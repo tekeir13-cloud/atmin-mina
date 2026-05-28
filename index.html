@@ -1031,7 +1031,15 @@
 <!-- NOTIFICACIÓN -->
 <div class="notif" id="notif">✓ Guardado correctamente</div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+// ===================== SUPABASE CONFIG =====================
+// ⚠ REEMPLAZA estos valores con los de tu proyecto en Supabase
+// Supabase → Settings → API → Project URL y anon public key
+const SUPABASE_URL = 'https://ueiermflrxiapeednrov.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlaWVybWZscnhpYXBlZWRucm92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MTM4NDYsImV4cCI6MjA5NTQ4OTg0Nn0.75qDiRT0azEfjR0Boqah4rWy2GFumLfhJayKU6S_6e8';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 // ===================== STATE =====================
 const state = {
   personal: [],
@@ -1095,13 +1103,80 @@ function showNotif(msg = '✓ Guardado correctamente') {
   setTimeout(() => n.classList.remove('show'), 2500);
 }
 
-function init() {
+async function init() {
   const now = new Date();
   document.getElementById('fecha-badge').textContent =
     now.toLocaleDateString('es-PE', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
   document.querySelectorAll('input[type=date]').forEach(i => i.value = hoy());
-  seedData();
+  showNotif('⏳ Cargando datos...');
+  await cargarDesdeSB();
   renderPage('dashboard');
+}
+
+async function cargarDesdeSB() {
+  try {
+    const [personal, perforacion, expHist, expStock, petHist, acHist, mant, util] = await Promise.all([
+      sb.from('personal').select('*').order('id'),
+      sb.from('perforacion').select('*').order('fecha'),
+      sb.from('explosivos_historial').select('*').order('fecha'),
+      sb.from('explosivos_stock').select('*'),
+      sb.from('petroleo_historial').select('*').order('fecha'),
+      sb.from('aceros_historial').select('*').order('fecha'),
+      sb.from('mantenimiento').select('*').order('fecha'),
+      sb.from('utilidad_movimientos').select('*').order('id'),
+    ]);
+
+    state.personal = (personal.data || []).map(p => ({
+      id: p.id, nombre: p.nombre, dni: p.dni, rol: p.rol,
+      frente: p.frente, estado: p.estado, jornal: Number(p.jornal)
+    }));
+
+    state.perforacion = (perforacion.data || []).map(p => ({
+      _id: p.id, fecha: p.fecha, frente: p.frente, metros: Number(p.metros),
+      personas: p.personas, roca: p.roca, obs: p.obs
+    }));
+
+    state.explosivos.historial = (expHist.data || []).map(e => ({
+      _id: e.id, fecha: e.fecha, frente: e.frente, tipo: e.tipo,
+      cantidad: e.cantidad, detalle: e.detalle
+    }));
+
+    if (expStock.data && expStock.data.length > 0) {
+      state.explosivos.stock = {};
+      expStock.data.forEach(r => { state.explosivos.stock[r.tipo] = r.cantidad; });
+    }
+
+    state.petroleo.historial = (petHist.data || []).map(p => ({
+      _id: p.id, fecha: p.fecha, frente: p.frente, equipo: p.equipo,
+      galones: Number(p.galones), precio: Number(p.precio)
+    }));
+
+    state.aceros.historial = (acHist.data || []).map(a => ({
+      _id: a.id, fecha: a.fecha, frente: a.frente, tipo: a.tipo,
+      cantidad: a.cantidad, estado: a.detalle
+    }));
+
+    state.mantenimiento = (mant.data || []).map(m => ({
+      _id: m.id, fecha: m.fecha, equipo: m.equipo, tipo: m.tipo,
+      resp: m.responsable, costo: Number(m.costo), desc: m.descripcion, estado: m.estado
+    }));
+
+    state.utilidad.movimientos = (util.data || []).map(u => ({
+      _id: u.id, concepto: u.concepto, monto: Number(u.monto), tipo: u.tipo
+    }));
+
+    // Actualizar contador nav
+    document.querySelectorAll('.nav-item').forEach(n => {
+      if (n.getAttribute('onclick') === "navigate('personal')") {
+        n.innerHTML = n.innerHTML.replace(/\(\d+\)/, `(${state.personal.length})`);
+      }
+    });
+
+    showNotif('✓ Datos cargados desde Supabase');
+  } catch (err) {
+    console.error('Error cargando datos:', err);
+    showNotif('⚠ Error conectando a Supabase');
+  }
 }
 
 function seedData() {
@@ -1270,17 +1345,19 @@ function renderPersonal() {
   }).join('');
 }
 
-function agregarPersonal() {
+async function agregarPersonal() {
   const nombre = document.getElementById('p-nombre').value.trim();
   if (!nombre) { showNotif('⚠ Ingresa el nombre'); return; }
-  state.personal.push({
-    id: state.personal.length + 1,
+  const nuevo = {
     nombre, dni: document.getElementById('p-dni').value,
     rol: document.getElementById('p-rol').value,
     frente: parseInt(document.getElementById('p-frente').value),
     estado: document.getElementById('p-estado').value,
     jornal: parseFloat(document.getElementById('p-jornal').value) || 80
-  });
+  };
+  const { data, error } = await sb.from('personal').insert([nuevo]).select().single();
+  if (error) { showNotif('⚠ Error al guardar'); console.error(error); return; }
+  state.personal.push({ ...nuevo, id: data.id });
   limpiarFormPersonal();
   renderPersonal();
   showNotif('✓ Personal agregado');
@@ -1329,28 +1406,36 @@ function miniBarras(tipo) {
   }).join('');
 }
 
-function registrarExplosivo() {
+async function registrarExplosivo() {
   const tipo = document.getElementById('exp-tipo').value;
   const cant = parseInt(document.getElementById('exp-cantidad').value);
   if (!cant || cant <= 0) { showNotif('⚠ Cantidad inválida'); return; }
   if ((state.explosivos.stock[tipo] || 0) < cant) { showNotif('⚠ Stock insuficiente'); return; }
-  state.explosivos.stock[tipo] -= cant;
-  state.explosivos.historial.push({
+  const nuevo = {
     fecha: document.getElementById('exp-fecha').value,
     frente: parseInt(document.getElementById('exp-frente').value),
     tipo, cantidad: cant,
     detalle: document.getElementById('exp-detalle').value || 'Sin detalle'
-  });
+  };
+  const nuevoStock = (state.explosivos.stock[tipo] || 0) - cant;
+  const { error: e1 } = await sb.from('explosivos_historial').insert([nuevo]);
+  const { error: e2 } = await sb.from('explosivos_stock').update({ cantidad: nuevoStock, updated_at: new Date() }).eq('tipo', tipo);
+  if (e1 || e2) { showNotif('⚠ Error al guardar'); console.error(e1, e2); return; }
+  state.explosivos.stock[tipo] = nuevoStock;
+  state.explosivos.historial.push(nuevo);
   renderExplosivos();
   showNotif(`✓ ${cant} ${tipo} registrados`);
 }
 
-function mostrarModalRecarga() {
+async function mostrarModalRecarga() {
   const tipo = prompt('¿Qué explosivo reabastecer? (M-1000, M-3000, M-5000, Carmex (por metro))');
   if (!tipo || !state.explosivos.stock.hasOwnProperty(tipo)) { showNotif('⚠ Tipo no válido'); return; }
   const cant = parseInt(prompt(`¿Cuántas unidades de ${tipo} ingresan?`));
   if (!cant || cant <= 0) return;
-  state.explosivos.stock[tipo] += cant;
+  const nuevoStock = state.explosivos.stock[tipo] + cant;
+  const { error } = await sb.from('explosivos_stock').update({ cantidad: nuevoStock, updated_at: new Date() }).eq('tipo', tipo);
+  if (error) { showNotif('⚠ Error al guardar'); return; }
+  state.explosivos.stock[tipo] = nuevoStock;
   renderExplosivos();
   showNotif(`✓ +${cant} ${tipo} ingresados al stock`);
 }
@@ -1370,17 +1455,20 @@ function renderAceros() {
   ).join('') || '<tr><td colspan="5" class="empty-state">Sin registros</td></tr>';
 }
 
-function registrarAcero() {
+async function registrarAcero() {
   const cant = parseInt(document.getElementById('ac-cant').value);
   if (!cant || cant <= 0) { showNotif('⚠ Cantidad inválida'); return; }
-  state.aceros.historial.push({
+  const nuevo = {
     fecha: document.getElementById('ac-fecha').value,
     frente: parseInt(document.getElementById('ac-frente').value),
     tipo: document.getElementById('ac-tipo').value,
     cantidad: cant,
-    estado: document.getElementById('ac-estado').value
-  });
-  if (document.getElementById('ac-estado').value !== 'En uso') state.aceros.stock = Math.max(0, state.aceros.stock - cant);
+    detalle: document.getElementById('ac-estado').value
+  };
+  const { error } = await sb.from('aceros_historial').insert([nuevo]);
+  if (error) { showNotif('⚠ Error al guardar'); console.error(error); return; }
+  state.aceros.historial.push({ ...nuevo, estado: nuevo.detalle });
+  if (nuevo.detalle !== 'En uso') state.aceros.stock = Math.max(0, state.aceros.stock - cant);
   renderAceros();
   showNotif('✓ Aceros registrados');
 }
@@ -1403,16 +1491,19 @@ function renderPetroleo() {
   ).join('') || '<tr><td colspan="6" class="empty-state">Sin registros</td></tr>';
 }
 
-function registrarPetroleo() {
+async function registrarPetroleo() {
   const gal = parseFloat(document.getElementById('pet-galones').value);
   const precio = parseFloat(document.getElementById('pet-precio').value);
   if (!gal || gal <= 0) { showNotif('⚠ Galones inválidos'); return; }
-  state.petroleo.historial.push({
+  const nuevo = {
     fecha: document.getElementById('pet-fecha').value,
     frente: parseInt(document.getElementById('pet-frente').value),
     equipo: document.getElementById('pet-equipo').value,
     galones: gal, precio: precio || 14.5
-  });
+  };
+  const { error } = await sb.from('petroleo_historial').insert([nuevo]);
+  if (error) { showNotif('⚠ Error al guardar'); console.error(error); return; }
+  state.petroleo.historial.push(nuevo);
   state.petroleo.stock = Math.max(0, state.petroleo.stock - gal);
   renderPetroleo();
   showNotif('✓ Consumo de petróleo registrado');
@@ -1442,17 +1533,20 @@ function renderPerforacion() {
   }).join('') || '<tr><td colspan="7" class="empty-state">Sin registros</td></tr>';
 }
 
-function registrarPerforacion() {
+async function registrarPerforacion() {
   const metros = parseFloat(document.getElementById('per-metros').value);
   const personas = parseInt(document.getElementById('per-personas').value);
   if (!metros || metros <= 0) { showNotif('⚠ Metros inválidos'); return; }
-  state.perforacion.push({
+  const nuevo = {
     fecha: document.getElementById('per-fecha').value,
     frente: parseInt(document.getElementById('per-frente').value),
     metros, personas: personas || 1,
     roca: document.getElementById('per-roca').value,
     obs: document.getElementById('per-obs').value
-  });
+  };
+  const { error } = await sb.from('perforacion').insert([nuevo]);
+  if (error) { showNotif('⚠ Error al guardar'); console.error(error); return; }
+  state.perforacion.push(nuevo);
   renderPerforacion();
   showNotif('✓ Perforación registrada');
 }
@@ -1478,17 +1572,22 @@ function renderMantenimiento() {
   }).join('');
 }
 
-function registrarMantenimiento() {
+async function registrarMantenimiento() {
   const resp = document.getElementById('mant-resp').value.trim();
   const desc = document.getElementById('mant-desc').value.trim();
   if (!resp || !desc) { showNotif('⚠ Completa responsable y descripción'); return; }
-  state.mantenimiento.push({
+  const nuevo = {
     fecha: document.getElementById('mant-fecha').value,
     equipo: document.getElementById('mant-equipo').value,
     tipo: document.getElementById('mant-tipo').value,
-    resp, costo: parseFloat(document.getElementById('mant-costo').value)||0,
-    desc, estado: document.getElementById('mant-estado').value
-  });
+    responsable: resp,
+    costo: parseFloat(document.getElementById('mant-costo').value)||0,
+    descripcion: desc,
+    estado: document.getElementById('mant-estado').value
+  };
+  const { error } = await sb.from('mantenimiento').insert([nuevo]);
+  if (error) { showNotif('⚠ Error al guardar'); console.error(error); return; }
+  state.mantenimiento.push({ ...nuevo, resp: nuevo.responsable, desc: nuevo.descripcion });
   renderMantenimiento();
   showNotif('✓ Mantenimiento registrado');
 }
@@ -1567,11 +1666,14 @@ function renderUtilidad() {
   ).join('') || '<tr><td colspan="3" class="empty-state">Sin movimientos</td></tr>';
 }
 
-function agregarMovimiento() {
+async function agregarMovimiento() {
   const concepto = document.getElementById('util-concepto').value.trim();
   const monto = parseFloat(document.getElementById('util-monto').value);
   if (!concepto || !monto) { showNotif('⚠ Completa concepto y monto'); return; }
-  state.utilidad.movimientos.push({ concepto, monto, tipo: document.getElementById('util-tipo').value });
+  const nuevo = { concepto, monto, tipo: document.getElementById('util-tipo').value };
+  const { error } = await sb.from('utilidad_movimientos').insert([nuevo]);
+  if (error) { showNotif('⚠ Error al guardar'); console.error(error); return; }
+  state.utilidad.movimientos.push(nuevo);
   document.getElementById('util-concepto').value = '';
   document.getElementById('util-monto').value = '';
   renderUtilidad();
