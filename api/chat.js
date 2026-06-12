@@ -1,5 +1,3 @@
-const https = require('https');
-
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -19,18 +17,28 @@ module.exports = async function handler(req, res) {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 400,
         system: system || 'Eres el asistente de Deepmine.',
-        messages: messages.slice(-8),
+        messages: messages && messages.length ? messages : [{ role: 'user', content: 'Hola' }],
       }),
     });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('Claude error:', response.status, errText);
+      return res.status(200).json({ 
+        content: [{ type: 'text', text: 'Error API: ' + response.status + ' - ' + errText }] 
+      });
+    }
 
     const data = await response.json();
     return res.status(200).json(data);
     
   } catch (error) {
-    console.error('Error:', error);
-    return res.status(500).json({ error: error.message });
+    console.error('Handler error:', error);
+    return res.status(200).json({ 
+      content: [{ type: 'text', text: 'Error: ' + error.message }] 
+    });
   }
 };
