@@ -3044,6 +3044,7 @@ select option{background:var(--coal3);}
         <option value="">— Seleccionar día —</option>
       </select>
       <span id="vt-badge" style="font-size:11px;color:var(--text3)"></span>
+      <button id="vt-wa-btn" onclick="copiarReporteWhatsApp()" style="display:none;padding:8px 16px;background:rgba(37,211,102,0.15);border:1px solid rgba(37,211,102,0.4);color:#25d366;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">📋 Copiar para WhatsApp</button>
     </div>
     <!-- Panel sin datos -->
     <div id="vt-empty" style="text-align:center;padding:32px;color:var(--text3);font-size:13px">
@@ -3137,7 +3138,15 @@ select option{background:var(--coal3);}
 
       <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Para Galería</div>
       <div id="comp-cons-gal-rows" style="margin-bottom:8px"></div>
-      <button onclick="compAddCons('galeria')" style="font-size:11px;background:var(--coal4);border:1px dashed var(--border);color:var(--accent-light);padding:6px 14px;border-radius:4px;cursor:pointer;width:100%;margin-bottom:20px">+ Agregar ítem Galería</button>
+      <button onclick="compAddCons('galeria')" style="font-size:11px;background:var(--coal4);border:1px dashed var(--border);color:var(--accent-light);padding:6px 14px;border-radius:4px;cursor:pointer;width:100%;margin-bottom:16px">+ Agregar ítem Galería</button>
+
+      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">💥 Explosivos por Frente</div>
+      <div class="table-wrap" style="margin-bottom:20px">
+        <table style="width:100%">
+          <thead><tr style="font-size:10px;color:var(--text3)"><th style="text-align:left;padding:6px 8px">Código</th><th style="padding:6px 8px;text-align:center;color:#f87171">⛏️ Rampa</th><th style="padding:6px 8px;text-align:center;color:#60a5fa">🔵 Galería</th></tr></thead>
+          <tbody id="comp-expf-body"></tbody>
+        </table>
+      </div>
 
       <!-- S3: PETRÓLEO Y GASOLINA -->
       <div class="section-title" style="margin-bottom:12px">⛽ Consumo de Petróleo y Gasolina</div>
@@ -3191,7 +3200,7 @@ select option{background:var(--coal3);}
       <button class="mod-tab" onclick="switchCompTab('observaciones',this)">📝 Observaciones</button>
     </div>
     <div id="comp-tab-explosivos" class="comp-tab-content">
-      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Código</th><th class="r">I</th><th class="r">E</th><th class="r">C</th><th class="r">F</th></tr></thead><tbody id="tbody-explosivos"><tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sin reportes aún</td></tr></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Código</th><th class="r">I</th><th class="r">E</th><th class="r">C</th><th class="r">F</th><th class="r" style="color:#f87171">Rampa</th><th class="r" style="color:#60a5fa">Galería</th></tr></thead><tbody id="tbody-explosivos"><tr><td colspan="9" style="text-align:center;color:var(--text3);padding:20px">Sin reportes aún</td></tr></tbody></table></div>
     </div>
     <div id="comp-tab-materiales" class="comp-tab-content" style="display:none">
       <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Frente</th><th>Material</th><th class="r">Cantidad</th><th>Unidad</th></tr></thead><tbody id="tbody-materiales"><tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sin reportes aún</td></tr></tbody></table></div>
@@ -6996,6 +7005,13 @@ function abrirModalCompresorista() {
   document.getElementById('comp-cons-rampa-rows').innerHTML = '';
   document.getElementById('comp-cons-gal-rows').innerHTML = '';
   compAddCons('rampa'); compAddCons('galeria');
+  // explosivos por frente
+  document.getElementById('comp-expf-body').innerHTML = COMP_EXPLOSIVOS.map(c => `
+    <tr style="border-top:1px solid var(--border2)">
+      <td style="padding:6px 8px;font-family:'DM Mono',monospace;font-size:12px;color:var(--text)">${c}</td>
+      <td style="padding:4px 6px"><input type="number" min="0" step="any" id="cexpf-${c.replace(/\./g,'_')}-R" placeholder="0" style="width:100%;background:var(--coal4);border:1px solid rgba(248,113,113,0.3);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>
+      <td style="padding:4px 6px"><input type="number" min="0" step="any" id="cexpf-${c.replace(/\./g,'_')}-G" placeholder="0" style="width:100%;background:var(--coal4);border:1px solid rgba(96,165,250,0.3);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>
+    </tr>`).join('');
   // petróleo
   document.getElementById('comp-petroleo-fields').innerHTML = COMP_PETROLEO.map(m => `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -7057,7 +7073,7 @@ function compAddCons(frente) {
 }
 
 function compCalcF(codigo) {
-  const id = codigo.replace('.','_');
+  const id = codigo.replace(/\./g,'_');
   const i = parseFloat(document.getElementById('cexp-'+id+'-I')?.value)||0;
   const e = parseFloat(document.getElementById('cexp-'+id+'-E')?.value)||0;
   const c = parseFloat(document.getElementById('cexp-'+id+'-C')?.value)||0;
@@ -7098,8 +7114,13 @@ function guardarReporteComp() {
 
   // explosivos
   const explosivos = COMP_EXPLOSIVOS.map(c => {
-    const id = c.replace('.','_');
+    const id = c.replace(/\./g,'_');
     return {codigo:c, I:parseFloat(document.getElementById('cexp-'+id+'-I')?.value)||0, E:parseFloat(document.getElementById('cexp-'+id+'-E')?.value)||0, C:parseFloat(document.getElementById('cexp-'+id+'-C')?.value)||0, F:parseFloat(document.getElementById('cexp-'+id+'-F')?.value)||0};
+  });
+  // explosivos por frente
+  const expFrente = COMP_EXPLOSIVOS.map(c => {
+    const id = c.replace(/\./g,'_');
+    return {codigo:c, rampa:parseFloat(document.getElementById('cexpf-'+id+'-R')?.value)||0, galeria:parseFloat(document.getElementById('cexpf-'+id+'-G')?.value)||0};
   });
 
   // consumo rampa
@@ -7129,7 +7150,7 @@ function guardarReporteComp() {
 
   const obs = document.getElementById('comp-obs').value.trim();
 
-  const reporte = {fecha, turno:_compTurnoSeleccionado, nombre, dni, materialesAlmacen, explosivos, consumoRampa, consumoGaleria, petroleo, gasolina, horometros, obs};
+  const reporte = {fecha, turno:_compTurnoSeleccionado, nombre, dni, materialesAlmacen, explosivos, expFrente, consumoRampa, consumoGaleria, petroleo, gasolina, horometros, obs};
 
   const idx = state.compresorista.findIndex(r => r.fecha===fecha && r.turno===_compTurnoSeleccionado);
   if(idx>=0){
@@ -7195,10 +7216,15 @@ function renderTablaCompresorista() {
   if(!data.length) return;
   // explosivos
   let expRows = '';
-  data.forEach(r => r.explosivos.forEach(e => {
-    expRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td style="font-family:'DM Mono',monospace">${e.codigo}</td><td class="r">${e.I}</td><td class="r">${e.E}</td><td class="r">${e.C}</td><td class="r">${e.F}</td></tr>`;
-  }));
-  document.getElementById('tbody-explosivos').innerHTML = expRows || '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sin datos</td></tr>';
+  data.forEach(r => {
+    const ef = r.expFrente || [];
+    r.explosivos.forEach(e => {
+      const f = ef.find(x=>x.codigo===e.codigo)||{rampa:0,galeria:0};
+      const rVal = f.rampa||0, gVal = f.galeria||0;
+      expRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td style="font-family:'DM Mono',monospace">${e.codigo}</td><td class="r">${e.I}</td><td class="r">${e.E}</td><td class="r">${e.C}</td><td class="r">${e.F}</td><td class="r" style="color:#f87171">${rVal||'—'}</td><td class="r" style="color:#60a5fa">${gVal||'—'}</td></tr>`;
+    });
+  });
+  document.getElementById('tbody-explosivos').innerHTML = expRows || '<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:20px">Sin datos</td></tr>';
   // materiales
   let matRows = '';
   data.forEach(r => {
@@ -7243,6 +7269,81 @@ function abrirReporteVisor(fecha, turno){
   visorRenderDia();
   const panel = document.getElementById('vt-panel');
   if(panel && panel.scrollIntoView) panel.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+// ── Copiar reporte para WhatsApp ──
+function copiarReporteWhatsApp() {
+  const sel = document.getElementById('vt-dia-sel');
+  const fecha = sel ? sel.value : '';
+  if(!fecha) { showNotif('Selecciona un día primero','error'); return; }
+  const r = state.compresorista.find(x=>x.fecha===fecha && x.turno===_vtTurno);
+  if(!r) { showNotif('No hay reporte para ese día/turno','error'); return; }
+
+  const turnoIc = r.turno==='Día' ? '☀️' : '🌙';
+  const tPet = r.petroleo.reduce((s,p)=>s+p.gln,0);
+  const tGas = r.gasolina.reduce((s,g)=>s+g.gln,0);
+
+  let txt = '';
+  txt += `🔧 *REPORTE DE GUARDIA — DEEPMINE*\n`;
+  txt += `📅 ${r.fecha} | ${turnoIc} Turno ${r.turno}\n`;
+  txt += `👷 Compresorista: *${r.nombre}* (DNI: ${r.dni})\n\n`;
+
+  // Explosivos almacén
+  const expAct = r.explosivos.filter(e=>e.I||e.E||e.C);
+  if(expAct.length){
+    txt += `💥 *EXPLOSIVOS — ALMACÉN*\n`;
+    expAct.forEach(e=>{ txt += `  ${e.codigo}: I:${e.I} | E:${e.E} | C:${e.C} | F:${e.F}\n`; });
+    txt += '\n';
+  }
+
+  // Explosivos por frente
+  const ef = r.expFrente || [];
+  const efAct = ef.filter(x=>x.rampa||x.galeria);
+  if(efAct.length){
+    txt += `💣 *EXPLOSIVOS POR FRENTE*\n`;
+    efAct.forEach(e=>{ txt += `  ${e.codigo}: ⛏️Rampa ${e.rampa||0} | 🔵Galería ${e.galeria||0}\n`; });
+    txt += '\n';
+  }
+
+  // Consumo materiales
+  if(r.consumoRampa.length||r.consumoGaleria.length){
+    txt += `⛏️ *CONSUMO MATERIALES*\n`;
+    if(r.consumoRampa.length){ txt += `_Rampa:_\n`; r.consumoRampa.forEach(m=>{ txt += `  • ${m.desc}: ${m.cant} ${m.unidad}\n`; }); }
+    if(r.consumoGaleria.length){ txt += `_Galería:_\n`; r.consumoGaleria.forEach(m=>{ txt += `  • ${m.desc}: ${m.cant} ${m.unidad}\n`; }); }
+    txt += '\n';
+  }
+
+  // Combustible
+  txt += `⛽ *COMBUSTIBLE*\n`;
+  txt += `  Petróleo total: ${tPet.toFixed(1)} gln\n`;
+  r.petroleo.filter(p=>p.gln).forEach(p=>{ txt += `    › ${p.equipo}: ${p.gln} gln\n`; });
+  txt += `  Gasolina total: ${tGas.toFixed(1)} gln\n`;
+  r.gasolina.filter(g=>g.gln).forEach(g=>{ txt += `    › ${g.equipo}: ${g.gln} gln\n`; });
+  txt += '\n';
+
+  // Horómetros
+  const horoAct = r.horometros.filter(h=>h.HT>0);
+  if(horoAct.length){
+    txt += `⏱️ *HORÓMETROS*\n`;
+    horoAct.forEach(h=>{ txt += `  ${h.equipo}: ${h.HI}→${h.HF}h (${h.HT}h)\n`; });
+    txt += '\n';
+  }
+
+  // Observaciones
+  if(r.obs){
+    txt += `📝 *OBSERVACIONES*\n${r.obs}\n`;
+  }
+
+  navigator.clipboard.writeText(txt).then(()=>{
+    showNotif('✅ Reporte copiado — pégalo en WhatsApp','ok');
+  }).catch(()=>{
+    // fallback para móviles
+    const ta = document.createElement('textarea');
+    ta.value = txt; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+    showNotif('✅ Reporte copiado — pégalo en WhatsApp','ok');
+  });
 }
 
 // ── Estilos reutilizables para el Excel ──
@@ -7311,11 +7412,23 @@ function exportarCompresoristExcel() {
 
   // ── EXPLOSIVOS ──
   const expFilas=[];
-  data.forEach(r=>r.explosivos.forEach(e=>{ if(e.I||e.E||e.C||e.F) expFilas.push([r.fecha,r.turno,r.nombre,e.codigo,e.I,e.E,e.C,e.F]); }));
-  COMP_EXPLOSIVOS.forEach(c=>expFilas.push(['TOTAL','','',c,expTotales[c].I,expTotales[c].E,expTotales[c].C,'']));
+  const expTotalesR={}, expTotalesG={};
+  COMP_EXPLOSIVOS.forEach(c=>{expTotalesR[c]=0;expTotalesG[c]=0;});
+  data.forEach(r=>{
+    const ef=r.expFrente||[];
+    r.explosivos.forEach(e=>{
+      if(e.I||e.E||e.C||e.F){
+        const f=ef.find(x=>x.codigo===e.codigo)||{rampa:0,galeria:0};
+        expFilas.push([r.fecha,r.turno,r.nombre,e.codigo,e.I,e.E,e.C,e.F,f.rampa||0,f.galeria||0]);
+        expTotalesR[e.codigo]=(expTotalesR[e.codigo]||0)+(f.rampa||0);
+        expTotalesG[e.codigo]=(expTotalesG[e.codigo]||0)+(f.galeria||0);
+      }
+    });
+  });
+  COMP_EXPLOSIVOS.forEach(c=>expFilas.push(['TOTAL','','',c,expTotales[c].I,expTotales[c].E,expTotales[c].C,'',expTotalesR[c]||0,expTotalesG[c]||0]));
   XLSX.utils.book_append_sheet(wb, _xlHoja('EXPLOSIVOS — '+mesNombre+' '+ay, C_ROJO,
-    ['Fecha','Turno','Compresorista','Código','I','E','C','F'], expFilas,
-    [{wch:12},{wch:8},{wch:20},{wch:10},{wch:8},{wch:8},{wch:8},{wch:8}]), 'Explosivos');
+    ['Fecha','Turno','Compresorista','Código','I','E','C','F','Rampa','Galería'], expFilas,
+    [{wch:12},{wch:8},{wch:20},{wch:10},{wch:8},{wch:8},{wch:8},{wch:8},{wch:10},{wch:10}]), 'Explosivos');
 
   // ── MATERIALES ──
   const matFilas=[];
@@ -7414,6 +7527,8 @@ function visorRenderDia() {
     if(panel) panel.style.display='none'; return;
   }
   if(empty) empty.style.display='none';
+  const waBtnEl = document.getElementById('vt-wa-btn');
+  if(waBtnEl) waBtnEl.style.display='inline-block';
   if(panel) panel.style.display='block';
 
   // Info compresorista
@@ -7453,20 +7568,25 @@ function visorRenderDia() {
   const wFuel=document.getElementById('vt-wrap-fuel'); if(wFuel) wFuel.innerHTML='<canvas id="vt-chart-fuel" height="200"></canvas>';
   const wHoro=document.getElementById('vt-wrap-horo'); if(wHoro) wHoro.innerHTML='<canvas id="vt-chart-horo" height="200"></canvas>';
 
-  // ── Gráfico Explosivos ──
+  // ── Gráfico Explosivos (Rampa vs Galería) ──
+  const ef = r.expFrente || [];
+  const expConFrente = COMP_EXPLOSIVOS.map(c=>({codigo:c, rampa:(ef.find(x=>x.codigo===c)||{}).rampa||0, galeria:(ef.find(x=>x.codigo===c)||{}).galeria||0})).filter(x=>x.rampa||x.galeria);
   const expActivos = r.explosivos.filter(e=>e.I||e.E||e.C);
   const ctxExp = document.getElementById('vt-chart-exp');
-  if(ctxExp && expActivos.length){
+  if(ctxExp && (expConFrente.length || expActivos.length)){
+    const useFrente = expConFrente.length > 0;
+    const labels = useFrente ? expConFrente.map(e=>e.codigo) : expActivos.map(e=>e.codigo);
+    const datasets = useFrente ? [
+      {label:'Rampa',data:expConFrente.map(e=>e.rampa),backgroundColor:'rgba(248,113,113,0.75)',borderRadius:4},
+      {label:'Galería',data:expConFrente.map(e=>e.galeria),backgroundColor:'rgba(96,165,250,0.75)',borderRadius:4},
+    ] : [
+      {label:'Ingreso',data:expActivos.map(e=>e.I),backgroundColor:'rgba(34,211,165,0.7)',borderRadius:4},
+      {label:'Egreso',data:expActivos.map(e=>e.E),backgroundColor:'rgba(248,113,113,0.7)',borderRadius:4},
+      {label:'Final',data:expActivos.map(e=>e.F),backgroundColor:'rgba(91,110,245,0.7)',borderRadius:4},
+    ];
     _vtCharts.exp = new Chart(ctxExp, {
       type:'bar',
-      data:{
-        labels: expActivos.map(e=>e.codigo),
-        datasets:[
-          {label:'Ingreso',data:expActivos.map(e=>e.I),backgroundColor:'rgba(34,211,165,0.7)',borderRadius:4},
-          {label:'Egreso',data:expActivos.map(e=>e.E),backgroundColor:'rgba(248,113,113,0.7)',borderRadius:4},
-          {label:'Final',data:expActivos.map(e=>e.F),backgroundColor:'rgba(91,110,245,0.7)',borderRadius:4},
-        ]
-      },
+      data:{labels, datasets},
       options:{responsive:true,plugins:{legend:{labels:{color:'#8b8ba7',font:{size:10}}}},scales:{x:{ticks:{color:'#8b8ba7',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}},y:{ticks:{color:'#8b8ba7',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}}}}
     });
   } else if(wExp){ wExp.innerHTML='<div style="text-align:center;color:var(--text3);padding:40px;font-size:12px">Sin datos de explosivos</div>'; }
