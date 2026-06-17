@@ -3030,6 +3030,63 @@ select option{background:var(--coal3);}
   <!-- RESUMEN ÚLTIMO TURNO -->
   <div id="comp-resumen" style="display:none;margin-bottom:18px"></div>
 
+  <!-- VISOR DÍA / NOCHE -->
+  <div class="card" style="margin-bottom:18px">
+    <!-- Selector turno + día -->
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+      <div style="display:flex;gap:6px">
+        <button id="vt-dia-btn" onclick="visorTurno('Día')"
+          style="padding:8px 18px;border:2px solid var(--accent);background:var(--accent-dim);color:var(--accent-light);border-radius:6px;cursor:pointer;font-size:12px;font-weight:700">☀️ Día</button>
+        <button id="vt-noche-btn" onclick="visorTurno('Noche')"
+          style="padding:8px 18px;border:2px solid var(--border);background:var(--coal4);color:var(--text2);border-radius:6px;cursor:pointer;font-size:12px;font-weight:700">🌙 Noche</button>
+      </div>
+      <select id="vt-dia-sel" onchange="visorRenderDia()" style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 12px;font-size:12px;min-width:160px">
+        <option value="">— Seleccionar día —</option>
+      </select>
+      <span id="vt-badge" style="font-size:11px;color:var(--text3)"></span>
+    </div>
+    <!-- Panel sin datos -->
+    <div id="vt-empty" style="text-align:center;padding:32px;color:var(--text3);font-size:13px">
+      Selecciona un día para ver el reporte
+    </div>
+    <!-- Panel con datos -->
+    <div id="vt-panel" style="display:none">
+      <!-- Info compresorista -->
+      <div id="vt-info" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px"></div>
+      <!-- Gráficos -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:18px">
+        <div style="background:var(--coal3);border-radius:10px;padding:16px">
+          <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">💥 Explosivos</div>
+          <canvas id="vt-chart-exp" height="200"></canvas>
+        </div>
+        <div style="background:var(--coal3);border-radius:10px;padding:16px">
+          <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">⛽ Combustible</div>
+          <canvas id="vt-chart-fuel" height="200"></canvas>
+        </div>
+        <div style="background:var(--coal3);border-radius:10px;padding:16px">
+          <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">⏱️ Horómetros (HT)</div>
+          <canvas id="vt-chart-horo" height="200"></canvas>
+        </div>
+      </div>
+      <!-- Consumo materiales -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">⛏️ Consumo Rampa</div>
+          <div id="vt-cons-rampa" style="background:var(--coal3);border-radius:8px;padding:12px;font-size:12px;color:var(--text2);min-height:60px"></div>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">⛏️ Consumo Galería</div>
+          <div id="vt-cons-gal" style="background:var(--coal3);border-radius:8px;padding:12px;font-size:12px;color:var(--text2);min-height:60px"></div>
+        </div>
+      </div>
+      <!-- Observaciones -->
+      <div id="vt-obs-wrap" style="margin-top:14px;display:none">
+        <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">📝 Observaciones</div>
+        <div id="vt-obs" style="background:var(--coal3);border-radius:8px;padding:12px;font-size:13px;color:var(--text);line-height:1.6"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL FORMULARIO -->
   <div class="modal-overlay" id="modal-compresorista" onclick="if(event.target===this)cerrarModalCompresorista()">
     <div class="modal" style="width:min(700px,96vw);max-height:92vh;overflow-y:auto;padding:28px 24px">
@@ -3420,7 +3477,7 @@ function renderPage(page){
   else if(page==='seguridad')renderSeguridad();
   else if(page==='ia')renderIA();
   else if(page==='reporte')renderReportePage();
-  else if(page==='compresorista'){if(typeof renderTablaCompresorista==='function')renderTablaCompresorista();}
+  else if(page==='compresorista'){if(typeof renderTablaCompresorista==='function'){renderTablaCompresorista();visorPoblarDias();visorRenderDia();}}
 }
 
 function renderModPane(mod,pane){
@@ -7082,6 +7139,11 @@ function guardarReporteComp() {
   compGuardarLocal();
   renderTablaCompresorista();
   mostrarResumenComp(reporte);
+  visorPoblarDias();
+  // Apuntar el selector al reporte recién guardado
+  const selVT=document.getElementById('vt-dia-sel');
+  if(selVT){selVT.value=fecha;}
+  visorRenderDia();
   cerrarModalCompresorista();
   showNotif('Reporte guardado · datos acumulados del mes','ok');
 }
@@ -7274,6 +7336,138 @@ function exportarCompresoristExcel() {
   XLSX.writeFile(wb, 'reporte_compresorista_'+mesNombre+'_'+ay+'.xlsx');
   showNotif('Excel del mes generado','ok');
 }
+
+// ── VISOR DÍA / NOCHE ──────────────────────────────────────────
+let _vtTurno = 'Día';
+let _vtCharts = {};
+
+function visorTurno(turno) {
+  _vtTurno = turno;
+  const esDia = turno === 'Día';
+  const btnD = document.getElementById('vt-dia-btn');
+  const btnN = document.getElementById('vt-noche-btn');
+  if(btnD){ btnD.style.borderColor=esDia?'var(--accent)':'var(--border)'; btnD.style.background=esDia?'var(--accent-dim)':'var(--coal4)'; btnD.style.color=esDia?'var(--accent-light)':'var(--text2)'; }
+  if(btnN){ btnN.style.borderColor=!esDia?'var(--accent)':'var(--border)'; btnN.style.background=!esDia?'var(--accent-dim)':'var(--coal4)'; btnN.style.color=!esDia?'var(--accent-light)':'var(--text2)'; }
+  visorPoblarDias();
+  visorRenderDia();
+}
+
+function visorPoblarDias() {
+  const sel = document.getElementById('vt-dia-sel');
+  if(!sel) return;
+  const prev = sel.value;
+  // Obtener todos los días con reportes del turno activo
+  const diasConReporte = new Set(state.compresorista.filter(r=>r.turno===_vtTurno).map(r=>r.fecha));
+  // Calcular días del mes actual
+  const hoy = new Date();
+  const year = hoy.getFullYear(), month = hoy.getMonth();
+  const diasMes = new Date(year, month+1, 0).getDate();
+  const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  sel.innerHTML = '<option value="">— Seleccionar día —</option>';
+  for(let d=1; d<=diasMes; d++){
+    const fStr = year+'-'+String(month+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    const tieneReporte = diasConReporte.has(fStr);
+    const opt = document.createElement('option');
+    opt.value = fStr;
+    opt.textContent = d + ' ' + MESES[month] + (tieneReporte ? ' ✓' : '');
+    if(tieneReporte) opt.style.color = '#22d3a5';
+    sel.appendChild(opt);
+  }
+  // Badge total
+  const badge = document.getElementById('vt-badge');
+  if(badge) badge.textContent = diasConReporte.size + ' reportes de turno ' + _vtTurno + ' este mes';
+  if(prev) sel.value = prev;
+}
+
+function visorRenderDia() {
+  const sel = document.getElementById('vt-dia-sel');
+  const fecha = sel ? sel.value : '';
+  const empty = document.getElementById('vt-empty');
+  const panel = document.getElementById('vt-panel');
+  if(!fecha){ if(empty)empty.style.display='block'; if(panel)panel.style.display='none'; return; }
+
+  const r = state.compresorista.find(x=>x.fecha===fecha && x.turno===_vtTurno);
+  if(!r){
+    if(empty){ empty.style.display='block'; empty.textContent='Sin reporte de turno '+_vtTurno+' para este día'; }
+    if(panel) panel.style.display='none'; return;
+  }
+  if(empty) empty.style.display='none';
+  if(panel) panel.style.display='block';
+
+  // Info compresorista
+  const info = document.getElementById('vt-info');
+  if(info) info.innerHTML = [
+    {ic:'👷',lbl:'Compresorista',val:r.nombre},
+    {ic:'🪪',lbl:'DNI',val:r.dni},
+    {ic:'📅',lbl:'Fecha',val:r.fecha},
+    {ic:r.turno==='Día'?'☀️':'🌙',lbl:'Turno',val:r.turno},
+  ].map(x=>`<div style="background:var(--coal3);border-radius:8px;padding:10px 14px;flex:1;min-width:120px">
+    <div style="font-size:18px;margin-bottom:4px">${x.ic}</div>
+    <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1px">${x.lbl}</div>
+    <div style="font-size:13px;font-weight:600;color:var(--text)">${x.val||'—'}</div>
+  </div>`).join('');
+
+  // Destruir charts anteriores
+  ['exp','fuel','horo'].forEach(k=>{ if(_vtCharts[k]){ _vtCharts[k].destroy(); delete _vtCharts[k]; }});
+
+  // ── Gráfico Explosivos ──
+  const expActivos = r.explosivos.filter(e=>e.I||e.E||e.C);
+  const ctxExp = document.getElementById('vt-chart-exp');
+  if(ctxExp && expActivos.length){
+    _vtCharts.exp = new Chart(ctxExp, {
+      type:'bar',
+      data:{
+        labels: expActivos.map(e=>e.codigo),
+        datasets:[
+          {label:'Ingreso',data:expActivos.map(e=>e.I),backgroundColor:'rgba(34,211,165,0.7)',borderRadius:4},
+          {label:'Egreso',data:expActivos.map(e=>e.E),backgroundColor:'rgba(248,113,113,0.7)',borderRadius:4},
+          {label:'Final',data:expActivos.map(e=>e.F),backgroundColor:'rgba(91,110,245,0.7)',borderRadius:4},
+        ]
+      },
+      options:{responsive:true,plugins:{legend:{labels:{color:'#8b8ba7',font:{size:10}}}},scales:{x:{ticks:{color:'#8b8ba7',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}},y:{ticks:{color:'#8b8ba7',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}}}}
+    });
+  } else if(ctxExp){ ctxExp.parentElement.innerHTML='<div style="text-align:center;color:var(--text3);padding:40px;font-size:12px">Sin datos de explosivos</div>'; }
+
+  // ── Gráfico Combustible ──
+  const fuelLabels=[...r.petroleo.filter(p=>p.gln).map(p=>p.equipo), ...r.gasolina.filter(g=>g.gln).map(g=>g.equipo)];
+  const fuelVals=[...r.petroleo.filter(p=>p.gln).map(p=>p.gln), ...r.gasolina.filter(g=>g.gln).map(g=>g.gln)];
+  const fuelColors=[...r.petroleo.filter(p=>p.gln).map(()=>'rgba(229,144,34,0.8)'), ...r.gasolina.filter(g=>g.gln).map(()=>'rgba(34,211,165,0.8)')];
+  const ctxFuel = document.getElementById('vt-chart-fuel');
+  if(ctxFuel && fuelLabels.length){
+    _vtCharts.fuel = new Chart(ctxFuel, {
+      type:'doughnut',
+      data:{labels:fuelLabels, datasets:[{data:fuelVals,backgroundColor:fuelColors,borderWidth:0,hoverOffset:4}]},
+      options:{responsive:true,plugins:{legend:{position:'bottom',labels:{color:'#8b8ba7',font:{size:10},padding:8}}}}
+    });
+  } else if(ctxFuel){ ctxFuel.parentElement.innerHTML='<div style="text-align:center;color:var(--text3);padding:40px;font-size:12px">Sin consumo de combustible</div>'; }
+
+  // ── Gráfico Horómetros ──
+  const horoActivos = r.horometros.filter(h=>h.HT>0);
+  const ctxHoro = document.getElementById('vt-chart-horo');
+  if(ctxHoro && horoActivos.length){
+    _vtCharts.horo = new Chart(ctxHoro, {
+      type:'bar',
+      data:{labels:horoActivos.map(h=>h.equipo),datasets:[{label:'Horas trabajadas',data:horoActivos.map(h=>h.HT),backgroundColor:'rgba(91,110,245,0.75)',borderRadius:4}]},
+      options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#8b8ba7',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}},y:{ticks:{color:'#8b8ba7',font:{size:10}},grid:{display:false}}}}
+    });
+  } else if(ctxHoro){ ctxHoro.parentElement.innerHTML='<div style="text-align:center;color:var(--text3);padding:40px;font-size:12px">Sin horómetros registrados</div>'; }
+
+  // Consumo materiales
+  const cRampa = document.getElementById('vt-cons-rampa');
+  const cGal = document.getElementById('vt-cons-gal');
+  if(cRampa) cRampa.innerHTML = r.consumoRampa.length ? r.consumoRampa.map(m=>`<div style="padding:4px 0;border-bottom:1px solid var(--border2)"><span style="color:var(--text)">${m.desc}</span> <span style="float:right;color:var(--accent-light)">${m.cant} ${m.unidad}</span></div>`).join('') : '<span style="color:var(--text3)">Sin consumo Rampa</span>';
+  if(cGal) cGal.innerHTML = r.consumoGaleria.length ? r.consumoGaleria.map(m=>`<div style="padding:4px 0;border-bottom:1px solid var(--border2)"><span style="color:var(--text)">${m.desc}</span> <span style="float:right;color:var(--accent-light)">${m.cant} ${m.unidad}</span></div>`).join('') : '<span style="color:var(--text3)">Sin consumo Galería</span>';
+
+  // Observaciones
+  const obsWrap = document.getElementById('vt-obs-wrap');
+  const obsEl = document.getElementById('vt-obs');
+  if(r.obs){ if(obsWrap)obsWrap.style.display='block'; if(obsEl)obsEl.textContent=r.obs; }
+  else { if(obsWrap)obsWrap.style.display='none'; }
+}
+
+// ── Actualizar visor al guardar y al navegar ──
+const _origRenderTabla = typeof renderTablaCompresorista === 'function' ? renderTablaCompresorista : null;
+
 // ==================== FIN MÓDULO COMPRESORISTA ====================
 </script>
 
