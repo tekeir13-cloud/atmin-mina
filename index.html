@@ -1900,6 +1900,7 @@ select option{background:var(--coal3);}
 #ia-messages::-webkit-scrollbar { width:4px; }
 #ia-messages::-webkit-scrollbar-thumb { background:var(--coal5); border-radius:4px; }
 </style>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -2019,6 +2020,7 @@ select option{background:var(--coal3);}
           <span class="modulo-chip" data-mod="tarifario" onclick="toggleChip(this)">📋 Tarifario</span>
           <span class="modulo-chip" data-mod="finanzas" onclick="toggleChip(this)">💰 Finanzas</span>
           <span class="modulo-chip" data-mod="reporte" onclick="toggleChip(this)">📋 Reportes</span>
+          <span class="modulo-chip" data-mod="compresorista" onclick="toggleChip(this)">🔧 Compresorista</span>
         </div>
       </div>
       <div class="btn-row" style="margin-top:14px">
@@ -2054,6 +2056,7 @@ select option{background:var(--coal3);}
     <button class="nav-item" onclick="navigate('seguridad')"><span class="icon">🦺</span> Seguridad</button>
     <button class="nav-item" onclick="navigate('ia')"><span class="icon">🤖</span> Asistente IA</button>
     <button class="nav-item" onclick="navigate('reporte')"><span class="icon">📋</span> Reporte Mensual</button>
+    <button class="nav-item" onclick="navigate('compresorista')"><span class="icon">🔧</span> Compresorista</button>
   </nav>
 </aside>
 <main class="main">
@@ -5385,8 +5388,8 @@ function renderGraficosReporte(modulo, ac, cos, ing, util){
 // ════════════════════════════════════════════════════
 
 const ROLES_MODULOS = {
-  gerente:      ['dashboard','logistica','rrhh','operaciones','mantenimiento','maquinas','tarifario','finanzas','seguridad','ia','reporte'],
-  jefe_guardia: ['dashboard','logistica','rrhh','operaciones','seguridad','ia'],
+  gerente:      ['dashboard','logistica','rrhh','operaciones','mantenimiento','maquinas','tarifario','finanzas','seguridad','ia','reporte','compresorista'],
+  jefe_guardia: ['dashboard','logistica','rrhh','operaciones','seguridad','ia','compresorista'],
   almacenero:   ['dashboard','logistica'],
   mecanico:     ['dashboard','mantenimiento','maquinas'],
   contador:     ['dashboard','tarifario','finanzas','reporte'],
@@ -6744,6 +6747,325 @@ window.onload=init;
 
 
   
+
+<div id="page-compresorista" class="page" style="display:none">
+  <div class="page-header">
+    <h2 class="section-title">🔧 Compresorista</h2>
+  </div>
+  <div class="card" style="margin-bottom:1rem">
+    <h3 style="color:var(--accent);margin-bottom:1rem">Identificación</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+      <div class="form-group">
+        <label>Nombre Completo</label>
+        <input type="text" id="comp-nombre" placeholder="Nombre del compresorista">
+      </div>
+      <div class="form-group">
+        <label>DNI</label>
+        <input type="text" id="comp-dni" placeholder="Número de DNI">
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:1rem">
+    <h3 style="color:var(--accent);margin-bottom:1rem">Pegar Reporte Diario</h3>
+    <div class="form-group">
+      <textarea id="comp-reporte-texto" rows="15" placeholder="Pega aquí el reporte de guardia..." style="width:100%;font-family:monospace;font-size:0.85rem;background:var(--coal3);color:var(--text);border:1px solid var(--coal4);border-radius:8px;padding:1rem;resize:vertical"></textarea>
+    </div>
+    <button class="btn btn-gold" onclick="digitalizarReporte()">📊 Digitalizar</button>
+    <button class="btn btn-outline" onclick="exportarCompresoristExcel()" style="margin-left:0.5rem">📥 Exportar Excel</button>
+  </div>
+  <div class="card">
+    <div class="mod-tabs" style="margin-bottom:1rem">
+      <button class="mod-tab active" onclick="switchCompTab('explosivos',this)">💣 Explosivos</button>
+      <button class="mod-tab" onclick="switchCompTab('materiales',this)">📦 Materiales</button>
+      <button class="mod-tab" onclick="switchCompTab('petroleo',this)">⛽ Petróleo/Gasolina</button>
+      <button class="mod-tab" onclick="switchCompTab('horometros',this)">⏱️ Horómetros</button>
+      <button class="mod-tab" onclick="switchCompTab('observaciones',this)">📝 Observaciones</button>
+    </div>
+    <div id="comp-tab-explosivos" class="comp-tab-content">
+      <div class="table-wrap">
+        <table id="tabla-explosivos">
+          <thead><tr><th>Fecha</th><th>Turno</th><th>Tipo</th><th>Ingreso</th><th>Egreso</th><th>Consumo</th><th>Final</th></tr></thead>
+          <tbody id="tbody-explosivos"><tr><td colspan="7" style="text-align:center;color:var(--text3)">Sin datos</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="comp-tab-materiales" class="comp-tab-content" style="display:none">
+      <div class="table-wrap">
+        <table id="tabla-materiales">
+          <thead><tr><th>Fecha</th><th>Turno</th><th>Destino</th><th>Material</th></tr></thead>
+          <tbody id="tbody-materiales"><tr><td colspan="4" style="text-align:center;color:var(--text3)">Sin datos</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="comp-tab-petroleo" class="comp-tab-content" style="display:none">
+      <div class="table-wrap">
+        <table id="tabla-petroleo">
+          <thead><tr><th>Fecha</th><th>Turno</th><th>Equipo</th><th>Tipo</th><th>Cantidad (gln)</th></tr></thead>
+          <tbody id="tbody-petroleo"><tr><td colspan="5" style="text-align:center;color:var(--text3)">Sin datos</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="comp-tab-horometros" class="comp-tab-content" style="display:none">
+      <div class="table-wrap">
+        <table id="tabla-horometros">
+          <thead><tr><th>Fecha</th><th>Turno</th><th>Equipo</th><th>HI</th><th>HF</th><th>HT</th></tr></thead>
+          <tbody id="tbody-horometros"><tr><td colspan="6" style="text-align:center;color:var(--text3)">Sin datos</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="comp-tab-observaciones" class="comp-tab-content" style="display:none">
+      <div class="table-wrap">
+        <table id="tabla-observaciones">
+          <thead><tr><th>Fecha</th><th>Turno</th><th>Compresorista</th><th>Observaciones</th></tr></thead>
+          <tbody id="tbody-observaciones"><tr><td colspan="4" style="text-align:center;color:var(--text3)">Sin datos</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==================== MÓDULO COMPRESORISTA ====================
+if (!state.compresorista) state.compresorista = [];
+
+function switchCompTab(tab, btn) {
+  document.querySelectorAll('.comp-tab-content').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('#page-compresorista .mod-tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('comp-tab-' + tab).style.display = 'block';
+  btn.classList.add('active');
+}
+
+function digitalizarReporte() {
+  const texto = document.getElementById('comp-reporte-texto').value;
+  if (!texto.trim()) { alert('Pega el reporte primero'); return; }
+
+  const reporte = parsearReporteCompresorista(texto);
+  if (!reporte) { alert('No se pudo parsear el reporte. Verifica el formato.'); return; }
+
+  // Agregar nombre y DNI si están en los campos
+  reporte.nombre = document.getElementById('comp-nombre').value || reporte.nombre || '';
+  reporte.dni = document.getElementById('comp-dni').value || '';
+
+  // Evitar duplicados por fecha+turno
+  const idx = state.compresorista.findIndex(r => r.fecha === reporte.fecha && r.turno === reporte.turno);
+  if (idx >= 0) {
+    if (!confirm(`Ya existe un reporte para ${reporte.fecha} turno ${reporte.turno}. ¿Reemplazar?`)) return;
+    state.compresorista[idx] = reporte;
+  } else {
+    state.compresorista.push(reporte);
+  }
+
+  // Ordenar por fecha
+  state.compresorista.sort((a, b) => a.fecha.localeCompare(b.fecha));
+
+  renderTablaCompresorista();
+  document.getElementById('comp-reporte-texto').value = '';
+  alert('✅ Reporte digitalizado correctamente');
+}
+
+function parsearReporteCompresorista(texto) {
+  const reporte = {
+    fecha: '', turno: '', nombre: '',
+    explosivos: [], materialesRampa: [], materialesGaleria: [],
+    petroleo: [], gasolina: [], horometros: [], observaciones: ''
+  };
+
+  const lineas = texto.split('\n').map(l => l.trim());
+
+  for (const linea of lineas) {
+    // Nombre del compresorista
+    const mNombre = linea.match(/Compresorista[:\s*]+(.+)/i);
+    if (mNombre) reporte.nombre = mNombre[1].replace(/\*/g,'').trim();
+
+    // Turno
+    const mTurno = linea.match(/Turno[:\s*]+(.+)/i);
+    if (mTurno) reporte.turno = mTurno[1].replace(/\*/g,'').trim();
+
+    // Fecha
+    const mFecha = linea.match(/Fecha[:\s*]+.+?(\d{2}\/\d{2}\/\d{4})/i);
+    if (mFecha) reporte.fecha = mFecha[1];
+
+    // Explosivos: TIPO → I: X | E: X | C: X | F: X
+    const mExplosivo = linea.match(/^([A-Z0-9\.\s]+)\s*[→>]\s*I:\s*([\d.]+)\s*\|\s*E:\s*([\d.]+)\s*\|\s*C:\s*([\d.]+)\s*\|\s*F:\s*([\d.]+)/i);
+    if (mExplosivo) {
+      reporte.explosivos.push({
+        tipo: mExplosivo[1].trim(),
+        ingreso: parseFloat(mExplosivo[2]),
+        egreso: parseFloat(mExplosivo[3]),
+        consumo: parseFloat(mExplosivo[4]),
+        final: parseFloat(mExplosivo[5])
+      });
+    }
+
+    // Horómetros: Equipo → HI: X | HF: X | HT: X
+    const mHoro = linea.match(/^(.+?)\s*[→>]\s*HI:\s*([\d.]+|-)\s*\|\s*HF:\s*([\d.]+|-)\s*\|\s*HT:\s*([\d.]+|-)/i);
+    if (mHoro) {
+      reporte.horometros.push({
+        equipo: mHoro[1].trim(),
+        hi: mHoro[2],
+        hf: mHoro[3],
+        ht: mHoro[4]
+      });
+    }
+  }
+
+  // Parsear secciones
+  let seccion = '';
+  for (const linea of lineas) {
+    if (linea.includes('CONSUMO DE PETRÓLEO') || linea.includes('CONSUMO DE PETROLEO')) { seccion = 'petroleo'; continue; }
+    if (linea.includes('GASOLINA')) { seccion = 'gasolina'; continue; }
+    if (linea.includes('Para Rampa:') || linea.match(/Para Rampa/i)) { seccion = 'rampa'; continue; }
+    if (linea.includes('Para Galería:') || linea.match(/Para Galería/i)) { seccion = 'galeria'; continue; }
+    if (linea.includes('HORÓMETROS') || linea.includes('HOROMETROS')) { seccion = 'horometros'; continue; }
+    if (linea.includes('OBSERVACIONES')) { seccion = 'observaciones'; continue; }
+    if (linea.match(/^━+$/) || linea.match(/^[*]{3,}$/)) {
+      if (seccion === 'observaciones') seccion = '';
+      continue;
+    }
+
+    if (seccion === 'rampa' && linea.startsWith('-') && linea.length > 1) {
+      const mat = linea.replace(/^-\s*/, '').trim();
+      if (mat) reporte.materialesRampa.push(mat);
+    }
+    if (seccion === 'galeria' && linea.startsWith('-') && linea.length > 1) {
+      const mat = linea.replace(/^-\s*/, '').trim();
+      if (mat) reporte.materialesGaleria.push(mat);
+    }
+    if (seccion === 'petroleo') {
+      const mPetroleo = linea.match(/^(.+?):\s*([\d.]+)\s*gln/i);
+      if (mPetroleo && !linea.includes('Total')) {
+        reporte.petroleo.push({ equipo: mPetroleo[1].trim(), cantidad: parseFloat(mPetroleo[2]) });
+      }
+    }
+    if (seccion === 'gasolina') {
+      const mGasolina = linea.match(/^(.+?):\s*([\d.]+)\s*gln/i);
+      if (mGasolina && !linea.includes('Total')) {
+        reporte.gasolina.push({ equipo: mGasolina[1].trim(), cantidad: parseFloat(mGasolina[2]) });
+      }
+    }
+    if (seccion === 'observaciones' && linea && !linea.startsWith('━') && !linea.startsWith('*')) {
+      if (linea !== '-') reporte.observaciones += (reporte.observaciones ? '\n' : '') + linea;
+    }
+  }
+
+  if (!reporte.fecha && !reporte.nombre) return null;
+  return reporte;
+}
+
+function renderTablaCompresorista() {
+  const data = state.compresorista;
+
+  // Explosivos
+  const tbodyExp = document.getElementById('tbody-explosivos');
+  if (tbodyExp) {
+    if (data.length === 0) {
+      tbodyExp.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3)">Sin datos</td></tr>';
+    } else {
+      let html = '';
+      for (const r of data) {
+        for (const e of r.explosivos) {
+          html += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${e.tipo}</td><td>${e.ingreso}</td><td>${e.egreso}</td><td>${e.consumo}</td><td>${e.final}</td></tr>`;
+        }
+      }
+      tbodyExp.innerHTML = html || '<tr><td colspan="7" style="text-align:center;color:var(--text3)">Sin datos</td></tr>';
+    }
+  }
+
+  // Materiales
+  const tbodyMat = document.getElementById('tbody-materiales');
+  if (tbodyMat) {
+    let html = '';
+    for (const r of data) {
+      for (const m of r.materialesRampa) {
+        html += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>Rampa</td><td>${m}</td></tr>`;
+      }
+      for (const m of r.materialesGaleria) {
+        html += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>Galería</td><td>${m}</td></tr>`;
+      }
+    }
+    tbodyMat.innerHTML = html || '<tr><td colspan="4" style="text-align:center;color:var(--text3)">Sin datos</td></tr>';
+  }
+
+  // Petróleo/Gasolina
+  const tbodyPet = document.getElementById('tbody-petroleo');
+  if (tbodyPet) {
+    let html = '';
+    for (const r of data) {
+      for (const p of r.petroleo) {
+        html += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${p.equipo}</td><td>Petróleo</td><td>${p.cantidad}</td></tr>`;
+      }
+      for (const g of r.gasolina) {
+        html += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${g.equipo}</td><td>Gasolina</td><td>${g.cantidad}</td></tr>`;
+      }
+    }
+    tbodyPet.innerHTML = html || '<tr><td colspan="5" style="text-align:center;color:var(--text3)">Sin datos</td></tr>';
+  }
+
+  // Horómetros
+  const tbodyHoro = document.getElementById('tbody-horometros');
+  if (tbodyHoro) {
+    let html = '';
+    for (const r of data) {
+      for (const h of r.horometros) {
+        html += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${h.equipo}</td><td>${h.hi}</td><td>${h.hf}</td><td>${h.ht}</td></tr>`;
+      }
+    }
+    tbodyHoro.innerHTML = html || '<tr><td colspan="6" style="text-align:center;color:var(--text3)">Sin datos</td></tr>';
+  }
+
+  // Observaciones
+  const tbodyObs = document.getElementById('tbody-observaciones');
+  if (tbodyObs) {
+    let html = '';
+    for (const r of data) {
+      if (r.observaciones) {
+        html += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${r.nombre}</td><td style="white-space:pre-wrap">${r.observaciones}</td></tr>`;
+      }
+    }
+    tbodyObs.innerHTML = html || '<tr><td colspan="4" style="text-align:center;color:var(--text3)">Sin datos</td></tr>';
+  }
+}
+
+function exportarCompresoristExcel() {
+  if (typeof XLSX === 'undefined') { alert('La librería Excel no está disponible'); return; }
+  const wb = XLSX.utils.book_new();
+  const data = state.compresorista;
+
+  // Hoja Explosivos
+  const expRows = [['Fecha','Turno','Tipo','Ingreso','Egreso','Consumo','Final']];
+  for (const r of data) for (const e of r.explosivos) expRows.push([r.fecha,r.turno,e.tipo,e.ingreso,e.egreso,e.consumo,e.final]);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(expRows), 'Explosivos');
+
+  // Hoja Materiales
+  const matRows = [['Fecha','Turno','Destino','Material']];
+  for (const r of data) {
+    for (const m of r.materialesRampa) matRows.push([r.fecha,r.turno,'Rampa',m]);
+    for (const m of r.materialesGaleria) matRows.push([r.fecha,r.turno,'Galería',m]);
+  }
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(matRows), 'Materiales');
+
+  // Hoja Petróleo
+  const petRows = [['Fecha','Turno','Equipo','Tipo','Cantidad (gln)']];
+  for (const r of data) {
+    for (const p of r.petroleo) petRows.push([r.fecha,r.turno,p.equipo,'Petróleo',p.cantidad]);
+    for (const g of r.gasolina) petRows.push([r.fecha,r.turno,g.equipo,'Gasolina',g.cantidad]);
+  }
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(petRows), 'Petroleo_Gasolina');
+
+  // Hoja Horómetros
+  const horoRows = [['Fecha','Turno','Equipo','HI','HF','HT']];
+  for (const r of data) for (const h of r.horometros) horoRows.push([r.fecha,r.turno,h.equipo,h.hi,h.hf,h.ht]);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(horoRows), 'Horometros');
+
+  // Hoja Observaciones
+  const obsRows = [['Fecha','Turno','Compresorista','Observaciones']];
+  for (const r of data) if (r.observaciones) obsRows.push([r.fecha,r.turno,r.nombre,r.observaciones]);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(obsRows), 'Observaciones');
+
+  XLSX.writeFile(wb, 'reporte_compresorista.xlsx');
+}
+// ==================== FIN MÓDULO COMPRESORISTA ====================
+</script>
 
 </body>
 </html>
