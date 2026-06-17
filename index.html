@@ -6750,29 +6750,54 @@ window.onload=init;
   
 
 <div id="page-compresorista" class="page" style="display:none">
-  <div class="page-header">
-    <h2 class="section-title">🔧 Compresorista</h2>
-  </div>
-  <div class="card" style="margin-bottom:1rem">
-    <h3 style="color:var(--accent);margin-bottom:1rem">Identificación</h3>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
-      <div class="form-group">
-        <label>Nombre Completo</label>
-        <input type="text" id="comp-nombre" placeholder="Nombre del compresorista">
-      </div>
-      <div class="form-group">
-        <label>DNI</label>
-        <input type="text" id="comp-dni" placeholder="Número de DNI">
-      </div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+    <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.5px">🔧 Compresorista</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-gold" onclick="abrirModalCompresorista()">+ Ingresar Reporte</button>
+      <button class="btn btn-outline" onclick="exportarCompresoristExcel()">📥 Excel</button>
     </div>
   </div>
-  <div class="card" style="margin-bottom:1rem">
-    <h3 style="color:var(--accent);margin-bottom:1rem">Pegar Reporte Diario</h3>
-    <div class="form-group">
-      <textarea id="comp-reporte-texto" rows="15" placeholder="Pega aquí el reporte de guardia..." style="width:100%;font-family:monospace;font-size:0.85rem;background:var(--coal3);color:var(--text);border:1px solid var(--coal4);border-radius:8px;padding:1rem;resize:vertical"></textarea>
+
+  <!-- MODAL INGRESO REPORTE -->
+  <div class="modal-overlay" id="modal-compresorista" style="display:none" onclick="if(event.target===this)cerrarModalCompresorista()">
+    <div class="modal" style="width:min(620px,95vw);max-height:90vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase">Ingresar Reporte de Guardia</div>
+        <button onclick="cerrarModalCompresorista()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;line-height:1">×</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+        <div class="form-group">
+          <label>Nombre Completo</label>
+          <input type="text" id="comp-nombre" placeholder="Ej: Anthony Rengifo">
+        </div>
+        <div class="form-group">
+          <label>DNI</label>
+          <input type="text" id="comp-dni" placeholder="Ej: 47382910">
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label>Turno</label>
+        <div style="display:flex;gap:10px;margin-top:6px">
+          <button id="comp-turno-dia" onclick="seleccionarTurno('Día')"
+            style="flex:1;padding:12px;border:2px solid var(--border);background:var(--coal4);color:var(--text2);border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:all 0.15s">
+            ☀️ Día
+          </button>
+          <button id="comp-turno-noche" onclick="seleccionarTurno('Noche')"
+            style="flex:1;padding:12px;border:2px solid var(--border);background:var(--coal4);color:var(--text2);border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:all 0.15s">
+            🌙 Noche
+          </button>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:16px">
+        <label>Pegar Reporte de Guardia</label>
+        <textarea id="comp-reporte-texto" rows="12" placeholder="Pega aquí el reporte de guardia en formato WhatsApp..." style="width:100%;font-family:'DM Mono',monospace;font-size:11px;background:var(--coal4);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:12px;resize:vertical;line-height:1.6;margin-top:6px"></textarea>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-gold" onclick="digitalizarReporte()" style="flex:1">📊 Digitalizar Reporte</button>
+        <button class="btn btn-outline" onclick="cerrarModalCompresorista()">Cancelar</button>
+      </div>
+      <div id="comp-msg" style="margin-top:10px;font-size:11px;display:none"></div>
     </div>
-    <button class="btn btn-gold" onclick="digitalizarReporte()">📊 Digitalizar</button>
-    <button class="btn btn-outline" onclick="exportarCompresoristExcel()" style="margin-left:0.5rem">📥 Exportar Excel</button>
   </div>
   <div class="card">
     <div class="mod-tabs" style="margin-bottom:1rem">
@@ -6828,6 +6853,38 @@ window.onload=init;
 <script>
 // ==================== MÓDULO COMPRESORISTA ====================
 if (!state.compresorista) state.compresorista = [];
+let _compTurnoSeleccionado = '';
+
+function abrirModalCompresorista() {
+  document.getElementById('modal-compresorista').style.display = 'flex';
+  document.getElementById('comp-nombre').value = '';
+  document.getElementById('comp-dni').value = '';
+  document.getElementById('comp-reporte-texto').value = '';
+  _compTurnoSeleccionado = '';
+  ['dia','noche'].forEach(t => {
+    const btn = document.getElementById('comp-turno-'+t);
+    btn.style.borderColor = 'var(--border)';
+    btn.style.color = 'var(--text2)';
+    btn.style.background = 'var(--coal4)';
+  });
+}
+
+function cerrarModalCompresorista() {
+  document.getElementById('modal-compresorista').style.display = 'none';
+}
+
+function seleccionarTurno(turno) {
+  _compTurnoSeleccionado = turno;
+  const esDia = turno === 'Día';
+  const btnDia = document.getElementById('comp-turno-dia');
+  const btnNoche = document.getElementById('comp-turno-noche');
+  btnDia.style.borderColor = esDia ? 'var(--accent)' : 'var(--border)';
+  btnDia.style.color = esDia ? 'var(--accent-light)' : 'var(--text2)';
+  btnDia.style.background = esDia ? 'var(--accent-dim)' : 'var(--coal4)';
+  btnNoche.style.borderColor = !esDia ? 'var(--accent)' : 'var(--border)';
+  btnNoche.style.color = !esDia ? 'var(--accent-light)' : 'var(--text2)';
+  btnNoche.style.background = !esDia ? 'var(--accent-dim)' : 'var(--coal4)';
+}
 
 function switchCompTab(tab, btn) {
   document.querySelectorAll('.comp-tab-content').forEach(el => el.style.display = 'none');
@@ -6837,17 +6894,22 @@ function switchCompTab(tab, btn) {
 }
 
 function digitalizarReporte() {
+  const nombre = document.getElementById('comp-nombre').value.trim();
+  const dni = document.getElementById('comp-dni').value.trim();
   const texto = document.getElementById('comp-reporte-texto').value;
-  if (!texto.trim()) { alert('Pega el reporte primero'); return; }
+
+  if (!nombre) { showNotif('Ingresa el nombre del compresorista','error'); return; }
+  if (!dni) { showNotif('Ingresa el DNI','error'); return; }
+  if (!_compTurnoSeleccionado) { showNotif('Selecciona el turno (Día o Noche)','error'); return; }
+  if (!texto.trim()) { showNotif('Pega el reporte primero','error'); return; }
 
   const reporte = parsearReporteCompresorista(texto);
-  if (!reporte) { alert('No se pudo parsear el reporte. Verifica el formato.'); return; }
+  if (!reporte) { showNotif('No se pudo parsear el reporte. Verifica el formato.','error'); return; }
 
-  // Agregar nombre y DNI si están en los campos
-  reporte.nombre = document.getElementById('comp-nombre').value || reporte.nombre || '';
-  reporte.dni = document.getElementById('comp-dni').value || '';
+  reporte.nombre = nombre;
+  reporte.dni = dni;
+  reporte.turno = _compTurnoSeleccionado;
 
-  // Evitar duplicados por fecha+turno
   const idx = state.compresorista.findIndex(r => r.fecha === reporte.fecha && r.turno === reporte.turno);
   if (idx >= 0) {
     if (!confirm(`Ya existe un reporte para ${reporte.fecha} turno ${reporte.turno}. ¿Reemplazar?`)) return;
@@ -6856,12 +6918,10 @@ function digitalizarReporte() {
     state.compresorista.push(reporte);
   }
 
-  // Ordenar por fecha
   state.compresorista.sort((a, b) => a.fecha.localeCompare(b.fecha));
-
   renderTablaCompresorista();
-  document.getElementById('comp-reporte-texto').value = '';
-  alert('✅ Reporte digitalizado correctamente');
+  cerrarModalCompresorista();
+  showNotif('Reporte digitalizado correctamente','ok');
 }
 
 function parsearReporteCompresorista(texto) {
