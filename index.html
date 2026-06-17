@@ -3027,99 +3027,129 @@ select option{background:var(--coal3);}
     </div>
   </div>
 
-  <!-- MODAL INGRESO REPORTE -->
+  <!-- RESUMEN ÚLTIMO TURNO -->
+  <div id="comp-resumen" style="display:none;margin-bottom:18px"></div>
+
+  <!-- MODAL FORMULARIO -->
   <div class="modal-overlay" id="modal-compresorista" onclick="if(event.target===this)cerrarModalCompresorista()">
-    <div class="modal" style="width:min(620px,95vw);max-height:90vh;overflow-y:auto">
+    <div class="modal" style="width:min(700px,96vw);max-height:92vh;overflow-y:auto;padding:28px 24px">
+
+      <!-- CABECERA -->
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-        <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase">Ingresar Reporte de Guardia</div>
-        <button onclick="cerrarModalCompresorista()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;line-height:1">×</button>
+        <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase">📋 Reporte de Guardia</div>
+        <button onclick="cerrarModalCompresorista()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:20px;line-height:1">×</button>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div class="form-group"><label>Nombre Completo</label><input type="text" id="comp-nombre" placeholder="Ej: Gilmer Jiménez"></div>
+        <div class="form-group"><label>DNI</label><input type="text" id="comp-dni" placeholder="Ej: 47382910"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
         <div class="form-group">
-          <label>Nombre Completo</label>
-          <input type="text" id="comp-nombre" placeholder="Ej: Anthony Rengifo">
+          <label>Turno</label>
+          <div style="display:flex;gap:8px;margin-top:6px">
+            <button id="comp-turno-dia" onclick="seleccionarTurno('Día')" style="flex:1;padding:10px;border:2px solid var(--border);background:var(--coal4);color:var(--text2);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;transition:all 0.15s">☀️ Día</button>
+            <button id="comp-turno-noche" onclick="seleccionarTurno('Noche')" style="flex:1;padding:10px;border:2px solid var(--border);background:var(--coal4);color:var(--text2);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;transition:all 0.15s">🌙 Noche</button>
+          </div>
         </div>
-        <div class="form-group">
-          <label>DNI</label>
-          <input type="text" id="comp-dni" placeholder="Ej: 47382910">
+        <div class="form-group"><label>Fecha</label><input type="date" id="comp-fecha"></div>
+      </div>
+
+      <!-- S1: INGRESO A ALMACÉN -->
+      <div class="section-title" style="margin-bottom:12px">📦 Ingreso a Almacén</div>
+
+      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Materiales</div>
+      <div id="comp-mat-rows" style="margin-bottom:8px"></div>
+      <button onclick="compAddMat()" style="font-size:11px;background:var(--coal4);border:1px dashed var(--border);color:var(--accent-light);padding:6px 14px;border-radius:4px;cursor:pointer;width:100%;margin-bottom:16px">+ Agregar material</button>
+
+      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Explosivos</div>
+      <div class="table-wrap" style="margin-bottom:20px">
+        <table style="width:100%">
+          <thead><tr style="font-size:10px;color:var(--text3)"><th style="text-align:left;padding:6px 8px">Código</th><th style="padding:6px 8px;text-align:center">I (Ingreso)</th><th style="padding:6px 8px;text-align:center">E (Egreso)</th><th style="padding:6px 8px;text-align:center">C (Consumo)</th><th style="padding:6px 8px;text-align:center">F (Final)</th></tr></thead>
+          <tbody id="comp-exp-body"></tbody>
+        </table>
+      </div>
+
+      <!-- S2: CONSUMO -->
+      <div class="section-title" style="margin-bottom:12px">⛏️ Consumo</div>
+
+      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Para Rampa</div>
+      <div id="comp-cons-rampa-rows" style="margin-bottom:8px"></div>
+      <button onclick="compAddCons('rampa')" style="font-size:11px;background:var(--coal4);border:1px dashed var(--border);color:var(--accent-light);padding:6px 14px;border-radius:4px;cursor:pointer;width:100%;margin-bottom:16px">+ Agregar ítem Rampa</button>
+
+      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Para Galería</div>
+      <div id="comp-cons-gal-rows" style="margin-bottom:8px"></div>
+      <button onclick="compAddCons('galeria')" style="font-size:11px;background:var(--coal4);border:1px dashed var(--border);color:var(--accent-light);padding:6px 14px;border-radius:4px;cursor:pointer;width:100%;margin-bottom:20px">+ Agregar ítem Galería</button>
+
+      <!-- S3: PETRÓLEO Y GASOLINA -->
+      <div class="section-title" style="margin-bottom:12px">⛽ Consumo de Petróleo y Gasolina</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--warn);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">🛢 Petróleo (gln)</div>
+          <div id="comp-petroleo-fields"></div>
+          <div style="display:flex;justify-content:space-between;padding:6px 8px;background:var(--coal3);border-radius:4px;margin-top:6px">
+            <span style="font-size:11px;font-weight:700;color:var(--text2)">TOTAL</span>
+            <span style="font-size:12px;font-weight:700;color:var(--warn)" id="comp-total-petroleo">0 gln</span>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--positive);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">⛽ Gasolina (gln)</div>
+          <div id="comp-gasolina-fields"></div>
+          <div style="display:flex;justify-content:space-between;padding:6px 8px;background:var(--coal3);border-radius:4px;margin-top:6px">
+            <span style="font-size:11px;font-weight:700;color:var(--text2)">TOTAL</span>
+            <span style="font-size:12px;font-weight:700;color:var(--positive)" id="comp-total-gasolina">0 gln</span>
+          </div>
         </div>
       </div>
-      <div class="form-group" style="margin-bottom:14px">
-        <label>Turno</label>
-        <div style="display:flex;gap:10px;margin-top:6px">
-          <button id="comp-turno-dia" onclick="seleccionarTurno('Día')"
-            style="flex:1;padding:12px;border:2px solid var(--border);background:var(--coal4);color:var(--text2);border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:all 0.15s">
-            ☀️ Día
-          </button>
-          <button id="comp-turno-noche" onclick="seleccionarTurno('Noche')"
-            style="flex:1;padding:12px;border:2px solid var(--border);background:var(--coal4);color:var(--text2);border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:all 0.15s">
-            🌙 Noche
-          </button>
-        </div>
+
+      <!-- S4: HORÓMETROS -->
+      <div class="section-title" style="margin-bottom:12px">⏱️ Horómetros</div>
+      <div class="table-wrap" style="margin-bottom:20px">
+        <table style="width:100%">
+          <thead><tr style="font-size:10px;color:var(--text3)"><th style="text-align:left;padding:6px 8px">Equipo</th><th style="padding:6px 8px;text-align:center">HI</th><th style="padding:6px 8px;text-align:center">HF</th><th style="padding:6px 8px;text-align:center;color:var(--accent-light)">HT (auto)</th></tr></thead>
+          <tbody id="comp-horo-body"></tbody>
+        </table>
       </div>
-      <div class="form-group" style="margin-bottom:16px">
-        <label>Pegar Reporte de Guardia</label>
-        <textarea id="comp-reporte-texto" rows="12" placeholder="Pega aquí el reporte de guardia en formato WhatsApp..." style="width:100%;font-family:'DM Mono',monospace;font-size:11px;background:var(--coal4);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:12px;resize:vertical;line-height:1.6;margin-top:6px"></textarea>
-      </div>
+
+      <!-- S5: OBSERVACIONES -->
+      <div class="section-title" style="margin-bottom:12px">📝 Observaciones</div>
+      <textarea id="comp-obs" rows="3" placeholder="Ej: Personal de galería realizó un disparo..." style="width:100%;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:10px;font-size:12px;resize:vertical;margin-bottom:20px"></textarea>
+
       <div style="display:flex;gap:10px">
-        <button class="btn btn-gold" onclick="digitalizarReporte()" style="flex:1">📊 Digitalizar Reporte</button>
+        <button class="btn btn-gold" onclick="guardarReporteComp()" style="flex:1">💾 Guardar Reporte</button>
         <button class="btn btn-outline" onclick="cerrarModalCompresorista()">Cancelar</button>
       </div>
-      <div id="comp-msg" style="margin-top:10px;font-size:11px;display:none"></div>
     </div>
   </div>
+
+  <!-- TABLAS ACUMULADAS -->
   <div class="card">
-    <div class="mod-tabs" style="margin-bottom:1rem">
-      <button class="mod-tab active" onclick="switchCompTab('explosivos',this)">💣 Explosivos</button>
+    <div class="mod-tabs" style="margin-bottom:16px">
+      <button class="mod-tab active" onclick="switchCompTab('explosivos',this)">💥 Explosivos</button>
       <button class="mod-tab" onclick="switchCompTab('materiales',this)">📦 Materiales</button>
       <button class="mod-tab" onclick="switchCompTab('petroleo',this)">⛽ Petróleo/Gasolina</button>
       <button class="mod-tab" onclick="switchCompTab('horometros',this)">⏱️ Horómetros</button>
       <button class="mod-tab" onclick="switchCompTab('observaciones',this)">📝 Observaciones</button>
     </div>
     <div id="comp-tab-explosivos" class="comp-tab-content">
-      <div class="table-wrap">
-        <table id="tabla-explosivos">
-          <thead><tr><th>Fecha</th><th>Turno</th><th>Tipo</th><th>Ingreso</th><th>Egreso</th><th>Consumo</th><th>Final</th></tr></thead>
-          <tbody id="tbody-explosivos"><tr><td colspan="7" style="text-align:center;color:var(--text3)">Sin datos</td></tr></tbody>
-        </table>
-      </div>
+      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Código</th><th class="r">I</th><th class="r">E</th><th class="r">C</th><th class="r">F</th></tr></thead><tbody id="tbody-explosivos"><tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sin reportes aún</td></tr></tbody></table></div>
     </div>
     <div id="comp-tab-materiales" class="comp-tab-content" style="display:none">
-      <div class="table-wrap">
-        <table id="tabla-materiales">
-          <thead><tr><th>Fecha</th><th>Turno</th><th>Destino</th><th>Material</th></tr></thead>
-          <tbody id="tbody-materiales"><tr><td colspan="4" style="text-align:center;color:var(--text3)">Sin datos</td></tr></tbody>
-        </table>
-      </div>
+      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Frente</th><th>Material</th><th class="r">Cantidad</th><th>Unidad</th></tr></thead><tbody id="tbody-materiales"><tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sin reportes aún</td></tr></tbody></table></div>
     </div>
     <div id="comp-tab-petroleo" class="comp-tab-content" style="display:none">
-      <div class="table-wrap">
-        <table id="tabla-petroleo">
-          <thead><tr><th>Fecha</th><th>Turno</th><th>Equipo</th><th>Tipo</th><th>Cantidad (gln)</th></tr></thead>
-          <tbody id="tbody-petroleo"><tr><td colspan="5" style="text-align:center;color:var(--text3)">Sin datos</td></tr></tbody>
-        </table>
-      </div>
+      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Equipo</th><th>Tipo</th><th class="r">Galones</th></tr></thead><tbody id="tbody-petroleo"><tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">Sin reportes aún</td></tr></tbody></table></div>
     </div>
     <div id="comp-tab-horometros" class="comp-tab-content" style="display:none">
-      <div class="table-wrap">
-        <table id="tabla-horometros">
-          <thead><tr><th>Fecha</th><th>Turno</th><th>Equipo</th><th>HI</th><th>HF</th><th>HT</th></tr></thead>
-          <tbody id="tbody-horometros"><tr><td colspan="6" style="text-align:center;color:var(--text3)">Sin datos</td></tr></tbody>
-        </table>
-      </div>
+      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Equipo</th><th class="r">HI</th><th class="r">HF</th><th class="r">HT</th></tr></thead><tbody id="tbody-horometros"><tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sin reportes aún</td></tr></tbody></table></div>
     </div>
     <div id="comp-tab-observaciones" class="comp-tab-content" style="display:none">
-      <div class="table-wrap">
-        <table id="tabla-observaciones">
-          <thead><tr><th>Fecha</th><th>Turno</th><th>Compresorista</th><th>Observaciones</th></tr></thead>
-          <tbody id="tbody-observaciones"><tr><td colspan="4" style="text-align:center;color:var(--text3)">Sin datos</td></tr></tbody>
-        </table>
-      </div>
+      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Compresorista</th><th>Observaciones</th></tr></thead><tbody id="tbody-observaciones"><tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">Sin reportes aún</td></tr></tbody></table></div>
     </div>
   </div>
 </div>
 
-  </div><!-- end content -->
+</div><!-- end content -->
 </main>
 
 <div class="notif" id="notif">✓ Guardado</div>
@@ -6857,18 +6887,55 @@ window.onload=init;
 if (!state.compresorista) state.compresorista = [];
 let _compTurnoSeleccionado = '';
 
+const COMP_EXPLOSIVOS = ['E.1000','E.3000','E.5000','CX.1.80','CX.2.40','FM','Neiter'];
+const COMP_PETROLEO   = ['Grupo','Compresora M135','Compresora M122','Scoop Epiroc','Scoop Monte','Dumper'];
+const COMP_GASOLINA   = ['Camioneta Blanca','Camioneta Roja','Cuatrimoto C','Cuatrimoto N','Mina'];
+const COMP_HOROMETROS = ['Grupo','Compresora M135','Compresora M122','Scoop Epiroc','Scoop Monte','Dumper'];
+
 function abrirModalCompresorista() {
   document.getElementById('modal-compresorista').style.display = 'flex';
   document.getElementById('comp-nombre').value = '';
   document.getElementById('comp-dni').value = '';
-  document.getElementById('comp-reporte-texto').value = '';
+  document.getElementById('comp-obs').value = '';
+  document.getElementById('comp-fecha').value = new Date().toISOString().split('T')[0];
   _compTurnoSeleccionado = '';
   ['dia','noche'].forEach(t => {
-    const btn = document.getElementById('comp-turno-'+t);
-    btn.style.borderColor = 'var(--border)';
-    btn.style.color = 'var(--text2)';
-    btn.style.background = 'var(--coal4)';
+    const b = document.getElementById('comp-turno-'+t);
+    b.style.borderColor = 'var(--border)'; b.style.color = 'var(--text2)'; b.style.background = 'var(--coal4)';
   });
+  // materiales
+  document.getElementById('comp-mat-rows').innerHTML = '';
+  compAddMat();
+  // explosivos
+  document.getElementById('comp-exp-body').innerHTML = COMP_EXPLOSIVOS.map(c => `
+    <tr style="border-top:1px solid var(--border2)">
+      <td style="padding:6px 8px;font-family:'DM Mono',monospace;font-size:12px;color:var(--text)">${c}</td>
+      ${['I','E','C','F'].map(f => `<td style="padding:4px 6px"><input type="number" min="0" step="any" id="cexp-${c.replace('.','_')}-${f}" placeholder="0" oninput="compCalcF('${c}')" style="width:100%;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>`).join('')}
+    </tr>`).join('');
+  // consumo
+  document.getElementById('comp-cons-rampa-rows').innerHTML = '';
+  document.getElementById('comp-cons-gal-rows').innerHTML = '';
+  compAddCons('rampa'); compAddCons('galeria');
+  // petróleo
+  document.getElementById('comp-petroleo-fields').innerHTML = COMP_PETROLEO.map(m => `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <span style="font-size:11px;color:var(--text2)">${m}</span>
+      <input type="number" min="0" step="any" id="cpet-${m.replace(/ /g,'_')}" placeholder="0" oninput="compSumaFuel('petroleo')" style="width:80px;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:right">
+    </div>`).join('');
+  document.getElementById('comp-gasolina-fields').innerHTML = COMP_GASOLINA.map(m => `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <span style="font-size:11px;color:var(--text2)">${m}</span>
+      <input type="number" min="0" step="any" id="cgas-${m.replace(/ /g,'_')}" placeholder="0" oninput="compSumaFuel('gasolina')" style="width:80px;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:right">
+    </div>`).join('');
+  document.getElementById('comp-total-petroleo').textContent = '0 gln';
+  document.getElementById('comp-total-gasolina').textContent = '0 gln';
+  // horómetros
+  document.getElementById('comp-horo-body').innerHTML = COMP_HOROMETROS.map(m => `
+    <tr style="border-top:1px solid var(--border2)">
+      <td style="padding:6px 8px;font-size:12px;color:var(--text)">${m}</td>
+      ${['HI','HF'].map(f => `<td style="padding:4px 6px"><input type="number" min="0" step="0.01" id="choro-${m.replace(/ /g,'_')}-${f}" placeholder="0" oninput="compCalcHT('${m}')" style="width:100%;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>`).join('')}
+      <td style="padding:6px 8px;text-align:center;font-family:'DM Mono',monospace;font-size:12px;color:var(--accent-light)" id="choro-${m.replace(/ /g,'_')}-HT">—</td>
+    </tr>`).join('');
 }
 
 function cerrarModalCompresorista() {
@@ -6878,253 +6945,228 @@ function cerrarModalCompresorista() {
 function seleccionarTurno(turno) {
   _compTurnoSeleccionado = turno;
   const esDia = turno === 'Día';
-  const btnDia = document.getElementById('comp-turno-dia');
-  const btnNoche = document.getElementById('comp-turno-noche');
-  btnDia.style.borderColor = esDia ? 'var(--accent)' : 'var(--border)';
-  btnDia.style.color = esDia ? 'var(--accent-light)' : 'var(--text2)';
-  btnDia.style.background = esDia ? 'var(--accent-dim)' : 'var(--coal4)';
-  btnNoche.style.borderColor = !esDia ? 'var(--accent)' : 'var(--border)';
-  btnNoche.style.color = !esDia ? 'var(--accent-light)' : 'var(--text2)';
-  btnNoche.style.background = !esDia ? 'var(--accent-dim)' : 'var(--coal4)';
+  ['dia','noche'].forEach(t => {
+    const b = document.getElementById('comp-turno-'+t);
+    const activo = (t === 'dia') === esDia;
+    b.style.borderColor = activo ? 'var(--accent)' : 'var(--border)';
+    b.style.color = activo ? 'var(--accent-light)' : 'var(--text2)';
+    b.style.background = activo ? 'var(--accent-dim)' : 'var(--coal4)';
+  });
 }
 
-function switchCompTab(tab, btn) {
-  document.querySelectorAll('.comp-tab-content').forEach(el => el.style.display = 'none');
-  document.querySelectorAll('#page-compresorista .mod-tab').forEach(el => el.classList.remove('active'));
-  document.getElementById('comp-tab-' + tab).style.display = 'block';
-  btn.classList.add('active');
+function compAddMat() {
+  const row = document.createElement('div');
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 80px 70px 30px;gap:6px;margin-bottom:6px';
+  row.innerHTML = `
+    <input type="text" placeholder="Descripción del material" style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 10px;font-size:12px">
+    <input type="number" min="0" placeholder="Cant." style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 8px;font-size:12px;text-align:center">
+    <input type="text" placeholder="Unidad" style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 8px;font-size:12px">
+    <button onclick="this.parentElement.remove()" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);color:var(--negative);border-radius:4px;cursor:pointer;font-size:14px">×</button>`;
+  document.getElementById('comp-mat-rows').appendChild(row);
 }
 
-function digitalizarReporte() {
+function compAddCons(frente) {
+  const row = document.createElement('div');
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 80px 70px 30px;gap:6px;margin-bottom:6px';
+  row.innerHTML = `
+    <input type="text" placeholder="Descripción" style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 10px;font-size:12px">
+    <input type="number" min="0" placeholder="Cant." style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 8px;font-size:12px;text-align:center">
+    <input type="text" placeholder="Unidad" style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 8px;font-size:12px">
+    <button onclick="this.parentElement.remove()" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);color:var(--negative);border-radius:4px;cursor:pointer;font-size:14px">×</button>`;
+  document.getElementById('comp-cons-'+(frente==='rampa'?'rampa':'gal')+'-rows').appendChild(row);
+}
+
+function compCalcF(codigo) {
+  const id = codigo.replace('.','_');
+  const i = parseFloat(document.getElementById('cexp-'+id+'-I')?.value)||0;
+  const e = parseFloat(document.getElementById('cexp-'+id+'-E')?.value)||0;
+  const c = parseFloat(document.getElementById('cexp-'+id+'-C')?.value)||0;
+  const fEl = document.getElementById('cexp-'+id+'-F');
+  if(fEl) fEl.value = i - e - c;
+}
+
+function compSumaFuel(tipo) {
+  const lista = tipo === 'petroleo' ? COMP_PETROLEO : COMP_GASOLINA;
+  const prefix = tipo === 'petroleo' ? 'cpet-' : 'cgas-';
+  const total = lista.reduce((s,m) => s + (parseFloat(document.getElementById(prefix+m.replace(/ /g,'_'))?.value)||0), 0);
+  document.getElementById('comp-total-'+tipo).textContent = total.toFixed(1)+' gln';
+}
+
+function compCalcHT(maquina) {
+  const id = maquina.replace(/ /g,'_');
+  const hi = parseFloat(document.getElementById('choro-'+id+'-HI')?.value)||0;
+  const hf = parseFloat(document.getElementById('choro-'+id+'-HF')?.value)||0;
+  const htEl = document.getElementById('choro-'+id+'-HT');
+  if(htEl) htEl.textContent = hf > 0 ? (hf - hi).toFixed(2) : '—';
+}
+
+function guardarReporteComp() {
   const nombre = document.getElementById('comp-nombre').value.trim();
   const dni = document.getElementById('comp-dni').value.trim();
-  const texto = document.getElementById('comp-reporte-texto').value;
+  const fecha = document.getElementById('comp-fecha').value;
+  if(!nombre){showNotif('Ingresa el nombre','error');return;}
+  if(!dni){showNotif('Ingresa el DNI','error');return;}
+  if(!_compTurnoSeleccionado){showNotif('Selecciona el turno','error');return;}
+  if(!fecha){showNotif('Selecciona la fecha','error');return;}
 
-  if (!nombre) { showNotif('Ingresa el nombre del compresorista','error'); return; }
-  if (!dni) { showNotif('Ingresa el DNI','error'); return; }
-  if (!_compTurnoSeleccionado) { showNotif('Selecciona el turno (Día o Noche)','error'); return; }
-  if (!texto.trim()) { showNotif('Pega el reporte primero','error'); return; }
+  // materiales almacén
+  const materialesAlmacen = [];
+  document.getElementById('comp-mat-rows').querySelectorAll('div').forEach(row => {
+    const ins = row.querySelectorAll('input');
+    if(ins[0]?.value.trim()) materialesAlmacen.push({desc:ins[0].value.trim(), cant:ins[1]?.value||'', unidad:ins[2]?.value||''});
+  });
 
-  const reporte = parsearReporteCompresorista(texto);
-  if (!reporte) { showNotif('No se pudo parsear el reporte. Verifica el formato.','error'); return; }
+  // explosivos
+  const explosivos = COMP_EXPLOSIVOS.map(c => {
+    const id = c.replace('.','_');
+    return {codigo:c, I:parseFloat(document.getElementById('cexp-'+id+'-I')?.value)||0, E:parseFloat(document.getElementById('cexp-'+id+'-E')?.value)||0, C:parseFloat(document.getElementById('cexp-'+id+'-C')?.value)||0, F:parseFloat(document.getElementById('cexp-'+id+'-F')?.value)||0};
+  });
 
-  reporte.nombre = nombre;
-  reporte.dni = dni;
-  reporte.turno = _compTurnoSeleccionado;
+  // consumo rampa
+  const consumoRampa = [];
+  document.getElementById('comp-cons-rampa-rows').querySelectorAll('div').forEach(row => {
+    const ins = row.querySelectorAll('input');
+    if(ins[0]?.value.trim()) consumoRampa.push({desc:ins[0].value.trim(), cant:ins[1]?.value||'', unidad:ins[2]?.value||''});
+  });
+  // consumo galeria
+  const consumoGaleria = [];
+  document.getElementById('comp-cons-gal-rows').querySelectorAll('div').forEach(row => {
+    const ins = row.querySelectorAll('input');
+    if(ins[0]?.value.trim()) consumoGaleria.push({desc:ins[0].value.trim(), cant:ins[1]?.value||'', unidad:ins[2]?.value||''});
+  });
 
-  const idx = state.compresorista.findIndex(r => r.fecha === reporte.fecha && r.turno === reporte.turno);
-  if (idx >= 0) {
-    if (!confirm(`Ya existe un reporte para ${reporte.fecha} turno ${reporte.turno}. ¿Reemplazar?`)) return;
+  // petróleo
+  const petroleo = COMP_PETROLEO.map(m => ({equipo:m, gln:parseFloat(document.getElementById('cpet-'+m.replace(/ /g,'_'))?.value)||0}));
+  const gasolina = COMP_GASOLINA.map(m => ({equipo:m, gln:parseFloat(document.getElementById('cgas-'+m.replace(/ /g,'_'))?.value)||0}));
+
+  // horómetros
+  const horometros = COMP_HOROMETROS.map(m => {
+    const id = m.replace(/ /g,'_');
+    const hi = parseFloat(document.getElementById('choro-'+id+'-HI')?.value)||0;
+    const hf = parseFloat(document.getElementById('choro-'+id+'-HF')?.value)||0;
+    return {equipo:m, HI:hi, HF:hf, HT:hf>0?+(hf-hi).toFixed(2):0};
+  });
+
+  const obs = document.getElementById('comp-obs').value.trim();
+
+  const reporte = {fecha, turno:_compTurnoSeleccionado, nombre, dni, materialesAlmacen, explosivos, consumoRampa, consumoGaleria, petroleo, gasolina, horometros, obs};
+
+  const idx = state.compresorista.findIndex(r => r.fecha===fecha && r.turno===_compTurnoSeleccionado);
+  if(idx>=0){
+    if(!confirm('Ya existe un reporte para esta fecha y turno. ¿Reemplazar?')) return;
     state.compresorista[idx] = reporte;
   } else {
     state.compresorista.push(reporte);
   }
-
-  state.compresorista.sort((a, b) => a.fecha.localeCompare(b.fecha));
+  state.compresorista.sort((a,b)=>a.fecha.localeCompare(b.fecha));
   renderTablaCompresorista();
+  mostrarResumenComp(reporte);
   cerrarModalCompresorista();
-  showNotif('Reporte digitalizado correctamente','ok');
+  showNotif('Reporte guardado correctamente','ok');
 }
 
-function parsearReporteCompresorista(texto) {
-  const reporte = {
-    fecha: '', turno: '', nombre: '',
-    explosivos: [], materialesRampa: [], materialesGaleria: [],
-    petroleo: [], gasolina: [], horometros: [], observaciones: ''
-  };
+function mostrarResumenComp(r) {
+  const totPet = r.petroleo.reduce((s,x)=>s+x.gln,0);
+  const totGas = r.gasolina.reduce((s,x)=>s+x.gln,0);
+  const expHtml = r.explosivos.filter(e=>e.I||e.E||e.C).map(e=>`<span style="font-size:11px;background:var(--coal4);border:1px solid var(--border);border-radius:4px;padding:3px 8px;color:var(--text2)"><b style="color:var(--text)">${e.codigo}</b> I:${e.I} E:${e.E} C:${e.C} F:${e.F}</span>`).join('');
+  const horoHtml = r.horometros.filter(h=>h.HT>0).map(h=>`<span style="font-size:11px;background:var(--coal4);border:1px solid var(--border);border-radius:4px;padding:3px 8px;color:var(--text2)"><b style="color:var(--text)">${h.equipo}</b> ${h.HT}h</span>`).join('');
+  document.getElementById('comp-resumen').style.display = 'block';
+  document.getElementById('comp-resumen').innerHTML = `
+    <div class="card" style="border:1px solid var(--accent-border)">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--accent-light);margin-bottom:12px">📊 Resumen — ${r.turno} ${r.fecha} · ${r.nombre}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px">
+        <div style="background:var(--coal3);border-radius:6px;padding:10px;text-align:center">
+          <div style="font-size:18px;font-weight:700;color:var(--warn)">${totPet.toFixed(1)}</div>
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase">gln Petróleo</div>
+        </div>
+        <div style="background:var(--coal3);border-radius:6px;padding:10px;text-align:center">
+          <div style="font-size:18px;font-weight:700;color:var(--positive)">${totGas.toFixed(1)}</div>
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase">gln Gasolina</div>
+        </div>
+        <div style="background:var(--coal3);border-radius:6px;padding:10px;text-align:center">
+          <div style="font-size:18px;font-weight:700;color:var(--accent-light)">${r.horometros.reduce((s,h)=>s+h.HT,0).toFixed(1)}</div>
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase">Horas total</div>
+        </div>
+        <div style="background:var(--coal3);border-radius:6px;padding:10px;text-align:center">
+          <div style="font-size:18px;font-weight:700;color:var(--negative)">${r.explosivos.reduce((s,e)=>s+e.E,0)}</div>
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase">Explosivos Egreso</div>
+        </div>
+      </div>
+      ${expHtml?`<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Explosivos</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">${expHtml}</div>`:''}
+      ${horoHtml?`<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Horómetros</div><div style="display:flex;flex-wrap:wrap;gap:6px">${horoHtml}</div>`:''}
+    </div>`;
+}
 
-  const lineas = texto.split('\n').map(l => l.trim());
-
-  for (const linea of lineas) {
-    // Nombre del compresorista
-    const mNombre = linea.match(/Compresorista[:\s*]+(.+)/i);
-    if (mNombre) reporte.nombre = mNombre[1].replace(/\*/g,'').trim();
-
-    // Turno
-    const mTurno = linea.match(/Turno[:\s*]+(.+)/i);
-    if (mTurno) reporte.turno = mTurno[1].replace(/\*/g,'').trim();
-
-    // Fecha
-    const mFecha = linea.match(/Fecha[:\s*]+.+?(\d{2}\/\d{2}\/\d{4})/i);
-    if (mFecha) reporte.fecha = mFecha[1];
-
-    // Explosivos: TIPO → I: X | E: X | C: X | F: X
-    const mExplosivo = linea.match(/^([A-Z0-9\.\s]+)\s*[→>]\s*I:\s*([\d.]+)\s*\|\s*E:\s*([\d.]+)\s*\|\s*C:\s*([\d.]+)\s*\|\s*F:\s*([\d.]+)/i);
-    if (mExplosivo) {
-      reporte.explosivos.push({
-        tipo: mExplosivo[1].trim(),
-        ingreso: parseFloat(mExplosivo[2]),
-        egreso: parseFloat(mExplosivo[3]),
-        consumo: parseFloat(mExplosivo[4]),
-        final: parseFloat(mExplosivo[5])
-      });
-    }
-
-    // Horómetros: Equipo → HI: X | HF: X | HT: X
-    const mHoro = linea.match(/^(.+?)\s*[→>]\s*HI:\s*([\d.]+|-)\s*\|\s*HF:\s*([\d.]+|-)\s*\|\s*HT:\s*([\d.]+|-)/i);
-    if (mHoro) {
-      reporte.horometros.push({
-        equipo: mHoro[1].trim(),
-        hi: mHoro[2],
-        hf: mHoro[3],
-        ht: mHoro[4]
-      });
-    }
-  }
-
-  // Parsear secciones
-  let seccion = '';
-  for (const linea of lineas) {
-    if (linea.includes('CONSUMO DE PETRÓLEO') || linea.includes('CONSUMO DE PETROLEO')) { seccion = 'petroleo'; continue; }
-    if (linea.includes('GASOLINA')) { seccion = 'gasolina'; continue; }
-    if (linea.includes('Para Rampa:') || linea.match(/Para Rampa/i)) { seccion = 'rampa'; continue; }
-    if (linea.includes('Para Galería:') || linea.match(/Para Galería/i)) { seccion = 'galeria'; continue; }
-    if (linea.includes('HORÓMETROS') || linea.includes('HOROMETROS')) { seccion = 'horometros'; continue; }
-    if (linea.includes('OBSERVACIONES')) { seccion = 'observaciones'; continue; }
-    if (linea.match(/^━+$/) || linea.match(/^[*]{3,}$/)) {
-      if (seccion === 'observaciones') seccion = '';
-      continue;
-    }
-
-    if (seccion === 'rampa' && linea.startsWith('-') && linea.length > 1) {
-      const mat = linea.replace(/^-\s*/, '').trim();
-      if (mat) reporte.materialesRampa.push(mat);
-    }
-    if (seccion === 'galeria' && linea.startsWith('-') && linea.length > 1) {
-      const mat = linea.replace(/^-\s*/, '').trim();
-      if (mat) reporte.materialesGaleria.push(mat);
-    }
-    if (seccion === 'petroleo') {
-      const mPetroleo = linea.match(/^(.+?):\s*([\d.]+)\s*gln/i);
-      if (mPetroleo && !linea.includes('Total')) {
-        reporte.petroleo.push({ equipo: mPetroleo[1].trim(), cantidad: parseFloat(mPetroleo[2]) });
-      }
-    }
-    if (seccion === 'gasolina') {
-      const mGasolina = linea.match(/^(.+?):\s*([\d.]+)\s*gln/i);
-      if (mGasolina && !linea.includes('Total')) {
-        reporte.gasolina.push({ equipo: mGasolina[1].trim(), cantidad: parseFloat(mGasolina[2]) });
-      }
-    }
-    if (seccion === 'observaciones' && linea && !linea.startsWith('━') && !linea.startsWith('*')) {
-      if (linea !== '-') reporte.observaciones += (reporte.observaciones ? '\n' : '') + linea;
-    }
-  }
-
-  if (!reporte.fecha && !reporte.nombre) return null;
-  return reporte;
+function switchCompTab(tab, btn) {
+  document.querySelectorAll('.comp-tab-content').forEach(el=>el.style.display='none');
+  document.querySelectorAll('#page-compresorista .mod-tab').forEach(el=>el.classList.remove('active'));
+  document.getElementById('comp-tab-'+tab).style.display='block';
+  btn.classList.add('active');
 }
 
 function renderTablaCompresorista() {
   const data = state.compresorista;
-
-  // Explosivos
-  const tbodyExp = document.getElementById('tbody-explosivos');
-  if (tbodyExp) {
-    if (data.length === 0) {
-      tbodyExp.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3)">Sin datos</td></tr>';
-    } else {
-      let html = '';
-      for (const r of data) {
-        for (const e of r.explosivos) {
-          html += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${e.tipo}</td><td>${e.ingreso}</td><td>${e.egreso}</td><td>${e.consumo}</td><td>${e.final}</td></tr>`;
-        }
-      }
-      tbodyExp.innerHTML = html || '<tr><td colspan="7" style="text-align:center;color:var(--text3)">Sin datos</td></tr>';
-    }
-  }
-
-  // Materiales
-  const tbodyMat = document.getElementById('tbody-materiales');
-  if (tbodyMat) {
-    let html = '';
-    for (const r of data) {
-      for (const m of r.materialesRampa) {
-        html += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>Rampa</td><td>${m}</td></tr>`;
-      }
-      for (const m of r.materialesGaleria) {
-        html += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>Galería</td><td>${m}</td></tr>`;
-      }
-    }
-    tbodyMat.innerHTML = html || '<tr><td colspan="4" style="text-align:center;color:var(--text3)">Sin datos</td></tr>';
-  }
-
-  // Petróleo/Gasolina
-  const tbodyPet = document.getElementById('tbody-petroleo');
-  if (tbodyPet) {
-    let html = '';
-    for (const r of data) {
-      for (const p of r.petroleo) {
-        html += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${p.equipo}</td><td>Petróleo</td><td>${p.cantidad}</td></tr>`;
-      }
-      for (const g of r.gasolina) {
-        html += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${g.equipo}</td><td>Gasolina</td><td>${g.cantidad}</td></tr>`;
-      }
-    }
-    tbodyPet.innerHTML = html || '<tr><td colspan="5" style="text-align:center;color:var(--text3)">Sin datos</td></tr>';
-  }
-
-  // Horómetros
-  const tbodyHoro = document.getElementById('tbody-horometros');
-  if (tbodyHoro) {
-    let html = '';
-    for (const r of data) {
-      for (const h of r.horometros) {
-        html += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${h.equipo}</td><td>${h.hi}</td><td>${h.hf}</td><td>${h.ht}</td></tr>`;
-      }
-    }
-    tbodyHoro.innerHTML = html || '<tr><td colspan="6" style="text-align:center;color:var(--text3)">Sin datos</td></tr>';
-  }
-
-  // Observaciones
-  const tbodyObs = document.getElementById('tbody-observaciones');
-  if (tbodyObs) {
-    let html = '';
-    for (const r of data) {
-      if (r.observaciones) {
-        html += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${r.nombre}</td><td style="white-space:pre-wrap">${r.observaciones}</td></tr>`;
-      }
-    }
-    tbodyObs.innerHTML = html || '<tr><td colspan="4" style="text-align:center;color:var(--text3)">Sin datos</td></tr>';
-  }
+  if(!data.length) return;
+  // explosivos
+  let expRows = '';
+  data.forEach(r => r.explosivos.forEach(e => {
+    expRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td style="font-family:'DM Mono',monospace">${e.codigo}</td><td class="r">${e.I}</td><td class="r">${e.E}</td><td class="r">${e.C}</td><td class="r">${e.F}</td></tr>`;
+  }));
+  document.getElementById('tbody-explosivos').innerHTML = expRows || '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sin datos</td></tr>';
+  // materiales
+  let matRows = '';
+  data.forEach(r => {
+    r.materialesAlmacen.forEach(m => { matRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>Almacén</td><td>${m.desc}</td><td class="r">${m.cant}</td><td>${m.unidad}</td></tr>`; });
+    r.consumoRampa.forEach(m => { matRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>Rampa</td><td>${m.desc}</td><td class="r">${m.cant}</td><td>${m.unidad}</td></tr>`; });
+    r.consumoGaleria.forEach(m => { matRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>Galería</td><td>${m.desc}</td><td class="r">${m.cant}</td><td>${m.unidad}</td></tr>`; });
+  });
+  document.getElementById('tbody-materiales').innerHTML = matRows || '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sin datos</td></tr>';
+  // petróleo/gasolina
+  let petRows = '';
+  data.forEach(r => {
+    r.petroleo.forEach(p => { if(p.gln) petRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${p.equipo}</td><td style="color:var(--warn)">Petróleo</td><td class="r">${p.gln}</td></tr>`; });
+    r.gasolina.forEach(g => { if(g.gln) petRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${g.equipo}</td><td style="color:var(--positive)">Gasolina</td><td class="r">${g.gln}</td></tr>`; });
+  });
+  document.getElementById('tbody-petroleo').innerHTML = petRows || '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">Sin datos</td></tr>';
+  // horómetros
+  let horoRows = '';
+  data.forEach(r => r.horometros.forEach(h => {
+    if(h.HI||h.HF) horoRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${h.equipo}</td><td class="r">${h.HI}</td><td class="r">${h.HF}</td><td class="r" style="color:var(--accent-light)">${h.HT}</td></tr>`;
+  }));
+  document.getElementById('tbody-horometros').innerHTML = horoRows || '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sin datos</td></tr>';
+  // observaciones
+  let obsRows = '';
+  data.forEach(r => { if(r.obs) obsRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${r.nombre}</td><td>${r.obs}</td></tr>`; });
+  document.getElementById('tbody-observaciones').innerHTML = obsRows || '<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">Sin datos</td></tr>';
 }
 
 function exportarCompresoristExcel() {
-  if (typeof XLSX === 'undefined') { alert('La librería Excel no está disponible'); return; }
+  if(!state.compresorista.length){showNotif('Sin datos para exportar','error');return;}
+  if(typeof XLSX==='undefined'){showNotif('Librería Excel no disponible','error');return;}
   const wb = XLSX.utils.book_new();
-  const data = state.compresorista;
-
-  // Hoja Explosivos
-  const expRows = [['Fecha','Turno','Tipo','Ingreso','Egreso','Consumo','Final']];
-  for (const r of data) for (const e of r.explosivos) expRows.push([r.fecha,r.turno,e.tipo,e.ingreso,e.egreso,e.consumo,e.final]);
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(expRows), 'Explosivos');
-
-  // Hoja Materiales
-  const matRows = [['Fecha','Turno','Destino','Material']];
-  for (const r of data) {
-    for (const m of r.materialesRampa) matRows.push([r.fecha,r.turno,'Rampa',m]);
-    for (const m of r.materialesGaleria) matRows.push([r.fecha,r.turno,'Galería',m]);
-  }
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(matRows), 'Materiales');
-
-  // Hoja Petróleo
-  const petRows = [['Fecha','Turno','Equipo','Tipo','Cantidad (gln)']];
-  for (const r of data) {
-    for (const p of r.petroleo) petRows.push([r.fecha,r.turno,p.equipo,'Petróleo',p.cantidad]);
-    for (const g of r.gasolina) petRows.push([r.fecha,r.turno,g.equipo,'Gasolina',g.cantidad]);
-  }
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(petRows), 'Petroleo_Gasolina');
-
-  // Hoja Horómetros
-  const horoRows = [['Fecha','Turno','Equipo','HI','HF','HT']];
-  for (const r of data) for (const h of r.horometros) horoRows.push([r.fecha,r.turno,h.equipo,h.hi,h.hf,h.ht]);
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(horoRows), 'Horometros');
-
-  // Hoja Observaciones
-  const obsRows = [['Fecha','Turno','Compresorista','Observaciones']];
-  for (const r of data) if (r.observaciones) obsRows.push([r.fecha,r.turno,r.nombre,r.observaciones]);
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(obsRows), 'Observaciones');
-
+  // Explosivos
+  const expData = [['Fecha','Turno','Compresorista','Código','I','E','C','F']];
+  state.compresorista.forEach(r=>r.explosivos.forEach(e=>expData.push([r.fecha,r.turno,r.nombre,e.codigo,e.I,e.E,e.C,e.F])));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(expData), 'Explosivos');
+  // Materiales
+  const matData = [['Fecha','Turno','Frente','Material','Cantidad','Unidad']];
+  state.compresorista.forEach(r=>{
+    r.materialesAlmacen.forEach(m=>matData.push([r.fecha,r.turno,'Almacén',m.desc,m.cant,m.unidad]));
+    r.consumoRampa.forEach(m=>matData.push([r.fecha,r.turno,'Rampa',m.desc,m.cant,m.unidad]));
+    r.consumoGaleria.forEach(m=>matData.push([r.fecha,r.turno,'Galería',m.desc,m.cant,m.unidad]));
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(matData), 'Materiales');
+  // Combustible
+  const fuelData = [['Fecha','Turno','Equipo','Tipo','Galones']];
+  state.compresorista.forEach(r=>{
+    r.petroleo.forEach(p=>{if(p.gln)fuelData.push([r.fecha,r.turno,p.equipo,'Petróleo',p.gln]);});
+    r.gasolina.forEach(g=>{if(g.gln)fuelData.push([r.fecha,r.turno,g.equipo,'Gasolina',g.gln]);});
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(fuelData), 'Combustible');
+  // Horómetros
+  const horoData = [['Fecha','Turno','Equipo','HI','HF','HT']];
+  state.compresorista.forEach(r=>r.horometros.forEach(h=>{if(h.HI||h.HF)horoData.push([r.fecha,r.turno,h.equipo,h.HI,h.HF,h.HT]);}));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(horoData), 'Horómetros');
   XLSX.writeFile(wb, 'reporte_compresorista.xlsx');
 }
 // ==================== FIN MÓDULO COMPRESORISTA ====================
