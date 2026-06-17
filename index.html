@@ -1900,7 +1900,7 @@ select option{background:var(--coal3);}
 #ia-messages::-webkit-scrollbar { width:4px; }
 #ia-messages::-webkit-scrollbar-thumb { background:var(--coal5); border-radius:4px; }
 </style>
-<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 </head>
 <body>
 
@@ -3420,7 +3420,7 @@ function renderPage(page){
   else if(page==='seguridad')renderSeguridad();
   else if(page==='ia')renderIA();
   else if(page==='reporte')renderReportePage();
-  else if(page==='maquinas'){activarPrimerTab('maq','resumen');renderMaquinasResumen();}
+  else if(page==='compresorista'){if(typeof renderTablaCompresorista==='function')renderTablaCompresorista();}
 }
 
 function renderModPane(mod,pane){
@@ -6887,6 +6887,26 @@ window.onload=init;
 if (!state.compresorista) state.compresorista = [];
 let _compTurnoSeleccionado = '';
 
+// ── Persistencia local (acumula reportes del mes) ──
+const COMP_STORAGE_KEY = 'atmin_compresorista';
+function compGuardarLocal() {
+  try { localStorage.setItem(COMP_STORAGE_KEY, JSON.stringify(state.compresorista)); } catch(e){}
+}
+function compCargarLocal() {
+  try {
+    const raw = localStorage.getItem(COMP_STORAGE_KEY);
+    if(raw){
+      state.compresorista = JSON.parse(raw);
+      // Limpieza automática: conservar solo reportes de los últimos 31 días
+      const limite = new Date(); limite.setDate(limite.getDate()-31);
+      const limStr = limite.toISOString().split('T')[0];
+      state.compresorista = state.compresorista.filter(r => r.fecha >= limStr);
+      compGuardarLocal();
+    }
+  } catch(e){ state.compresorista = []; }
+}
+compCargarLocal();
+
 const COMP_EXPLOSIVOS = ['E.1000','E.3000','E.5000','CX.1.80','CX.2.40','FM','Neiter'];
 const COMP_PETROLEO   = ['Grupo','Compresora M135','Compresora M122','Scoop Epiroc','Scoop Monte','Dumper'];
 const COMP_GASOLINA   = ['Camioneta Blanca','Camioneta Roja','Cuatrimoto C','Cuatrimoto N','Mina'];
@@ -7059,10 +7079,11 @@ function guardarReporteComp() {
     state.compresorista.push(reporte);
   }
   state.compresorista.sort((a,b)=>a.fecha.localeCompare(b.fecha));
+  compGuardarLocal();
   renderTablaCompresorista();
   mostrarResumenComp(reporte);
   cerrarModalCompresorista();
-  showNotif('Reporte guardado correctamente','ok');
+  showNotif('Reporte guardado · datos acumulados del mes','ok');
 }
 
 function mostrarResumenComp(r) {
@@ -7140,34 +7161,118 @@ function renderTablaCompresorista() {
   document.getElementById('tbody-observaciones').innerHTML = obsRows || '<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">Sin datos</td></tr>';
 }
 
+// ── Estilos reutilizables para el Excel ──
+const XL_MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+function _xlTitulo(texto, color){
+  return {v:texto, t:'s', s:{font:{bold:true,sz:14,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:color}},alignment:{horizontal:'left',vertical:'center'}}};
+}
+function _xlHeader(texto, color){
+  return {v:texto, t:'s', s:{font:{bold:true,sz:11,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:color}},alignment:{horizontal:'center',vertical:'center'},border:_xlBorde()}};
+}
+function _xlBorde(){
+  const b={style:'thin',color:{rgb:'D0D0D0'}};
+  return {top:b,bottom:b,left:b,right:b};
+}
+function _xlCelda(v, opts){
+  opts=opts||{};
+  return {v:v===undefined||v===null?'':v, t:(typeof v==='number'?'n':'s'), s:Object.assign({alignment:{horizontal:opts.center?'center':'left',vertical:'center'},border:_xlBorde(),fill:{fgColor:{rgb:opts.bg||'FFFFFF'}},font:{sz:10,color:{rgb:opts.fc||'1A1A2E'},bold:!!opts.bold}}, opts.extra||{})};
+}
+// Construye una hoja: titulo + headers coloreados + filas con zebra
+function _xlHoja(titulo, color, headers, filas, anchos){
+  const aoa=[];
+  // fila título (merge)
+  aoa.push([_xlTitulo(titulo, color)]);
+  aoa.push([]); // espacio
+  aoa.push(headers.map(h=>_xlHeader(h, color)));
+  filas.forEach((fila,i)=>{
+    const bg = i%2===0 ? 'FFFFFF' : 'F2F4FB';
+    aoa.push(fila.map((c,ci)=>_xlCelda(c, {center:ci>=2, bg})));
+  });
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols']=(anchos||headers.map(()=>({wch:16})));
+  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:headers.length-1}}];
+  return ws;
+}
+
 function exportarCompresoristExcel() {
   if(!state.compresorista.length){showNotif('Sin datos para exportar','error');return;}
   if(typeof XLSX==='undefined'){showNotif('Librería Excel no disponible','error');return;}
+
+  // Determinar mes de referencia (el del reporte más reciente)
+  const ultimo = state.compresorista[state.compresorista.length-1];
+  const [ay,am] = ultimo.fecha.split('-');
+  const mesNombre = XL_MESES[parseInt(am,10)-1] || '';
+  const data = state.compresorista.filter(r => r.fecha.startsWith(ay+'-'+am));
+
   const wb = XLSX.utils.book_new();
-  // Explosivos
-  const expData = [['Fecha','Turno','Compresorista','Código','I','E','C','F']];
-  state.compresorista.forEach(r=>r.explosivos.forEach(e=>expData.push([r.fecha,r.turno,r.nombre,e.codigo,e.I,e.E,e.C,e.F])));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(expData), 'Explosivos');
-  // Materiales
-  const matData = [['Fecha','Turno','Frente','Material','Cantidad','Unidad']];
-  state.compresorista.forEach(r=>{
-    r.materialesAlmacen.forEach(m=>matData.push([r.fecha,r.turno,'Almacén',m.desc,m.cant,m.unidad]));
-    r.consumoRampa.forEach(m=>matData.push([r.fecha,r.turno,'Rampa',m.desc,m.cant,m.unidad]));
-    r.consumoGaleria.forEach(m=>matData.push([r.fecha,r.turno,'Galería',m.desc,m.cant,m.unidad]));
+  const C_AZUL='3B4FD4', C_ROJO='D43B4F', C_NARANJA='E59022', C_VERDE='1FA971', C_MORADO='7C5CF6', C_GRIS='4A4A6A';
+
+  // ── RESUMEN MENSUAL ──
+  let totPet=0, totGas=0, totHoras=0;
+  const expTotales={}; COMP_EXPLOSIVOS.forEach(c=>expTotales[c]={I:0,E:0,C:0});
+  data.forEach(r=>{
+    r.petroleo.forEach(p=>totPet+=p.gln);
+    r.gasolina.forEach(g=>totGas+=g.gln);
+    r.horometros.forEach(h=>totHoras+=h.HT);
+    r.explosivos.forEach(e=>{expTotales[e.codigo].I+=e.I;expTotales[e.codigo].E+=e.E;expTotales[e.codigo].C+=e.C;});
   });
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(matData), 'Materiales');
-  // Combustible
-  const fuelData = [['Fecha','Turno','Equipo','Tipo','Galones']];
-  state.compresorista.forEach(r=>{
-    r.petroleo.forEach(p=>{if(p.gln)fuelData.push([r.fecha,r.turno,p.equipo,'Petróleo',p.gln]);});
-    r.gasolina.forEach(g=>{if(g.gln)fuelData.push([r.fecha,r.turno,g.equipo,'Gasolina',g.gln]);});
+  const resFilas=[
+    ['Reportes registrados', data.length],
+    ['Total Petróleo (gln)', +totPet.toFixed(1)],
+    ['Total Gasolina (gln)', +totGas.toFixed(1)],
+    ['Total Horas máquina', +totHoras.toFixed(1)],
+  ];
+  const wsRes=_xlHoja('RESUMEN — '+mesNombre+' '+ay, C_GRIS, ['Concepto','Valor'], resFilas, [{wch:28},{wch:16}]);
+  XLSX.utils.book_append_sheet(wb, wsRes, 'Resumen');
+
+  // ── EXPLOSIVOS ──
+  const expFilas=[];
+  data.forEach(r=>r.explosivos.forEach(e=>{ if(e.I||e.E||e.C||e.F) expFilas.push([r.fecha,r.turno,r.nombre,e.codigo,e.I,e.E,e.C,e.F]); }));
+  COMP_EXPLOSIVOS.forEach(c=>expFilas.push(['TOTAL','','',c,expTotales[c].I,expTotales[c].E,expTotales[c].C,'']));
+  XLSX.utils.book_append_sheet(wb, _xlHoja('EXPLOSIVOS — '+mesNombre+' '+ay, C_ROJO,
+    ['Fecha','Turno','Compresorista','Código','I','E','C','F'], expFilas,
+    [{wch:12},{wch:8},{wch:20},{wch:10},{wch:8},{wch:8},{wch:8},{wch:8}]), 'Explosivos');
+
+  // ── MATERIALES ──
+  const matFilas=[];
+  data.forEach(r=>{
+    r.materialesAlmacen.forEach(m=>matFilas.push([r.fecha,r.turno,'Almacén',m.desc,m.cant,m.unidad]));
+    r.consumoRampa.forEach(m=>matFilas.push([r.fecha,r.turno,'Rampa',m.desc,m.cant,m.unidad]));
+    r.consumoGaleria.forEach(m=>matFilas.push([r.fecha,r.turno,'Galería',m.desc,m.cant,m.unidad]));
   });
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(fuelData), 'Combustible');
-  // Horómetros
-  const horoData = [['Fecha','Turno','Equipo','HI','HF','HT']];
-  state.compresorista.forEach(r=>r.horometros.forEach(h=>{if(h.HI||h.HF)horoData.push([r.fecha,r.turno,h.equipo,h.HI,h.HF,h.HT]);}));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(horoData), 'Horómetros');
-  XLSX.writeFile(wb, 'reporte_compresorista.xlsx');
+  XLSX.utils.book_append_sheet(wb, _xlHoja('MATERIALES — '+mesNombre+' '+ay, C_AZUL,
+    ['Fecha','Turno','Frente','Material','Cantidad','Unidad'], matFilas,
+    [{wch:12},{wch:8},{wch:10},{wch:28},{wch:10},{wch:10}]), 'Materiales');
+
+  // ── COMBUSTIBLE ──
+  const fuelFilas=[];
+  data.forEach(r=>{
+    r.petroleo.forEach(p=>{if(p.gln)fuelFilas.push([r.fecha,r.turno,p.equipo,'Petróleo',p.gln]);});
+    r.gasolina.forEach(g=>{if(g.gln)fuelFilas.push([r.fecha,r.turno,g.equipo,'Gasolina',g.gln]);});
+  });
+  fuelFilas.push(['TOTAL','','','Petróleo',+totPet.toFixed(1)]);
+  fuelFilas.push(['TOTAL','','','Gasolina',+totGas.toFixed(1)]);
+  XLSX.utils.book_append_sheet(wb, _xlHoja('COMBUSTIBLE — '+mesNombre+' '+ay, C_NARANJA,
+    ['Fecha','Turno','Equipo','Tipo','Galones'], fuelFilas,
+    [{wch:12},{wch:8},{wch:18},{wch:12},{wch:10}]), 'Combustible');
+
+  // ── HORÓMETROS ──
+  const horoFilas=[];
+  data.forEach(r=>r.horometros.forEach(h=>{if(h.HI||h.HF)horoFilas.push([r.fecha,r.turno,h.equipo,h.HI,h.HF,h.HT]);}));
+  horoFilas.push(['TOTAL','','','','',+totHoras.toFixed(1)]);
+  XLSX.utils.book_append_sheet(wb, _xlHoja('HORÓMETROS — '+mesNombre+' '+ay, C_MORADO,
+    ['Fecha','Turno','Equipo','HI','HF','HT'], horoFilas,
+    [{wch:12},{wch:8},{wch:18},{wch:10},{wch:10},{wch:10}]), 'Horómetros');
+
+  // ── OBSERVACIONES ──
+  const obsFilas=[];
+  data.forEach(r=>{ if(r.obs) obsFilas.push([r.fecha,r.turno,r.nombre,r.obs]); });
+  XLSX.utils.book_append_sheet(wb, _xlHoja('OBSERVACIONES — '+mesNombre+' '+ay, C_VERDE,
+    ['Fecha','Turno','Compresorista','Observaciones'], obsFilas,
+    [{wch:12},{wch:8},{wch:20},{wch:50}]), 'Observaciones');
+
+  XLSX.writeFile(wb, 'reporte_compresorista_'+mesNombre+'_'+ay+'.xlsx');
+  showNotif('Excel del mes generado','ok');
 }
 // ==================== FIN MÓDULO COMPRESORISTA ====================
 </script>
