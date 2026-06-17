@@ -3017,6 +3017,108 @@ select option{background:var(--coal3);}
   </div>
 </div>
 
+
+<div id="page-compresorista" class="page">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+    <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.5px">🔧 Compresorista</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-gold" onclick="abrirModalCompresorista()">+ Ingresar Reporte</button>
+      <button class="btn btn-outline" onclick="exportarCompresoristExcel()">📥 Excel</button>
+    </div>
+  </div>
+
+  <!-- MODAL INGRESO REPORTE -->
+  <div class="modal-overlay" id="modal-compresorista" onclick="if(event.target===this)cerrarModalCompresorista()">
+    <div class="modal" style="width:min(620px,95vw);max-height:90vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase">Ingresar Reporte de Guardia</div>
+        <button onclick="cerrarModalCompresorista()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;line-height:1">×</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+        <div class="form-group">
+          <label>Nombre Completo</label>
+          <input type="text" id="comp-nombre" placeholder="Ej: Anthony Rengifo">
+        </div>
+        <div class="form-group">
+          <label>DNI</label>
+          <input type="text" id="comp-dni" placeholder="Ej: 47382910">
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label>Turno</label>
+        <div style="display:flex;gap:10px;margin-top:6px">
+          <button id="comp-turno-dia" onclick="seleccionarTurno('Día')"
+            style="flex:1;padding:12px;border:2px solid var(--border);background:var(--coal4);color:var(--text2);border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:all 0.15s">
+            ☀️ Día
+          </button>
+          <button id="comp-turno-noche" onclick="seleccionarTurno('Noche')"
+            style="flex:1;padding:12px;border:2px solid var(--border);background:var(--coal4);color:var(--text2);border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:all 0.15s">
+            🌙 Noche
+          </button>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:16px">
+        <label>Pegar Reporte de Guardia</label>
+        <textarea id="comp-reporte-texto" rows="12" placeholder="Pega aquí el reporte de guardia en formato WhatsApp..." style="width:100%;font-family:'DM Mono',monospace;font-size:11px;background:var(--coal4);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:12px;resize:vertical;line-height:1.6;margin-top:6px"></textarea>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-gold" onclick="digitalizarReporte()" style="flex:1">📊 Digitalizar Reporte</button>
+        <button class="btn btn-outline" onclick="cerrarModalCompresorista()">Cancelar</button>
+      </div>
+      <div id="comp-msg" style="margin-top:10px;font-size:11px;display:none"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="mod-tabs" style="margin-bottom:1rem">
+      <button class="mod-tab active" onclick="switchCompTab('explosivos',this)">💣 Explosivos</button>
+      <button class="mod-tab" onclick="switchCompTab('materiales',this)">📦 Materiales</button>
+      <button class="mod-tab" onclick="switchCompTab('petroleo',this)">⛽ Petróleo/Gasolina</button>
+      <button class="mod-tab" onclick="switchCompTab('horometros',this)">⏱️ Horómetros</button>
+      <button class="mod-tab" onclick="switchCompTab('observaciones',this)">📝 Observaciones</button>
+    </div>
+    <div id="comp-tab-explosivos" class="comp-tab-content">
+      <div class="table-wrap">
+        <table id="tabla-explosivos">
+          <thead><tr><th>Fecha</th><th>Turno</th><th>Tipo</th><th>Ingreso</th><th>Egreso</th><th>Consumo</th><th>Final</th></tr></thead>
+          <tbody id="tbody-explosivos"><tr><td colspan="7" style="text-align:center;color:var(--text3)">Sin datos</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="comp-tab-materiales" class="comp-tab-content" style="display:none">
+      <div class="table-wrap">
+        <table id="tabla-materiales">
+          <thead><tr><th>Fecha</th><th>Turno</th><th>Destino</th><th>Material</th></tr></thead>
+          <tbody id="tbody-materiales"><tr><td colspan="4" style="text-align:center;color:var(--text3)">Sin datos</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="comp-tab-petroleo" class="comp-tab-content" style="display:none">
+      <div class="table-wrap">
+        <table id="tabla-petroleo">
+          <thead><tr><th>Fecha</th><th>Turno</th><th>Equipo</th><th>Tipo</th><th>Cantidad (gln)</th></tr></thead>
+          <tbody id="tbody-petroleo"><tr><td colspan="5" style="text-align:center;color:var(--text3)">Sin datos</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="comp-tab-horometros" class="comp-tab-content" style="display:none">
+      <div class="table-wrap">
+        <table id="tabla-horometros">
+          <thead><tr><th>Fecha</th><th>Turno</th><th>Equipo</th><th>HI</th><th>HF</th><th>HT</th></tr></thead>
+          <tbody id="tbody-horometros"><tr><td colspan="6" style="text-align:center;color:var(--text3)">Sin datos</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="comp-tab-observaciones" class="comp-tab-content" style="display:none">
+      <div class="table-wrap">
+        <table id="tabla-observaciones">
+          <thead><tr><th>Fecha</th><th>Turno</th><th>Compresorista</th><th>Observaciones</th></tr></thead>
+          <tbody id="tbody-observaciones"><tr><td colspan="4" style="text-align:center;color:var(--text3)">Sin datos</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
   </div><!-- end content -->
 </main>
 
@@ -6749,106 +6851,6 @@ window.onload=init;
 
   
 
-<div id="page-compresorista" class="page">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
-    <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.5px">🔧 Compresorista</div>
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-gold" onclick="abrirModalCompresorista()">+ Ingresar Reporte</button>
-      <button class="btn btn-outline" onclick="exportarCompresoristExcel()">📥 Excel</button>
-    </div>
-  </div>
-
-  <!-- MODAL INGRESO REPORTE -->
-  <div class="modal-overlay" id="modal-compresorista" onclick="if(event.target===this)cerrarModalCompresorista()">
-    <div class="modal" style="width:min(620px,95vw);max-height:90vh;overflow-y:auto">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-        <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase">Ingresar Reporte de Guardia</div>
-        <button onclick="cerrarModalCompresorista()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;line-height:1">×</button>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
-        <div class="form-group">
-          <label>Nombre Completo</label>
-          <input type="text" id="comp-nombre" placeholder="Ej: Anthony Rengifo">
-        </div>
-        <div class="form-group">
-          <label>DNI</label>
-          <input type="text" id="comp-dni" placeholder="Ej: 47382910">
-        </div>
-      </div>
-      <div class="form-group" style="margin-bottom:14px">
-        <label>Turno</label>
-        <div style="display:flex;gap:10px;margin-top:6px">
-          <button id="comp-turno-dia" onclick="seleccionarTurno('Día')"
-            style="flex:1;padding:12px;border:2px solid var(--border);background:var(--coal4);color:var(--text2);border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:all 0.15s">
-            ☀️ Día
-          </button>
-          <button id="comp-turno-noche" onclick="seleccionarTurno('Noche')"
-            style="flex:1;padding:12px;border:2px solid var(--border);background:var(--coal4);color:var(--text2);border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:all 0.15s">
-            🌙 Noche
-          </button>
-        </div>
-      </div>
-      <div class="form-group" style="margin-bottom:16px">
-        <label>Pegar Reporte de Guardia</label>
-        <textarea id="comp-reporte-texto" rows="12" placeholder="Pega aquí el reporte de guardia en formato WhatsApp..." style="width:100%;font-family:'DM Mono',monospace;font-size:11px;background:var(--coal4);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:12px;resize:vertical;line-height:1.6;margin-top:6px"></textarea>
-      </div>
-      <div style="display:flex;gap:10px">
-        <button class="btn btn-gold" onclick="digitalizarReporte()" style="flex:1">📊 Digitalizar Reporte</button>
-        <button class="btn btn-outline" onclick="cerrarModalCompresorista()">Cancelar</button>
-      </div>
-      <div id="comp-msg" style="margin-top:10px;font-size:11px;display:none"></div>
-    </div>
-  </div>
-  <div class="card">
-    <div class="mod-tabs" style="margin-bottom:1rem">
-      <button class="mod-tab active" onclick="switchCompTab('explosivos',this)">💣 Explosivos</button>
-      <button class="mod-tab" onclick="switchCompTab('materiales',this)">📦 Materiales</button>
-      <button class="mod-tab" onclick="switchCompTab('petroleo',this)">⛽ Petróleo/Gasolina</button>
-      <button class="mod-tab" onclick="switchCompTab('horometros',this)">⏱️ Horómetros</button>
-      <button class="mod-tab" onclick="switchCompTab('observaciones',this)">📝 Observaciones</button>
-    </div>
-    <div id="comp-tab-explosivos" class="comp-tab-content">
-      <div class="table-wrap">
-        <table id="tabla-explosivos">
-          <thead><tr><th>Fecha</th><th>Turno</th><th>Tipo</th><th>Ingreso</th><th>Egreso</th><th>Consumo</th><th>Final</th></tr></thead>
-          <tbody id="tbody-explosivos"><tr><td colspan="7" style="text-align:center;color:var(--text3)">Sin datos</td></tr></tbody>
-        </table>
-      </div>
-    </div>
-    <div id="comp-tab-materiales" class="comp-tab-content" style="display:none">
-      <div class="table-wrap">
-        <table id="tabla-materiales">
-          <thead><tr><th>Fecha</th><th>Turno</th><th>Destino</th><th>Material</th></tr></thead>
-          <tbody id="tbody-materiales"><tr><td colspan="4" style="text-align:center;color:var(--text3)">Sin datos</td></tr></tbody>
-        </table>
-      </div>
-    </div>
-    <div id="comp-tab-petroleo" class="comp-tab-content" style="display:none">
-      <div class="table-wrap">
-        <table id="tabla-petroleo">
-          <thead><tr><th>Fecha</th><th>Turno</th><th>Equipo</th><th>Tipo</th><th>Cantidad (gln)</th></tr></thead>
-          <tbody id="tbody-petroleo"><tr><td colspan="5" style="text-align:center;color:var(--text3)">Sin datos</td></tr></tbody>
-        </table>
-      </div>
-    </div>
-    <div id="comp-tab-horometros" class="comp-tab-content" style="display:none">
-      <div class="table-wrap">
-        <table id="tabla-horometros">
-          <thead><tr><th>Fecha</th><th>Turno</th><th>Equipo</th><th>HI</th><th>HF</th><th>HT</th></tr></thead>
-          <tbody id="tbody-horometros"><tr><td colspan="6" style="text-align:center;color:var(--text3)">Sin datos</td></tr></tbody>
-        </table>
-      </div>
-    </div>
-    <div id="comp-tab-observaciones" class="comp-tab-content" style="display:none">
-      <div class="table-wrap">
-        <table id="tabla-observaciones">
-          <thead><tr><th>Fecha</th><th>Turno</th><th>Compresorista</th><th>Observaciones</th></tr></thead>
-          <tbody id="tbody-observaciones"><tr><td colspan="4" style="text-align:center;color:var(--text3)">Sin datos</td></tr></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-</div>
 
 <script>
 // ==================== MÓDULO COMPRESORISTA ====================
