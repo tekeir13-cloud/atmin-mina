@@ -7003,7 +7003,7 @@ function abrirModalCompresorista() {
   document.getElementById('comp-exp-body').innerHTML = COMP_EXPLOSIVOS.map(c => `
     <tr style="border-top:1px solid var(--border2)">
       <td style="padding:6px 8px;font-family:'DM Mono',monospace;font-size:12px;color:var(--text)">${c}</td>
-      ${['I','E','C','F'].map(f => `<td style="padding:4px 6px"><input type="number" min="0" step="any" id="cexp-${c.replace('.','_')}-${f}" placeholder="0" oninput="compCalcF('${c}')" style="width:100%;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>`).join('')}
+      ${['I','E','C','F'].map(f => `<td style="padding:4px 6px"><input type="number" min="0" step="any" id="cexp-${c.replace(/\./g,'_')}-${f}" placeholder="0" oninput="compCalcF('${c}')" style="width:100%;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>`).join('')}
     </tr>`).join('');
   // consumo
   document.getElementById('comp-cons-rampa-rows').innerHTML = '';
@@ -7254,12 +7254,15 @@ function renderTablaCompresorista() {
   let obsRows = '';
   [...data].reverse().forEach(r => {
     const turnoIc = r.turno==='Día'?'☀️':'🌙';
-    obsRows += `<tr onclick="abrirReporteVisor('${r.fecha}','${r.turno}')" style="cursor:pointer" onmouseover="this.style.background='var(--coal4)'" onmouseout="this.style.background=''">
-      <td style="color:var(--accent-light);font-weight:600">${r.fecha}</td>
-      <td>${turnoIc} ${r.turno}</td>
-      <td>${r.nombre}</td>
-      <td style="color:var(--text3)">${r.obs||'—'}</td>
-      <td class="r"><span style="font-size:10px;background:var(--accent-dim);color:var(--accent-light);border:1px solid var(--accent-border);border-radius:4px;padding:3px 8px">Ver gráficos ▸</span></td>
+    obsRows += `<tr onmouseover="this.style.background='var(--coal4)'" onmouseout="this.style.background=''">
+      <td onclick="abrirReporteVisor('${r.fecha}','${r.turno}')" style="cursor:pointer;color:var(--accent-light);font-weight:600">${r.fecha}</td>
+      <td onclick="abrirReporteVisor('${r.fecha}','${r.turno}')" style="cursor:pointer">${turnoIc} ${r.turno}</td>
+      <td onclick="abrirReporteVisor('${r.fecha}','${r.turno}')" style="cursor:pointer">${r.nombre}</td>
+      <td onclick="abrirReporteVisor('${r.fecha}','${r.turno}')" style="cursor:pointer;color:var(--text3)">${r.obs||'—'}</td>
+      <td class="r" style="white-space:nowrap">
+        <span onclick="abrirReporteVisor('${r.fecha}','${r.turno}')" style="cursor:pointer;font-size:10px;background:var(--accent-dim);color:var(--accent-light);border:1px solid var(--accent-border);border-radius:4px;padding:3px 8px">Ver gráficos ▸</span>
+        <span onclick="enviarWhatsAppReporte('${r.fecha}','${r.turno}')" style="cursor:pointer;font-size:10px;background:rgba(37,211,102,0.15);color:#25d366;border:1px solid rgba(37,211,102,0.4);border-radius:4px;padding:3px 8px;margin-left:4px">📲 WhatsApp</span>
+      </td>
     </tr>`;
   });
   document.getElementById('tbody-observaciones').innerHTML = obsRows || '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">Sin datos</td></tr>';
@@ -7275,14 +7278,25 @@ function abrirReporteVisor(fecha, turno){
   if(panel && panel.scrollIntoView) panel.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
-// ── Copiar reporte para WhatsApp ──
+// ── Enviar reporte por WhatsApp desde la lista (cualquier fecha/turno) ──
+function enviarWhatsAppReporte(fecha, turno){
+  const r = state.compresorista.find(x=>x.fecha===fecha && x.turno===turno);
+  if(!r) { showNotif('No hay reporte para ese día/turno','error'); return; }
+  _enviarReporteWA(r);
+}
+
+// ── Enviar reporte para WhatsApp (botón del visor) ──
 function copiarReporteWhatsApp() {
   const sel = document.getElementById('vt-dia-sel');
   const fecha = sel ? sel.value : '';
   if(!fecha) { showNotif('Selecciona un día primero','error'); return; }
   const r = state.compresorista.find(x=>x.fecha===fecha && x.turno===_vtTurno);
   if(!r) { showNotif('No hay reporte para ese día/turno','error'); return; }
+  _enviarReporteWA(r);
+}
 
+// ── Construye el texto y abre WhatsApp para un reporte dado ──
+function _enviarReporteWA(r) {
   const turnoIc = r.turno==='Día' ? '[DIA]' : '[NOCHE]';
   const tPet = r.petroleo.reduce((s,p)=>s+p.gln,0);
   const tGas = r.gasolina.reduce((s,g)=>s+g.gln,0);
