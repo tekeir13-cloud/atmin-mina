@@ -3053,19 +3053,21 @@ select option{background:var(--coal3);}
     <div id="vt-panel" style="display:none">
       <!-- Info compresorista -->
       <div id="vt-info" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px"></div>
+      <!-- Totales de ESTE reporte -->
+      <div id="vt-totales" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:18px"></div>
       <!-- Gráficos -->
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:18px">
         <div style="background:var(--coal3);border-radius:10px;padding:16px">
           <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">💥 Explosivos</div>
-          <canvas id="vt-chart-exp" height="200"></canvas>
+          <div id="vt-wrap-exp"><canvas id="vt-chart-exp" height="200"></canvas></div>
         </div>
         <div style="background:var(--coal3);border-radius:10px;padding:16px">
           <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">⛽ Combustible</div>
-          <canvas id="vt-chart-fuel" height="200"></canvas>
+          <div id="vt-wrap-fuel"><canvas id="vt-chart-fuel" height="200"></canvas></div>
         </div>
         <div style="background:var(--coal3);border-radius:10px;padding:16px">
           <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">⏱️ Horómetros (HT)</div>
-          <canvas id="vt-chart-horo" height="200"></canvas>
+          <div id="vt-wrap-horo"><canvas id="vt-chart-horo" height="200"></canvas></div>
         </div>
       </div>
       <!-- Consumo materiales -->
@@ -3201,7 +3203,8 @@ select option{background:var(--coal3);}
       <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Equipo</th><th class="r">HI</th><th class="r">HF</th><th class="r">HT</th></tr></thead><tbody id="tbody-horometros"><tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sin reportes aún</td></tr></tbody></table></div>
     </div>
     <div id="comp-tab-observaciones" class="comp-tab-content" style="display:none">
-      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Compresorista</th><th>Observaciones</th></tr></thead><tbody id="tbody-observaciones"><tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">Sin reportes aún</td></tr></tbody></table></div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:10px">👆 Haz clic en cualquier reporte para ver sus totales y gráficos</div>
+      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Compresorista</th><th>Observaciones</th><th class="r">Acción</th></tr></thead><tbody id="tbody-observaciones"><tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">Sin reportes aún</td></tr></tbody></table></div>
     </div>
   </div>
 </div>
@@ -7217,10 +7220,29 @@ function renderTablaCompresorista() {
     if(h.HI||h.HF) horoRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${h.equipo}</td><td class="r">${h.HI}</td><td class="r">${h.HF}</td><td class="r" style="color:var(--accent-light)">${h.HT}</td></tr>`;
   }));
   document.getElementById('tbody-horometros').innerHTML = horoRows || '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sin datos</td></tr>';
-  // observaciones
+  // observaciones / lista de reportes clicables (más reciente primero)
   let obsRows = '';
-  data.forEach(r => { if(r.obs) obsRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${r.nombre}</td><td>${r.obs}</td></tr>`; });
-  document.getElementById('tbody-observaciones').innerHTML = obsRows || '<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">Sin datos</td></tr>';
+  [...data].reverse().forEach(r => {
+    const turnoIc = r.turno==='Día'?'☀️':'🌙';
+    obsRows += `<tr onclick="abrirReporteVisor('${r.fecha}','${r.turno}')" style="cursor:pointer" onmouseover="this.style.background='var(--coal4)'" onmouseout="this.style.background=''">
+      <td style="color:var(--accent-light);font-weight:600">${r.fecha}</td>
+      <td>${turnoIc} ${r.turno}</td>
+      <td>${r.nombre}</td>
+      <td style="color:var(--text3)">${r.obs||'—'}</td>
+      <td class="r"><span style="font-size:10px;background:var(--accent-dim);color:var(--accent-light);border:1px solid var(--accent-border);border-radius:4px;padding:3px 8px">Ver gráficos ▸</span></td>
+    </tr>`;
+  });
+  document.getElementById('tbody-observaciones').innerHTML = obsRows || '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">Sin datos</td></tr>';
+}
+
+// Clic en un reporte de la lista → carga sus gráficos y totales en el visor
+function abrirReporteVisor(fecha, turno){
+  visorTurno(turno);
+  const sel = document.getElementById('vt-dia-sel');
+  if(sel) sel.value = fecha;
+  visorRenderDia();
+  const panel = document.getElementById('vt-panel');
+  if(panel && panel.scrollIntoView) panel.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 // ── Estilos reutilizables para el Excel ──
@@ -7407,8 +7429,29 @@ function visorRenderDia() {
     <div style="font-size:13px;font-weight:600;color:var(--text)">${x.val||'—'}</div>
   </div>`).join('');
 
-  // Destruir charts anteriores
+  // Totales de ESTE reporte
+  const tPet = r.petroleo.reduce((s,p)=>s+p.gln,0);
+  const tGas = r.gasolina.reduce((s,g)=>s+g.gln,0);
+  const tHoras = r.horometros.reduce((s,h)=>s+h.HT,0);
+  const tExpE = r.explosivos.reduce((s,e)=>s+e.E,0);
+  const tExpC = r.explosivos.reduce((s,e)=>s+e.C,0);
+  const totEl = document.getElementById('vt-totales');
+  if(totEl) totEl.innerHTML = [
+    {v:tPet.toFixed(1),l:'gln Petróleo',c:'var(--warn)'},
+    {v:tGas.toFixed(1),l:'gln Gasolina',c:'var(--positive)'},
+    {v:tHoras.toFixed(1),l:'Horas máquina',c:'var(--accent-light)'},
+    {v:tExpE,l:'Explosivos Egreso',c:'var(--negative)'},
+    {v:tExpC,l:'Explosivos Consumo',c:'var(--info)'},
+  ].map(x=>`<div style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+    <div style="font-size:20px;font-weight:700;color:${x.c}">${x.v}</div>
+    <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px">${x.l}</div>
+  </div>`).join('');
+
+  // Destruir charts anteriores y regenerar canvases limpios
   ['exp','fuel','horo'].forEach(k=>{ if(_vtCharts[k]){ _vtCharts[k].destroy(); delete _vtCharts[k]; }});
+  const wExp=document.getElementById('vt-wrap-exp'); if(wExp) wExp.innerHTML='<canvas id="vt-chart-exp" height="200"></canvas>';
+  const wFuel=document.getElementById('vt-wrap-fuel'); if(wFuel) wFuel.innerHTML='<canvas id="vt-chart-fuel" height="200"></canvas>';
+  const wHoro=document.getElementById('vt-wrap-horo'); if(wHoro) wHoro.innerHTML='<canvas id="vt-chart-horo" height="200"></canvas>';
 
   // ── Gráfico Explosivos ──
   const expActivos = r.explosivos.filter(e=>e.I||e.E||e.C);
@@ -7426,7 +7469,7 @@ function visorRenderDia() {
       },
       options:{responsive:true,plugins:{legend:{labels:{color:'#8b8ba7',font:{size:10}}}},scales:{x:{ticks:{color:'#8b8ba7',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}},y:{ticks:{color:'#8b8ba7',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}}}}
     });
-  } else if(ctxExp){ ctxExp.parentElement.innerHTML='<div style="text-align:center;color:var(--text3);padding:40px;font-size:12px">Sin datos de explosivos</div>'; }
+  } else if(wExp){ wExp.innerHTML='<div style="text-align:center;color:var(--text3);padding:40px;font-size:12px">Sin datos de explosivos</div>'; }
 
   // ── Gráfico Combustible ──
   const fuelLabels=[...r.petroleo.filter(p=>p.gln).map(p=>p.equipo), ...r.gasolina.filter(g=>g.gln).map(g=>g.equipo)];
@@ -7439,7 +7482,7 @@ function visorRenderDia() {
       data:{labels:fuelLabels, datasets:[{data:fuelVals,backgroundColor:fuelColors,borderWidth:0,hoverOffset:4}]},
       options:{responsive:true,plugins:{legend:{position:'bottom',labels:{color:'#8b8ba7',font:{size:10},padding:8}}}}
     });
-  } else if(ctxFuel){ ctxFuel.parentElement.innerHTML='<div style="text-align:center;color:var(--text3);padding:40px;font-size:12px">Sin consumo de combustible</div>'; }
+  } else if(wFuel){ wFuel.innerHTML='<div style="text-align:center;color:var(--text3);padding:40px;font-size:12px">Sin consumo de combustible</div>'; }
 
   // ── Gráfico Horómetros ──
   const horoActivos = r.horometros.filter(h=>h.HT>0);
@@ -7450,7 +7493,7 @@ function visorRenderDia() {
       data:{labels:horoActivos.map(h=>h.equipo),datasets:[{label:'Horas trabajadas',data:horoActivos.map(h=>h.HT),backgroundColor:'rgba(91,110,245,0.75)',borderRadius:4}]},
       options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#8b8ba7',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}},y:{ticks:{color:'#8b8ba7',font:{size:10}},grid:{display:false}}}}
     });
-  } else if(ctxHoro){ ctxHoro.parentElement.innerHTML='<div style="text-align:center;color:var(--text3);padding:40px;font-size:12px">Sin horómetros registrados</div>'; }
+  } else if(wHoro){ wHoro.innerHTML='<div style="text-align:center;color:var(--text3);padding:40px;font-size:12px">Sin horómetros registrados</div>'; }
 
   // Consumo materiales
   const cRampa = document.getElementById('vt-cons-rampa');
