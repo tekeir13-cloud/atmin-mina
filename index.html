@@ -7633,27 +7633,34 @@ function visorRenderDia() {
   const wFuel=document.getElementById('vt-wrap-fuel'); if(wFuel) wFuel.innerHTML='<canvas id="vt-chart-fuel" height="200"></canvas>';
   const wHoro=document.getElementById('vt-wrap-horo'); if(wHoro) wHoro.innerHTML='<canvas id="vt-chart-horo" height="200"></canvas>';
 
-  // ── Gráfico Explosivos — VS Rampa Brenda vs Cortada Noreste (doughnut + detalle) ──
+  // ── Gráfico Explosivos — Radar Rampa Brenda vs Cortada Noreste (S/) ──
   const ef = r.expFrente || [];
   const totalRampa = ef.reduce((s,e)=>s+(e.rampa||0)*(COMP_PRECIOS_EXP[e.codigo]||0),0);
   const totalCortada = ef.reduce((s,e)=>s+(e.galeria||0)*(COMP_PRECIOS_EXP[e.codigo]||0),0);
   const totalExp = totalRampa + totalCortada;
   const ctxExp = document.getElementById('vt-chart-exp');
   const detExp = document.getElementById('vt-exp-detalle');
-  if(totalExp > 0 && ctxExp){
-    const pctR = (totalRampa/totalExp*100).toFixed(1);
-    const pctC = (totalCortada/totalExp*100).toFixed(1);
+  const efActivos = COMP_EXPLOSIVOS.filter(c=>{ const x=ef.find(e=>e.codigo===c); return x&&(x.rampa||x.galeria); });
+  if(efActivos.length > 0 && ctxExp){
+    const dataR = efActivos.map(c=>{ const x=ef.find(e=>e.codigo===c)||{}; return +((x.rampa||0)*(COMP_PRECIOS_EXP[c]||0)).toFixed(2); });
+    const dataC = efActivos.map(c=>{ const x=ef.find(e=>e.codigo===c)||{}; return +((x.galeria||0)*(COMP_PRECIOS_EXP[c]||0)).toFixed(2); });
     _vtCharts.exp = new Chart(ctxExp, {
-      type:'doughnut',
+      type:'radar',
       data:{
-        labels:['Rampa Brenda','Cortada Noreste'],
-        datasets:[{data:[+totalRampa.toFixed(2),+totalCortada.toFixed(2)], backgroundColor:['rgba(248,113,113,0.85)','rgba(96,165,250,0.85)'], borderWidth:2, borderColor:'rgba(0,0,0,0.3)', hoverOffset:6}]
+        labels: efActivos,
+        datasets:[
+          {label:'Rampa Brenda (S/)', data:dataR, backgroundColor:'rgba(248,113,113,0.2)', borderColor:'rgba(248,113,113,0.9)', pointBackgroundColor:'rgba(248,113,113,0.9)', pointRadius:4, borderWidth:2},
+          {label:'Cortada Noreste (S/)', data:dataC, backgroundColor:'rgba(96,165,250,0.2)', borderColor:'rgba(96,165,250,0.9)', pointBackgroundColor:'rgba(96,165,250,0.9)', pointRadius:4, borderWidth:2},
+        ]
       },
-      options:{responsive:true,plugins:{legend:{position:'bottom',labels:{color:'#8b8ba7',font:{size:10},padding:10}},
-        tooltip:{callbacks:{label:ctx=>`S/ ${ctx.parsed.toFixed(2)} (${ctx.dataIndex===0?pctR:pctC}%)`}}}}
+      options:{responsive:true, plugins:{legend:{position:'bottom',labels:{color:'#8b8ba7',font:{size:10},padding:10}},
+        tooltip:{callbacks:{label:ctx=>`S/ ${ctx.parsed.r.toFixed(2)}`}}},
+        scales:{r:{ticks:{color:'#8b8ba7',font:{size:9},backdropColor:'transparent',callback:v=>'S/'+v},grid:{color:'rgba(255,255,255,0.08)'},angleLines:{color:'rgba(255,255,255,0.08)'},pointLabels:{color:'#8b8ba7',font:{size:10}}}}}
     });
+    const pctR=(totalExp>0?(totalRampa/totalExp*100):0).toFixed(1);
+    const pctC=(totalExp>0?(totalCortada/totalExp*100):0).toFixed(1);
     if(detExp) detExp.innerHTML = `
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
         <div style="background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.3);border-radius:8px;padding:10px;text-align:center">
           <div style="font-size:15px;font-weight:700;color:#f87171">S/ ${totalRampa.toFixed(2)}</div>
           <div style="font-size:10px;color:#f87171;opacity:0.8">${pctR}% del total</div>
@@ -7667,8 +7674,7 @@ function visorRenderDia() {
       </div>
       <div style="text-align:center;margin-top:6px;font-size:11px;color:var(--text3)">Total explosivos: <b style="color:var(--text)">S/ ${totalExp.toFixed(2)}</b></div>`;
   } else {
-    if(wExp) wExp.innerHTML='<div style="text-align:center;color:var(--text3);padding:30px;font-size:12px">Ingresa datos por frente para ver el VS</div>';
-    // fallback: mostrar costo por código si hay consumo
+    if(wExp) wExp.innerHTML='<div style="text-align:center;color:var(--text3);padding:20px;font-size:12px">Ingresa cantidades por frente para ver el radar</div>';
     const expActivos = r.explosivos.filter(e=>e.C>0);
     if(expActivos.length && detExp){
       const totalFb = expActivos.reduce((s,e)=>s+(e.C||0)*(COMP_PRECIOS_EXP[e.codigo]||0),0);
