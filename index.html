@@ -3059,16 +3059,18 @@ select option{background:var(--coal3);}
       <!-- Gráficos -->
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:18px">
         <div style="background:var(--coal3);border-radius:10px;padding:16px">
-          <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">💥 Explosivos</div>
-          <div id="vt-wrap-exp"><canvas id="vt-chart-exp" height="200"></canvas></div>
+          <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">💥 Explosivos — Costo por Frente</div>
+          <div id="vt-wrap-exp"><canvas id="vt-chart-exp" height="180"></canvas></div>
+          <div id="vt-exp-detalle" style="margin-top:10px"></div>
         </div>
         <div style="background:var(--coal3);border-radius:10px;padding:16px">
-          <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">⛽ Combustible</div>
-          <div id="vt-wrap-fuel"><canvas id="vt-chart-fuel" height="200"></canvas></div>
+          <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">⛽ Combustible — Costo por Equipo</div>
+          <div id="vt-wrap-fuel"><canvas id="vt-chart-fuel" height="180"></canvas></div>
+          <div id="vt-fuel-detalle" style="margin-top:10px"></div>
         </div>
         <div style="background:var(--coal3);border-radius:10px;padding:16px">
           <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">⏱️ Horómetros (HT)</div>
-          <div id="vt-wrap-horo"><canvas id="vt-chart-horo" height="200"></canvas></div>
+          <div id="vt-wrap-horo"><canvas id="vt-chart-horo" height="180"></canvas></div>
         </div>
       </div>
       <!-- Consumo materiales -->
@@ -7631,67 +7633,116 @@ function visorRenderDia() {
   const wFuel=document.getElementById('vt-wrap-fuel'); if(wFuel) wFuel.innerHTML='<canvas id="vt-chart-fuel" height="200"></canvas>';
   const wHoro=document.getElementById('vt-wrap-horo'); if(wHoro) wHoro.innerHTML='<canvas id="vt-chart-horo" height="200"></canvas>';
 
-  // ── Gráfico Explosivos — S/ por frente (Rampa Brenda / Cortada Noreste) ──
+  // ── Gráfico Explosivos — VS Rampa Brenda vs Cortada Noreste (doughnut + detalle) ──
   const ef = r.expFrente || [];
-  const expConFrente = COMP_EXPLOSIVOS.map(c=>({
-    codigo:c,
-    rampa:(ef.find(x=>x.codigo===c)||{}).rampa||0,
-    galeria:(ef.find(x=>x.codigo===c)||{}).galeria||0,
-    precio: COMP_PRECIOS_EXP[c]||0
-  })).filter(x=>x.rampa||x.galeria||(r.explosivos.find(e=>e.codigo===x.codigo)||{}).C);
-  const expActivos = r.explosivos.filter(e=>e.C>0);
+  const totalRampa = ef.reduce((s,e)=>s+(e.rampa||0)*(COMP_PRECIOS_EXP[e.codigo]||0),0);
+  const totalCortada = ef.reduce((s,e)=>s+(e.galeria||0)*(COMP_PRECIOS_EXP[e.codigo]||0),0);
+  const totalExp = totalRampa + totalCortada;
   const ctxExp = document.getElementById('vt-chart-exp');
-  if(ctxExp && (expConFrente.length || expActivos.length)){
-    const useFrente = expConFrente.filter(x=>x.rampa||x.galeria).length > 0;
-    if(useFrente){
-      const labels = expConFrente.filter(x=>x.rampa||x.galeria).map(e=>e.codigo);
-      const dataR = expConFrente.filter(x=>x.rampa||x.galeria).map(e=>+(e.rampa*e.precio).toFixed(2));
-      const dataG = expConFrente.filter(x=>x.rampa||x.galeria).map(e=>+(e.galeria*e.precio).toFixed(2));
-      _vtCharts.exp = new Chart(ctxExp, {
-        type:'bar',
-        data:{labels, datasets:[
-          {label:'Rampa Brenda (S/)',data:dataR,backgroundColor:'rgba(248,113,113,0.8)',borderRadius:4},
-          {label:'Cortada Noreste (S/)',data:dataG,backgroundColor:'rgba(96,165,250,0.8)',borderRadius:4},
-        ]},
-        options:{responsive:true,plugins:{legend:{labels:{color:'#8b8ba7',font:{size:10}}},tooltip:{callbacks:{label:ctx=>'S/ '+ctx.parsed.y.toFixed(2)}}},scales:{x:{ticks:{color:'#8b8ba7',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}},y:{ticks:{color:'#8b8ba7',font:{size:10},callback:v=>'S/'+v},grid:{color:'rgba(255,255,255,0.04)'}}}}
-      });
-    } else {
-      const labels = expActivos.map(e=>e.codigo);
-      const data = expActivos.map(e=>+((e.C||0)*(COMP_PRECIOS_EXP[e.codigo]||0)).toFixed(2));
-      _vtCharts.exp = new Chart(ctxExp, {
-        type:'bar',
-        data:{labels, datasets:[{label:'Costo consumo (S/)',data,backgroundColor:'rgba(248,113,113,0.8)',borderRadius:4}]},
-        options:{responsive:true,plugins:{legend:{labels:{color:'#8b8ba7',font:{size:10}}},tooltip:{callbacks:{label:ctx=>'S/ '+ctx.parsed.y.toFixed(2)}}},scales:{x:{ticks:{color:'#8b8ba7',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}},y:{ticks:{color:'#8b8ba7',font:{size:10},callback:v=>'S/'+v},grid:{color:'rgba(255,255,255,0.04)'}}}}
-      });
+  const detExp = document.getElementById('vt-exp-detalle');
+  if(totalExp > 0 && ctxExp){
+    const pctR = (totalRampa/totalExp*100).toFixed(1);
+    const pctC = (totalCortada/totalExp*100).toFixed(1);
+    _vtCharts.exp = new Chart(ctxExp, {
+      type:'doughnut',
+      data:{
+        labels:['Rampa Brenda','Cortada Noreste'],
+        datasets:[{data:[+totalRampa.toFixed(2),+totalCortada.toFixed(2)], backgroundColor:['rgba(248,113,113,0.85)','rgba(96,165,250,0.85)'], borderWidth:2, borderColor:'rgba(0,0,0,0.3)', hoverOffset:6}]
+      },
+      options:{responsive:true,plugins:{legend:{position:'bottom',labels:{color:'#8b8ba7',font:{size:10},padding:10}},
+        tooltip:{callbacks:{label:ctx=>`S/ ${ctx.parsed.toFixed(2)} (${ctx.dataIndex===0?pctR:pctC}%)`}}}}
+    });
+    if(detExp) detExp.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.3);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:15px;font-weight:700;color:#f87171">S/ ${totalRampa.toFixed(2)}</div>
+          <div style="font-size:10px;color:#f87171;opacity:0.8">${pctR}% del total</div>
+          <div style="font-size:9px;color:var(--text3);text-transform:uppercase;margin-top:3px">Rampa Brenda</div>
+        </div>
+        <div style="background:rgba(96,165,250,0.12);border:1px solid rgba(96,165,250,0.3);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:15px;font-weight:700;color:#60a5fa">S/ ${totalCortada.toFixed(2)}</div>
+          <div style="font-size:10px;color:#60a5fa;opacity:0.8">${pctC}% del total</div>
+          <div style="font-size:9px;color:var(--text3);text-transform:uppercase;margin-top:3px">Cortada Noreste</div>
+        </div>
+      </div>
+      <div style="text-align:center;margin-top:6px;font-size:11px;color:var(--text3)">Total explosivos: <b style="color:var(--text)">S/ ${totalExp.toFixed(2)}</b></div>`;
+  } else {
+    if(wExp) wExp.innerHTML='<div style="text-align:center;color:var(--text3);padding:30px;font-size:12px">Ingresa datos por frente para ver el VS</div>';
+    // fallback: mostrar costo por código si hay consumo
+    const expActivos = r.explosivos.filter(e=>e.C>0);
+    if(expActivos.length && detExp){
+      const totalFb = expActivos.reduce((s,e)=>s+(e.C||0)*(COMP_PRECIOS_EXP[e.codigo]||0),0);
+      detExp.innerHTML = expActivos.map(e=>{
+        const c=(e.C||0)*(COMP_PRECIOS_EXP[e.codigo]||0);
+        const pct=totalFb>0?(c/totalFb*100).toFixed(1):'0';
+        return `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border2);font-size:11px"><span style="color:var(--text)">${e.codigo} ×${e.C}</span><span style="color:var(--warn)">S/ ${c.toFixed(2)} <span style="color:var(--text3)">(${pct}%)</span></span></div>`;
+      }).join('')+'<div style="text-align:right;padding-top:4px;font-size:11px;font-weight:700;color:var(--text)">Total: S/ '+totalFb.toFixed(2)+'</div>';
     }
-  } else if(wExp){ wExp.innerHTML='<div style="text-align:center;color:var(--text3);padding:40px;font-size:12px">Sin datos de explosivos</div>'; }
+  }
 
-  // ── Gráfico Combustible — color único por máquina, S/ y % ──
-  const FUEL_COLORS = ['#e59022','#f87171','#60a5fa','#34d399','#a78bfa','#fb923c','#38bdf8','#4ade80','#f472b6','#facc15'];
+  // ── Gráfico Combustible — doughnut por máquina + tabla costo y % ──
+  const FUEL_COLORS = ['#e59022','#f87171','#60a5fa','#34d399','#a78bfa','#fb923c','#38bdf8','#facc15','#f472b6','#4ade80'];
   const petFilt = r.petroleo.filter(p=>p.gln);
   const gasFilt = r.gasolina.filter(g=>g.gln);
+  const totalPetS = petFilt.reduce((s,p)=>s+p.gln*COMP_PRECIO_PET,0);
+  const totalGasS = gasFilt.reduce((s,g)=>s+g.gln*COMP_PRECIO_GAS,0);
   const fuelItems = [
-    ...petFilt.map(p=>({label:p.equipo, val:+(p.gln*COMP_PRECIO_PET).toFixed(2), gln:p.gln})),
-    ...gasFilt.map(g=>({label:g.equipo, val:+(g.gln*COMP_PRECIO_GAS).toFixed(2), gln:g.gln})),
+    ...petFilt.map((p,i)=>({label:p.equipo, val:+(p.gln*COMP_PRECIO_PET).toFixed(2), gln:p.gln, tipo:'P', color:FUEL_COLORS[i%FUEL_COLORS.length], grupTotal:totalPetS})),
+    ...gasFilt.map((g,i)=>({label:g.equipo, val:+(g.gln*COMP_PRECIO_GAS).toFixed(2), gln:g.gln, tipo:'G', color:FUEL_COLORS[(petFilt.length+i)%FUEL_COLORS.length], grupTotal:totalGasS})),
   ];
   const fuelTotal = fuelItems.reduce((s,x)=>s+x.val,0);
   const ctxFuel = document.getElementById('vt-chart-fuel');
+  const detFuel = document.getElementById('vt-fuel-detalle');
   if(ctxFuel && fuelItems.length){
     _vtCharts.fuel = new Chart(ctxFuel, {
       type:'doughnut',
       data:{
         labels: fuelItems.map(x=>x.label),
-        datasets:[{data:fuelItems.map(x=>x.val), backgroundColor:fuelItems.map((_,i)=>FUEL_COLORS[i%FUEL_COLORS.length]), borderWidth:1, borderColor:'rgba(0,0,0,0.2)', hoverOffset:6}]
+        datasets:[{data:fuelItems.map(x=>x.val), backgroundColor:fuelItems.map(x=>x.color), borderWidth:1, borderColor:'rgba(0,0,0,0.2)', hoverOffset:6}]
       },
       options:{responsive:true,plugins:{
-        legend:{position:'bottom',labels:{color:'#8b8ba7',font:{size:10},padding:8}},
+        legend:{display:false},
         tooltip:{callbacks:{label:ctx=>{
           const item=fuelItems[ctx.dataIndex];
-          const pct=fuelTotal>0?(item.val/fuelTotal*100).toFixed(1):'0';
-          return ` ${item.label}: S/ ${item.val.toFixed(2)} (${pct}%)`;
+          const pctTotal=fuelTotal>0?(item.val/fuelTotal*100).toFixed(1):'0';
+          const pctGrup=item.grupTotal>0?(item.val/item.grupTotal*100).toFixed(1):'0';
+          const tipo=item.tipo==='P'?'Petróleo':'Gasolina';
+          return [`S/ ${item.val.toFixed(2)}`,`${pctTotal}% del total | ${pctGrup}% del ${tipo}`];
         }}}
       }}
     });
+    if(detFuel){
+      const petRows = petFilt.map((p,i)=>{
+        const val=+(p.gln*COMP_PRECIO_PET).toFixed(2);
+        const pctT=fuelTotal>0?(val/fuelTotal*100).toFixed(1):'0';
+        const pctG=totalPetS>0?(val/totalPetS*100).toFixed(1):'0';
+        return `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border2);font-size:10px">
+          <div style="width:8px;height:8px;border-radius:50%;background:${FUEL_COLORS[i%FUEL_COLORS.length]};flex-shrink:0"></div>
+          <span style="color:var(--text);flex:1">${p.equipo}</span>
+          <span style="color:var(--warn);font-weight:600">S/ ${val.toFixed(2)}</span>
+          <span style="color:var(--text3)">${pctG}%pet</span>
+          <span style="color:var(--text3)">${pctT}%tot</span>
+        </div>`;
+      }).join('');
+      const gasRows = gasFilt.map((g,i)=>{
+        const val=+(g.gln*COMP_PRECIO_GAS).toFixed(2);
+        const pctT=fuelTotal>0?(val/fuelTotal*100).toFixed(1):'0';
+        const pctG=totalGasS>0?(val/totalGasS*100).toFixed(1):'0';
+        return `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border2);font-size:10px">
+          <div style="width:8px;height:8px;border-radius:50%;background:${FUEL_COLORS[(petFilt.length+i)%FUEL_COLORS.length]};flex-shrink:0"></div>
+          <span style="color:var(--text);flex:1">${g.equipo}</span>
+          <span style="color:var(--positive);font-weight:600">S/ ${val.toFixed(2)}</span>
+          <span style="color:var(--text3)">${pctG}%gas</span>
+          <span style="color:var(--text3)">${pctT}%tot</span>
+        </div>`;
+      }).join('');
+      detFuel.innerHTML = `
+        <div style="font-size:9px;color:var(--warn);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">Petróleo — S/ ${totalPetS.toFixed(2)}</div>
+        ${petRows}
+        <div style="font-size:9px;color:var(--positive);text-transform:uppercase;letter-spacing:1px;margin:6px 0 3px">Gasolina — S/ ${totalGasS.toFixed(2)}</div>
+        ${gasRows}
+        <div style="text-align:right;padding-top:6px;font-size:11px;font-weight:700;color:var(--text)">Total combustible: S/ ${fuelTotal.toFixed(2)}</div>`;
+    }
   } else if(wFuel){ wFuel.innerHTML='<div style="text-align:center;color:var(--text3);padding:40px;font-size:12px">Sin consumo de combustible</div>'; }
 
   // ── Gráfico Horómetros ──
