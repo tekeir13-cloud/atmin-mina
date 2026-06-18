@@ -7392,41 +7392,37 @@ function _enviarReporteWA(r) {
     txt += '\n';
   }
 
-  // Explosivos — costo por consumo
-  const costo = compCostoReporte(r);
-  const fmtS = v=>'S/ '+v.toFixed(2);
-  txt += `*COSTO EXPLOSIVOS (Consumo x Precio)*\n`;
+  // Explosivos — consumo (solo unidades)
+  txt += `*CONSUMO EXPLOSIVOS*\n`;
   r.explosivos.filter(e=>e.C>0).forEach(e=>{
-    const precio = COMP_PRECIOS_EXP[e.codigo]||0;
-    txt += `  ${e.codigo}: ${e.C} unid x ${fmtS(precio)} = *${fmtS(e.C*precio)}*\n`;
+    txt += `  ${e.codigo}: ${e.C} unid\n`;
   });
-  txt += `  *Total Explosivos: ${fmtS(costo.cExp)}*\n\n`;
+  const totExpUnid = r.explosivos.reduce((s,e)=>s+(e.C||0),0);
+  txt += `  *Total Explosivos: ${totExpUnid} unid*\n\n`;
 
-  // Aceros — costo por frente
+  // Aceros — por frente (solo unidades)
   const acerosAct = (r.aceros||[]).filter(a=>(a.rampa||0)+(a.galeria||0)>0);
   if(acerosAct.length){
     txt += `*ACEROS (por Frente)*\n`;
+    let totAceUnid = 0;
     acerosAct.forEach(a=>{
-      const precio = COMP_PRECIOS_ACEROS[a.codigo]||0;
-      const tot = ((a.rampa||0)+(a.galeria||0))*precio;
       const det = [];
       if(a.rampa>0) det.push(`Rampa ${a.rampa}`);
       if(a.galeria>0) det.push(`Cortada ${a.galeria}`);
-      txt += `  ${a.codigo}: ${det.join(' | ')} x ${fmtS(precio)} = *${fmtS(tot)}*\n`;
+      totAceUnid += (a.rampa||0)+(a.galeria||0);
+      txt += `  ${a.codigo}: ${det.join(' | ')} = *${(a.rampa||0)+(a.galeria||0)} unid*\n`;
     });
-    txt += `  *Total Aceros: ${fmtS(costo.cAce)}*\n\n`;
+    txt += `  *Total Aceros: ${totAceUnid} unid*\n\n`;
   }
 
-  // Combustible (detalle por máquina + costo)
+  // Combustible (detalle por máquina, solo galones)
   txt += `*COMBUSTIBLE POR MAQUINA*\n`;
-  txt += `_Petroleo (S/ ${COMP_PRECIO_PET}/gln):_\n`;
+  txt += `_Petroleo:_\n`;
   r.petroleo.forEach(p=>{ txt += `    ${p.equipo}: ${p.gln} gln\n`; });
-  txt += `  *Total Petroleo: ${tPet.toFixed(1)} gln = ${fmtS(costo.cPet)}*\n`;
-  txt += `_Gasolina (S/ ${COMP_PRECIO_GAS}/gln):_\n`;
+  txt += `  *Total Petroleo: ${tPet.toFixed(1)} gln*\n`;
+  txt += `_Gasolina:_\n`;
   r.gasolina.forEach(g=>{ txt += `    ${g.equipo}: ${g.gln} gln\n`; });
-  txt += `  *Total Gasolina: ${tGas.toFixed(1)} gln = ${fmtS(costo.cGas)}*\n`;
-  txt += `  *COSTO TOTAL COMBUSTIBLE: ${fmtS(costo.cPet+costo.cGas)}*\n\n`;
-  txt += `*COSTO TOTAL TURNO: ${fmtS(costo.total)}*\n\n`;
+  txt += `  *Total Gasolina: ${tGas.toFixed(1)} gln*\n\n`;
 
   // Horómetros
   const horoAct = r.horometros.filter(h=>h.HT>0);
