@@ -2344,51 +2344,59 @@ select option{background:var(--coal3);}
 <!-- RRHH -->
 <div class="page" id="page-rrhh">
   <div class="mod-tabs">
-    <button class="mod-tab active" onclick="modTab('rrhh','planilla',this)">📋 Planilla Diaria</button>
-    <button class="mod-tab" onclick="modTab('rrhh','tareas',this)">✅ Tareas</button>
+    <button class="mod-tab active" onclick="modTab('rrhh','planilla',this)">📋 Tareo Diario</button>
+    <button class="mod-tab" onclick="modTab('rrhh','tareas',this)">📂 Historial &amp; Edición</button>
     <button class="mod-tab" onclick="modTab('rrhh','personal',this)">👥 Personal</button>
     <button class="mod-tab" onclick="modTab('rrhh','costorrhh',this)">💲 Costo Planilla</button>
   </div>
+
   <div class="mod-pane active" style="display:block" id="rrhh-planilla">
     <div class="kpi-grid">
-      <div class="kpi-card"><div class="kpi-label">Activos Hoy</div><div class="kpi-value gold" id="rr-activo">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Ausentes</div><div class="kpi-value red" id="rr-ausente">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Costo Planilla Hoy</div><div class="kpi-value warn" id="rr-costo-hoy">S/ 0</div></div>
-      <div class="kpi-card"><div class="kpi-label">Costo Planilla Mes</div><div class="kpi-value red" id="rr-costo-mes">S/ 0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Tareados Hoy</div><div class="kpi-value gold" id="rr-activo">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Ausentes Hoy</div><div class="kpi-value red" id="rr-ausente">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Costo Tareo Hoy</div><div class="kpi-value warn" id="rr-costo-hoy">S/ 0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Costo Acum. Mes</div><div class="kpi-value red" id="rr-costo-mes">S/ 0</div></div>
     </div>
     <div class="card" style="margin-bottom:18px">
-      <div class="section-title">Registrar Asistencia</div>
-      <div class="form-grid">
-        <div class="form-group"><label>Fecha</label><input type="date" id="pl-fecha"></div>
-        <div class="form-group"><label>Trabajador</label><select id="pl-trabajador"><option value="">— Seleccionar —</option></select></div>
-        <div class="form-group"><label>Estado</label><select id="pl-estado"><option value="activo">Activo</option><option value="ausente">Ausente</option><option value="descanso">Descanso médico</option></select></div>
-        <div class="form-group"><label>Frente</label><select id="pl-frente"><option value="1">Rampa</option><option value="2">Cortada</option></select></div>
-        <div class="form-group"><label>Tareas del dia</label><select id="pl-tareas-num"><option value="1">x1 Jornal normal</option><option value="1.5">x1.5 Hora extra</option><option value="2">x2 Doble turno</option></select></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+        <div class="section-title" style="margin:0">Tareo del Día</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="date" id="tareo-fecha" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:13px">
+          <button class="btn btn-outline" style="padding:7px 14px;font-size:12px" onclick="cargarGridTareo()">Cargar</button>
+          <button id="btn-seed-demo" class="btn btn-outline" style="padding:7px 14px;font-size:11px;opacity:0.6;display:none" onclick="seedTareoDemo()">⚡ Demo</button>
+        </div>
       </div>
-      <div class="btn-row">
-        <button class="btn btn-gold" onclick="registrarAsistencia()">Registrar</button>
-        <button class="btn btn-outline" onclick="registrarTodosActivos()">✓ Todos Activos</button>
+      <div id="tareo-grid" style="display:flex;flex-direction:column;gap:8px"></div>
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn btn-gold" onclick="guardarTareo()">💾 Guardar Tareo del Día</button>
       </div>
     </div>
-    <div id="planilla-lista"></div>
+    <div id="tareo-resumen-dia" style="margin-top:8px"></div>
   </div>
+
   <div class="mod-pane" style="display:none" id="rrhh-tareas">
-    <div class="card" style="margin-bottom:18px">
-      <div class="section-title">Asignar Tarea Diaria</div>
-      <div class="form-grid">
-        <div class="form-group"><label>Fecha</label><input type="date" id="tarea-fecha"></div>
-        <div class="form-group"><label>Trabajador</label><select id="tarea-trabajador"><option value="">— Seleccionar —</option></select></div>
-        <div class="form-group"><label>Tarea</label><select id="tarea-tipo"><option>Perforación</option><option>Voladura</option><option>Limpieza de frente</option><option>Sostenimiento</option><option>Acarreo</option><option>Topografía</option><option>Chancado</option><option>Mantenimiento equipos</option><option>Guardia</option><option>Otro</option></select></div>
-        <div class="form-group"><label>Frente</label><select id="tarea-frente"><option value="1">Rampa</option><option value="2">Cortada</option></select></div>
-        <div class="form-group"><label>Detalle</label><input type="text" id="tarea-detalle" placeholder="Descripción adicional"></div>
-        <div class="form-group"><label>Estado</label><select id="tarea-estado"><option value="completado" selected>✓ Completado</option></select></div>
-        <div class="form-group"><label>Multiplicador tareas</label><select id="tarea-mult"><option value="1">x1 Jornal normal</option><option value="1.5">x1.5 Hora extra +50%</option><option value="2">x2 Doble turno</option></select></div>
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+        <div class="section-title" style="margin:0">Historial &amp; Edición de Tareos</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <select id="hist-mes" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:12px" onchange="renderTareas()">
+            <option value="">— Todos los meses —</option>
+          </select>
+          <select id="hist-trabajador" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:12px" onchange="renderTareas()">
+            <option value="">— Todos —</option>
+          </select>
+        </div>
       </div>
-      <div class="btn-row"><button class="btn btn-gold" onclick="registrarTarea()">Asignar Tarea</button></div>
     </div>
-    <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Trabajador</th><th>Tarea</th><th>Frente</th><th>Multiplicador</th><th>Pago (S/)</th><th>Estado</th></tr></thead><tbody id="tareas-tbody"></tbody></table></div>
-    <div id="tareas-resumen"></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Fecha</th><th>Trabajador</th><th>Cargo</th><th>Tareas</th><th>Pago S/</th><th>Acción</th></tr></thead>
+        <tbody id="tareas-tbody"></tbody>
+      </table>
+    </div>
+    <div id="tareas-resumen" style="margin-top:12px"></div>
   </div>
+
   <div class="mod-pane" style="display:none" id="rrhh-personal">
     <!-- Formulario alta -->
     <div class="card" style="margin-bottom:14px">
@@ -2436,14 +2444,41 @@ select option{background:var(--coal3);}
   </div>
   <div class="mod-pane" style="display:none" id="rrhh-costorrhh">
     <div class="kpi-grid">
-      <div class="kpi-card"><div class="kpi-label">Costo Diario</div><div class="kpi-value red" id="cr-diario">S/ 0</div></div>
-      <div class="kpi-card"><div class="kpi-label">Costo Semanal</div><div class="kpi-value warn" id="cr-semanal">S/ 0</div></div>
-      <div class="kpi-card"><div class="kpi-label">Costo Mensual</div><div class="kpi-value red" id="cr-mensual">S/ 0</div><div class="kpi-sub">est. 26 días</div></div>
-      <div class="kpi-card"><div class="kpi-label">Costo por Metro</div><div class="kpi-value blue" id="cr-por-metro">S/ —</div></div>
+      <div class="kpi-card"><div class="kpi-label">Costo Hoy</div><div class="kpi-value red" id="cr-diario">S/ 0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Costo Semana</div><div class="kpi-value warn" id="cr-semanal">S/ 0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Costo Mes Acum.</div><div class="kpi-value red" id="cr-mensual">S/ 0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Proyectado Mes</div><div class="kpi-value blue" id="cr-proyectado">S/ —</div></div>
     </div>
-    <div class="two-col">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+      <button class="btn btn-gold" style="padding:8px 18px;font-size:12px" onclick="exportarPlanillaExcel()">📊 Exportar Excel</button>
+    </div>
+    <div class="table-wrap">
+      <table id="costo-planilla-table">
+        <thead>
+          <tr style="background:#1a2744">
+            <th style="color:#fff">Trabajador</th>
+            <th style="color:#fff">Cargo</th>
+            <th style="color:#fff">Jornal/día</th>
+            <th style="color:#fff">Días Trab.</th>
+            <th style="color:#fff">x1</th>
+            <th style="color:#fff">x1.5</th>
+            <th style="color:#fff">x2</th>
+            <th style="color:#fff">TOTAL S/</th>
+          </tr>
+        </thead>
+        <tbody id="cr-tabla-tbody"></tbody>
+        <tfoot id="cr-tfoot"></tfoot>
+      </table>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0 8px">
+      <select id="costo-mes-sel" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px" onchange="renderCostoRRHH()">
+        <option value="">— Mes actual —</option>
+      </select>
+      <span id="cr-por-metro" style="display:none"></span>
+    </div>
+    <div class="two-col" style="margin-top:14px">
       <div class="card"><div class="section-title">Por Frente</div><div id="cr-por-frente"></div></div>
-      <div class="card"><div class="section-title">Por Rol</div><div id="cr-por-rol"></div></div>
+      <div class="card"><div class="section-title">Por Cargo</div><div id="cr-por-rol"></div></div>
     </div>
   </div>
 </div>
@@ -3335,6 +3370,7 @@ select option{background:var(--coal3);}
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 const SUPABASE_URL='https://ueiermflrxiapeednrov.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlaWVybWZscnhpYXBlZWRucm92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MTM4NDYsImV4cCI6MjA5NTQ4OTg0Nn0.75qDiRT0azEfjR0Boqah4rWy2GFumLfhJayKU6S_6e8';
@@ -3552,6 +3588,11 @@ function poblarSelects(){
     const sel=document.getElementById(id);if(!sel)return;
     sel.innerHTML='<option value="">— Seleccionar —</option>'+activos.map(p=>`<option value="${p.id}">${p.nombre} (${p.rol})</option>`).join('');
   });
+  // Reset historial filters so they get repopulated on next render
+  const hMes=document.getElementById('hist-mes');
+  if(hMes) hMes.innerHTML='<option value="">— Todos los meses —</option>';
+  const hW=document.getElementById('hist-trabajador');
+  if(hW) hW.innerHTML='<option value="">— Todos —</option>';
 }
 
 function activarPrimerTab(mod, pane){
@@ -4115,170 +4156,209 @@ function renderCostosLog(){
 }
 
 // ── RRHH ──
-function renderPlanilla(){
-  const ac=state.personal.filter(p=>p.estado==='activo').length;
-  const au=state.personal.filter(p=>p.estado==='ausente').length;
-  const ch=state.personal.filter(p=>p.estado==='activo').reduce((s,p)=>s+p.jornal,0);
-  document.getElementById('rr-activo').textContent=ac;document.getElementById('rr-ausente').textContent=au;
-  document.getElementById('rr-costo-hoy').textContent=fmtS(ch);
-  document.getElementById('rr-costo-mes').textContent=fmtS(ch*state.metas.dias);
-  document.getElementById('planilla-lista').innerHTML=state.personal.map(p=>`
-    <div class="planilla-row">
-      <div class="planilla-nombre">${p.nombre}</div>
-      <div class="planilla-rol">${p.rol}</div>
-      <div class="planilla-tarea" style="color:${FC[p.frente]}">${FL[p.frente]}</div>
-      <div><span class="badge ${p.estado==='activo'?'badge-ok':p.estado==='ausente'?'badge-danger':'badge-warn'}">${p.estado==='activo'?'Activo':p.estado==='ausente'?'Ausente':'Descanso'}</span></div>
-      <div class="planilla-costo">${fmtS(p.jornal)}/día</div>
-    </div>`).join('')||'<div class="empty-state">Sin personal</div>';
+
+function initTareoFecha(){
+  const el=document.getElementById('tareo-fecha');
+  if(el && !el.value) el.value=hoy();
 }
-async function registrarAsistencia(){
-  const wid=parseInt(document.getElementById('pl-trabajador').value);
-  if(!wid){showNotif('⚠ Selecciona un trabajador','error');return;}
-  const estado=document.getElementById('pl-estado').value;
-  const frente=parseInt(document.getElementById('pl-frente').value);
-  const p=state.personal.find(x=>x.id===wid);if(p){p.estado=estado;p.frente=frente;}
-  try{await sb.from('personal').update({estado,frente}).eq('id',wid);}catch(e){}
-  renderPlanilla();showNotif('✓ Asistencia registrada');
+
+function cargarGridTareo(){
+  initTareoFecha();
+  const fecha=document.getElementById('tareo-fecha').value||hoy();
+  const lbl=document.getElementById('tareo-fecha-label');
+  if(lbl) lbl.textContent=fmtF(fecha);
+  const activos=state.personal.filter(p=>p.estado!=='baja');
+  const grid=document.getElementById('tareo-grid');
+  if(!grid) return;
+  if(!activos.length){grid.innerHTML='<div style="color:var(--text3);padding:16px;text-align:center;font-size:13px">Sin personal activo. Registra trabajadores en la pestaña Personal.</div>';return;}
+  const tareosDelDia=state.tareas.filter(t=>t.fecha===fecha);
+  grid.innerHTML=activos.map(p=>{
+    const t=tareosDelDia.find(t=>t.trabajadorId==p.id);
+    const val=t?String(t.mult):'';
+    const c=FC[p.frente]||'#888';
+    const ini=p.nombre.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+    const btn=(v,lbl)=>`<button onclick="selTareoBtn(this)" data-pid="${p.id}" data-val="${v}" style="padding:6px 14px;border-radius:6px;border:1px solid ${val===v?'var(--gold)':'var(--border)'};cursor:pointer;font-weight:700;font-size:12px;touch-action:manipulation;background:${val===v?'rgba(201,168,76,0.25)':'var(--coal4)'};color:${val===v?'var(--gold-light)':'var(--text3)'};">${lbl}</button>`;
+    return`<div data-pid="${p.id}" class="tareo-row" style="display:flex;align-items:center;gap:10px;background:var(--coal3);border-radius:10px;padding:10px 14px;border:1px solid var(--border)">
+      <div style="width:36px;height:36px;border-radius:50%;background:${c}22;color:${c};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">${ini}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.nombre}</div>
+        <div style="font-size:10px;color:var(--text3)">${p.rol} · <span style="color:${c}">${FL[p.frente]||'—'}</span> · S/${p.jornal}/día</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        ${btn('1','×1')}${btn('1.5','×1.5')}${btn('2','×2')}
+      </div>
+    </div>`;
+  }).join('');
+  actualizarKpisTareo(fecha);
 }
-function registrarTodosActivos(){state.personal.forEach(p=>p.estado='activo');renderPlanilla();showNotif('✓ Todos activos');}
-function renderTareas(){
-  const tbody = document.getElementById('tareas-tbody');
-  if(!tbody) return;
 
-  tbody.innerHTML = sortRegistros(state.tareas).map(t => {
-    const p      = state.personal.find(x => x.id === t.trabajadorId);
-    const mult   = Number(t.mult || 1);
-    const jornal = p ? Number(p.jornal) : 0;
-    const pagoBase  = jornal;
-    const pagoTotal = jornal * mult;
-    const pagoExtra = pagoTotal - pagoBase;
+function selTareoBtn(btn){
+  const pid=btn.dataset.pid;
+  const row=document.querySelector(`.tareo-row[data-pid="${pid}"]`);
+  const btns=row.querySelectorAll('button');
+  const yaActivo=btn.style.background.includes('201,168');
+  btns.forEach(b=>{b.style.background='var(--coal4)';b.style.color='var(--text3)';b.style.borderColor='var(--border)';});
+  if(!yaActivo){btn.style.background='rgba(201,168,76,0.25)';btn.style.color='var(--gold-light)';btn.style.borderColor='var(--gold)';}
+}
 
-    const multColor = mult >= 2 ? 'badge-info' : mult > 1 ? 'badge-warn' : 'badge-ok';
-    const multLabel = mult >= 2 ? '×2 Doble turno' : mult > 1 ? '×1.5 Hora extra' : '×1 Normal';
+function actualizarKpisTareo(fecha){
+  const f=fecha||hoy();
+  const mes=f.slice(0,7);
+  const activos=state.personal.filter(p=>p.estado!=='baja');
+  const hoyT=state.tareas.filter(t=>t.fecha===f);
+  const mesT=state.tareas.filter(t=>t.fecha.startsWith(mes));
+  const costHoy=hoyT.reduce((s,t)=>{const p=state.personal.find(x=>x.id==t.trabajadorId);return s+(p?p.jornal*(t.mult||1):0);},0);
+  const costMes=mesT.reduce((s,t)=>{const p=state.personal.find(x=>x.id==t.trabajadorId);return s+(p?p.jornal*(t.mult||1):0);},0);
+  const g=id=>document.getElementById(id);
+  if(g('rr-activo')) g('rr-activo').textContent=hoyT.length;
+  if(g('rr-ausente')) g('rr-ausente').textContent=activos.length-hoyT.length;
+  if(g('rr-costo-hoy')) g('rr-costo-hoy').textContent=fmtS(costHoy);
+  if(g('rr-costo-mes')) g('rr-costo-mes').textContent=fmtS(costMes);
+}
 
-    return `<tr>
-      <td>${fmtF(t.fecha)}</td>
-      <td>
-        <strong>${p ? p.nombre : '—'}</strong>
-        <div style="font-size:10px;color:var(--text3)">${p ? p.rol : ''}</div>
-      </td>
-      <td>${t.tarea}</td>
-      <td style="color:${FC[t.frente]}">${FL[t.frente]}</td>
-      <td><span class="badge ${multColor}">${multLabel}</span></td>
-      <td>
-        <div style="font-family:'DM Mono',monospace;font-size:14px;color:var(--gold-light);font-weight:700">
-          ${fmtS(pagoTotal)}
-        </div>
-        ${mult > 1
-          ? `<div style="font-size:10px;color:var(--text3);margin-top:2px">
-               Base ${fmtS(pagoBase)} + Extra ${fmtS(pagoExtra)}
-             </div>`
-          : `<div style="font-size:10px;color:var(--text3);margin-top:2px">Jornal base</div>`
-        }
-      </td>
-      <td><span class="badge badge-ok">✓ Completado</span></td>
-    </tr>`;
-  }).join('') || '<tr><td colspan="7" class="empty-state">Sin tareas registradas</td></tr>';
-
-  // ── Resumen total al pie ──
-  const totalPago  = state.tareas.reduce((s,t) => {
-    const p = state.personal.find(x => x.id === t.trabajadorId);
-    return s + (p ? Number(p.jornal) * Number(t.mult || 1) : 0);
-  }, 0);
-  const totalExtra = state.tareas.reduce((s,t) => {
-    const p    = state.personal.find(x => x.id === t.trabajadorId);
-    const mult = Number(t.mult || 1);
-    return s + (p && mult > 1 ? Number(p.jornal) * (mult - 1) : 0);
-  }, 0);
-  const totalBase = totalPago - totalExtra;
-
-  const resumen = document.getElementById('tareas-resumen');
-  if(resumen){
-    resumen.innerHTML = `
-      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;padding:14px;
-                  background:var(--coal3);border-radius:9px;border:1px solid var(--border)">
-        <div>
-          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">
-            Total tareas
-          </div>
-          <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700;color:var(--gold-light)">
-            ${state.tareas.length}
-          </div>
-        </div>
-        <div>
-          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">
-            Jornal base total
-          </div>
-          <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700;color:var(--text2)">
-            ${fmtS(totalBase)}
-          </div>
-        </div>
-        <div>
-          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">
-            Horas extra (+adicional)
-          </div>
-          <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700;color:var(--text)">
-            +${fmtS(totalExtra)}
-          </div>
-        </div>
-        <div style="background:rgba(201,168,76,0.1);border:1px solid rgba(201,168,76,0.3);
-                    border-radius:8px;padding:10px 16px">
-          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">
-            TOTAL A PAGAR
-          </div>
-          <div style="font-family:'Syne',sans-serif;font-size:26px;font-weight:800;color:var(--gold-light)">
-            ${fmtS(totalPago)}
-          </div>
-        </div>
-      </div>`;
+async function guardarTareo(){
+  const fecha=document.getElementById('tareo-fecha').value||hoy();
+  const rows=document.querySelectorAll('#tareo-grid .tareo-row');
+  let guardados=0,omitidos=0;
+  for(const row of rows){
+    const pid=row.dataset.pid;
+    const btn=row.querySelector('button[style*="201,168"]');
+    if(!btn){omitidos++;continue;}
+    const mult=parseFloat(btn.dataset.val)||1;
+    const existe=state.tareas.find(t=>t.fecha===fecha&&String(t.trabajadorId)===String(pid));
+    if(existe){
+      existe.mult=mult;
+      try{if(existe.id) await sb.from('tareas').update({mult}).eq('id',existe.id);}catch(e){}
+    } else {
+      const p=state.personal.find(x=>String(x.id)===String(pid));
+      const nv={fecha,trabajadorId:pid,tarea:'Tareo diario',frente:p?.frente||1,detalle:'',estadoTarea:'completado',mult};
+      try{const{data}=await sb.from('tareas').insert([{fecha,trabajador_id:pid,tarea:'Tareo diario',frente:nv.frente,detalle:'',estado_tarea:'completado',mult,mes_id:getMesId()}]).select().single();if(data)nv.id=data.id;}catch(e){}
+      state.tareas.push(nv);
+    }
+    guardados++;
   }
+  const msg=document.getElementById('tareo-save-msg');
+  if(msg){msg.textContent=`✓ ${guardados} tareados${omitidos?' · '+omitidos+' sin tarear':''}`;setTimeout(()=>{msg.textContent='';},4000);}
+  actualizarKpisTareo(fecha);renderCostoRRHH();
+  showNotif(`✓ Tareo del ${fmtF(fecha)} guardado — ${guardados} trabajadores`);
+}
+
+function renderPlanilla(){
+  initTareoFecha();
+  cargarGridTareo();
+}
+
+function registrarAsistencia(){}
+function registrarTodosActivos(){}
+
+function seedTareoDemo(){
+  if(!state.personal.length){showNotif('Primero registra personal en la pestaña Personal','error');return;}
+  const activos=state.personal.filter(p=>p.estado!=='baja');
+  const mults=[1,1,1,1.5,2];
+  const hoyD=new Date();
+  for(let d=14;d>=0;d--){
+    const fd=new Date(hoyD);fd.setDate(hoyD.getDate()-d);
+    const fechaStr=fd.toISOString().slice(0,10);
+    activos.forEach(p=>{
+      if(Math.random()<0.2) return;
+      const yaExiste=state.tareas.find(t=>t.fecha===fechaStr&&String(t.trabajadorId)===String(p.id));
+      if(yaExiste) return;
+      const mult=mults[Math.floor(Math.random()*mults.length)];
+      state.tareas.push({fecha:fechaStr,trabajadorId:p.id,tarea:'Tareo diario',frente:p.frente||1,detalle:'Demo',estadoTarea:'completado',mult,_tmpId:Date.now()+Math.random()});
+    });
+  }
+  renderTareas();renderCostoRRHH();actualizarKpisTareo(hoy());
+  showNotif(`✓ Datos demo: ${state.tareas.length} tareos en los últimos 15 días`);
+}
+
+function renderTareas(){
+  const tbody=document.getElementById('tareas-tbody');if(!tbody)return;
+  // Poblar filtros
+  const hMes=document.getElementById('hist-mes');
+  const hTrab=document.getElementById('hist-trabajador');
+  const meses=[...new Set(state.tareas.map(t=>t.fecha.slice(0,7)))].sort().reverse();
+  if(hMes){
+    const prevMes=hMes.value;
+    hMes.innerHTML='<option value="">— Todos los meses —</option>'+meses.map(m=>`<option value="${m}"${m===prevMes?' selected':''}>${m}</option>`).join('');
+  }
+  if(hTrab){
+    const prevT=hTrab.value;
+    const activos=state.personal.filter(p=>p.estado!=='baja');
+    hTrab.innerHTML='<option value="">— Todos —</option>'+activos.map(p=>`<option value="${p.id}"${String(p.id)===prevT?' selected':''}>${p.nombre}</option>`).join('');
+  }
+  const filtMes=hMes?hMes.value:'';
+  const filtTrab=hTrab?hTrab.value:'';
+  let tareas=[...state.tareas].sort((a,b)=>b.fecha.localeCompare(a.fecha));
+  if(filtMes) tareas=tareas.filter(t=>t.fecha.startsWith(filtMes));
+  if(filtTrab) tareas=tareas.filter(t=>String(t.trabajadorId)===String(filtTrab));
+  const diasMap={};
+  tareas.forEach(t=>{if(!diasMap[t.trabajadorId])diasMap[t.trabajadorId]=new Set();diasMap[t.trabajadorId].add(t.fecha);});
+  tbody.innerHTML=tareas.map((t,i)=>{
+    const p=state.personal.find(x=>String(x.id)===String(t.trabajadorId));
+    const mult=Number(t.mult||1);
+    const jornal=p?Number(p.jornal):0;
+    const pago=jornal*mult;
+    const multCol=mult>=2?'#f87171':mult>1?'#f59e0b':'#60a5fa';
+    const dias=diasMap[t.trabajadorId]?diasMap[t.trabajadorId].size:1;
+    const uid=t.id||t._tmpId||i;
+    return`<tr id="tareo-row-${uid}">
+      <td>${fmtF(t.fecha)}</td>
+      <td><strong>${p?p.nombre:'—'}</strong><div style="font-size:10px;color:var(--text3)">${p?p.rol:''}</div></td>
+      <td style="font-size:11px;color:var(--text3)">${p?p.cargo||p.rol:'—'}</td>
+      <td><span style="font-weight:700;color:${multCol}">×${mult}</span></td>
+      <td style="font-family:'DM Mono',monospace">${fmtS(jornal)}</td>
+      <td style="font-family:'DM Mono',monospace;color:var(--gold-light);font-weight:700">${fmtS(pago)}</td>
+      <td style="text-align:center"><span class="badge badge-ok">${dias}</span></td>
+      <td><button onclick="editarTareoRow('${uid}')" style="background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-weight:600">Editar</button></td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="8" class="empty-state">Sin registros</td></tr>';
+  const totalPago=tareas.reduce((s,t)=>{const p=state.personal.find(x=>String(x.id)===String(t.trabajadorId));return s+(p?p.jornal*(t.mult||1):0);},0);
+  const resumen=document.getElementById('tareas-resumen');
+  if(resumen) resumen.innerHTML=`<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;padding:12px;background:var(--coal3);border-radius:9px;border:1px solid var(--border)">
+    <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase">Registros</div><div style="font-size:22px;font-weight:700;color:var(--gold-light)">${tareas.length}</div></div>
+    <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase">Trabajadores</div><div style="font-size:22px;font-weight:700;color:var(--text2)">${new Set(tareas.map(t=>t.trabajadorId)).size}</div></div>
+    <div style="background:rgba(201,168,76,0.1);border:1px solid rgba(201,168,76,0.3);border-radius:8px;padding:10px 16px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase">Total a pagar</div><div style="font-size:26px;font-weight:800;color:var(--gold-light)">${fmtS(totalPago)}</div></div>
+  </div>`;
+}
+
+// _tareoEditIndex: índice temporal en state.tareas del registro siendo editado
+let _tareoEditIdx={};
+function editarTareoRow(uid){
+  const idx=state.tareas.findIndex(t=>String(t.id||t._tmpId)===String(uid)||String(state.tareas.indexOf(t))===String(uid));
+  const t=state.tareas.find(t=>String(t.id||t._tmpId)===String(uid));
+  if(!t) return;
+  const row=document.getElementById('tareo-row-'+uid);if(!row) return;
+  const actual=t.mult||1;
+  _tareoEditIdx[uid]=t;
+  row.cells[3].innerHTML=`<div style="display:flex;gap:5px;flex-wrap:wrap">
+    ${['1','1.5','2'].map(v=>`<button onclick="aplicarEditTareo('${uid}','${v}')" style="padding:3px 10px;border-radius:6px;border:1px solid ${String(actual)===v?'var(--gold)':'var(--border)'};cursor:pointer;font-size:11px;font-weight:700;background:${String(actual)===v?'rgba(201,168,76,0.25)':'var(--coal4)'};color:${String(actual)===v?'var(--gold-light)':'var(--text3)'}">×${v}</button>`).join('')}
+    <button onclick="renderTareas()" style="padding:3px 8px;border-radius:6px;border:1px solid var(--border);cursor:pointer;font-size:11px;color:var(--text3);background:var(--coal4)">✕</button>
+  </div>`;
+}
+
+async function aplicarEditTareo(uid, multStr){
+  const mult=parseFloat(multStr);
+  const t=state.tareas.find(t=>String(t.id||t._tmpId)===String(uid));
+  if(!t) return;
+  t.mult=mult;
+  try{if(t.id) await sb.from('tareas').update({mult}).eq('id',t.id);}catch(e){}
+  renderTareas();renderCostoRRHH();actualizarKpisTareo(hoy());
+  showNotif('✓ Tareo actualizado correctamente');
 }
 
 async function registrarTarea(){
-  const wid = parseInt(document.getElementById('tarea-trabajador').value);
-  if(!wid){ showNotif('⚠ Selecciona un trabajador','error'); return; }
-  const mult = parseFloat(document.getElementById('tarea-mult').value) || 1;
-  const p = state.personal.find(x => x.id === wid);
-  const pagoTotal = p ? p.jornal * mult : 0;
-  const pagoBase  = p ? p.jornal : 0;
-  const pagoExtra = pagoTotal - pagoBase;
-
-  const nv = {
-    fecha: document.getElementById('tarea-fecha').value,
-    trabajadorId: wid,
-    tarea: document.getElementById('tarea-tipo').value,
-    frente: parseInt(document.getElementById('tarea-frente').value),
-    detalle: document.getElementById('tarea-detalle').value,
-    estadoTarea: 'completado',   // siempre completado
-    mult: mult
-  };
-
-  try{
-    await sb.from('tareas').insert([{
-      fecha: nv.fecha, trabajador_id: nv.trabajadorId,
-      tarea: nv.tarea, frente: nv.frente,
-      detalle: nv.detalle, estado_tarea: 'completado', mult: mult
-    }]);
-  }catch(e){}
-
-  state.tareas.push(nv);
-  renderTareas();
-
-  // Notificación con el cálculo claro
-  const multLabel = mult === 1 ? 'jornal normal' : mult === 1.5 ? '×1.5 hora extra' : '×2 doble turno';
-  showNotif(`✓ ${p ? p.nombre : 'Trabajador'} — ${fmtS(pagoTotal)} (${multLabel}${mult > 1 ? ' · Extra: ' + fmtS(pagoExtra) : ''})`);
+  // legacy — no-op, sistema ahora usa guardarTareo()
 }
+
 function renderPersonal(){
-  const activos = state.personal.filter(p=>p.estado!=='baja');
-  const bajas   = state.personal.filter(p=>p.estado==='baja');
-  // Contadores
-  const cntA=document.getElementById('p-cnt-activos'), cntB=document.getElementById('p-cnt-baja'), cntT=document.getElementById('p-cnt-total');
-  if(cntA) cntA.textContent=activos.length;
-  if(cntB) cntB.textContent=bajas.length;
-  if(cntT) cntT.textContent=state.personal.length;
-  document.getElementById('total-personal').textContent=activos.length;
-  // Cards activos
-  document.getElementById('lista-personal').innerHTML=activos.map(p=>{
+  const activos=state.personal.filter(p=>p.estado!=='baja');
+  const bajas=state.personal.filter(p=>p.estado==='baja');
+  const g=id=>document.getElementById(id);
+  if(g('p-cnt-activos')) g('p-cnt-activos').textContent=activos.length;
+  if(g('p-cnt-baja')) g('p-cnt-baja').textContent=bajas.length;
+  if(g('p-cnt-total')) g('p-cnt-total').textContent=state.personal.length;
+  if(g('total-personal')) g('total-personal').textContent=activos.length;
+  g('lista-personal').innerHTML=activos.map(p=>{
     const ini=p.nombre.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
     const c=FC[p.frente]||'#888';
     const ingresoStr=p.ingreso?`<div style="font-size:9px;color:var(--text3);margin-top:2px">Ingresó: ${p.ingreso}</div>`:'';
@@ -4292,11 +4372,9 @@ function renderPersonal(){
       <div style="font-size:10px;color:var(--text3);margin-top:4px">S/ ${p.jornal}/día</div>
     </div>`;
   }).join('')||'<div style="color:var(--text3);font-size:12px;padding:16px">Sin personal activo</div>';
-  // Sección bajas
-  const bSec=document.getElementById('baja-section');
-  if(bSec) bSec.style.display=bajas.length?'block':'none';
-  const bCount=document.getElementById('baja-count'); if(bCount) bCount.textContent=bajas.length;
-  const bLista=document.getElementById('baja-lista');
+  const bSec=g('baja-section');if(bSec) bSec.style.display=bajas.length?'block':'none';
+  const bCount=g('baja-count');if(bCount) bCount.textContent=bajas.length;
+  const bLista=g('baja-lista');
   if(bLista) bLista.innerHTML=bajas.map(p=>{
     const ini=p.nombre.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
     return`<div class="persona-card ausente" style="opacity:0.65;border:1px solid rgba(239,68,68,0.25)">
@@ -4306,18 +4384,18 @@ function renderPersonal(){
       <span class="badge badge-danger">Baja</span>
       <div style="font-size:9px;color:#f87171;margin-top:3px">${p.motivoBaja||''}</div>
       ${p.fechaBaja?`<div style="font-size:9px;color:var(--text3)">${p.fechaBaja}</div>`:''}
-      ${p.obsBaja?`<div style="font-size:9px;color:var(--text3);margin-top:2px;font-style:italic">${p.obsBaja}</div>`:''}
     </div>`;
   }).join('');
 }
+
 let _bajaListaVisible=false;
 function toggleBajas(){
   _bajaListaVisible=!_bajaListaVisible;
-  document.getElementById('baja-lista').style.display=_bajaListaVisible?'grid':'none';
-  document.getElementById('baja-lista').style.gridTemplateColumns='repeat(auto-fill,minmax(150px,1fr))';
-  document.getElementById('baja-lista').style.gap='10px';
-  document.getElementById('baja-chevron').textContent=_bajaListaVisible?'▲':'▼';
+  const bl=document.getElementById('baja-lista');
+  if(bl){bl.style.display=_bajaListaVisible?'grid':'none';bl.style.gridTemplateColumns='repeat(auto-fill,minmax(150px,1fr))';bl.style.gap='10px';}
+  const ch=document.getElementById('baja-chevron');if(ch) ch.textContent=_bajaListaVisible?'▲':'▼';
 }
+
 function abrirModalBaja(){
   const activos=state.personal.filter(p=>p.estado!=='baja');
   if(!activos.length){showNotif('No hay personal activo para dar de baja','error');return;}
@@ -4327,19 +4405,20 @@ function abrirModalBaja(){
   document.getElementById('baja-obs').value='';
   document.getElementById('modal-baja').classList.add('active');
 }
+
 async function confirmarBaja(){
-  const id=parseInt(document.getElementById('baja-trabajador').value)||document.getElementById('baja-trabajador').value;
+  const id=document.getElementById('baja-trabajador').value;
   const motivo=document.getElementById('baja-motivo').value;
   const fecha=document.getElementById('baja-fecha').value;
   const obs=document.getElementById('baja-obs').value.trim();
-  const p=state.personal.find(x=>x.id==id);
+  const p=state.personal.find(x=>String(x.id)===String(id));
   if(!p){showNotif('Trabajador no encontrado','error');return;}
-  p.estado='baja'; p.motivoBaja=motivo; p.fechaBaja=fecha; p.obsBaja=obs;
+  p.estado='baja';p.motivoBaja=motivo;p.fechaBaja=fecha;p.obsBaja=obs;
   try{await sb.from('personal').update({estado:'baja',motivoBaja:motivo,fechaBaja:fecha,obsBaja:obs}).eq('id',id);}catch(e){}
-  cerrarModal('modal-baja');
-  poblarSelects();renderPersonal();renderCostoRRHH();
+  cerrarModal('modal-baja');poblarSelects();renderPersonal();renderCostoRRHH();
   showNotif(`${p.nombre} dado de baja: ${motivo}`,'warn');
 }
+
 async function agregarPersonal(){
   const nombre=document.getElementById('p-nombre').value.trim();
   if(!nombre){showNotif('⚠ Ingresa el nombre','error');return;}
@@ -4349,20 +4428,125 @@ async function agregarPersonal(){
   limpiarFormPersonal();poblarSelects();renderPersonal();renderCostoRRHH();showNotif('✓ Personal agregado');
 }
 function limpiarFormPersonal(){['p-nombre','p-dni','p-jornal','p-ingreso'].forEach(id=>document.getElementById(id).value='');}
+
 function renderCostoRRHH(){
-  const ac=state.personal.filter(p=>p.estado==='activo');
-  const cd=ac.reduce((s,p)=>s+p.jornal,0);
+  const mes=document.getElementById('costo-mes-sel')?.value||hoy().slice(0,7);
+  const hoyStr=hoy();
+  const semD=new Date();semD.setDate(semD.getDate()-semD.getDay());
+  const semStr=semD.toISOString().slice(0,10);
+  const tMes=state.tareas.filter(t=>t.fecha.startsWith(mes));
+  const tHoy=state.tareas.filter(t=>t.fecha===hoyStr);
+  const tSem=state.tareas.filter(t=>t.fecha>=semStr);
+  const calc=arr=>arr.reduce((s,t)=>{const p=state.personal.find(x=>String(x.id)===String(t.trabajadorId));return s+(p?p.jornal*(t.mult||1):0);},0);
+  const costHoy=calc(tHoy),costSem=calc(tSem),costMes=calc(tMes);
+  const diasMes=new Set(tMes.map(t=>t.fecha)).size;
+  const prom=diasMes>0?costMes/diasMes:0;
+  const proyMes=prom*26;
   const tm=state.perforacion.reduce((s,p)=>s+p.metros,0)||1;
-  document.getElementById('cr-diario').textContent=fmtS(cd);
-  document.getElementById('cr-semanal').textContent=fmtS(cd*6);
-  document.getElementById('cr-mensual').textContent=fmtS(cd*state.metas.dias);
-  document.getElementById('cr-por-metro').textContent=fmtS(cd*state.metas.dias/tm);
-  const f1=ac.filter(p=>p.frente===1),f2=ac.filter(p=>p.frente===2);
-  document.getElementById('cr-por-frente').innerHTML=`<div class="vs-row"><div class="vs-label">🟦 Rampa (${f1.length})</div><div class="vs-real">${fmtS(f1.reduce((s,p)=>s+p.jornal,0))}/día</div></div><div class="vs-row"><div class="vs-label">🟩 Cortada (${f2.length})</div><div class="vs-real">${fmtS(f2.reduce((s,p)=>s+p.jornal,0))}/día</div></div>`;
-  const br={};ac.forEach(p=>{if(!br[p.rol])br[p.rol]={n:0,c:0};br[p.rol].n++;br[p.rol].c+=p.jornal;});
-  document.getElementById('cr-por-rol').innerHTML=Object.entries(br).map(([r,{n,c}])=>`<div class="vs-row"><div class="vs-label">${r} (${n})</div><div class="vs-real">${fmtS(c)}/día</div><div class="vs-proy">${fmtS(c*state.metas.dias)}/mes</div></div>`).join('');
+  const g=id=>document.getElementById(id);
+  if(g('cr-diario')) g('cr-diario').textContent=fmtS(costHoy);
+  if(g('cr-semanal')) g('cr-semanal').textContent=fmtS(costSem);
+  if(g('cr-mensual')) g('cr-mensual').textContent=fmtS(costMes);
+  if(g('cr-proyectado')) g('cr-proyectado').textContent=fmtS(proyMes);
+  if(g('cr-por-metro')) g('cr-por-metro').textContent=fmtS(costMes/tm);
+  // Tabla por trabajador
+  const activos=state.personal.filter(p=>p.estado!=='baja');
+  const tbody=g('cr-tabla-tbody');if(!tbody) return;
+  let totDias=0,totTotal=0;
+  const filas=activos.map(p=>{
+    const pts=tMes.filter(t=>String(t.trabajadorId)===String(p.id));
+    const dias=new Set(pts.map(t=>t.fecha)).size;
+    const n1=pts.filter(t=>Number(t.mult||1)===1).length;
+    const n15=pts.filter(t=>Number(t.mult||1)===1.5).length;
+    const n2=pts.filter(t=>Number(t.mult||1)===2).length;
+    const total=pts.reduce((s,t)=>s+p.jornal*(t.mult||1),0);
+    totDias+=dias;totTotal+=total;
+    return{p,dias,n1,n15,n2,total};
+  }).filter(f=>f.dias>0||f.total>0).sort((a,b)=>b.total-a.total);
+  tbody.innerHTML=filas.map(({p,dias,n1,n15,n2,total})=>`<tr>
+    <td><strong>${p.nombre}</strong></td>
+    <td style="font-size:11px;color:var(--text3)">${p.rol}</td>
+    <td style="font-family:'DM Mono',monospace">${fmtS(p.jornal)}</td>
+    <td style="text-align:center;font-weight:700;color:var(--positive)">${dias}</td>
+    <td style="text-align:center;color:#60a5fa">${n1||'—'}</td>
+    <td style="text-align:center;color:#f59e0b">${n15||'—'}</td>
+    <td style="text-align:center;color:#f87171">${n2||'—'}</td>
+    <td style="font-family:'DM Mono',monospace;font-weight:700;color:var(--gold-light)">${fmtS(total)}</td>
+  </tr>`).join('')+`<tr style="background:rgba(201,168,76,0.08);border-top:2px solid rgba(201,168,76,0.3)">
+    <td colspan="3" style="font-weight:700;color:var(--gold)">TOTALES MES</td>
+    <td style="text-align:center;font-weight:700;color:var(--positive)">${totDias}</td>
+    <td colspan="3"></td>
+    <td style="font-family:'DM Mono',monospace;font-weight:800;color:var(--gold-light);font-size:15px">${fmtS(totTotal)}</td>
+  </tr>`;
+  // Desglose frentes
+  const calcF=fr=>tMes.filter(t=>{const p=state.personal.find(x=>String(x.id)===String(t.trabajadorId));return p&&p.frente===fr;});
+  if(g('cr-por-frente')) g('cr-por-frente').innerHTML=`
+    <div class="vs-row"><div class="vs-label">Rampa Brenda</div><div class="vs-real">${fmtS(calc(calcF(1)))}</div></div>
+    <div class="vs-row"><div class="vs-label">Cortada Noreste</div><div class="vs-real">${fmtS(calc(calcF(2)))}</div></div>`;
+  const byRol={};
+  filas.forEach(({p,total})=>{if(!byRol[p.rol])byRol[p.rol]=0;byRol[p.rol]+=total;});
+  if(g('cr-por-rol')) g('cr-por-rol').innerHTML=Object.entries(byRol).sort((a,b)=>b[1]-a[1]).map(([r,c])=>`<div class="vs-row"><div class="vs-label">${r}</div><div class="vs-real">${fmtS(c)}</div></div>`).join('');
+  // Selector meses
+  const selMes=g('costo-mes-sel');
+  if(selMes){
+    const meses=[...new Set(state.tareas.map(t=>t.fecha.slice(0,7)))].sort().reverse();
+    meses.forEach(m=>{if(!selMes.querySelector(`option[value="${m}"]`)){const o=document.createElement('option');o.value=m;o.textContent=m;selMes.appendChild(o);}});
+  }
 }
 
+function exportarPlanillaExcel(){
+  if(typeof XLSX==='undefined'){showNotif('Error: librería Excel no cargada','error');return;}
+  const mes=document.getElementById('costo-mes-sel')?.value||hoy().slice(0,7);
+  const [anio,mesN]=mes.split('-');
+  const nombreMes=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][parseInt(mesN)-1]||mes;
+  const tMes=state.tareas.filter(t=>t.fecha.startsWith(mes));
+  const activos=state.personal.filter(p=>p.estado!=='baja');
+  const filas=activos.map((p,i)=>{
+    const pts=tMes.filter(t=>String(t.trabajadorId)===String(p.id));
+    const dias=new Set(pts.map(t=>t.fecha)).size;
+    const n1=pts.filter(t=>Number(t.mult||1)===1).length;
+    const n15=pts.filter(t=>Number(t.mult||1)===1.5).length;
+    const n2=pts.filter(t=>Number(t.mult||1)===2).length;
+    const total=pts.reduce((s,t)=>s+p.jornal*(t.mult||1),0);
+    return[i+1,p.nombre,p.dni||'—',p.rol,FL[p.frente]||'—',p.jornal,dias,n1||0,n15||0,n2||0,+total.toFixed(2)];
+  });
+  const totRow=['','TOTALES','','','','',
+    filas.reduce((s,f)=>s+f[6],0),
+    filas.reduce((s,f)=>s+f[7],0),
+    filas.reduce((s,f)=>s+f[8],0),
+    filas.reduce((s,f)=>s+f[9],0),
+    +filas.reduce((s,f)=>s+f[10],0).toFixed(2)
+  ];
+  const wsData=[
+    [`ATMIN / DEEPMINE — PLANILLA DE PERSONAL`],
+    [`Período: ${nombreMes} ${anio}`],
+    [`Exportado: ${new Date().toLocaleDateString('es-PE',{day:'2-digit',month:'2-digit',year:'numeric'})}`],
+    [],
+    ['N°','Trabajador','DNI','Cargo','Frente','Jornal/día S/','Días Trab.','Jorn. ×1','Jorn. ×1.5','Jorn. ×2','TOTAL S/'],
+    ...filas,
+    totRow,
+    [],[],[],
+    ['','Firma Administrador del Proyecto:','','','','','Firma Jefe de Finanzas:'],
+    ['','___________________________','','','','','___________________________'],
+  ];
+  const ws1=XLSX.utils.aoa_to_sheet(wsData);
+  ws1['!cols']=[{wch:4},{wch:28},{wch:12},{wch:24},{wch:16},{wch:13},{wch:11},{wch:9},{wch:10},{wch:9},{wch:13}];
+  ws1['!merges']=[{s:{r:0,c:0},e:{r:0,c:10}}];
+  // Sheet 2 detalle diario
+  const det=[['Fecha','Trabajador','DNI','Cargo','Frente','Tareas','Jornal/día S/','Monto S/']];
+  [...tMes].sort((a,b)=>a.fecha.localeCompare(b.fecha)||String(a.trabajadorId).localeCompare(String(b.trabajadorId))).forEach(t=>{
+    const p=state.personal.find(x=>String(x.id)===String(t.trabajadorId));
+    if(!p) return;
+    det.push([t.fecha,p.nombre,p.dni||'—',p.rol,FL[p.frente]||'—',`×${t.mult||1}`,p.jornal,+(p.jornal*(t.mult||1)).toFixed(2)]);
+  });
+  const ws2=XLSX.utils.aoa_to_sheet(det);
+  ws2['!cols']=[{wch:12},{wch:28},{wch:12},{wch:24},{wch:16},{wch:8},{wch:13},{wch:13}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws1,'Resumen Mes');
+  XLSX.utils.book_append_sheet(wb,ws2,'Detalle Diario');
+  XLSX.writeFile(wb,`Planilla_${nombreMes}_${anio}.xlsx`);
+  showNotif(`✓ Excel descargado: Planilla_${nombreMes}_${anio}.xlsx`);
+}
 // ── OPERACIONES ──
 function renderAvance(){
   const ts=hoy();
