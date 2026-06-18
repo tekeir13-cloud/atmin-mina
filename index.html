@@ -7653,8 +7653,6 @@ function pintarFrenteChart(cfg){
   const fmtLbl = v=>'S/'+v.toFixed(dec);
   const render = (modo)=>{
     if(_vtCharts[key]){ _vtCharts[key].destroy(); delete _vtCharts[key]; }
-    wrapEl.innerHTML = '<canvas></canvas>';
-    const ctx = wrapEl.querySelector('canvas');
     let datos, datasets, valorDe, stacked=false;
     if(modo==='rampa'){
       datos = filas.filter(f=>f.cR>0).sort((a,b)=>b.cR-a.cR);
@@ -7678,6 +7676,13 @@ function pintarFrenteChart(cfg){
     tmpC.font = "700 10px 'DM Mono',monospace";
     const maxLblW = Math.max(...datos.map(f=>tmpC.measureText(fmtLbl(valorDe(f))).width)) + 18;
     const rPad = Math.min(maxLblW, isMob?72:88);
+    // Fija la altura del contenedor ANTES de crear el chart para que Chart.js
+    // dimensione el canvas correctamente y no deje espacio negro debajo.
+    const rowH = isMob ? 40 : 38;
+    wrapEl.style.position='relative';
+    wrapEl.style.height=(datos.length*rowH+44)+'px';
+    wrapEl.innerHTML = '<canvas style="display:block"></canvas>';
+    const ctx = wrapEl.querySelector('canvas');
     const labelPlugin = {
       id:key+'TotalLabel',
       afterDatasetsDraw(chart){
@@ -7723,8 +7728,6 @@ function pintarFrenteChart(cfg){
       },
       plugins:[labelPlugin]
     });
-    const rowH = isMob ? 44 : 40;
-    wrapEl.style.height=(datos.length*rowH+48)+'px';
   };
   // Botones segmentados — más grandes en móvil para facilitar el toque
   const botones = [
