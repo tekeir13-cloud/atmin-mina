@@ -3060,6 +3060,7 @@ select option{background:var(--coal3);}
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:18px">
         <div style="background:var(--coal3);border-radius:10px;padding:16px">
           <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">💥 Explosivos — Costo por Frente</div>
+          <div id="vt-exp-modo" style="display:flex;gap:6px;margin-bottom:10px"></div>
           <div id="vt-wrap-exp"><canvas id="vt-chart-exp" height="180"></canvas></div>
           <div id="vt-exp-detalle" style="margin-top:10px"></div>
         </div>
@@ -3070,6 +3071,7 @@ select option{background:var(--coal3);}
         </div>
         <div style="background:var(--coal3);border-radius:10px;padding:16px">
           <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">🔩 Aceros — Costo por Frente</div>
+          <div id="vt-ace-modo" style="display:flex;gap:6px;margin-bottom:10px"></div>
           <div id="vt-wrap-ace"><canvas id="vt-chart-ace" height="180"></canvas></div>
           <div id="vt-ace-detalle" style="margin-top:10px"></div>
         </div>
@@ -7624,6 +7626,106 @@ function visorPoblarDias() {
   if(prev) sel.value = prev;
 }
 
+// Pinta un gráfico de barras horizontales por frente con botones Ambos/Rampa/Cortada.
+// Reordena las barras según el modo y pega el monto al final de cada barra.
+function pintarFrenteChart(cfg){
+  // cfg: {key, wrapEl, modoEl, filas:[{codigo,precio,qR,qC,cR,cC,total}], shortLabel, decim}
+  const {key, wrapEl, modoEl, filas, shortLabel} = cfg;
+  const dec = cfg.decim==null?2:cfg.decim;
+  if(!wrapEl || !modoEl || !filas.length) return;
+  const COL_R='rgba(248,113,113,0.88)', COL_C='rgba(96,165,250,0.88)';
+  const render = (modo)=>{
+    if(_vtCharts[key]){ _vtCharts[key].destroy(); delete _vtCharts[key]; }
+    wrapEl.innerHTML = '<canvas></canvas>';
+    const ctx = wrapEl.querySelector('canvas');
+    let datos, datasets, valorDe, stacked=false;
+    if(modo==='rampa'){
+      datos = filas.filter(f=>f.cR>0).sort((a,b)=>b.cR-a.cR);
+      valorDe = f=>f.cR;
+      datasets = [{label:'Rampa Brenda', data:datos.map(f=>+f.cR.toFixed(2)), backgroundColor:COL_R, borderRadius:4, borderSkipped:false}];
+    } else if(modo==='cortada'){
+      datos = filas.filter(f=>f.cC>0).sort((a,b)=>b.cC-a.cC);
+      valorDe = f=>f.cC;
+      datasets = [{label:'Cortada Noreste', data:datos.map(f=>+f.cC.toFixed(2)), backgroundColor:COL_C, borderRadius:4, borderSkipped:false}];
+    } else {
+      datos = [...filas].sort((a,b)=>b.total-a.total);
+      valorDe = f=>f.total;
+      stacked = true;
+      datasets = [
+        {label:'Rampa Brenda', data:datos.map(f=>+f.cR.toFixed(2)), backgroundColor:COL_R, borderRadius:4, borderSkipped:false, stack:'s'},
+        {label:'Cortada Noreste', data:datos.map(f=>+f.cC.toFixed(2)), backgroundColor:COL_C, borderRadius:4, borderSkipped:false, stack:'s'},
+      ];
+    }
+    const labelPlugin = {
+      id:key+'TotalLabel',
+      afterDatasetsDraw(chart){
+        const {ctx:c, scales:{x}} = chart;
+        const meta = chart.getDatasetMeta(chart.data.datasets.length-1);
+        c.save();
+        c.font="700 10px 'DM Mono',monospace";
+        c.textBaseline='middle';
+        datos.forEach((f,i)=>{
+          const bar=meta.data[i]; if(!bar) return;
+          const lbl='S/ '+valorDe(f).toFixed(dec);
+          const px=x.getPixelForValue(valorDe(f));
+          const tw=c.measureText(lbl).width;
+          c.fillStyle='rgba(20,20,35,0.72)';
+          c.beginPath(); c.roundRect(px+5, bar.y-9, tw+10, 18, 4); c.fill();
+          c.fillStyle='#e8e8f0';
+          c.fillText(lbl, px+10, bar.y+0.5);
+        });
+        c.restore();
+      }
+    };
+    _vtCharts[key] = new Chart(ctx, {
+      type:'bar',
+      data:{ labels: datos.map(f=>shortLabel?shortLabel(f.codigo):f.codigo), datasets },
+      options:{
+        indexAxis:'y', responsive:true, maintainAspectRatio:false,
+        layout:{padding:{right:84, top:6, bottom:6}},
+        plugins:{
+          legend:{display:false},
+          tooltip:{callbacks:{
+            title:c=>datos[c[0].dataIndex].codigo,
+            label:c=>{
+              const f=datos[c.dataIndex];
+              const q=c.dataset.label.startsWith('Rampa')?f.qR:f.qC;
+              return ` ${c.dataset.label}: ${q} unid × S/ ${f.precio.toFixed(2)} = S/ ${c.parsed.x.toFixed(2)}`;
+            }
+          }}
+        },
+        scales:{
+          x:{stacked, border:{display:false}, ticks:{color:'#6b6b8a',font:{size:9},callback:v=>'S/'+v}, grid:{color:'rgba(255,255,255,0.05)'}},
+          y:{stacked, border:{display:false}, ticks:{autoSkip:false, color:'#d4d4e8',font:{size:11,weight:'700'},padding:6}, grid:{display:false}}
+        }
+      },
+      plugins:[labelPlugin]
+    });
+    wrapEl.style.height=(datos.length*38+50)+'px';
+  };
+  // Botones segmentados
+  const botones = [
+    {m:'ambos', t:'Ambos', c:'var(--accent-light)', bg:'var(--accent-dim)', bd:'var(--accent-border)'},
+    {m:'rampa', t:'Rampa', c:'#f87171', bg:'rgba(248,113,113,0.14)', bd:'rgba(248,113,113,0.4)'},
+    {m:'cortada', t:'Cortada', c:'#60a5fa', bg:'rgba(96,165,250,0.14)', bd:'rgba(96,165,250,0.4)'},
+  ];
+  modoEl.innerHTML = botones.map(b=>`<button data-m="${b.m}" style="flex:1;cursor:pointer;border-radius:6px;padding:5px 6px;font-size:10px;font-weight:700;background:var(--coal4);border:1px solid var(--border);color:var(--text3)">${b.t}</button>`).join('');
+  const setActivo = (modo)=>{
+    modoEl.querySelectorAll('button').forEach(btn=>{
+      const b = botones.find(x=>x.m===btn.dataset.m);
+      const on = btn.dataset.m===modo;
+      btn.style.background = on?b.bg:'var(--coal4)';
+      btn.style.color = on?b.c:'var(--text3)';
+      btn.style.borderColor = on?b.bd:'var(--border)';
+    });
+  };
+  modoEl.querySelectorAll('button').forEach(btn=>{
+    btn.onclick = ()=>{ setActivo(btn.dataset.m); render(btn.dataset.m); };
+  });
+  setActivo('ambos');
+  render('ambos');
+}
+
 function visorRenderDia() {
   const sel = document.getElementById('vt-dia-sel');
   const fecha = sel ? sel.value : '';
@@ -7706,63 +7808,7 @@ function visorRenderDia() {
   const totalCortada = expFilas.reduce((s,f)=>s+f.cC,0);
   const totalExp = totalRampa + totalCortada;
   if(expFilas.length && ctxExp){
-    // Plugin: total S/ al final de cada barra con fondo semitransparente
-    const totalLabelPlugin = {
-      id:'expTotalLabel',
-      afterDatasetsDraw(chart){
-        const {ctx, scales:{x}} = chart;
-        const meta = chart.getDatasetMeta(chart.data.datasets.length-1);
-        ctx.save();
-        ctx.font="700 10px 'DM Mono',monospace";
-        ctx.textBaseline='middle';
-        expFilas.forEach((f,i)=>{
-          const bar=meta.data[i]; if(!bar) return;
-          const lbl='S/ '+f.total.toFixed(2);
-          const px=x.getPixelForValue(f.total);
-          const tw=ctx.measureText(lbl).width;
-          ctx.fillStyle='rgba(20,20,35,0.72)';
-          ctx.beginPath();
-          ctx.roundRect(px+5, bar.y-9, tw+10, 18, 4);
-          ctx.fill();
-          ctx.fillStyle='#e8e8f0';
-          ctx.fillText(lbl, px+10, bar.y+0.5);
-        });
-        ctx.restore();
-      }
-    };
-    _vtCharts.exp = new Chart(ctxExp, {
-      type:'bar',
-      data:{
-        labels: expFilas.map(f=>f.codigo),
-        datasets:[
-          {label: expFallback?'Consumo (S/)':'Rampa Brenda', data:expFilas.map(f=>+f.cR.toFixed(2)), backgroundColor:'rgba(248,113,113,0.88)', borderRadius:4, borderSkipped:false, stack:'s'},
-          {label:'Cortada Noreste', data:expFilas.map(f=>+f.cC.toFixed(2)), backgroundColor:'rgba(96,165,250,0.88)', borderRadius:4, borderSkipped:false, stack:'s', hidden:expFallback},
-        ]
-      },
-      options:{
-        indexAxis:'y',
-        responsive:true,
-        maintainAspectRatio:false,
-        layout:{padding:{right:84, top:6, bottom:6}},
-        plugins:{
-          legend:{position:'bottom',labels:{color:'#8b8ba7',font:{size:10},padding:14,usePointStyle:true,pointStyle:'rectRounded',boxWidth:12}},
-          tooltip:{callbacks:{
-            title:ctx=>expFilas[ctx[0].dataIndex].codigo,
-            label:ctx=>{
-              const f=expFilas[ctx.dataIndex];
-              const q=ctx.datasetIndex===0?f.qR:f.qC;
-              return ` ${ctx.dataset.label}: ${q} unid × S/ ${f.precio.toFixed(2)} = S/ ${ctx.parsed.x.toFixed(2)}`;
-            }
-          }}
-        },
-        scales:{
-          x:{stacked:true, border:{display:false}, ticks:{color:'#6b6b8a',font:{size:9},callback:v=>'S/'+v}, grid:{color:'rgba(255,255,255,0.05)'}},
-          y:{stacked:true, border:{display:false}, ticks:{autoSkip:false, color:'#d4d4e8',font:{size:11,weight:'700'},padding:6}, grid:{display:false}}
-        }
-      },
-      plugins:[totalLabelPlugin]
-    });
-    if(wExp) wExp.style.height=(expFilas.length*38+64)+'px';
+    pintarFrenteChart({key:'exp', wrapEl:wExp, modoEl:document.getElementById('vt-exp-modo'), filas:expFilas});
     // Detalle: tabla ranqueada por costo + tarjetas resumen
     const pctR=(totalExp>0?(totalRampa/totalExp*100):0).toFixed(1);
     const pctC=(totalExp>0?(totalCortada/totalExp*100):0).toFixed(1);
@@ -7804,6 +7850,7 @@ function visorRenderDia() {
       <div style="text-align:center;margin-top:8px;font-size:11px;color:var(--text3)">Total explosivos: <b style="color:var(--text)">S/ ${totalExp.toFixed(2)}</b></div>`;
   } else {
     if(wExp){ wExp.style.height='auto'; wExp.innerHTML='<div style="text-align:center;color:var(--text3);padding:20px;font-size:12px">Sin consumo de explosivos registrado</div>'; }
+    const meEx=document.getElementById('vt-exp-modo'); if(meEx) meEx.innerHTML='';
     if(detExp) detExp.innerHTML='';
   }
 
@@ -7832,62 +7879,7 @@ function visorRenderDia() {
       'BARRA DE ALUMINIO PARA ACUÑAR 1" X 10\'':'Al-Acuñar 10\'',
       'BARRA DE ALUMINIO PARA ACUÑAR 1" X 12':'Al-Acuñar 12\'',
     };
-    const aceTotalLabel = {
-      id:'aceTotalLabel',
-      afterDatasetsDraw(chart){
-        const {ctx, scales:{x}} = chart;
-        const meta = chart.getDatasetMeta(chart.data.datasets.length-1);
-        ctx.save();
-        ctx.font="700 10px 'DM Mono',monospace";
-        ctx.textBaseline='middle';
-        aceFilas.forEach((f,i)=>{
-          const bar=meta.data[i]; if(!bar) return;
-          const lbl='S/ '+f.total.toFixed(0);
-          const px=x.getPixelForValue(f.total);
-          const tw=ctx.measureText(lbl).width;
-          ctx.fillStyle='rgba(20,20,35,0.72)';
-          ctx.beginPath();
-          ctx.roundRect(px+5, bar.y-9, tw+10, 18, 4);
-          ctx.fill();
-          ctx.fillStyle='#e8e8f0';
-          ctx.fillText(lbl, px+10, bar.y+0.5);
-        });
-        ctx.restore();
-      }
-    };
-    _vtCharts.ace = new Chart(ctxAce, {
-      type:'bar',
-      data:{
-        labels: aceFilas.map(f=>ACE_LABELS[f.codigo]||f.codigo),
-        datasets:[
-          {label:'Rampa Brenda', data:aceFilas.map(f=>+f.cR.toFixed(2)), backgroundColor:'rgba(248,113,113,0.88)', borderRadius:4, borderSkipped:false, stack:'s'},
-          {label:'Cortada Noreste', data:aceFilas.map(f=>+f.cC.toFixed(2)), backgroundColor:'rgba(96,165,250,0.88)', borderRadius:4, borderSkipped:false, stack:'s'},
-        ]
-      },
-      options:{
-        indexAxis:'y',
-        responsive:true,
-        maintainAspectRatio:false,
-        layout:{padding:{right:84, top:6, bottom:6}},
-        plugins:{
-          legend:{position:'bottom',labels:{color:'#8b8ba7',font:{size:10},padding:14,usePointStyle:true,pointStyle:'rectRounded',boxWidth:12}},
-          tooltip:{callbacks:{
-            title:ctx=>aceFilas[ctx[0].dataIndex].codigo,
-            label:ctx=>{
-              const f=aceFilas[ctx.dataIndex];
-              const q=ctx.datasetIndex===0?f.qR:f.qC;
-              return ` ${ctx.dataset.label}: ${q} unid × S/ ${f.precio.toFixed(2)} = S/ ${ctx.parsed.x.toFixed(2)}`;
-            }
-          }}
-        },
-        scales:{
-          x:{stacked:true, border:{display:false}, ticks:{color:'#6b6b8a',font:{size:9},callback:v=>'S/'+v}, grid:{color:'rgba(255,255,255,0.05)'}},
-          y:{stacked:true, border:{display:false}, ticks:{autoSkip:false, color:'#d4d4e8',font:{size:11,weight:'700'},padding:6}, grid:{display:false}}
-        }
-      },
-      plugins:[aceTotalLabel]
-    });
-    if(wAceEl) wAceEl.style.height=(aceFilas.length*38+64)+'px';
+    pintarFrenteChart({key:'ace', wrapEl:wAceEl, modoEl:document.getElementById('vt-ace-modo'), filas:aceFilas, shortLabel:c=>ACE_LABELS[c]||c, decim:0});
     const apctR=(aceTotal>0?(aceTotalR/aceTotal*100):0).toFixed(1);
     const apctC=(aceTotal>0?(aceTotalC/aceTotal*100):0).toFixed(1);
     const aceFilasHTML = aceFilas.map(f=>{
@@ -7928,6 +7920,7 @@ function visorRenderDia() {
       <div style="text-align:center;margin-top:8px;font-size:11px;color:var(--text3)">Total aceros: <b style="color:var(--text)">S/ ${aceTotal.toFixed(2)}</b></div>`;
   } else {
     if(wAceEl){ wAceEl.style.height='auto'; wAceEl.innerHTML='<div style="text-align:center;color:var(--text3);padding:20px;font-size:12px">Sin consumo de aceros registrado</div>'; }
+    const meAc=document.getElementById('vt-ace-modo'); if(meAc) meAc.innerHTML='';
     if(detAce) detAce.innerHTML='';
   }
 
