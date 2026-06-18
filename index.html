@@ -7377,29 +7377,45 @@ function _enviarReporteWA(r) {
   r.explosivos.forEach(e=>{ txt += `  ${e.codigo}: I:${e.I} | E:${e.E} | C:${e.C} | F:${e.F}\n`; });
   txt += '\n';
 
-  // Explosivos por frente
+  // Explosivos por frente — agrupado por frente para mejor lectura
   const ef = r.expFrente || [];
   const efAct = ef.filter(x=>x.rampa||x.galeria);
   if(efAct.length){
     txt += `*EXPLOSIVOS POR FRENTE*\n`;
-    efAct.forEach(e=>{ txt += `  ${e.codigo}: Rampa Brenda ${e.rampa||0} | Cortada Noreste ${e.galeria||0}\n`; });
+    const efR = efAct.filter(e=>e.rampa>0);
+    const efC = efAct.filter(e=>e.galeria>0);
+    if(efR.length){
+      txt += `_Rampa Brenda:_\n`;
+      efR.forEach(e=>{ txt += `   • ${e.codigo}: ${e.rampa}\n`; });
+    }
+    if(efC.length){
+      txt += `_Cortada Noreste:_\n`;
+      efC.forEach(e=>{ txt += `   • ${e.codigo}: ${e.galeria}\n`; });
+    }
     txt += '\n';
   }
 
   // Consumo materiales
   if(r.consumoRampa.length||r.consumoGaleria.length){
     txt += `*CONSUMO MATERIALES*\n`;
-    if(r.consumoRampa.length){ txt += `_Rampa Brenda:_\n`; r.consumoRampa.forEach(m=>{ txt += `  - ${m.desc}: ${m.cant} ${m.unidad}\n`; }); }
-    if(r.consumoGaleria.length){ txt += `_Cortada Noreste:_\n`; r.consumoGaleria.forEach(m=>{ txt += `  - ${m.desc}: ${m.cant} ${m.unidad}\n`; }); }
+    if(r.consumoRampa.length){ txt += `_Rampa Brenda:_\n`; r.consumoRampa.forEach(m=>{ txt += `   • ${m.desc}: ${m.cant} ${m.unidad}\n`; }); }
+    if(r.consumoGaleria.length){ txt += `_Cortada Noreste:_\n`; r.consumoGaleria.forEach(m=>{ txt += `   • ${m.desc}: ${m.cant} ${m.unidad}\n`; }); }
     txt += '\n';
   }
 
-  // Explosivos — consumo (solo unidades)
+  // Explosivos — consumo (solo unidades). Usa rampa+cortada si hay datos, si no el cardex C
   txt += `*CONSUMO EXPLOSIVOS*\n`;
-  r.explosivos.filter(e=>e.C>0).forEach(e=>{
-    txt += `  ${e.codigo}: ${e.C} unid\n`;
-  });
-  const totExpUnid = r.explosivos.reduce((s,e)=>s+(e.C||0),0);
+  const consPorFrente = efAct.length > 0;
+  const consExp = COMP_EXPLOSIVOS.map(c=>{
+    if(consPorFrente){
+      const x = ef.find(e=>e.codigo===c)||{};
+      return {codigo:c, u:(x.rampa||0)+(x.galeria||0)};
+    }
+    const e = r.explosivos.find(e=>e.codigo===c)||{};
+    return {codigo:c, u:e.C||0};
+  }).filter(e=>e.u>0);
+  consExp.forEach(e=>{ txt += `   • ${e.codigo}: ${e.u} unid\n`; });
+  const totExpUnid = consExp.reduce((s,e)=>s+e.u,0);
   txt += `  *Total Explosivos: ${totExpUnid} unid*\n\n`;
 
   // Aceros — por frente (solo unidades)
