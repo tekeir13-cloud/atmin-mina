@@ -7674,22 +7674,35 @@ function visorRenderDia() {
       </div>
       <div style="text-align:center;margin-top:6px;font-size:11px;color:var(--text3)">Total explosivos: <b style="color:var(--text)">S/ ${totalExp.toFixed(2)}</b></div>`;
   } else {
-    if(wExp) wExp.innerHTML='<div style="text-align:center;color:var(--text3);padding:20px;font-size:12px">Ingresa cantidades por frente para ver el radar</div>';
-    const expActivos = r.explosivos.filter(e=>e.C>0);
-    if(expActivos.length && detExp){
-      const totalFb = expActivos.reduce((s,e)=>s+(e.C||0)*(COMP_PRECIOS_EXP[e.codigo]||0),0);
-      detExp.innerHTML = expActivos.map(e=>{
+    // Sin datos por frente: radar con consumo (C) del cardex como dataset único
+    const expC = r.explosivos.filter(e=>e.C>0);
+    if(expC.length && ctxExp){
+      const totalFb = expC.reduce((s,e)=>s+(e.C||0)*(COMP_PRECIOS_EXP[e.codigo]||0),0);
+      const dataC = expC.map(e=>+((e.C||0)*(COMP_PRECIOS_EXP[e.codigo]||0)).toFixed(2));
+      _vtCharts.exp = new Chart(ctxExp, {
+        type:'radar',
+        data:{
+          labels: expC.map(e=>e.codigo),
+          datasets:[{label:'Consumo (S/)', data:dataC, backgroundColor:'rgba(248,113,113,0.2)', borderColor:'rgba(248,113,113,0.9)', pointBackgroundColor:'rgba(248,113,113,0.9)', pointRadius:4, borderWidth:2}]
+        },
+        options:{responsive:true, plugins:{legend:{position:'bottom',labels:{color:'#8b8ba7',font:{size:10}}},
+          tooltip:{callbacks:{label:ctx=>`S/ ${ctx.parsed.r.toFixed(2)}`}}},
+          scales:{r:{ticks:{color:'#8b8ba7',font:{size:9},backdropColor:'transparent',callback:v=>'S/'+v},grid:{color:'rgba(255,255,255,0.08)'},angleLines:{color:'rgba(255,255,255,0.08)'},pointLabels:{color:'#8b8ba7',font:{size:10}}}}}
+      });
+      if(detExp) detExp.innerHTML = expC.map(e=>{
         const c=(e.C||0)*(COMP_PRECIOS_EXP[e.codigo]||0);
         const pct=totalFb>0?(c/totalFb*100).toFixed(1):'0';
         return `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border2);font-size:11px"><span style="color:var(--text)">${e.codigo} ×${e.C}</span><span style="color:var(--warn)">S/ ${c.toFixed(2)} <span style="color:var(--text3)">(${pct}%)</span></span></div>`;
       }).join('')+'<div style="text-align:right;padding-top:4px;font-size:11px;font-weight:700;color:var(--text)">Total: S/ '+totalFb.toFixed(2)+'</div>';
+    } else {
+      if(wExp) wExp.innerHTML='<div style="text-align:center;color:var(--text3);padding:20px;font-size:12px">Sin consumo de explosivos registrado</div>';
     }
   }
 
   // ── Gráfico Combustible — doughnut por máquina + tabla costo y % ──
   const FUEL_COLORS = ['#e59022','#f87171','#60a5fa','#34d399','#a78bfa','#fb923c','#38bdf8','#facc15','#f472b6','#4ade80'];
-  const petFilt = r.petroleo.filter(p=>p.gln);
-  const gasFilt = r.gasolina.filter(g=>g.gln);
+  const petFilt = r.petroleo.filter(p=>p.gln && p.equipo!=='Mina');
+  const gasFilt = r.gasolina.filter(g=>g.gln && g.equipo!=='Mina');
   const totalPetS = petFilt.reduce((s,p)=>s+p.gln*COMP_PRECIO_PET,0);
   const totalGasS = gasFilt.reduce((s,g)=>s+g.gln*COMP_PRECIO_GAS,0);
   const fuelItems = [
