@@ -7629,11 +7629,12 @@ function visorPoblarDias() {
 // Pinta un gráfico de barras horizontales por frente con botones Ambos/Rampa/Cortada.
 // Reordena las barras según el modo y pega el monto al final de cada barra.
 function pintarFrenteChart(cfg){
-  // cfg: {key, wrapEl, modoEl, filas:[{codigo,precio,qR,qC,cR,cC,total}], shortLabel, decim}
   const {key, wrapEl, modoEl, filas, shortLabel} = cfg;
   const dec = cfg.decim==null?2:cfg.decim;
   if(!wrapEl || !modoEl || !filas.length) return;
+  const isMob = window.innerWidth < 500;
   const COL_R='rgba(248,113,113,0.88)', COL_C='rgba(96,165,250,0.88)';
+  const fmtLbl = v=>'S/'+v.toFixed(dec);
   const render = (modo)=>{
     if(_vtCharts[key]){ _vtCharts[key].destroy(); delete _vtCharts[key]; }
     wrapEl.innerHTML = '<canvas></canvas>';
@@ -7642,20 +7643,25 @@ function pintarFrenteChart(cfg){
     if(modo==='rampa'){
       datos = filas.filter(f=>f.cR>0).sort((a,b)=>b.cR-a.cR);
       valorDe = f=>f.cR;
-      datasets = [{label:'Rampa Brenda', data:datos.map(f=>+f.cR.toFixed(2)), backgroundColor:COL_R, borderRadius:4, borderSkipped:false}];
+      datasets = [{label:'Rampa Brenda', data:datos.map(f=>+f.cR.toFixed(2)), backgroundColor:COL_R, borderRadius:5, borderSkipped:false, barThickness: isMob?18:22}];
     } else if(modo==='cortada'){
       datos = filas.filter(f=>f.cC>0).sort((a,b)=>b.cC-a.cC);
       valorDe = f=>f.cC;
-      datasets = [{label:'Cortada Noreste', data:datos.map(f=>+f.cC.toFixed(2)), backgroundColor:COL_C, borderRadius:4, borderSkipped:false}];
+      datasets = [{label:'Cortada Noreste', data:datos.map(f=>+f.cC.toFixed(2)), backgroundColor:COL_C, borderRadius:5, borderSkipped:false, barThickness: isMob?18:22}];
     } else {
       datos = [...filas].sort((a,b)=>b.total-a.total);
       valorDe = f=>f.total;
       stacked = true;
       datasets = [
-        {label:'Rampa Brenda', data:datos.map(f=>+f.cR.toFixed(2)), backgroundColor:COL_R, borderRadius:4, borderSkipped:false, stack:'s'},
-        {label:'Cortada Noreste', data:datos.map(f=>+f.cC.toFixed(2)), backgroundColor:COL_C, borderRadius:4, borderSkipped:false, stack:'s'},
+        {label:'Rampa Brenda', data:datos.map(f=>+f.cR.toFixed(2)), backgroundColor:COL_R, borderRadius:5, borderSkipped:false, stack:'s', barThickness: isMob?18:22},
+        {label:'Cortada Noreste', data:datos.map(f=>+f.cC.toFixed(2)), backgroundColor:COL_C, borderRadius:5, borderSkipped:false, stack:'s', barThickness: isMob?18:22},
       ];
     }
+    // Mide el texto más largo para calcular el padding derecho
+    const tmpC = document.createElement('canvas').getContext('2d');
+    tmpC.font = "700 10px 'DM Mono',monospace";
+    const maxLblW = Math.max(...datos.map(f=>tmpC.measureText(fmtLbl(valorDe(f))).width)) + 18;
+    const rPad = Math.min(maxLblW, isMob?72:88);
     const labelPlugin = {
       id:key+'TotalLabel',
       afterDatasetsDraw(chart){
@@ -7666,10 +7672,10 @@ function pintarFrenteChart(cfg){
         c.textBaseline='middle';
         datos.forEach((f,i)=>{
           const bar=meta.data[i]; if(!bar) return;
-          const lbl='S/ '+valorDe(f).toFixed(dec);
+          const lbl=fmtLbl(valorDe(f));
           const px=x.getPixelForValue(valorDe(f));
           const tw=c.measureText(lbl).width;
-          c.fillStyle='rgba(20,20,35,0.72)';
+          c.fillStyle='rgba(20,20,35,0.78)';
           c.beginPath(); c.roundRect(px+5, bar.y-9, tw+10, 18, 4); c.fill();
           c.fillStyle='#e8e8f0';
           c.fillText(lbl, px+10, bar.y+0.5);
@@ -7682,45 +7688,45 @@ function pintarFrenteChart(cfg){
       data:{ labels: datos.map(f=>shortLabel?shortLabel(f.codigo):f.codigo), datasets },
       options:{
         indexAxis:'y', responsive:true, maintainAspectRatio:false,
-        layout:{padding:{right:84, top:6, bottom:6}},
+        layout:{padding:{right:rPad, top:4, bottom:4}},
         plugins:{
           legend:{display:false},
-          tooltip:{callbacks:{
+          tooltip:{mode:'index', intersect:false, callbacks:{
             title:c=>datos[c[0].dataIndex].codigo,
             label:c=>{
               const f=datos[c.dataIndex];
               const q=c.dataset.label.startsWith('Rampa')?f.qR:f.qC;
-              return ` ${c.dataset.label}: ${q} unid × S/ ${f.precio.toFixed(2)} = S/ ${c.parsed.x.toFixed(2)}`;
+              return ` ${c.dataset.label}: ${q} × S/${f.precio.toFixed(2)} = S/${c.parsed.x.toFixed(2)}`;
             }
           }}
         },
         scales:{
-          x:{stacked, border:{display:false}, ticks:{color:'#6b6b8a',font:{size:9},callback:v=>'S/'+v}, grid:{color:'rgba(255,255,255,0.05)'}},
-          y:{stacked, border:{display:false}, ticks:{autoSkip:false, color:'#d4d4e8',font:{size:11,weight:'700'},padding:6}, grid:{display:false}}
+          x:{stacked, border:{display:false}, ticks:{color:'#6b6b8a',font:{size:isMob?8:9},maxTicksLimit:5,callback:v=>'S/'+v}, grid:{color:'rgba(255,255,255,0.05)'}},
+          y:{stacked, border:{display:false}, ticks:{autoSkip:false, color:'#d4d4e8',font:{size:isMob?10:11,weight:'700'},padding:isMob?4:6}, grid:{display:false}}
         }
       },
       plugins:[labelPlugin]
     });
-    wrapEl.style.height=(datos.length*38+50)+'px';
+    const rowH = isMob ? 44 : 40;
+    wrapEl.style.height=(datos.length*rowH+48)+'px';
   };
-  // Botones segmentados
+  // Botones segmentados — más grandes en móvil para facilitar el toque
   const botones = [
-    {m:'ambos', t:'Ambos', c:'var(--accent-light)', bg:'var(--accent-dim)', bd:'var(--accent-border)'},
-    {m:'rampa', t:'Rampa', c:'#f87171', bg:'rgba(248,113,113,0.14)', bd:'rgba(248,113,113,0.4)'},
-    {m:'cortada', t:'Cortada', c:'#60a5fa', bg:'rgba(96,165,250,0.14)', bd:'rgba(96,165,250,0.4)'},
+    {m:'ambos',   t:'Ambos',   c:'var(--accent-light)', bg:'var(--accent-dim)',          bd:'var(--accent-border)'},
+    {m:'rampa',   t:'Rampa',   c:'#f87171',             bg:'rgba(248,113,113,0.15)',     bd:'rgba(248,113,113,0.45)'},
+    {m:'cortada', t:'Cortada', c:'#60a5fa',             bg:'rgba(96,165,250,0.15)',      bd:'rgba(96,165,250,0.45)'},
   ];
-  modoEl.innerHTML = botones.map(b=>`<button data-m="${b.m}" style="flex:1;cursor:pointer;border-radius:6px;padding:5px 6px;font-size:10px;font-weight:700;background:var(--coal4);border:1px solid var(--border);color:var(--text3)">${b.t}</button>`).join('');
+  modoEl.innerHTML = botones.map(b=>`<button data-m="${b.m}" style="flex:1;cursor:pointer;border-radius:8px;padding:${isMob?'8px 4px':'5px 6px'};font-size:${isMob?'12px':'10px'};font-weight:700;background:var(--coal4);border:1px solid var(--border);color:var(--text3);touch-action:manipulation">${b.t}</button>`).join('');
   const setActivo = (modo)=>{
     modoEl.querySelectorAll('button').forEach(btn=>{
-      const b = botones.find(x=>x.m===btn.dataset.m);
-      const on = btn.dataset.m===modo;
-      btn.style.background = on?b.bg:'var(--coal4)';
-      btn.style.color = on?b.c:'var(--text3)';
-      btn.style.borderColor = on?b.bd:'var(--border)';
+      const b=botones.find(x=>x.m===btn.dataset.m), on=btn.dataset.m===modo;
+      btn.style.background=on?b.bg:'var(--coal4)';
+      btn.style.color=on?b.c:'var(--text3)';
+      btn.style.borderColor=on?b.bd:'var(--border)';
     });
   };
   modoEl.querySelectorAll('button').forEach(btn=>{
-    btn.onclick = ()=>{ setActivo(btn.dataset.m); render(btn.dataset.m); };
+    btn.onclick=()=>{ setActivo(btn.dataset.m); render(btn.dataset.m); };
   });
   setActivo('ambos');
   render('ambos');
