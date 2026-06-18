@@ -1976,6 +1976,48 @@ select option{background:var(--coal3);}
   </div>
 </div>
 
+<!-- ═══════════════ MODAL DAR DE BAJA ═══════════════ -->
+<div class="modal-overlay" id="modal-baja" onclick="if(event.target===this)cerrarModal('modal-baja')">
+  <div class="modal" style="width:min(480px,95vw)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+      <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:#f87171">⬇ Dar de Baja</div>
+      <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-baja')">✕</button>
+    </div>
+    <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:11px;color:#f87171">
+      El trabajador quedará inactivo y no aparecerá en planilla ni en costos. Su historial se conserva.
+    </div>
+    <div class="form-grid" style="grid-template-columns:1fr">
+      <div class="form-group">
+        <label>Trabajador</label>
+        <select id="baja-trabajador" style="font-size:13px"></select>
+      </div>
+      <div class="form-group">
+        <label>Motivo de baja</label>
+        <select id="baja-motivo">
+          <option value="Renuncia voluntaria">Renuncia voluntaria</option>
+          <option value="Término de contrato">Término de contrato</option>
+          <option value="Despido">Despido</option>
+          <option value="Accidente / Salud">Accidente / Salud</option>
+          <option value="Abandono de trabajo">Abandono de trabajo</option>
+          <option value="Otro">Otro</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Fecha de baja</label>
+        <input type="date" id="baja-fecha">
+      </div>
+      <div class="form-group">
+        <label>Observaciones (opcional)</label>
+        <textarea id="baja-obs" rows="3" placeholder="Detalles adicionales..." style="resize:vertical;font-size:12px;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--text);width:100%;box-sizing:border-box"></textarea>
+      </div>
+    </div>
+    <div class="btn-row" style="margin-top:18px">
+      <button class="btn" style="background:rgba(239,68,68,0.2);color:#f87171;border:1px solid rgba(239,68,68,0.4);font-weight:700" onclick="confirmarBaja()">Confirmar Baja</button>
+      <button class="btn btn-outline" onclick="cerrarModal('modal-baja')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════════ MODAL ADMIN USUARIOS ═══════════════ -->
 <div class="modal-overlay" id="modal-admin-usuarios">
   <div class="modal" style="width:min(600px,95vw);max-height:90vh">
@@ -2348,19 +2390,49 @@ select option{background:var(--coal3);}
     <div id="tareas-resumen"></div>
   </div>
   <div class="mod-pane" style="display:none" id="rrhh-personal">
-    <div class="card" style="margin-bottom:18px">
+    <!-- Formulario alta -->
+    <div class="card" style="margin-bottom:14px">
       <div class="section-title">Registrar Personal</div>
       <div class="form-grid">
         <div class="form-group"><label>Nombre Completo</label><input type="text" id="p-nombre" placeholder="Ej: Juan Quispe"></div>
         <div class="form-group"><label>DNI</label><input type="text" id="p-dni" placeholder="12345678"></div>
-        <div class="form-group"><label>Rol / Cargo</label><select id="p-rol"><option>Perforista</option><option>Ayudante</option><option>Chancador</option><option>Explosivero</option><option>Mecánico</option><option>Capataz</option><option>Guardia</option><option>Topógrafo</option></select></div>
-        <div class="form-group"><label>Frente</label><select id="p-frente"><option value="1">Rampa</option><option value="2">Cortada</option></select></div>
+        <div class="form-group"><label>Rol / Cargo</label><select id="p-rol"><option>Perforista</option><option>Ayudante</option><option>Chancador</option><option>Explosivero</option><option>Mecánico</option><option>Capataz</option><option>Guardia</option><option>Topógrafo</option><option>Compresorista</option></select></div>
+        <div class="form-group"><label>Frente</label><select id="p-frente"><option value="1">Rampa Brenda</option><option value="2">Cortada Noreste</option></select></div>
         <div class="form-group"><label>Jornal diario (S/)</label><input type="number" id="p-jornal" placeholder="80"></div>
+        <div class="form-group"><label>Fecha de ingreso</label><input type="date" id="p-ingreso"></div>
       </div>
-      <div class="btn-row"><button class="btn btn-gold" onclick="agregarPersonal()">+ Agregar</button><button class="btn btn-outline" onclick="limpiarFormPersonal()">Limpiar</button></div>
+      <div class="btn-row">
+        <button class="btn btn-gold" onclick="agregarPersonal()">+ Agregar trabajador</button>
+        <button class="btn btn-outline" onclick="limpiarFormPersonal()">Limpiar</button>
+        <button class="btn" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.35)" onclick="abrirModalBaja()">⬇ Dar de Baja</button>
+      </div>
     </div>
-    <div class="section-title">Personal Registrado — <span id="total-personal">0</span></div>
+    <!-- Resumen rápido -->
+    <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <div style="background:var(--coal3);border-radius:8px;padding:10px 16px;flex:1;min-width:110px;text-align:center">
+        <div style="font-size:20px;font-weight:700;color:var(--positive)" id="p-cnt-activos">0</div>
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-top:2px">Activos</div>
+      </div>
+      <div style="background:var(--coal3);border-radius:8px;padding:10px 16px;flex:1;min-width:110px;text-align:center">
+        <div style="font-size:20px;font-weight:700;color:#f87171" id="p-cnt-baja">0</div>
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-top:2px">Dados de Baja</div>
+      </div>
+      <div style="background:var(--coal3);border-radius:8px;padding:10px 16px;flex:1;min-width:110px;text-align:center">
+        <div style="font-size:20px;font-weight:700;color:var(--gold)" id="p-cnt-total">0</div>
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-top:2px">Total Hist.</div>
+      </div>
+    </div>
+    <!-- Lista activos -->
+    <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Personal Activo — <span id="total-personal">0</span></div>
     <div class="persona-grid" id="lista-personal"></div>
+    <!-- Lista bajas (colapsable) -->
+    <div id="baja-section" style="margin-top:16px;display:none">
+      <button onclick="toggleBajas()" style="width:100%;background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text3);font-size:12px;font-weight:600;cursor:pointer;text-align:left;display:flex;justify-content:space-between;align-items:center">
+        <span>⬇ Historial de Bajas — <span id="baja-count">0</span> trabajadores</span>
+        <span id="baja-chevron">▼</span>
+      </button>
+      <div id="baja-lista" style="display:none;margin-top:8px"></div>
+    </div>
   </div>
   <div class="mod-pane" style="display:none" id="rrhh-costorrhh">
     <div class="kpi-grid">
@@ -3475,9 +3547,10 @@ function seedData(){
 }
 
 function poblarSelects(){
+  const activos=state.personal.filter(p=>p.estado!=='baja');
   ['pl-trabajador','tarea-trabajador'].forEach(id=>{
     const sel=document.getElementById(id);if(!sel)return;
-    sel.innerHTML='<option value="">— Seleccionar —</option>'+state.personal.map(p=>`<option value="${p.id}">${p.nombre} (${p.rol})</option>`).join('');
+    sel.innerHTML='<option value="">— Seleccionar —</option>'+activos.map(p=>`<option value="${p.id}">${p.nombre} (${p.rol})</option>`).join('');
   });
 }
 
@@ -4196,22 +4269,86 @@ async function registrarTarea(){
   showNotif(`✓ ${p ? p.nombre : 'Trabajador'} — ${fmtS(pagoTotal)} (${multLabel}${mult > 1 ? ' · Extra: ' + fmtS(pagoExtra) : ''})`);
 }
 function renderPersonal(){
-  document.getElementById('total-personal').textContent=state.personal.length;
-  document.getElementById('lista-personal').innerHTML=state.personal.map(p=>{
+  const activos = state.personal.filter(p=>p.estado!=='baja');
+  const bajas   = state.personal.filter(p=>p.estado==='baja');
+  // Contadores
+  const cntA=document.getElementById('p-cnt-activos'), cntB=document.getElementById('p-cnt-baja'), cntT=document.getElementById('p-cnt-total');
+  if(cntA) cntA.textContent=activos.length;
+  if(cntB) cntB.textContent=bajas.length;
+  if(cntT) cntT.textContent=state.personal.length;
+  document.getElementById('total-personal').textContent=activos.length;
+  // Cards activos
+  document.getElementById('lista-personal').innerHTML=activos.map(p=>{
     const ini=p.nombre.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
-    const c=FC[p.frente];
-    return`<div class="persona-card${p.estado!=='activo'?' ausente':''}"><div class="persona-avatar" style="background:${c}22;color:${c}">${ini}</div><div class="persona-name">${p.nombre}</div><div class="persona-role">${p.rol}</div><div style="font-size:9px;color:${c}">${FL[p.frente]}</div><span class="badge ${p.estado==='activo'?'badge-ok':p.estado==='ausente'?'badge-danger':'badge-warn'}">${p.estado}</span></div>`;
+    const c=FC[p.frente]||'#888';
+    const ingresoStr=p.ingreso?`<div style="font-size:9px;color:var(--text3);margin-top:2px">Ingresó: ${p.ingreso}</div>`:'';
+    return`<div class="persona-card">
+      <div class="persona-avatar" style="background:${c}22;color:${c}">${ini}</div>
+      <div class="persona-name">${p.nombre}</div>
+      <div class="persona-role">${p.rol}</div>
+      <div style="font-size:9px;color:${c};margin-top:2px">${FL[p.frente]||'—'}</div>
+      <span class="badge ${p.estado==='activo'?'badge-ok':p.estado==='ausente'?'badge-danger':'badge-warn'}">${p.estado}</span>
+      ${ingresoStr}
+      <div style="font-size:10px;color:var(--text3);margin-top:4px">S/ ${p.jornal}/día</div>
+    </div>`;
+  }).join('')||'<div style="color:var(--text3);font-size:12px;padding:16px">Sin personal activo</div>';
+  // Sección bajas
+  const bSec=document.getElementById('baja-section');
+  if(bSec) bSec.style.display=bajas.length?'block':'none';
+  const bCount=document.getElementById('baja-count'); if(bCount) bCount.textContent=bajas.length;
+  const bLista=document.getElementById('baja-lista');
+  if(bLista) bLista.innerHTML=bajas.map(p=>{
+    const ini=p.nombre.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+    return`<div class="persona-card ausente" style="opacity:0.65;border:1px solid rgba(239,68,68,0.25)">
+      <div class="persona-avatar" style="background:rgba(239,68,68,0.1);color:#f87171">${ini}</div>
+      <div class="persona-name" style="text-decoration:line-through;color:var(--text3)">${p.nombre}</div>
+      <div class="persona-role">${p.rol}</div>
+      <span class="badge badge-danger">Baja</span>
+      <div style="font-size:9px;color:#f87171;margin-top:3px">${p.motivoBaja||''}</div>
+      ${p.fechaBaja?`<div style="font-size:9px;color:var(--text3)">${p.fechaBaja}</div>`:''}
+      ${p.obsBaja?`<div style="font-size:9px;color:var(--text3);margin-top:2px;font-style:italic">${p.obsBaja}</div>`:''}
+    </div>`;
   }).join('');
+}
+let _bajaListaVisible=false;
+function toggleBajas(){
+  _bajaListaVisible=!_bajaListaVisible;
+  document.getElementById('baja-lista').style.display=_bajaListaVisible?'grid':'none';
+  document.getElementById('baja-lista').style.gridTemplateColumns='repeat(auto-fill,minmax(150px,1fr))';
+  document.getElementById('baja-lista').style.gap='10px';
+  document.getElementById('baja-chevron').textContent=_bajaListaVisible?'▲':'▼';
+}
+function abrirModalBaja(){
+  const activos=state.personal.filter(p=>p.estado!=='baja');
+  if(!activos.length){showNotif('No hay personal activo para dar de baja','error');return;}
+  const sel=document.getElementById('baja-trabajador');
+  sel.innerHTML=activos.map(p=>`<option value="${p.id}">${p.nombre} — ${p.rol}</option>`).join('');
+  document.getElementById('baja-fecha').value=hoy();
+  document.getElementById('baja-obs').value='';
+  document.getElementById('modal-baja').classList.add('active');
+}
+async function confirmarBaja(){
+  const id=parseInt(document.getElementById('baja-trabajador').value)||document.getElementById('baja-trabajador').value;
+  const motivo=document.getElementById('baja-motivo').value;
+  const fecha=document.getElementById('baja-fecha').value;
+  const obs=document.getElementById('baja-obs').value.trim();
+  const p=state.personal.find(x=>x.id==id);
+  if(!p){showNotif('Trabajador no encontrado','error');return;}
+  p.estado='baja'; p.motivoBaja=motivo; p.fechaBaja=fecha; p.obsBaja=obs;
+  try{await sb.from('personal').update({estado:'baja',motivoBaja:motivo,fechaBaja:fecha,obsBaja:obs}).eq('id',id);}catch(e){}
+  cerrarModal('modal-baja');
+  poblarSelects();renderPersonal();renderCostoRRHH();
+  showNotif(`${p.nombre} dado de baja: ${motivo}`,'warn');
 }
 async function agregarPersonal(){
   const nombre=document.getElementById('p-nombre').value.trim();
   if(!nombre){showNotif('⚠ Ingresa el nombre','error');return;}
-  const nv={nombre,dni:document.getElementById('p-dni').value,rol:document.getElementById('p-rol').value,frente:parseInt(document.getElementById('p-frente').value),estado:'activo',jornal:parseFloat(document.getElementById('p-jornal').value)||80};
+  const nv={nombre,dni:document.getElementById('p-dni').value,rol:document.getElementById('p-rol').value,frente:parseInt(document.getElementById('p-frente').value),estado:'activo',jornal:parseFloat(document.getElementById('p-jornal').value)||80,ingreso:document.getElementById('p-ingreso').value||hoy()};
   try{const{data}=await sb.from('personal').insert([nv]).select().single();state.personal.push({...nv,id:data.id});}
   catch(e){state.personal.push({...nv,id:Date.now()});}
-  limpiarFormPersonal();poblarSelects();renderPersonal();showNotif('✓ Personal agregado');
+  limpiarFormPersonal();poblarSelects();renderPersonal();renderCostoRRHH();showNotif('✓ Personal agregado');
 }
-function limpiarFormPersonal(){['p-nombre','p-dni','p-jornal'].forEach(id=>document.getElementById(id).value='');}
+function limpiarFormPersonal(){['p-nombre','p-dni','p-jornal','p-ingreso'].forEach(id=>document.getElementById(id).value='');}
 function renderCostoRRHH(){
   const ac=state.personal.filter(p=>p.estado==='activo');
   const cd=ac.reduce((s,p)=>s+p.jornal,0);
