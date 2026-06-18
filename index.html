@@ -7004,7 +7004,11 @@ const COMP_ACEROS = ['BARRA CONICA 4\' X 7/8"','BARRA CONICA 6\' X 7/8"','BARRA 
 const COMP_PRECIOS_ACEROS = {'BARRA CONICA 4\' X 7/8"':249.17,'BARRA CONICA 6\' X 7/8"':330.29,'BARRA CONICA 8\' X 7/8"':411.41,'BROCA DESCARTABLE DE BOTONES 36 MM':76.88,'BROCA DESCARTABLE DE BOTONES 32 MM':74.91,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'':102.6,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 10\'':118.35,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 12':141.9};
 
 function compCostoReporte(r){
-  const cExp = r.explosivos.reduce((s,e)=>s+(e.C||0)*(COMP_PRECIOS_EXP[e.codigo]||0),0);
+  // Usa expFrente si hay datos, si no usa columna C del cardex
+  const ef = r.expFrente||[];
+  const efTotal = ef.reduce((s,e)=>s+((e.rampa||0)+(e.galeria||0))*(COMP_PRECIOS_EXP[e.codigo]||0),0);
+  const cExpCardex = r.explosivos.reduce((s,e)=>s+(e.C||0)*(COMP_PRECIOS_EXP[e.codigo]||0),0);
+  const cExp = efTotal > 0 ? efTotal : cExpCardex;
   const cPet = r.petroleo.reduce((s,p)=>s+p.gln,0)*COMP_PRECIO_PET;
   const cGas = r.gasolina.reduce((s,g)=>s+g.gln,0)*COMP_PRECIO_GAS;
   const cAce = (r.aceros||[]).reduce((s,a)=>s+((a.rampa||0)+(a.galeria||0))*(COMP_PRECIOS_ACEROS[a.codigo]||0),0);
