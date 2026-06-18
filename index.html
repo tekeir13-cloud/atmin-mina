@@ -7633,79 +7633,117 @@ function visorRenderDia() {
   const wFuel=document.getElementById('vt-wrap-fuel'); if(wFuel) wFuel.innerHTML='<canvas id="vt-chart-fuel" height="200"></canvas>';
   const wHoro=document.getElementById('vt-wrap-horo'); if(wHoro) wHoro.innerHTML='<canvas id="vt-chart-horo" height="200"></canvas>';
 
-  // ── Gráfico Explosivos — Radar Rampa Brenda vs Cortada Noreste (S/) ──
+  // ── Gráfico Explosivos — Barras apiladas horizontales ordenadas por costo (S/) ──
   const ef = r.expFrente || [];
-  const totalRampa = ef.reduce((s,e)=>s+(e.rampa||0)*(COMP_PRECIOS_EXP[e.codigo]||0),0);
-  const totalCortada = ef.reduce((s,e)=>s+(e.galeria||0)*(COMP_PRECIOS_EXP[e.codigo]||0),0);
-  const totalExp = totalRampa + totalCortada;
   const ctxExp = document.getElementById('vt-chart-exp');
   const detExp = document.getElementById('vt-exp-detalle');
-  const efActivos = COMP_EXPLOSIVOS.filter(c=>{ const x=ef.find(e=>e.codigo===c); return x&&(x.rampa||x.galeria); });
-  if(efActivos.length > 0 && ctxExp){
-    const dataR = efActivos.map(c=>{ const x=ef.find(e=>e.codigo===c)||{}; return +((x.rampa||0)*(COMP_PRECIOS_EXP[c]||0)).toFixed(2); });
-    const dataC = efActivos.map(c=>{ const x=ef.find(e=>e.codigo===c)||{}; return +((x.galeria||0)*(COMP_PRECIOS_EXP[c]||0)).toFixed(2); });
+  // Una fila por explosivo con costo Rampa/Cortada, ordenadas por costo total desc
+  let expFilas = COMP_EXPLOSIVOS.map(c=>{
+    const x = ef.find(e=>e.codigo===c) || {};
+    const precio = COMP_PRECIOS_EXP[c]||0;
+    const cR=(x.rampa||0)*precio, cC=(x.galeria||0)*precio;
+    return {codigo:c, precio, qR:x.rampa||0, qC:x.galeria||0, cR, cC, total:cR+cC};
+  }).filter(f=>f.total>0).sort((a,b)=>b.total-a.total);
+  // Respaldo: sin datos por frente, usar consumo del cardex como columna única
+  let expFallback=false;
+  if(!expFilas.length){
+    expFilas = r.explosivos.filter(e=>e.C>0).map(e=>{
+      const precio=COMP_PRECIOS_EXP[e.codigo]||0;
+      return {codigo:e.codigo, precio, qR:e.C, qC:0, cR:(e.C||0)*precio, cC:0, total:(e.C||0)*precio};
+    }).sort((a,b)=>b.total-a.total);
+    expFallback = expFilas.length>0;
+  }
+  const totalRampa = expFilas.reduce((s,f)=>s+f.cR,0);
+  const totalCortada = expFilas.reduce((s,f)=>s+f.cC,0);
+  const totalExp = totalRampa + totalCortada;
+  if(expFilas.length && ctxExp){
+    // Plugin: dibuja el costo total en S/ al final de cada barra apilada
+    const totalLabelPlugin = {
+      id:'expTotalLabel',
+      afterDatasetsDraw(chart){
+        const {ctx, scales:{x}} = chart;
+        const meta = chart.getDatasetMeta(0);
+        ctx.save();
+        ctx.font="700 11px 'DM Sans',sans-serif";
+        ctx.fillStyle='#e8e8f0';
+        ctx.textBaseline='middle';
+        expFilas.forEach((f,i)=>{
+          const bar=meta.data[i]; if(!bar) return;
+          ctx.fillText('S/ '+f.total.toFixed(2), x.getPixelForValue(f.total)+6, bar.y);
+        });
+        ctx.restore();
+      }
+    };
     _vtCharts.exp = new Chart(ctxExp, {
       type:'bar',
       data:{
-        labels: efActivos,
+        labels: expFilas.map(f=>f.codigo),
         datasets:[
-          {label:'Rampa Brenda', data:dataR, backgroundColor:'rgba(248,113,113,0.85)', borderRadius:4, borderSkipped:false},
-          {label:'Cortada Noreste', data:dataC, backgroundColor:'rgba(96,165,250,0.85)', borderRadius:4, borderSkipped:false},
+          {label: expFallback?'Consumo (S/)':'Rampa Brenda', data:expFilas.map(f=>+f.cR.toFixed(2)), backgroundColor:'rgba(248,113,113,0.9)', borderRadius:3, stack:'s'},
+          {label:'Cortada Noreste', data:expFilas.map(f=>+f.cC.toFixed(2)), backgroundColor:'rgba(96,165,250,0.9)', borderRadius:3, stack:'s', hidden:expFallback},
         ]
       },
       options:{
         indexAxis:'y',
         responsive:true,
+        layout:{padding:{right:62}},
         plugins:{
-          legend:{position:'bottom',labels:{color:'#8b8ba7',font:{size:10},padding:10}},
-          tooltip:{callbacks:{label:ctx=>`S/ ${ctx.parsed.x.toFixed(2)}`}}
+          legend:{position:'bottom',labels:{color:'#8b8ba7',font:{size:10},padding:12,usePointStyle:true,pointStyle:'rectRounded'}},
+          tooltip:{callbacks:{label:ctx=>{
+            const f=expFilas[ctx.dataIndex];
+            const q=ctx.datasetIndex===0?f.qR:f.qC;
+            return `${ctx.dataset.label}: ${q} unid × S/ ${f.precio.toFixed(2)} = S/ ${ctx.parsed.x.toFixed(2)}`;
+          }}}
         },
         scales:{
-          x:{ticks:{color:'#8b8ba7',font:{size:9},callback:v=>'S/'+v},grid:{color:'rgba(255,255,255,0.06)'}},
-          y:{ticks:{color:'#c4c4d4',font:{size:10}},grid:{display:false}}
+          x:{stacked:true, ticks:{color:'#8b8ba7',font:{size:9},callback:v=>'S/'+v},grid:{color:'rgba(255,255,255,0.06)'}},
+          y:{stacked:true, ticks:{color:'#c4c4d4',font:{size:11,weight:'600'}},grid:{display:false}}
         }
-      }
+      },
+      plugins:[totalLabelPlugin]
     });
+    // Detalle: tabla ranqueada por costo + tarjetas resumen
     const pctR=(totalExp>0?(totalRampa/totalExp*100):0).toFixed(1);
     const pctC=(totalExp>0?(totalCortada/totalExp*100):0).toFixed(1);
+    const filasHTML = expFilas.map(f=>{
+      const pct = totalExp>0?(f.total/totalExp*100):0;
+      return `<tr style="border-top:1px solid var(--border2)">
+        <td style="padding:5px 6px;font-family:'DM Mono',monospace;font-size:11px;color:var(--text)">${f.codigo}</td>
+        <td style="padding:5px 6px;text-align:right;font-size:11px;color:#f87171">${f.cR>0?'S/ '+f.cR.toFixed(2):'—'}</td>
+        <td style="padding:5px 6px;text-align:right;font-size:11px;color:#60a5fa">${f.cC>0?'S/ '+f.cC.toFixed(2):'—'}</td>
+        <td style="padding:5px 6px;text-align:right;font-size:11px;font-weight:700;color:var(--text)">S/ ${f.total.toFixed(2)}</td>
+        <td style="padding:5px 6px;text-align:right;font-size:10px;color:var(--text3)">${pct.toFixed(0)}%</td>
+      </tr>`;
+    }).join('');
     if(detExp) detExp.innerHTML = `
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
-        <div style="background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.3);border-radius:8px;padding:10px;text-align:center">
-          <div style="font-size:15px;font-weight:700;color:#f87171">S/ ${totalRampa.toFixed(2)}</div>
-          <div style="font-size:10px;color:#f87171;opacity:0.8">${pctR}% del total</div>
-          <div style="font-size:9px;color:var(--text3);text-transform:uppercase;margin-top:3px">Rampa Brenda</div>
+      <div class="table-wrap" style="margin-top:4px">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px">
+            <th style="padding:4px 6px;text-align:left">Explosivo</th>
+            <th style="padding:4px 6px;text-align:right;color:#f87171">${expFallback?'Consumo':'Rampa'}</th>
+            <th style="padding:4px 6px;text-align:right;color:#60a5fa">Cortada</th>
+            <th style="padding:4px 6px;text-align:right">Total</th>
+            <th style="padding:4px 6px;text-align:right">%</th>
+          </tr></thead>
+          <tbody>${filasHTML}</tbody>
+        </table>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+        <div style="background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.3);border-radius:8px;padding:9px;text-align:center">
+          <div style="font-size:14px;font-weight:700;color:#f87171">S/ ${totalRampa.toFixed(2)}</div>
+          <div style="font-size:9px;color:#f87171;opacity:0.85">${pctR}% del total</div>
+          <div style="font-size:8px;color:var(--text3);text-transform:uppercase;margin-top:2px">${expFallback?'Consumo total':'Rampa Brenda'}</div>
         </div>
-        <div style="background:rgba(96,165,250,0.12);border:1px solid rgba(96,165,250,0.3);border-radius:8px;padding:10px;text-align:center">
-          <div style="font-size:15px;font-weight:700;color:#60a5fa">S/ ${totalCortada.toFixed(2)}</div>
-          <div style="font-size:10px;color:#60a5fa;opacity:0.8">${pctC}% del total</div>
-          <div style="font-size:9px;color:var(--text3);text-transform:uppercase;margin-top:3px">Cortada Noreste</div>
+        <div style="background:rgba(96,165,250,0.12);border:1px solid rgba(96,165,250,0.3);border-radius:8px;padding:9px;text-align:center">
+          <div style="font-size:14px;font-weight:700;color:#60a5fa">S/ ${totalCortada.toFixed(2)}</div>
+          <div style="font-size:9px;color:#60a5fa;opacity:0.85">${pctC}% del total</div>
+          <div style="font-size:8px;color:var(--text3);text-transform:uppercase;margin-top:2px">Cortada Noreste</div>
         </div>
       </div>
-      <div style="text-align:center;margin-top:6px;font-size:11px;color:var(--text3)">Total explosivos: <b style="color:var(--text)">S/ ${totalExp.toFixed(2)}</b></div>`;
+      <div style="text-align:center;margin-top:8px;font-size:11px;color:var(--text3)">Total explosivos: <b style="color:var(--text)">S/ ${totalExp.toFixed(2)}</b></div>`;
   } else {
-    // Sin datos por frente: radar con consumo (C) del cardex como dataset único
-    const expC = r.explosivos.filter(e=>e.C>0);
-    if(expC.length && ctxExp){
-      const totalFb = expC.reduce((s,e)=>s+(e.C||0)*(COMP_PRECIOS_EXP[e.codigo]||0),0);
-      const dataC = expC.map(e=>+((e.C||0)*(COMP_PRECIOS_EXP[e.codigo]||0)).toFixed(2));
-      _vtCharts.exp = new Chart(ctxExp, {
-        type:'radar',
-        data:{
-          labels: expC.map(e=>e.codigo),
-          datasets:[{label:'Consumo (S/)', data:dataC, backgroundColor:'rgba(248,113,113,0.2)', borderColor:'rgba(248,113,113,0.9)', pointBackgroundColor:'rgba(248,113,113,0.9)', pointRadius:4, borderWidth:2}]
-        },
-        options:{responsive:true, plugins:{legend:{position:'bottom',labels:{color:'#8b8ba7',font:{size:10}}},
-          tooltip:{callbacks:{label:ctx=>`S/ ${ctx.parsed.r.toFixed(2)}`}}},
-          scales:{r:{ticks:{color:'#8b8ba7',font:{size:9},backdropColor:'transparent',callback:v=>'S/'+v},grid:{color:'rgba(255,255,255,0.08)'},angleLines:{color:'rgba(255,255,255,0.08)'},pointLabels:{color:'#8b8ba7',font:{size:10}}}}}
-      });
-      if(detExp) detExp.innerHTML = expC.map(e=>{
-        const c=(e.C||0)*(COMP_PRECIOS_EXP[e.codigo]||0);
-        const pct=totalFb>0?(c/totalFb*100).toFixed(1):'0';
-        return `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border2);font-size:11px"><span style="color:var(--text)">${e.codigo} ×${e.C}</span><span style="color:var(--warn)">S/ ${c.toFixed(2)} <span style="color:var(--text3)">(${pct}%)</span></span></div>`;
-      }).join('')+'<div style="text-align:right;padding-top:4px;font-size:11px;font-weight:700;color:var(--text)">Total: S/ '+totalFb.toFixed(2)+'</div>';
-    } else {
-      if(wExp) wExp.innerHTML='<div style="text-align:center;color:var(--text3);padding:20px;font-size:12px">Sin consumo de explosivos registrado</div>';
-    }
+    if(wExp) wExp.innerHTML='<div style="text-align:center;color:var(--text3);padding:20px;font-size:12px">Sin consumo de explosivos registrado</div>';
+    if(detExp) detExp.innerHTML='';
   }
 
   // ── Gráfico Combustible — doughnut por máquina + tabla costo y % ──
