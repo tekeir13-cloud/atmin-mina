@@ -7016,9 +7016,9 @@ function compCostoReporte(r){
   const cAce = (r.aceros||[]).reduce((s,a)=>s+((a.rampa||0)+(a.galeria||0))*(COMP_PRECIOS_ACEROS[a.codigo]||0),0);
   return {cExp, cPet, cGas, cAce, total:cExp+cPet+cGas+cAce};
 }
-const COMP_PETROLEO   = ['Grupo','Compresora M135','Compresora M122','Scoop Epiroc','Scoop Monte','Dumper'];
+const COMP_PETROLEO   = ['Grupo Electrógeno','Compresora M135','Compresora M122','Scoop Epiroc','Scoop Monte','Dumper'];
 const COMP_GASOLINA   = ['Camioneta Blanca','Camioneta Roja','Cuatrimoto C','Cuatrimoto N'];
-const COMP_HOROMETROS = ['Grupo','Compresora M135','Compresora M122','Scoop Epiroc','Scoop Monte','Dumper'];
+const COMP_HOROMETROS = ['Grupo Electrógeno','Compresora M135','Compresora M122','Scoop Epiroc','Scoop Monte','Dumper'];
 
 function abrirModalCompresorista() {
   document.getElementById('modal-compresorista').style.display = 'flex';
@@ -7356,8 +7356,8 @@ function copiarReporteWhatsApp() {
 // ── Construye el texto y abre WhatsApp para un reporte dado ──
 function _enviarReporteWA(r) {
   const turnoIc = r.turno==='Día' ? '[DIA]' : '[NOCHE]';
-  const tPet = r.petroleo.reduce((s,p)=>s+p.gln,0);
-  const tGas = r.gasolina.reduce((s,g)=>s+g.gln,0);
+  const tPet = r.petroleo.filter(p=>p.equipo!=='Mina').reduce((s,p)=>s+p.gln,0);
+  const tGas = r.gasolina.filter(g=>g.equipo!=='Mina').reduce((s,g)=>s+g.gln,0);
 
   let txt = '';
   txt += `*REPORTE DE GUARDIA — DEEPMINE*\n`;
@@ -7436,10 +7436,10 @@ function _enviarReporteWA(r) {
   // Combustible (detalle por máquina, solo galones)
   txt += `*COMBUSTIBLE POR MAQUINA*\n`;
   txt += `_Petroleo:_\n`;
-  r.petroleo.forEach(p=>{ txt += `    ${p.equipo}: ${p.gln} gln\n`; });
+  r.petroleo.filter(p=>p.equipo!=='Mina').forEach(p=>{ const eq=p.equipo==='Grupo'?'Grupo Electrógeno':p.equipo; txt += `    ${eq}: ${p.gln} gln\n`; });
   txt += `  *Total Petroleo: ${tPet.toFixed(1)} gln*\n`;
   txt += `_Gasolina:_\n`;
-  r.gasolina.forEach(g=>{ txt += `    ${g.equipo}: ${g.gln} gln\n`; });
+  r.gasolina.filter(g=>g.equipo!=='Mina').forEach(g=>{ txt += `    ${g.equipo}: ${g.gln} gln\n`; });
   txt += `  *Total Gasolina: ${tGas.toFixed(1)} gln*\n\n`;
 
   // Horómetros
@@ -7779,8 +7779,8 @@ function visorRenderDia() {
   </div>`).join('');
 
   // Totales de ESTE reporte
-  const tPet = r.petroleo.reduce((s,p)=>s+p.gln,0);
-  const tGas = r.gasolina.reduce((s,g)=>s+g.gln,0);
+  const tPet = r.petroleo.filter(p=>p.equipo!=='Mina').reduce((s,p)=>s+p.gln,0);
+  const tGas = r.gasolina.filter(g=>g.equipo!=='Mina').reduce((s,g)=>s+g.gln,0);
   const tHoras = r.horometros.reduce((s,h)=>s+h.HT,0);
   const tExpC = r.explosivos.reduce((s,e)=>s+e.C,0);
   const costo = compCostoReporte(r);
