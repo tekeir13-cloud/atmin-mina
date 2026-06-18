@@ -3069,6 +3069,11 @@ select option{background:var(--coal3);}
           <div id="vt-fuel-detalle" style="margin-top:10px"></div>
         </div>
         <div style="background:var(--coal3);border-radius:10px;padding:16px">
+          <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">🔩 Aceros — Costo por Frente</div>
+          <div id="vt-wrap-ace"><canvas id="vt-chart-ace" height="180"></canvas></div>
+          <div id="vt-ace-detalle" style="margin-top:10px"></div>
+        </div>
+        <div style="background:var(--coal3);border-radius:10px;padding:16px">
           <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">⏱️ Horómetros (HT)</div>
           <div id="vt-wrap-horo"><canvas id="vt-chart-horo" height="180"></canvas></div>
         </div>
@@ -3147,6 +3152,15 @@ select option{background:var(--coal3);}
         <table style="width:100%">
           <thead><tr style="font-size:10px;color:var(--text3)"><th style="text-align:left;padding:6px 8px">Código</th><th style="padding:6px 8px;text-align:center;color:#f87171">⛏️ Rampa Brenda</th><th style="padding:6px 8px;text-align:center;color:#60a5fa">🔵 Cortada Noreste</th></tr></thead>
           <tbody id="comp-expf-body"></tbody>
+        </table>
+      </div>
+
+      <!-- ACEROS POR FRENTE -->
+      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">🔩 Aceros por Frente</div>
+      <div class="table-wrap" style="margin-bottom:20px">
+        <table style="width:100%">
+          <thead><tr style="font-size:10px;color:var(--text3)"><th style="text-align:left;padding:6px 8px">Acero</th><th style="padding:6px 8px;text-align:center;color:#f87171">⛏️ Rampa Brenda</th><th style="padding:6px 8px;text-align:center;color:#60a5fa">🔵 Cortada Noreste</th><th style="padding:6px 8px;text-align:right;color:var(--accent-light)">Precio unit.</th></tr></thead>
+          <tbody id="comp-acerosf-body"></tbody>
         </table>
       </div>
 
@@ -6986,12 +7000,15 @@ const COMP_EXPLOSIVOS = ['E.1000','E.3000','E.5000','CX.1.80','CX.2.40','FM','Ne
 const COMP_PRECIOS_EXP = {'E.1000':1.36,'E.3000':1.54,'E.5000':2.34,'CX.1.80':3.81,'CX.2.40':4.10,'FM':4.00,'Neiter':2.00};
 const COMP_PRECIO_PET = 24.5;
 const COMP_PRECIO_GAS = 21.0;
+const COMP_ACEROS = ['BC 4\'×7/8"','BC 6\'×7/8"','BC 8\'×7/8"','BD Botones 36mm','BD Botones 32mm','Al-Acuñar 1"×8\'','Al-Acuñar 1"×10\'','Al-Acuñar 1"×12\''];
+const COMP_PRECIOS_ACEROS = {'BC 4\'×7/8"':249.17,'BC 6\'×7/8"':330.29,'BC 8\'×7/8"':411.41,'BD Botones 36mm':76.88,'BD Botones 32mm':74.91,'Al-Acuñar 1"×8\'':102.6,'Al-Acuñar 1"×10\'':118.35,'Al-Acuñar 1"×12\'':141.9};
 
 function compCostoReporte(r){
   const cExp = r.explosivos.reduce((s,e)=>s+(e.C||0)*(COMP_PRECIOS_EXP[e.codigo]||0),0);
   const cPet = r.petroleo.reduce((s,p)=>s+p.gln,0)*COMP_PRECIO_PET;
   const cGas = r.gasolina.reduce((s,g)=>s+g.gln,0)*COMP_PRECIO_GAS;
-  return {cExp, cPet, cGas, total:cExp+cPet+cGas};
+  const cAce = (r.aceros||[]).reduce((s,a)=>s+((a.rampa||0)+(a.galeria||0))*(COMP_PRECIOS_ACEROS[a.codigo]||0),0);
+  return {cExp, cPet, cGas, cAce, total:cExp+cPet+cGas+cAce};
 }
 const COMP_PETROLEO   = ['Grupo','Compresora M135','Compresora M122','Scoop Epiroc','Scoop Monte','Dumper'];
 const COMP_GASOLINA   = ['Camioneta Blanca','Camioneta Roja','Cuatrimoto C','Cuatrimoto N'];
@@ -7028,6 +7045,16 @@ function abrirModalCompresorista() {
       <td style="padding:4px 6px"><input type="number" min="0" step="any" id="cexpf-${c.replace(/\./g,'_')}-R" placeholder="0" style="width:100%;background:var(--coal4);border:1px solid rgba(248,113,113,0.3);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>
       <td style="padding:4px 6px"><input type="number" min="0" step="any" id="cexpf-${c.replace(/\./g,'_')}-G" placeholder="0" style="width:100%;background:var(--coal4);border:1px solid rgba(96,165,250,0.3);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>
     </tr>`).join('');
+  // aceros por frente
+  document.getElementById('comp-acerosf-body').innerHTML = COMP_ACEROS.map(c => {
+    const id = c.replace(/[^a-zA-Z0-9]/g,'_');
+    return `<tr style="border-top:1px solid var(--border2)">
+      <td style="padding:6px 8px;font-size:11px;color:var(--text)">${c}</td>
+      <td style="padding:4px 6px"><input type="number" min="0" step="any" id="cace-${id}-R" placeholder="0" style="width:100%;background:var(--coal4);border:1px solid rgba(248,113,113,0.3);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>
+      <td style="padding:4px 6px"><input type="number" min="0" step="any" id="cace-${id}-G" placeholder="0" style="width:100%;background:var(--coal4);border:1px solid rgba(96,165,250,0.3);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>
+      <td style="padding:6px 8px;text-align:right;font-family:'DM Mono',monospace;font-size:11px;color:var(--accent-light)">S/ ${(COMP_PRECIOS_ACEROS[c]||0).toFixed(2)}</td>
+    </tr>`;
+  }).join('');
   // petróleo
   document.getElementById('comp-petroleo-fields').innerHTML = COMP_PETROLEO.map(m => `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -7139,6 +7166,11 @@ function guardarReporteComp() {
     return {codigo:c, rampa:parseFloat(document.getElementById('cexpf-'+id+'-R')?.value)||0, galeria:parseFloat(document.getElementById('cexpf-'+id+'-G')?.value)||0};
   });
 
+  // aceros por frente
+  const aceros = COMP_ACEROS.map(c => {
+    const id = c.replace(/[^a-zA-Z0-9]/g,'_');
+    return {codigo:c, rampa:parseFloat(document.getElementById('cace-'+id+'-R')?.value)||0, galeria:parseFloat(document.getElementById('cace-'+id+'-G')?.value)||0};
+  });
   // consumo rampa
   const consumoRampa = [];
   document.getElementById('comp-cons-rampa-rows').querySelectorAll('div').forEach(row => {
@@ -7166,7 +7198,7 @@ function guardarReporteComp() {
 
   const obs = document.getElementById('comp-obs').value.trim();
 
-  const reporte = {fecha, turno:_compTurnoSeleccionado, nombre, dni, materialesAlmacen, explosivos, expFrente, consumoRampa, consumoGaleria, petroleo, gasolina, horometros, obs};
+  const reporte = {fecha, turno:_compTurnoSeleccionado, nombre, dni, materialesAlmacen, explosivos, expFrente, aceros, consumoRampa, consumoGaleria, petroleo, gasolina, horometros, obs};
 
   const idx = state.compresorista.findIndex(r => r.fecha===fecha && r.turno===_compTurnoSeleccionado);
   if(idx>=0){
@@ -7365,6 +7397,21 @@ function _enviarReporteWA(r) {
     txt += `  ${e.codigo}: ${e.C} unid x ${fmtS(precio)} = *${fmtS(e.C*precio)}*\n`;
   });
   txt += `  *Total Explosivos: ${fmtS(costo.cExp)}*\n\n`;
+
+  // Aceros — costo por frente
+  const acerosAct = (r.aceros||[]).filter(a=>(a.rampa||0)+(a.galeria||0)>0);
+  if(acerosAct.length){
+    txt += `*ACEROS (por Frente)*\n`;
+    acerosAct.forEach(a=>{
+      const precio = COMP_PRECIOS_ACEROS[a.codigo]||0;
+      const tot = ((a.rampa||0)+(a.galeria||0))*precio;
+      const det = [];
+      if(a.rampa>0) det.push(`Rampa ${a.rampa}`);
+      if(a.galeria>0) det.push(`Cortada ${a.galeria}`);
+      txt += `  ${a.codigo}: ${det.join(' | ')} x ${fmtS(precio)} = *${fmtS(tot)}*\n`;
+    });
+    txt += `  *Total Aceros: ${fmtS(costo.cAce)}*\n\n`;
+  }
 
   // Combustible (detalle por máquina + costo)
   txt += `*COMBUSTIBLE POR MAQUINA*\n`;
@@ -7620,6 +7667,7 @@ function visorRenderDia() {
     {v:tGas.toFixed(1)+' gln',sub:fmtS(costo.cGas),l:'Gasolina',c:'var(--positive)'},
     {v:tHoras.toFixed(1),sub:'',l:'Horas máquina',c:'var(--accent-light)'},
     {v:fmtS(costo.cExp),sub:tExpC+' unid consumidas',l:'Costo Explosivos',c:'var(--negative)'},
+    {v:fmtS(costo.cAce),sub:(r.aceros||[]).reduce((s,a)=>s+(a.rampa||0)+(a.galeria||0),0)+' unid',l:'Costo Aceros',c:'#fbbf24'},
     {v:fmtS(costo.total),sub:'',l:'COSTO TOTAL TURNO',c:'var(--accent-light)',border:true},
   ].map(x=>`<div style="background:var(--coal3);border:1px solid ${x.border?'var(--accent-border)':'var(--border)'};border-radius:8px;padding:12px;text-align:center">
     <div style="font-size:18px;font-weight:700;color:${x.c}">${x.v}</div>
@@ -7628,9 +7676,10 @@ function visorRenderDia() {
   </div>`).join('');
 
   // Destruir charts anteriores y regenerar canvases limpios
-  ['exp','fuel','horo'].forEach(k=>{ if(_vtCharts[k]){ _vtCharts[k].destroy(); delete _vtCharts[k]; }});
+  ['exp','fuel','ace','horo'].forEach(k=>{ if(_vtCharts[k]){ _vtCharts[k].destroy(); delete _vtCharts[k]; }});
   const wExp=document.getElementById('vt-wrap-exp'); if(wExp) wExp.innerHTML='<canvas id="vt-chart-exp" height="200"></canvas>';
   const wFuel=document.getElementById('vt-wrap-fuel'); if(wFuel) wFuel.innerHTML='<canvas id="vt-chart-fuel" height="200"></canvas>';
+  const wAce=document.getElementById('vt-wrap-ace'); if(wAce) wAce.innerHTML='<canvas id="vt-chart-ace" height="200"></canvas>';
   const wHoro=document.getElementById('vt-wrap-horo'); if(wHoro) wHoro.innerHTML='<canvas id="vt-chart-horo" height="200"></canvas>';
 
   // ── Gráfico Explosivos — Barras apiladas horizontales ordenadas por costo (S/) ──
@@ -7744,6 +7793,107 @@ function visorRenderDia() {
   } else {
     if(wExp) wExp.innerHTML='<div style="text-align:center;color:var(--text3);padding:20px;font-size:12px">Sin consumo de explosivos registrado</div>';
     if(detExp) detExp.innerHTML='';
+  }
+
+  // ── Gráfico Aceros — Barras apiladas horizontales ordenadas por costo (S/) ──
+  const acf = r.aceros || [];
+  const ctxAce = document.getElementById('vt-chart-ace');
+  const detAce = document.getElementById('vt-ace-detalle');
+  const wAceEl = document.getElementById('vt-wrap-ace');
+  let aceFilas = acf.map(a=>{
+    const precio = COMP_PRECIOS_ACEROS[a.codigo]||0;
+    const cR=(a.rampa||0)*precio, cC=(a.galeria||0)*precio;
+    return {codigo:a.codigo, precio, qR:a.rampa||0, qC:a.galeria||0, cR, cC, total:cR+cC};
+  }).filter(f=>f.total>0).sort((a,b)=>b.total-a.total);
+  const aceTotalR = aceFilas.reduce((s,f)=>s+f.cR,0);
+  const aceTotalC = aceFilas.reduce((s,f)=>s+f.cC,0);
+  const aceTotal = aceTotalR + aceTotalC;
+  if(aceFilas.length && ctxAce){
+    const aceTotalLabel = {
+      id:'aceTotalLabel',
+      afterDatasetsDraw(chart){
+        const {ctx, scales:{x}} = chart;
+        const meta = chart.getDatasetMeta(0);
+        ctx.save();
+        ctx.font="700 11px 'DM Sans',sans-serif";
+        ctx.fillStyle='#e8e8f0';
+        ctx.textBaseline='middle';
+        aceFilas.forEach((f,i)=>{
+          const bar=meta.data[i]; if(!bar) return;
+          ctx.fillText('S/ '+f.total.toFixed(0), x.getPixelForValue(f.total)+6, bar.y);
+        });
+        ctx.restore();
+      }
+    };
+    _vtCharts.ace = new Chart(ctxAce, {
+      type:'bar',
+      data:{
+        labels: aceFilas.map(f=>f.codigo),
+        datasets:[
+          {label:'Rampa Brenda', data:aceFilas.map(f=>+f.cR.toFixed(2)), backgroundColor:'rgba(248,113,113,0.9)', borderRadius:3, stack:'s'},
+          {label:'Cortada Noreste', data:aceFilas.map(f=>+f.cC.toFixed(2)), backgroundColor:'rgba(96,165,250,0.9)', borderRadius:3, stack:'s'},
+        ]
+      },
+      options:{
+        indexAxis:'y',
+        responsive:true,
+        layout:{padding:{right:66}},
+        plugins:{
+          legend:{position:'bottom',labels:{color:'#8b8ba7',font:{size:10},padding:12,usePointStyle:true,pointStyle:'rectRounded'}},
+          tooltip:{callbacks:{label:ctx=>{
+            const f=aceFilas[ctx.dataIndex];
+            const q=ctx.datasetIndex===0?f.qR:f.qC;
+            return `${ctx.dataset.label}: ${q} unid × S/ ${f.precio.toFixed(2)} = S/ ${ctx.parsed.x.toFixed(2)}`;
+          }}}
+        },
+        scales:{
+          x:{stacked:true, ticks:{color:'#8b8ba7',font:{size:9},callback:v=>'S/'+v},grid:{color:'rgba(255,255,255,0.06)'}},
+          y:{stacked:true, ticks:{color:'#c4c4d4',font:{size:10,weight:'600'}},grid:{display:false}}
+        }
+      },
+      plugins:[aceTotalLabel]
+    });
+    const apctR=(aceTotal>0?(aceTotalR/aceTotal*100):0).toFixed(1);
+    const apctC=(aceTotal>0?(aceTotalC/aceTotal*100):0).toFixed(1);
+    const aceFilasHTML = aceFilas.map(f=>{
+      const pct = aceTotal>0?(f.total/aceTotal*100):0;
+      return `<tr style="border-top:1px solid var(--border2)">
+        <td style="padding:5px 6px;font-size:10px;color:var(--text)">${f.codigo}</td>
+        <td style="padding:5px 6px;text-align:right;font-size:11px;color:#f87171">${f.cR>0?'S/ '+f.cR.toFixed(2):'—'}</td>
+        <td style="padding:5px 6px;text-align:right;font-size:11px;color:#60a5fa">${f.cC>0?'S/ '+f.cC.toFixed(2):'—'}</td>
+        <td style="padding:5px 6px;text-align:right;font-size:11px;font-weight:700;color:var(--text)">S/ ${f.total.toFixed(2)}</td>
+        <td style="padding:5px 6px;text-align:right;font-size:10px;color:var(--text3)">${pct.toFixed(0)}%</td>
+      </tr>`;
+    }).join('');
+    if(detAce) detAce.innerHTML = `
+      <div class="table-wrap" style="margin-top:4px">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px">
+            <th style="padding:4px 6px;text-align:left">Acero</th>
+            <th style="padding:4px 6px;text-align:right;color:#f87171">Rampa</th>
+            <th style="padding:4px 6px;text-align:right;color:#60a5fa">Cortada</th>
+            <th style="padding:4px 6px;text-align:right">Total</th>
+            <th style="padding:4px 6px;text-align:right">%</th>
+          </tr></thead>
+          <tbody>${aceFilasHTML}</tbody>
+        </table>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+        <div style="background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.3);border-radius:8px;padding:9px;text-align:center">
+          <div style="font-size:14px;font-weight:700;color:#f87171">S/ ${aceTotalR.toFixed(2)}</div>
+          <div style="font-size:9px;color:#f87171;opacity:0.85">${apctR}% del total</div>
+          <div style="font-size:8px;color:var(--text3);text-transform:uppercase;margin-top:2px">Rampa Brenda</div>
+        </div>
+        <div style="background:rgba(96,165,250,0.12);border:1px solid rgba(96,165,250,0.3);border-radius:8px;padding:9px;text-align:center">
+          <div style="font-size:14px;font-weight:700;color:#60a5fa">S/ ${aceTotalC.toFixed(2)}</div>
+          <div style="font-size:9px;color:#60a5fa;opacity:0.85">${apctC}% del total</div>
+          <div style="font-size:8px;color:var(--text3);text-transform:uppercase;margin-top:2px">Cortada Noreste</div>
+        </div>
+      </div>
+      <div style="text-align:center;margin-top:8px;font-size:11px;color:var(--text3)">Total aceros: <b style="color:var(--text)">S/ ${aceTotal.toFixed(2)}</b></div>`;
+  } else {
+    if(wAceEl) wAceEl.innerHTML='<div style="text-align:center;color:var(--text3);padding:20px;font-size:12px">Sin consumo de aceros registrado</div>';
+    if(detAce) detAce.innerHTML='';
   }
 
   // ── Gráfico Combustible — doughnut por máquina + tabla costo y % ──
