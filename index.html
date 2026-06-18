@@ -6992,7 +6992,7 @@ function compCostoReporte(r){
   return {cExp, cPet, cGas, total:cExp+cPet+cGas};
 }
 const COMP_PETROLEO   = ['Grupo','Compresora M135','Compresora M122','Scoop Epiroc','Scoop Monte','Dumper'];
-const COMP_GASOLINA   = ['Camioneta Blanca','Camioneta Roja','Cuatrimoto C','Cuatrimoto N','Mina'];
+const COMP_GASOLINA   = ['Camioneta Blanca','Camioneta Roja','Cuatrimoto C','Cuatrimoto N'];
 const COMP_HOROMETROS = ['Grupo','Compresora M135','Compresora M122','Scoop Epiroc','Scoop Monte','Dumper'];
 
 function abrirModalCompresorista() {
@@ -7631,39 +7631,66 @@ function visorRenderDia() {
   const wFuel=document.getElementById('vt-wrap-fuel'); if(wFuel) wFuel.innerHTML='<canvas id="vt-chart-fuel" height="200"></canvas>';
   const wHoro=document.getElementById('vt-wrap-horo'); if(wHoro) wHoro.innerHTML='<canvas id="vt-chart-horo" height="200"></canvas>';
 
-  // ── Gráfico Explosivos (Rampa vs Galería) ──
+  // ── Gráfico Explosivos — S/ por frente (Rampa Brenda / Cortada Noreste) ──
   const ef = r.expFrente || [];
-  const expConFrente = COMP_EXPLOSIVOS.map(c=>({codigo:c, rampa:(ef.find(x=>x.codigo===c)||{}).rampa||0, galeria:(ef.find(x=>x.codigo===c)||{}).galeria||0})).filter(x=>x.rampa||x.galeria);
-  const expActivos = r.explosivos.filter(e=>e.I||e.E||e.C);
+  const expConFrente = COMP_EXPLOSIVOS.map(c=>({
+    codigo:c,
+    rampa:(ef.find(x=>x.codigo===c)||{}).rampa||0,
+    galeria:(ef.find(x=>x.codigo===c)||{}).galeria||0,
+    precio: COMP_PRECIOS_EXP[c]||0
+  })).filter(x=>x.rampa||x.galeria||(r.explosivos.find(e=>e.codigo===x.codigo)||{}).C);
+  const expActivos = r.explosivos.filter(e=>e.C>0);
   const ctxExp = document.getElementById('vt-chart-exp');
   if(ctxExp && (expConFrente.length || expActivos.length)){
-    const useFrente = expConFrente.length > 0;
-    const labels = useFrente ? expConFrente.map(e=>e.codigo) : expActivos.map(e=>e.codigo);
-    const datasets = useFrente ? [
-      {label:'Rampa Brenda',data:expConFrente.map(e=>e.rampa),backgroundColor:'rgba(248,113,113,0.75)',borderRadius:4},
-      {label:'Cortada Noreste',data:expConFrente.map(e=>e.galeria),backgroundColor:'rgba(96,165,250,0.75)',borderRadius:4},
-    ] : [
-      {label:'Ingreso',data:expActivos.map(e=>e.I),backgroundColor:'rgba(34,211,165,0.7)',borderRadius:4},
-      {label:'Egreso',data:expActivos.map(e=>e.E),backgroundColor:'rgba(248,113,113,0.7)',borderRadius:4},
-      {label:'Final',data:expActivos.map(e=>e.F),backgroundColor:'rgba(91,110,245,0.7)',borderRadius:4},
-    ];
-    _vtCharts.exp = new Chart(ctxExp, {
-      type:'bar',
-      data:{labels, datasets},
-      options:{responsive:true,plugins:{legend:{labels:{color:'#8b8ba7',font:{size:10}}}},scales:{x:{ticks:{color:'#8b8ba7',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}},y:{ticks:{color:'#8b8ba7',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}}}}
-    });
+    const useFrente = expConFrente.filter(x=>x.rampa||x.galeria).length > 0;
+    if(useFrente){
+      const labels = expConFrente.filter(x=>x.rampa||x.galeria).map(e=>e.codigo);
+      const dataR = expConFrente.filter(x=>x.rampa||x.galeria).map(e=>+(e.rampa*e.precio).toFixed(2));
+      const dataG = expConFrente.filter(x=>x.rampa||x.galeria).map(e=>+(e.galeria*e.precio).toFixed(2));
+      _vtCharts.exp = new Chart(ctxExp, {
+        type:'bar',
+        data:{labels, datasets:[
+          {label:'Rampa Brenda (S/)',data:dataR,backgroundColor:'rgba(248,113,113,0.8)',borderRadius:4},
+          {label:'Cortada Noreste (S/)',data:dataG,backgroundColor:'rgba(96,165,250,0.8)',borderRadius:4},
+        ]},
+        options:{responsive:true,plugins:{legend:{labels:{color:'#8b8ba7',font:{size:10}}},tooltip:{callbacks:{label:ctx=>'S/ '+ctx.parsed.y.toFixed(2)}}},scales:{x:{ticks:{color:'#8b8ba7',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}},y:{ticks:{color:'#8b8ba7',font:{size:10},callback:v=>'S/'+v},grid:{color:'rgba(255,255,255,0.04)'}}}}
+      });
+    } else {
+      const labels = expActivos.map(e=>e.codigo);
+      const data = expActivos.map(e=>+((e.C||0)*(COMP_PRECIOS_EXP[e.codigo]||0)).toFixed(2));
+      _vtCharts.exp = new Chart(ctxExp, {
+        type:'bar',
+        data:{labels, datasets:[{label:'Costo consumo (S/)',data,backgroundColor:'rgba(248,113,113,0.8)',borderRadius:4}]},
+        options:{responsive:true,plugins:{legend:{labels:{color:'#8b8ba7',font:{size:10}}},tooltip:{callbacks:{label:ctx=>'S/ '+ctx.parsed.y.toFixed(2)}}},scales:{x:{ticks:{color:'#8b8ba7',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}},y:{ticks:{color:'#8b8ba7',font:{size:10},callback:v=>'S/'+v},grid:{color:'rgba(255,255,255,0.04)'}}}}
+      });
+    }
   } else if(wExp){ wExp.innerHTML='<div style="text-align:center;color:var(--text3);padding:40px;font-size:12px">Sin datos de explosivos</div>'; }
 
-  // ── Gráfico Combustible ──
-  const fuelLabels=[...r.petroleo.filter(p=>p.gln).map(p=>p.equipo), ...r.gasolina.filter(g=>g.gln).map(g=>g.equipo)];
-  const fuelVals=[...r.petroleo.filter(p=>p.gln).map(p=>p.gln), ...r.gasolina.filter(g=>g.gln).map(g=>g.gln)];
-  const fuelColors=[...r.petroleo.filter(p=>p.gln).map(()=>'rgba(229,144,34,0.8)'), ...r.gasolina.filter(g=>g.gln).map(()=>'rgba(34,211,165,0.8)')];
+  // ── Gráfico Combustible — color único por máquina, S/ y % ──
+  const FUEL_COLORS = ['#e59022','#f87171','#60a5fa','#34d399','#a78bfa','#fb923c','#38bdf8','#4ade80','#f472b6','#facc15'];
+  const petFilt = r.petroleo.filter(p=>p.gln);
+  const gasFilt = r.gasolina.filter(g=>g.gln);
+  const fuelItems = [
+    ...petFilt.map(p=>({label:p.equipo, val:+(p.gln*COMP_PRECIO_PET).toFixed(2), gln:p.gln})),
+    ...gasFilt.map(g=>({label:g.equipo, val:+(g.gln*COMP_PRECIO_GAS).toFixed(2), gln:g.gln})),
+  ];
+  const fuelTotal = fuelItems.reduce((s,x)=>s+x.val,0);
   const ctxFuel = document.getElementById('vt-chart-fuel');
-  if(ctxFuel && fuelLabels.length){
+  if(ctxFuel && fuelItems.length){
     _vtCharts.fuel = new Chart(ctxFuel, {
       type:'doughnut',
-      data:{labels:fuelLabels, datasets:[{data:fuelVals,backgroundColor:fuelColors,borderWidth:0,hoverOffset:4}]},
-      options:{responsive:true,plugins:{legend:{position:'bottom',labels:{color:'#8b8ba7',font:{size:10},padding:8}}}}
+      data:{
+        labels: fuelItems.map(x=>x.label),
+        datasets:[{data:fuelItems.map(x=>x.val), backgroundColor:fuelItems.map((_,i)=>FUEL_COLORS[i%FUEL_COLORS.length]), borderWidth:1, borderColor:'rgba(0,0,0,0.2)', hoverOffset:6}]
+      },
+      options:{responsive:true,plugins:{
+        legend:{position:'bottom',labels:{color:'#8b8ba7',font:{size:10},padding:8}},
+        tooltip:{callbacks:{label:ctx=>{
+          const item=fuelItems[ctx.dataIndex];
+          const pct=fuelTotal>0?(item.val/fuelTotal*100).toFixed(1):'0';
+          return ` ${item.label}: S/ ${item.val.toFixed(2)} (${pct}%)`;
+        }}}
+      }}
     });
   } else if(wFuel){ wFuel.innerHTML='<div style="text-align:center;color:var(--text3);padding:40px;font-size:12px">Sin consumo de combustible</div>'; }
 
