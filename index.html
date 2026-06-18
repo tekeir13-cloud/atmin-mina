@@ -6981,6 +6981,16 @@ function compCargarLocal() {
 compCargarLocal();
 
 const COMP_EXPLOSIVOS = ['E.1000','E.3000','E.5000','CX.1.80','CX.2.40','FM','Neiter'];
+const COMP_PRECIOS_EXP = {'E.1000':1.36,'E.3000':1.54,'E.5000':2.34,'CX.1.80':3.81,'CX.2.40':4.10,'FM':4.00,'Neiter':2.00};
+const COMP_PRECIO_PET = 24.5;
+const COMP_PRECIO_GAS = 21.0;
+
+function compCostoReporte(r){
+  const cExp = r.explosivos.reduce((s,e)=>s+(e.C||0)*(COMP_PRECIOS_EXP[e.codigo]||0),0);
+  const cPet = r.petroleo.reduce((s,p)=>s+p.gln,0)*COMP_PRECIO_PET;
+  const cGas = r.gasolina.reduce((s,g)=>s+g.gln,0)*COMP_PRECIO_GAS;
+  return {cExp, cPet, cGas, total:cExp+cPet+cGas};
+}
 const COMP_PETROLEO   = ['Grupo','Compresora M135','Compresora M122','Scoop Epiroc','Scoop Monte','Dumper'];
 const COMP_GASOLINA   = ['Camioneta Blanca','Camioneta Roja','Cuatrimoto C','Cuatrimoto N','Mina'];
 const COMP_HOROMETROS = ['Grupo','Compresora M135','Compresora M122','Scoop Epiroc','Scoop Monte','Dumper'];
@@ -7179,7 +7189,9 @@ function guardarReporteComp() {
 function mostrarResumenComp(r) {
   const totPet = r.petroleo.reduce((s,x)=>s+x.gln,0);
   const totGas = r.gasolina.reduce((s,x)=>s+x.gln,0);
-  const expHtml = r.explosivos.filter(e=>e.I||e.E||e.C).map(e=>`<span style="font-size:11px;background:var(--coal4);border:1px solid var(--border);border-radius:4px;padding:3px 8px;color:var(--text2)"><b style="color:var(--text)">${e.codigo}</b> I:${e.I} E:${e.E} C:${e.C} F:${e.F}</span>`).join('');
+  const costo = compCostoReporte(r);
+  const fmt = v=>'S/ '+v.toFixed(2);
+  const expHtml = r.explosivos.filter(e=>e.I||e.E||e.C).map(e=>`<span style="font-size:11px;background:var(--coal4);border:1px solid var(--border);border-radius:4px;padding:3px 8px;color:var(--text2)"><b style="color:var(--text)">${e.codigo}</b> I:${e.I} E:${e.E} C:${e.C} F:${e.F} <b style="color:var(--warn)">${fmt((e.C||0)*(COMP_PRECIOS_EXP[e.codigo]||0))}</b></span>`).join('');
   const horoHtml = r.horometros.filter(h=>h.HT>0).map(h=>`<span style="font-size:11px;background:var(--coal4);border:1px solid var(--border);border-radius:4px;padding:3px 8px;color:var(--text2)"><b style="color:var(--text)">${h.equipo}</b> ${h.HT}h</span>`).join('');
   document.getElementById('comp-resumen').style.display = 'block';
   document.getElementById('comp-resumen').innerHTML = `
@@ -7187,23 +7199,29 @@ function mostrarResumenComp(r) {
       <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--accent-light);margin-bottom:12px">📊 Resumen — ${r.turno} ${r.fecha} · ${r.nombre}</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px">
         <div style="background:var(--coal3);border-radius:6px;padding:10px;text-align:center">
-          <div style="font-size:18px;font-weight:700;color:var(--warn)">${totPet.toFixed(1)}</div>
-          <div style="font-size:10px;color:var(--text3);text-transform:uppercase">gln Petróleo</div>
+          <div style="font-size:16px;font-weight:700;color:var(--warn)">${totPet.toFixed(1)} gln</div>
+          <div style="font-size:11px;color:var(--warn);opacity:0.8">${fmt(costo.cPet)}</div>
+          <div style="font-size:9px;color:var(--text3);text-transform:uppercase;margin-top:2px">Petróleo</div>
         </div>
         <div style="background:var(--coal3);border-radius:6px;padding:10px;text-align:center">
-          <div style="font-size:18px;font-weight:700;color:var(--positive)">${totGas.toFixed(1)}</div>
-          <div style="font-size:10px;color:var(--text3);text-transform:uppercase">gln Gasolina</div>
+          <div style="font-size:16px;font-weight:700;color:var(--positive)">${totGas.toFixed(1)} gln</div>
+          <div style="font-size:11px;color:var(--positive);opacity:0.8">${fmt(costo.cGas)}</div>
+          <div style="font-size:9px;color:var(--text3);text-transform:uppercase;margin-top:2px">Gasolina</div>
         </div>
         <div style="background:var(--coal3);border-radius:6px;padding:10px;text-align:center">
-          <div style="font-size:18px;font-weight:700;color:var(--accent-light)">${r.horometros.reduce((s,h)=>s+h.HT,0).toFixed(1)}</div>
-          <div style="font-size:10px;color:var(--text3);text-transform:uppercase">Horas total</div>
+          <div style="font-size:16px;font-weight:700;color:var(--accent-light)">${r.horometros.reduce((s,h)=>s+h.HT,0).toFixed(1)}</div>
+          <div style="font-size:9px;color:var(--text3);text-transform:uppercase;margin-top:2px">Horas total</div>
         </div>
         <div style="background:var(--coal3);border-radius:6px;padding:10px;text-align:center">
-          <div style="font-size:18px;font-weight:700;color:var(--negative)">${r.explosivos.reduce((s,e)=>s+e.E,0)}</div>
-          <div style="font-size:10px;color:var(--text3);text-transform:uppercase">Explosivos Egreso</div>
+          <div style="font-size:16px;font-weight:700;color:var(--negative)">${fmt(costo.cExp)}</div>
+          <div style="font-size:9px;color:var(--text3);text-transform:uppercase;margin-top:2px">Costo Explosivos</div>
+        </div>
+        <div style="background:var(--coal3);border-radius:6px;padding:10px;text-align:center;border:1px solid var(--accent-border)">
+          <div style="font-size:16px;font-weight:700;color:var(--accent-light)">${fmt(costo.total)}</div>
+          <div style="font-size:9px;color:var(--text3);text-transform:uppercase;margin-top:2px">COSTO TOTAL TURNO</div>
         </div>
       </div>
-      ${expHtml?`<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Explosivos</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">${expHtml}</div>`:''}
+      ${expHtml?`<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Explosivos (consumo + costo)</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">${expHtml}</div>`:''}
       ${horoHtml?`<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Horómetros</div><div style="display:flex;flex-wrap:wrap;gap:6px">${horoHtml}</div>`:''}
     </div>`;
 }
@@ -7336,15 +7354,26 @@ function _enviarReporteWA(r) {
     txt += '\n';
   }
 
-  // Combustible (detalle por máquina, todas)
+  // Explosivos — costo por consumo
+  const costo = compCostoReporte(r);
+  const fmtS = v=>'S/ '+v.toFixed(2);
+  txt += `*COSTO EXPLOSIVOS (Consumo x Precio)*\n`;
+  r.explosivos.filter(e=>e.C>0).forEach(e=>{
+    const precio = COMP_PRECIOS_EXP[e.codigo]||0;
+    txt += `  ${e.codigo}: ${e.C} unid x ${fmtS(precio)} = *${fmtS(e.C*precio)}*\n`;
+  });
+  txt += `  *Total Explosivos: ${fmtS(costo.cExp)}*\n\n`;
+
+  // Combustible (detalle por máquina + costo)
   txt += `*COMBUSTIBLE POR MAQUINA*\n`;
-  txt += `_Petroleo:_\n`;
+  txt += `_Petroleo (S/ ${COMP_PRECIO_PET}/gln):_\n`;
   r.petroleo.forEach(p=>{ txt += `    ${p.equipo}: ${p.gln} gln\n`; });
-  txt += `  *Total Petroleo: ${tPet.toFixed(1)} gln*\n`;
-  txt += `_Gasolina:_\n`;
+  txt += `  *Total Petroleo: ${tPet.toFixed(1)} gln = ${fmtS(costo.cPet)}*\n`;
+  txt += `_Gasolina (S/ ${COMP_PRECIO_GAS}/gln):_\n`;
   r.gasolina.forEach(g=>{ txt += `    ${g.equipo}: ${g.gln} gln\n`; });
-  txt += `  *Total Gasolina: ${tGas.toFixed(1)} gln*\n`;
-  txt += '\n';
+  txt += `  *Total Gasolina: ${tGas.toFixed(1)} gln = ${fmtS(costo.cGas)}*\n`;
+  txt += `  *COSTO TOTAL COMBUSTIBLE: ${fmtS(costo.cPet+costo.cGas)}*\n\n`;
+  txt += `*COSTO TOTAL TURNO: ${fmtS(costo.total)}*\n\n`;
 
   // Horómetros
   const horoAct = r.horometros.filter(h=>h.HT>0);
@@ -7580,17 +7609,19 @@ function visorRenderDia() {
   const tPet = r.petroleo.reduce((s,p)=>s+p.gln,0);
   const tGas = r.gasolina.reduce((s,g)=>s+g.gln,0);
   const tHoras = r.horometros.reduce((s,h)=>s+h.HT,0);
-  const tExpE = r.explosivos.reduce((s,e)=>s+e.E,0);
   const tExpC = r.explosivos.reduce((s,e)=>s+e.C,0);
+  const costo = compCostoReporte(r);
+  const fmtS = v=>'S/ '+v.toFixed(2);
   const totEl = document.getElementById('vt-totales');
   if(totEl) totEl.innerHTML = [
-    {v:tPet.toFixed(1),l:'gln Petróleo',c:'var(--warn)'},
-    {v:tGas.toFixed(1),l:'gln Gasolina',c:'var(--positive)'},
-    {v:tHoras.toFixed(1),l:'Horas máquina',c:'var(--accent-light)'},
-    {v:tExpE,l:'Explosivos Egreso',c:'var(--negative)'},
-    {v:tExpC,l:'Explosivos Consumo',c:'var(--info)'},
-  ].map(x=>`<div style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
-    <div style="font-size:20px;font-weight:700;color:${x.c}">${x.v}</div>
+    {v:tPet.toFixed(1)+' gln',sub:fmtS(costo.cPet),l:'Petróleo',c:'var(--warn)'},
+    {v:tGas.toFixed(1)+' gln',sub:fmtS(costo.cGas),l:'Gasolina',c:'var(--positive)'},
+    {v:tHoras.toFixed(1),sub:'',l:'Horas máquina',c:'var(--accent-light)'},
+    {v:fmtS(costo.cExp),sub:tExpC+' unid consumidas',l:'Costo Explosivos',c:'var(--negative)'},
+    {v:fmtS(costo.total),sub:'',l:'COSTO TOTAL TURNO',c:'var(--accent-light)',border:true},
+  ].map(x=>`<div style="background:var(--coal3);border:1px solid ${x.border?'var(--accent-border)':'var(--border)'};border-radius:8px;padding:12px;text-align:center">
+    <div style="font-size:18px;font-weight:700;color:${x.c}">${x.v}</div>
+    ${x.sub?`<div style="font-size:10px;color:var(--text3);margin-top:1px">${x.sub}</div>`:''}
     <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px">${x.l}</div>
   </div>`).join('');
 
