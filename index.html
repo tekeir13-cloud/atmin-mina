@@ -2464,6 +2464,9 @@ select option{background:var(--coal3);}
             <th style="color:#fff">x1.5</th>
             <th style="color:#fff">x2</th>
             <th style="color:#fff">TOTAL S/</th>
+            <th style="color:#fff">Adelanto</th>
+            <th style="color:#fff">Descuento</th>
+            <th style="color:#fff">NETO S/</th>
           </tr>
         </thead>
         <tbody id="cr-tabla-tbody"></tbody>
@@ -2474,6 +2477,8 @@ select option{background:var(--coal3);}
       <select id="costo-mes-sel" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px" onchange="renderCostoRRHH()">
         <option value="">— Mes actual —</option>
       </select>
+      <button id="btn-cerrar-mes" class="btn" style="padding:8px 14px;font-size:12px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#f87171" onclick="cerrarMes()">🔒 Cerrar Mes</button>
+      <button id="btn-reabrir-mes" class="btn" style="display:none;padding:8px 14px;font-size:12px;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.4);color:#4ade80" onclick="reabrirMes()">🔓 Reabrir Mes</button>
       <span id="cr-por-metro" style="display:none"></span>
     </div>
     <div class="two-col" style="margin-top:14px">
@@ -3370,7 +3375,6 @@ select option{background:var(--coal3);}
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 const SUPABASE_URL='https://ueiermflrxiapeednrov.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlaWVybWZscnhpYXBlZWRucm92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MTM4NDYsImV4cCI6MjA5NTQ4OTg0Nn0.75qDiRT0azEfjR0Boqah4rWy2GFumLfhJayKU6S_6e8';
@@ -3415,6 +3419,8 @@ const state={
   compresorista:[],
   metas:{f1:20,f2:20,dias:26},frenteActivo:1,
   mesActivo:{ id:null, mes:null, año:null },
+  mesesCerrados:[],
+  adelantos:{},
   tarifario:{
     maquinas:[],   // {equipo, tarifaHora, descripcion}
     frentes:[],    // {frente, tarifaMetro, descripcion}
@@ -4218,6 +4224,8 @@ function actualizarKpisTareo(fecha){
 
 async function guardarTareo(){
   const fecha=document.getElementById('tareo-fecha').value||hoy();
+  const mesFecha=fecha.slice(0,7);
+  if((state.mesesCerrados||[]).includes(mesFecha)){showNotif('Este mes está cerrado. Contacte al administrador.','error');return;}
   const rows=document.querySelectorAll('#tareo-grid .tareo-row');
   let guardados=0,omitidos=0;
   for(const row of rows){
@@ -4225,13 +4233,14 @@ async function guardarTareo(){
     const btn=row.querySelector('button[style*="201,168"]');
     if(!btn){omitidos++;continue;}
     const mult=parseFloat(btn.dataset.val)||1;
+    const p=state.personal.find(x=>String(x.id)===String(pid));
+    const jornal=p?.jornal||0;
     const existe=state.tareas.find(t=>t.fecha===fecha&&String(t.trabajadorId)===String(pid));
     if(existe){
-      existe.mult=mult;
+      existe.mult=mult;existe.jornal=jornal;
       try{if(existe.id) await sb.from('tareas').update({mult}).eq('id',existe.id);}catch(e){}
     } else {
-      const p=state.personal.find(x=>String(x.id)===String(pid));
-      const nv={fecha,trabajadorId:pid,tarea:'Tareo diario',frente:p?.frente||1,detalle:'',estadoTarea:'completado',mult};
+      const nv={fecha,trabajadorId:pid,tarea:'Tareo diario',frente:p?.frente||1,detalle:'',estadoTarea:'completado',mult,jornal};
       try{const{data}=await sb.from('tareas').insert([{fecha,trabajador_id:pid,tarea:'Tareo diario',frente:nv.frente,detalle:'',estado_tarea:'completado',mult,mes_id:getMesId()}]).select().single();if(data)nv.id=data.id;}catch(e){}
       state.tareas.push(nv);
     }
@@ -4340,6 +4349,8 @@ async function aplicarEditTareo(uid, multStr){
   const mult=parseFloat(multStr);
   const t=state.tareas.find(t=>String(t.id||t._tmpId)===String(uid));
   if(!t) return;
+  const mesFecha=t.fecha.slice(0,7);
+  if((state.mesesCerrados||[]).includes(mesFecha)){showNotif('Este mes está cerrado. Contacte al administrador.','error');renderTareas();return;}
   t.mult=mult;
   try{if(t.id) await sb.from('tareas').update({mult}).eq('id',t.id);}catch(e){}
   renderTareas();renderCostoRRHH();actualizarKpisTareo(hoy());
@@ -4437,7 +4448,7 @@ function renderCostoRRHH(){
   const tMes=state.tareas.filter(t=>t.fecha.startsWith(mes));
   const tHoy=state.tareas.filter(t=>t.fecha===hoyStr);
   const tSem=state.tareas.filter(t=>t.fecha>=semStr);
-  const calc=arr=>arr.reduce((s,t)=>{const p=state.personal.find(x=>String(x.id)===String(t.trabajadorId));return s+(p?p.jornal*(t.mult||1):0);},0);
+  const calc=arr=>arr.reduce((s,t)=>{const p=state.personal.find(x=>String(x.id)===String(t.trabajadorId));const j=t.jornal??p?.jornal??0;return s+j*(t.mult||1);},0);
   const costHoy=calc(tHoy),costSem=calc(tSem),costMes=calc(tMes);
   const diasMes=new Set(tMes.map(t=>t.fecha)).size;
   const prom=diasMes>0?costMes/diasMes:0;
@@ -4449,21 +4460,30 @@ function renderCostoRRHH(){
   if(g('cr-mensual')) g('cr-mensual').textContent=fmtS(costMes);
   if(g('cr-proyectado')) g('cr-proyectado').textContent=fmtS(proyMes);
   if(g('cr-por-metro')) g('cr-por-metro').textContent=fmtS(costMes/tm);
+  // Cerrar/Reabrir mes buttons
+  const mesCerrado=(state.mesesCerrados||[]).includes(mes);
+  const btnCerrar=g('btn-cerrar-mes');const btnReabrir=g('btn-reabrir-mes');
+  if(btnCerrar) btnCerrar.style.display=mesCerrado?'none':'';
+  if(btnReabrir) btnReabrir.style.display=mesCerrado?'':'none';
   // Tabla por trabajador
   const activos=state.personal.filter(p=>p.estado!=='baja');
   const tbody=g('cr-tabla-tbody');if(!tbody) return;
-  let totDias=0,totTotal=0;
+  let totDias=0,totTotal=0,totAdelanto=0,totDescuento=0;
+  if(!state.adelantos) state.adelantos={};
   const filas=activos.map(p=>{
     const pts=tMes.filter(t=>String(t.trabajadorId)===String(p.id));
     const dias=new Set(pts.map(t=>t.fecha)).size;
     const n1=pts.filter(t=>Number(t.mult||1)===1).length;
     const n15=pts.filter(t=>Number(t.mult||1)===1.5).length;
     const n2=pts.filter(t=>Number(t.mult||1)===2).length;
-    const total=pts.reduce((s,t)=>s+p.jornal*(t.mult||1),0);
-    totDias+=dias;totTotal+=total;
-    return{p,dias,n1,n15,n2,total};
+    const total=pts.reduce((s,t)=>{const j=t.jornal??p.jornal;return s+j*(t.mult||1);},0);
+    const adelanto=Number((state.adelantos[p.id]||{})[mes]||0);
+    const descuento=Number((state.adelantos[p.id]||{})[mes+'_desc']||0);
+    const neto=total-adelanto-descuento;
+    totDias+=dias;totTotal+=total;totAdelanto+=adelanto;totDescuento+=descuento;
+    return{p,dias,n1,n15,n2,total,adelanto,descuento,neto};
   }).filter(f=>f.dias>0||f.total>0).sort((a,b)=>b.total-a.total);
-  tbody.innerHTML=filas.map(({p,dias,n1,n15,n2,total})=>`<tr>
+  tbody.innerHTML=filas.map(({p,dias,n1,n15,n2,total,adelanto,descuento,neto})=>`<tr>
     <td><strong>${p.nombre}</strong></td>
     <td style="font-size:11px;color:var(--text3)">${p.rol}</td>
     <td style="font-family:'DM Mono',monospace">${fmtS(p.jornal)}</td>
@@ -4472,11 +4492,17 @@ function renderCostoRRHH(){
     <td style="text-align:center;color:#f59e0b">${n15||'—'}</td>
     <td style="text-align:center;color:#f87171">${n2||'—'}</td>
     <td style="font-family:'DM Mono',monospace;font-weight:700;color:var(--gold-light)">${fmtS(total)}</td>
+    <td><input type="number" min="0" step="0.01" value="${adelanto||''}" placeholder="0" style="width:80px;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:4px 6px;color:var(--text);font-size:11px;font-family:'DM Mono',monospace" onchange="setAdelanto('${p.id}','${mes}','adelanto',this.value)"></td>
+    <td><input type="number" min="0" step="0.01" value="${descuento||''}" placeholder="0" style="width:80px;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:4px 6px;color:var(--text);font-size:11px;font-family:'DM Mono',monospace" onchange="setAdelanto('${p.id}','${mes}','descuento',this.value)"></td>
+    <td style="font-family:'DM Mono',monospace;font-weight:700;color:${neto<0?'#f87171':'var(--positive)'}">${fmtS(neto)}</td>
   </tr>`).join('')+`<tr style="background:rgba(201,168,76,0.08);border-top:2px solid rgba(201,168,76,0.3)">
     <td colspan="3" style="font-weight:700;color:var(--gold)">TOTALES MES</td>
     <td style="text-align:center;font-weight:700;color:var(--positive)">${totDias}</td>
     <td colspan="3"></td>
     <td style="font-family:'DM Mono',monospace;font-weight:800;color:var(--gold-light);font-size:15px">${fmtS(totTotal)}</td>
+    <td style="font-family:'DM Mono',monospace;font-weight:700;color:#f87171">${fmtS(totAdelanto)}</td>
+    <td style="font-family:'DM Mono',monospace;font-weight:700;color:#f59e0b">${fmtS(totDescuento)}</td>
+    <td style="font-family:'DM Mono',monospace;font-weight:800;color:var(--positive);font-size:15px">${fmtS(totTotal-totAdelanto-totDescuento)}</td>
   </tr>`;
   // Desglose frentes
   const calcF=fr=>tMes.filter(t=>{const p=state.personal.find(x=>String(x.id)===String(t.trabajadorId));return p&&p.frente===fr;});
@@ -4490,8 +4516,54 @@ function renderCostoRRHH(){
   const selMes=g('costo-mes-sel');
   if(selMes){
     const meses=[...new Set(state.tareas.map(t=>t.fecha.slice(0,7)))].sort().reverse();
-    meses.forEach(m=>{if(!selMes.querySelector(`option[value="${m}"]`)){const o=document.createElement('option');o.value=m;o.textContent=m;selMes.appendChild(o);}});
+    meses.forEach(m=>{
+      if(!selMes.querySelector(`option[value="${m}"]`)){
+        const o=document.createElement('option');
+        o.value=m;
+        const cerrado=(state.mesesCerrados||[]).includes(m);
+        o.textContent=cerrado?`🔒 ${m}`:m;
+        selMes.appendChild(o);
+      } else {
+        const o=selMes.querySelector(`option[value="${m}"]`);
+        const cerrado=(state.mesesCerrados||[]).includes(m);
+        o.textContent=cerrado?`🔒 ${m}`:m;
+      }
+    });
   }
+}
+
+function saveState(){
+  try{localStorage.setItem('atmin_mesesCerrados',JSON.stringify(state.mesesCerrados||[]));}catch(e){}
+  try{localStorage.setItem('atmin_adelantos',JSON.stringify(state.adelantos||{}));}catch(e){}
+}
+
+function cerrarMes(){
+  const mes=document.getElementById('costo-mes-sel')?.value||hoy().slice(0,7);
+  if(!mes){showNotif('Seleccione un mes primero','error');return;}
+  if((state.mesesCerrados||[]).includes(mes)){showNotif('Este mes ya está cerrado','error');return;}
+  if(!state.mesesCerrados) state.mesesCerrados=[];
+  state.mesesCerrados.push(mes);
+  saveState();
+  renderCostoRRHH();
+  showNotif(`🔒 Mes ${mes} cerrado correctamente`);
+}
+
+function reabrirMes(){
+  const mes=document.getElementById('costo-mes-sel')?.value||hoy().slice(0,7);
+  if(!state.mesesCerrados) return;
+  state.mesesCerrados=state.mesesCerrados.filter(m=>m!==mes);
+  saveState();
+  renderCostoRRHH();
+  showNotif(`🔓 Mes ${mes} reabierto`);
+}
+
+function setAdelanto(pid,mes,tipo,val){
+  if(!state.adelantos) state.adelantos={};
+  if(!state.adelantos[pid]) state.adelantos[pid]={};
+  const key=tipo==='descuento'?mes+'_desc':mes;
+  state.adelantos[pid][key]=parseFloat(val)||0;
+  saveState();
+  renderCostoRRHH();
 }
 
 function exportarPlanillaExcel(){
@@ -4501,28 +4573,41 @@ function exportarPlanillaExcel(){
   const nombreMes=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][parseInt(mesN)-1]||mes;
   const tMes=state.tareas.filter(t=>t.fecha.startsWith(mes));
   const activos=state.personal.filter(p=>p.estado!=='baja');
+  if(!state.adelantos) state.adelantos={};
+  // Style helpers
+  const hdrS={font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'1A2744'}},alignment:{horizontal:'center'}};
+  const totS={font:{bold:true},fill:{fgColor:{rgb:'FFF3CD'}}};
+  const altS={fill:{fgColor:{rgb:'F5F5F5'}}};
+  const numS={numFmt:'#,##0.00'};
   const filas=activos.map((p,i)=>{
     const pts=tMes.filter(t=>String(t.trabajadorId)===String(p.id));
     const dias=new Set(pts.map(t=>t.fecha)).size;
     const n1=pts.filter(t=>Number(t.mult||1)===1).length;
     const n15=pts.filter(t=>Number(t.mult||1)===1.5).length;
     const n2=pts.filter(t=>Number(t.mult||1)===2).length;
-    const total=pts.reduce((s,t)=>s+p.jornal*(t.mult||1),0);
-    return[i+1,p.nombre,p.dni||'—',p.rol,FL[p.frente]||'—',p.jornal,dias,n1||0,n15||0,n2||0,+total.toFixed(2)];
+    const total=pts.reduce((s,t)=>{const j=t.jornal??p.jornal;return s+j*(t.mult||1);},0);
+    const adelanto=Number((state.adelantos[p.id]||{})[mes]||0);
+    const descuento=Number((state.adelantos[p.id]||{})[mes+'_desc']||0);
+    const neto=total-adelanto-descuento;
+    return[i+1,p.nombre,p.dni||'—',p.rol,FL[p.frente]||'—',p.jornal,dias,n1||0,n15||0,n2||0,+total.toFixed(2),+adelanto.toFixed(2),+descuento.toFixed(2),+neto.toFixed(2)];
   });
   const totRow=['','TOTALES','','','','',
     filas.reduce((s,f)=>s+f[6],0),
     filas.reduce((s,f)=>s+f[7],0),
     filas.reduce((s,f)=>s+f[8],0),
     filas.reduce((s,f)=>s+f[9],0),
-    +filas.reduce((s,f)=>s+f[10],0).toFixed(2)
+    +filas.reduce((s,f)=>s+f[10],0).toFixed(2),
+    +filas.reduce((s,f)=>s+f[11],0).toFixed(2),
+    +filas.reduce((s,f)=>s+f[12],0).toFixed(2),
+    +filas.reduce((s,f)=>s+f[13],0).toFixed(2)
   ];
+  const headers=['N°','Trabajador','DNI','Cargo','Frente','Jornal/día S/','Días Trab.','Jorn. ×1','Jorn. ×1.5','Jorn. ×2','TOTAL S/','Adelanto S/','Descuento S/','NETO S/'];
   const wsData=[
     [`ATMIN / DEEPMINE — PLANILLA DE PERSONAL`],
     [`Período: ${nombreMes} ${anio}`],
     [`Exportado: ${new Date().toLocaleDateString('es-PE',{day:'2-digit',month:'2-digit',year:'numeric'})}`],
     [],
-    ['N°','Trabajador','DNI','Cargo','Frente','Jornal/día S/','Días Trab.','Jorn. ×1','Jorn. ×1.5','Jorn. ×2','TOTAL S/'],
+    headers,
     ...filas,
     totRow,
     [],[],[],
@@ -4530,20 +4615,81 @@ function exportarPlanillaExcel(){
     ['','___________________________','','','','','___________________________'],
   ];
   const ws1=XLSX.utils.aoa_to_sheet(wsData);
-  ws1['!cols']=[{wch:4},{wch:28},{wch:12},{wch:24},{wch:16},{wch:13},{wch:11},{wch:9},{wch:10},{wch:9},{wch:13}];
-  ws1['!merges']=[{s:{r:0,c:0},e:{r:0,c:10}}];
+  ws1['!cols']=[{wch:4},{wch:28},{wch:12},{wch:24},{wch:16},{wch:13},{wch:11},{wch:9},{wch:10},{wch:9},{wch:13},{wch:13},{wch:13},{wch:13}];
+  ws1['!merges']=[{s:{r:0,c:0},e:{r:0,c:13}}];
+  // Apply styles to header row (row index 4)
+  const hdrRow=4;
+  headers.forEach((_,ci)=>{
+    const addr=XLSX.utils.encode_cell({r:hdrRow,c:ci});
+    if(ws1[addr]) ws1[addr].s=hdrS;
+  });
+  // Apply alternating row styles and number formats
+  filas.forEach((f,ri)=>{
+    const rowIdx=hdrRow+1+ri;
+    const bg=ri%2===1?altS:{};
+    f.forEach((_,ci)=>{
+      const addr=XLSX.utils.encode_cell({r:rowIdx,c:ci});
+      if(ws1[addr]){
+        if(ci>=5) ws1[addr].s={...bg,...numS};
+        else ws1[addr].s=bg;
+      }
+    });
+  });
+  // Apply totals row style
+  const totIdx=hdrRow+1+filas.length;
+  totRow.forEach((_,ci)=>{
+    const addr=XLSX.utils.encode_cell({r:totIdx,c:ci});
+    if(ws1[addr]) ws1[addr].s={...totS,...(ci>=5?numS:{})};
+  });
   // Sheet 2 detalle diario
   const det=[['Fecha','Trabajador','DNI','Cargo','Frente','Tareas','Jornal/día S/','Monto S/']];
   [...tMes].sort((a,b)=>a.fecha.localeCompare(b.fecha)||String(a.trabajadorId).localeCompare(String(b.trabajadorId))).forEach(t=>{
     const p=state.personal.find(x=>String(x.id)===String(t.trabajadorId));
     if(!p) return;
-    det.push([t.fecha,p.nombre,p.dni||'—',p.rol,FL[p.frente]||'—',`×${t.mult||1}`,p.jornal,+(p.jornal*(t.mult||1)).toFixed(2)]);
+    const j=t.jornal??p.jornal;
+    det.push([t.fecha,p.nombre,p.dni||'—',p.rol,FL[p.frente]||'—',`×${t.mult||1}`,j,+(j*(t.mult||1)).toFixed(2)]);
   });
   const ws2=XLSX.utils.aoa_to_sheet(det);
   ws2['!cols']=[{wch:12},{wch:28},{wch:12},{wch:24},{wch:16},{wch:8},{wch:13},{wch:13}];
+  // Apply header style to ws2
+  det[0].forEach((_,ci)=>{
+    const addr=XLSX.utils.encode_cell({r:0,c:ci});
+    if(ws2[addr]) ws2[addr].s=hdrS;
+  });
+  // Sheet 3 — Gráfico Costos (data table by cargo)
+  const byRol={};
+  filas.forEach(f=>{
+    const rol=f[3];
+    if(!byRol[rol]) byRol[rol]=0;
+    byRol[rol]+=f[10];
+  });
+  const rolEntries=Object.entries(byRol).sort((a,b)=>b[1]-a[1]);
+  const maxCosto=rolEntries[0]?rolEntries[0][1]:1;
+  const barWidth=30;
+  const graficoData=[
+    ['DISTRIBUCIÓN DE COSTOS POR CARGO'],
+    [`Período: ${nombreMes} ${anio}`],
+    [],
+    ['Cargo','Total S/','% del Total','Barra (visual)'],
+    ...rolEntries.map(([rol,total])=>{
+      const pct=maxCosto>0?(total/rolEntries.reduce((s,[,v])=>s+v,0)*100):0;
+      const bars=Math.round((total/maxCosto)*barWidth);
+      return[rol,+total.toFixed(2),+(pct).toFixed(1),'█'.repeat(bars)||'▏'];
+    }),
+    [],
+    ['TOTAL',+rolEntries.reduce((s,[,v])=>s+v,0).toFixed(2),100,''],
+  ];
+  const ws3=XLSX.utils.aoa_to_sheet(graficoData);
+  ws3['!cols']=[{wch:28},{wch:14},{wch:12},{wch:35}];
+  // Header style ws3
+  ['Cargo','Total S/','% del Total','Barra (visual)'].forEach((_,ci)=>{
+    const addr=XLSX.utils.encode_cell({r:3,c:ci});
+    if(ws3[addr]) ws3[addr].s=hdrS;
+  });
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws1,'Resumen Mes');
   XLSX.utils.book_append_sheet(wb,ws2,'Detalle Diario');
+  XLSX.utils.book_append_sheet(wb,ws3,'Gráfico Costos');
   XLSX.writeFile(wb,`Planilla_${nombreMes}_${anio}.xlsx`);
   showNotif(`✓ Excel descargado: Planilla_${nombreMes}_${anio}.xlsx`);
 }
