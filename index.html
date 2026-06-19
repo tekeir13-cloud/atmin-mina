@@ -3558,7 +3558,25 @@ async function cargarDesdeSB(){
     state.epp.historial=(eppH.data||[]).map(e=>({_id:e.id,fecha:e.fecha,tipo:e.tipo,trabajador:e.trabajador,cantidad:Number(e.cantidad),precio:Number(e.precio||0),motivo:e.motivo}));
     await cargarSeguridadSB();
     showNotif('✓ Datos cargados');
-  }catch(err){console.error(err);seedData();showNotif('ℹ Modo demo activo','warn');}
+  }catch(err){console.error(err);try{seedData();}catch(e2){console.error('seedData error:',e2);}showNotif('ℹ Modo demo activo','warn');}
+}
+
+function seedTarifario(){
+  state.tarifario.maquinas=[
+    {equipo:'Compresora',tarifaHora:45,descripcion:'Compresora de aire'},
+    {equipo:'Perforadora Jack Leg',tarifaHora:30,descripcion:'Perforación horizontal'},
+    {equipo:'Generador Eléctrico',tarifaHora:35,descripcion:'Grupo electrógeno'},
+    {equipo:'Camioneta',tarifaHora:25,descripcion:'Transporte de personal'}
+  ];
+  state.tarifario.frentes=[
+    {frente:1,tarifaMetro:250,descripcion:'Rampa'},
+    {frente:2,tarifaMetro:230,descripcion:'Cortada'}
+  ];
+  state.tarifario.roles=[
+    {rol:'Perforista',jornalBase:110,descripcion:'Maestro perforista'},
+    {rol:'Ayudante',jornalBase:80,descripcion:'Ayudante de operaciones'},
+    {rol:'Capataz',jornalBase:120,descripcion:'Supervisión de frente'}
+  ];
 }
 
 function seedData(){
@@ -6224,6 +6242,20 @@ async function doLogout(){
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('login-email').focus();
   mostrarBottomNav(false);
+}
+
+function actualizarBadgeMes(){
+  try{
+    const el=document.getElementById('topbar-mes');
+    if(!el) return;
+    const m=state.mesActivo&&state.mesActivo.mes, a=state.mesActivo&&state.mesActivo.año;
+    if(m&&a&&typeof MESES_ES!=='undefined'&&MESES_ES[m]){
+      el.textContent=MESES_ES[m]+' '+a;
+    }else{
+      const now=new Date();
+      el.textContent=now.toLocaleDateString('es-PE',{month:'long',year:'numeric'});
+    }
+  }catch(e){}
 }
 
 async function initSistema(){
