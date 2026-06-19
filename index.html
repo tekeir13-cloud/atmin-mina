@@ -2366,26 +2366,39 @@ select option{background:var(--coal3);}
       <div class="kpi-card"><div class="kpi-label">Costo Acum. Mes</div><div class="kpi-value red" id="rr-costo-mes">S/ 0</div></div>
     </div>
 
-    <!-- Controles -->
-    <div class="card" style="margin-bottom:14px">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-        <div class="section-title" style="margin:0">Tareo del Día</div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <input type="date" id="tareo-fecha" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:13px">
-          <select id="tareo-turno" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:13px">
-            <option value="DIA">Turno DÍA</option>
-            <option value="NOCHE">Turno NOCHE</option>
-          </select>
-          <input type="text" id="tareo-nivel" placeholder="Nivel (ej: Nv 2820)" value="Nv 2820" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:13px;width:130px">
-          <input type="text" id="tareo-jefe" placeholder="Jefe de Turno" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:13px;width:150px">
-          <button class="btn btn-outline" style="padding:7px 14px;font-size:12px" onclick="cargarGridTareo()">Cargar</button>
-          <button id="btn-seed-demo" class="btn btn-outline" style="padding:7px 14px;font-size:11px;opacity:0.6;display:none" onclick="seedTareoDemo()">⚡ Demo</button>
+    <!-- Botón inicial -->
+    <div class="card" id="tareo-inicio" style="margin-bottom:14px;text-align:center;padding:24px">
+      <div style="font-size:13px;color:var(--text3);margin-bottom:14px">Registra el tareo del turno seleccionando personal y asignando tareas.</div>
+      <button class="btn btn-gold" style="padding:12px 28px;font-size:15px" onclick="abrirSetupTareo()">➕ Registrar Tareo</button>
+    </div>
+
+    <!-- Paso 1: configuración del tareo -->
+    <div class="card" id="tareo-setup" style="margin-bottom:14px;display:none">
+      <div class="section-title" style="margin-top:0">Configurar Tareo</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Fecha</label><input type="date" id="tareo-fecha"></div>
+        <div class="form-group"><label>Turno</label><select id="tareo-turno"><option value="DIA">DÍA</option><option value="NOCHE">NOCHE</option></select></div>
+        <div class="form-group"><label>Nivel</label><input type="text" id="tareo-nivel" value="Nv 2820"></div>
+        <div class="form-group"><label>Jefe de Turno</label><select id="tareo-jefe"><option value="">— Seleccionar —</option></select></div>
+      </div>
+      <div style="margin-top:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px">Seleccionar Personal y Labor</label>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-outline" style="padding:4px 10px;font-size:11px" onclick="marcarTodoTareo(true)">Todos</button>
+            <button class="btn btn-outline" style="padding:4px 10px;font-size:11px" onclick="marcarTodoTareo(false)">Ninguno</button>
+          </div>
         </div>
+        <div id="tareo-personal-list" style="display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto"></div>
+      </div>
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn btn-gold" onclick="cargarHojaTareo()">📋 Cargar Hoja de Tareo</button>
+        <button class="btn btn-outline" onclick="cancelarSetupTareo()">Cancelar</button>
       </div>
     </div>
 
-    <!-- Hoja de tareo física -->
-    <div id="tareo-hoja" style="background:#fff;border-radius:10px;overflow:hidden;margin-bottom:14px;box-shadow:0 4px 24px rgba(0,0,0,0.35)">
+    <!-- Paso 2: hoja de tareo física -->
+    <div id="tareo-hoja" style="background:#fff;border-radius:10px;overflow:hidden;margin-bottom:14px;box-shadow:0 4px 24px rgba(0,0,0,0.35);display:none">
       <div style="background:#FFD700;padding:10px 18px;display:flex;justify-content:space-between;align-items:center">
         <div style="font-weight:900;font-size:15px;color:#000;font-family:Arial,sans-serif;letter-spacing:0.5px">TAREO DIARIO: <span id="tareo-hoja-fecha">—</span></div>
         <div style="font-weight:900;font-size:15px;color:#000;font-family:Arial,sans-serif;letter-spacing:0.5px">TURNO: <span id="tareo-hoja-turno">DÍA</span></div>
@@ -2400,6 +2413,7 @@ select option{background:var(--coal3);}
             <tr style="background:#1a1a1a">
               <th style="padding:8px 10px;border:1px solid #444;color:#fff;font-size:11px;text-align:center;white-space:nowrap">TURNO</th>
               <th style="padding:8px 10px;border:1px solid #444;color:#fff;font-size:11px;text-align:center;white-space:nowrap">NIVEL</th>
+              <th style="padding:8px 10px;border:1px solid #444;color:#fff;font-size:11px;text-align:center">LABOR</th>
               <th style="padding:8px 10px;border:1px solid #444;color:#fff;font-size:11px;text-align:center">CARGO</th>
               <th style="padding:8px 10px;border:1px solid #444;color:#fff;font-size:11px;text-align:center;min-width:170px">APELLIDOS Y NOMBRES</th>
               <th style="padding:8px 10px;border:1px solid #444;color:#fff;font-size:11px;text-align:center;min-width:130px">TAREA</th>
@@ -2426,9 +2440,10 @@ select option{background:var(--coal3);}
       </div>
     </div>
 
-    <div class="btn-row">
-      <button class="btn btn-gold" onclick="guardarTareo()">💾 Guardar Tareo</button>
+    <div class="btn-row" id="tareo-acciones" style="display:none">
+      <button class="btn btn-gold" onclick="guardarTareo()">✅ Registrar Tarea</button>
       <button class="btn btn-outline" onclick="imprimirTareo()" style="padding:8px 16px;font-size:13px">🖨️ Imprimir</button>
+      <button class="btn btn-outline" onclick="cancelarSetupTareo()" style="padding:8px 16px;font-size:13px">↩ Nuevo Tareo</button>
     </div>
     <div id="tareo-resumen-dia" style="margin-top:8px"></div>
   </div>
@@ -3604,6 +3619,7 @@ async function cargarDesdeSB(){
     // Stock de petróleo desde tabla dedicada
     if(petStock && petStock.data) state.petroleo.stock = Number(petStock.data.cantidad);
     state.personal=(per.data||[]).map(p=>({id:p.id,nombre:p.nombre,dni:p.dni,rol:p.rol,frente:p.frente,estado:p.estado||'activo',jornal:Number(p.jornal)}));
+    normalizarCargos();
     state.perforacion=(perf.data||[]).map(p=>({_id:p.id,fecha:p.fecha,frente:p.frente,metros:Number(p.metros),personas:p.personas,roca:p.roca,obs:p.obs}));
     state.explosivos.historial=(expH.data||[]).map(e=>({_id:e.id,fecha:e.fecha,frente:e.frente,tipo:e.tipo,cantidad:e.cantidad,detalle:e.detalle,precio:Number(e.precio||0)}));
     if(expS.data&&expS.data.length>0){state.explosivos.stock={};expS.data.forEach(r=>{state.explosivos.stock[r.tipo]=r.cantidad;});}
@@ -3641,9 +3657,30 @@ function seedTarifario(){
 function seedData(){
   const ahora=new Date();
   state.mesActivo={id:null,mes:ahora.getMonth()+1,año:ahora.getFullYear()};
-  const roles=['Perforista','Ayudante','Chancador','Explosivero','Mecánico','Capataz','Guardia'];
-  const nombres=['Juan Quispe','Pedro Mamani','Luis Condori','Carlos Huanca','Miguel Ccolque','José Apaza','Antonio Flores','Marco Chura','Roberto Laime','Felipe Cayo','Ernesto Mamani','David Ticona','Raúl Condori','César Flores','Omar Quispe','Víctor Apaza','Nelson Mamani','Hugo Choque','Jorge Layme','Edwin Condori'];
-  for(let i=0;i<20;i++)state.personal.push({id:i+1,nombre:nombres[i],dni:String(10000000+i*731),rol:roles[i%roles.length],frente:(i%2)+1,estado:i<17?'activo':i<19?'ausente':'descanso',jornal:80+(i%4)*10});
+  // Cuadrilla real basada en el tareo de mina — cargos válidos
+  const cuadrilla=[
+    {nombre:'SOTELO BENGOLEA MANUEL KENEDY',rol:'Jefe de Guardia',frente:1,jornal:160},
+    {nombre:'RENGIFO AZABACHE ANTHONY JEAN',rol:'Compresorista',frente:1,jornal:110},
+    {nombre:'OSCATEGUI AYALA RAUL BENJAMIN',rol:'Operador de Scoop',frente:1,jornal:130},
+    {nombre:'RIVAS RODRIGUEZ ALI EDUARDO',rol:'Operador de Dumper',frente:1,jornal:130},
+    {nombre:'FRANCISCO VILCA VICTOR EDGARDO',rol:'Maestro Perforista 1',frente:1,jornal:140},
+    {nombre:'RIOS PONCE EDWIN',rol:'Maestro Perforista 2',frente:1,jornal:140},
+    {nombre:'SOTO OLIVARES OSCAR ESVER',rol:'Ayudante',frente:1,jornal:90},
+    {nombre:'MUÑOZ JARA SANTOS',rol:'Maestro Perforista 1',frente:2,jornal:140},
+    {nombre:'LUIS LEONARDO CIRILO',rol:'Maestro Perforista 2',frente:2,jornal:140},
+    {nombre:'CONTRERAS HONORIO BRIAN RAI',rol:'Ayudante',frente:2,jornal:90},
+    {nombre:'DOMINGUEZ SEGURA HECTOR JAVIER',rol:'Ayudante',frente:2,jornal:90},
+    {nombre:'AMARANTO BERNILLA CARLOS',rol:'Jefe de Guardia',frente:1,jornal:160},
+    {nombre:'CASTILLO CHANTA JESUS JOEL',rol:'Conductor',frente:1,jornal:100},
+    {nombre:'MELGAREJO DELGADO HILDER',rol:'Ayudante Mecánico',frente:1,jornal:100},
+    {nombre:'SOTELO BENGOLEA STEFANO',rol:'Compresorista',frente:2,jornal:110},
+    {nombre:'RIOS ESCOBEDO CRISTIAN GIMI',rol:'Operador de Línea Amarilla',frente:1,jornal:130},
+    {nombre:'PAULOT SEGURA EDY VICTOR',rol:'Operador de Línea Amarilla',frente:2,jornal:130},
+    {nombre:'PINEDO RODRIGUEZ CESAR',rol:'Operador de Scoop',frente:2,jornal:130},
+    {nombre:'MOYA DURAN YONI WILY',rol:'Operador de Dumper',frente:2,jornal:130},
+    {nombre:'ROJAS GORMAS GUILLERMO RUBEN',rol:'Maestro Perforista 1',frente:1,jornal:140}
+  ];
+  cuadrilla.forEach((c,i)=>state.personal.push({id:i+1,nombre:c.nombre,dni:String(10000000+i*731),rol:c.rol,frente:c.frente,estado:i<18?'activo':'ausente',jornal:c.jornal}));
   for(let d=6;d>=0;d--){const f=new Date();f.setDate(f.getDate()-d);const fs=f.toISOString().split('T')[0];[1,2].forEach(fr=>state.perforacion.push({fecha:fs,frente:fr,metros:15+Math.floor(Math.random()*10),personas:6+Math.floor(Math.random()*3),roca:['Media','Dura','Blanda'][Math.floor(Math.random()*3)],obs:''}));}
   ['M-1000','M-3000','M-5000','Carmex (por metro)'].forEach(tipo=>{for(let i=0;i<3;i++){const f=new Date();f.setDate(f.getDate()-i*2);state.explosivos.historial.push({fecha:f.toISOString().split('T')[0],frente:(i%2)+1,tipo,cantidad:5+Math.floor(Math.random()*20),detalle:'Voladura',precio:8.5});}});
   for(let i=0;i<5;i++){
@@ -4240,48 +4277,126 @@ function renderCostosLog(){
 
 // ── RRHH ──
 
+// Corrige cargos inválidos heredados por otros válidos de la mina
+const MAPA_CARGOS_INVALIDOS={
+  'Perforista':'Maestro Perforista 1',
+  'Explosivero':'Maestro Perforista 2',
+  'Chancador':'Operador Múltiple',
+  'Mecánico':'Ayudante Mecánico',
+  'Guardia':'Jefe de Guardia',
+  'Operador':'Operador Múltiple'
+};
+function normalizarCargos(){
+  (state.personal||[]).forEach(p=>{
+    if(MAPA_CARGOS_INVALIDOS[p.rol]){
+      const nuevo=MAPA_CARGOS_INVALIDOS[p.rol];
+      p.rol=nuevo;
+      // Persistir corrección si tiene id de Supabase
+      try{ if(p.id) sb.from('personal').update({rol:nuevo}).eq('id',p.id); }catch(e){}
+    }
+  });
+}
+
 function initTareoFecha(){
   const el=document.getElementById('tareo-fecha');
   if(el && !el.value) el.value=hoy();
 }
 
-function cargarGridTareo(){
-  initTareoFecha();
-  const fecha  = document.getElementById('tareo-fecha').value || hoy();
-  const turno  = document.getElementById('tareo-turno')?.value || 'DIA';
-  const nivel  = document.getElementById('tareo-nivel')?.value || 'Nv 2820';
-  const jefe   = document.getElementById('tareo-jefe')?.value  || '—';
-  // Actualizar encabezado de la hoja física
-  const [y,m,d] = fecha.split('-');
-  const hojaFecha = document.getElementById('tareo-hoja-fecha');
-  const hojaTurno = document.getElementById('tareo-hoja-turno');
-  const hojaAdmin = document.getElementById('tareo-hoja-admin');
-  const hojaJefe  = document.getElementById('tareo-hoja-jefe');
-  if(hojaFecha) hojaFecha.textContent = `${d}/${m}/${y}`;
-  if(hojaTurno) hojaTurno.textContent = turno === 'DIA' ? 'DÍA' : 'NOCHE';
-  if(hojaAdmin) hojaAdmin.textContent = (usuarioActivo?.nombre || '—').toUpperCase();
-  if(hojaJefe)  hojaJefe.textContent  = jefe;
+// Cargos válidos que pueden ser Jefe de Turno
+const JEFES_TURNO_CARGOS = ['Capataz','Jefe de Guardia','Asistente de Residente'];
 
-  const activos = state.personal.filter(p => p.estado !== 'baja');
-  const tbody   = document.getElementById('tareo-grid');
-  if(!tbody) return;
+// Paso 0 → abrir asistente de configuración
+function abrirSetupTareo(){
+  initTareoFecha();
+  document.getElementById('tareo-inicio').style.display='none';
+  document.getElementById('tareo-setup').style.display='block';
+  document.getElementById('tareo-hoja').style.display='none';
+  document.getElementById('tareo-acciones').style.display='none';
+  // Poblar jefe de turno con personal cuyos cargos sean jefatura, o los cargos genéricos
+  const jefeSel=document.getElementById('tareo-jefe');
+  if(jefeSel){
+    const candidatos=state.personal.filter(p=>p.estado!=='baja'&&JEFES_TURNO_CARGOS.includes(p.rol));
+    let opts='<option value="">— Seleccionar —</option>';
+    if(candidatos.length){
+      opts+=candidatos.map(p=>`<option value="${p.nombre} (${p.rol})">${p.nombre} — ${p.rol}</option>`).join('');
+    }
+    opts+=JEFES_TURNO_CARGOS.map(c=>`<option value="${c}">${c}</option>`).join('');
+    jefeSel.innerHTML=opts;
+  }
+  // Poblar lista de personal con selección y labor
+  const list=document.getElementById('tareo-personal-list');
+  const activos=state.personal.filter(p=>p.estado!=='baja');
   if(!activos.length){
-    tbody.innerHTML='<tr><td colspan="6" style="padding:20px;text-align:center;color:#888;font-family:Arial">Sin personal activo. Registra trabajadores en la pestaña Personal.</td></tr>';
+    list.innerHTML='<div style="color:var(--text3);padding:14px;text-align:center;font-size:13px">Sin personal activo. Registra trabajadores en la pestaña Personal.</div>';
     return;
   }
-  const tareosDelDia = state.tareas.filter(t => t.fecha === fecha && (t.turno||'DIA') === turno);
-  const rows = activos.map((p, idx) => {
-    const t   = tareosDelDia.find(t => String(t.trabajadorId) === String(p.id));
-    const val = t ? String(t.mult) : '';
-    const obs = t ? (t.obs||'') : '';
-    const bg  = idx % 2 === 0 ? '#ffffff' : '#f5f5f5';
-    const mkBtn = (v, lbl) => {
-      const sel = val === v;
-      return `<button onclick="selTareoBtn(this)" data-pid="${p.id}" data-val="${v}" style="padding:4px 9px;border-radius:4px;border:2px solid ${sel?'#1a2744':'#bbb'};cursor:pointer;font-weight:700;font-size:11px;background:${sel?'#1a2744':'#fff'};color:${sel?'#fff':'#444'};touch-action:manipulation">${lbl}</button>`;
-    };
-    return `<tr data-pid="${p.id}" class="tareo-row" style="background:${bg}">
+  list.innerHTML=activos.map(p=>{
+    const labor=p.frente||1;
+    return `<div class="tareo-sel-row" data-pid="${p.id}" style="display:flex;align-items:center;gap:10px;background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px">
+      <input type="checkbox" class="tareo-chk" data-pid="${p.id}" style="width:18px;height:18px;accent-color:var(--gold);cursor:pointer">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.nombre}</div>
+        <div style="font-size:10px;color:var(--text3)">${p.rol} · S/${p.jornal}/día</div>
+      </div>
+      <select class="tareo-labor" data-pid="${p.id}" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
+        <option value="1" ${labor==1?'selected':''}>Rampa</option>
+        <option value="2" ${labor==2?'selected':''}>Cortada</option>
+      </select>
+    </div>`;
+  }).join('');
+}
+
+function marcarTodoTareo(val){
+  document.querySelectorAll('.tareo-chk').forEach(c=>c.checked=val);
+}
+
+function cancelarSetupTareo(){
+  document.getElementById('tareo-inicio').style.display='block';
+  document.getElementById('tareo-setup').style.display='none';
+  document.getElementById('tareo-hoja').style.display='none';
+  document.getElementById('tareo-acciones').style.display='none';
+}
+
+// Paso 1 → cargar hoja con el personal seleccionado
+function cargarHojaTareo(){
+  const fecha = document.getElementById('tareo-fecha').value || hoy();
+  const turno = document.getElementById('tareo-turno')?.value || 'DIA';
+  const nivel = document.getElementById('tareo-nivel')?.value || 'Nv 2820';
+  const jefe  = document.getElementById('tareo-jefe')?.value  || '—';
+  // Recolectar personal seleccionado con su labor
+  const seleccionados=[];
+  document.querySelectorAll('.tareo-chk').forEach(chk=>{
+    if(chk.checked){
+      const pid=chk.dataset.pid;
+      const laborSel=document.querySelector(`.tareo-labor[data-pid="${pid}"]`);
+      seleccionados.push({pid, frente:parseInt(laborSel?.value||'1',10)});
+    }
+  });
+  if(!seleccionados.length){ showNotif('Selecciona al menos un trabajador','error'); return; }
+
+  // Encabezado de la hoja
+  const [y,m,d]=fecha.split('-');
+  const set=(id,txt)=>{const el=document.getElementById(id);if(el)el.textContent=txt;};
+  set('tareo-hoja-fecha',`${d}/${m}/${y}`);
+  set('tareo-hoja-turno',turno==='DIA'?'DÍA':'NOCHE');
+  set('tareo-hoja-admin',(usuarioActivo?.nombre||'—').toUpperCase());
+  set('tareo-hoja-jefe',jefe||'—');
+
+  const tareosDelDia=state.tareas.filter(t=>t.fecha===fecha && (t.turno||'DIA')===turno);
+  const tbody=document.getElementById('tareo-grid');
+  const rows=seleccionados.map((sel,idx)=>{
+    const p=state.personal.find(x=>String(x.id)===String(sel.pid));
+    if(!p) return '';
+    const t   = tareosDelDia.find(t=>String(t.trabajadorId)===String(p.id));
+    const val = t?String(t.mult):'';
+    const obs = t?(t.obs||''):'';
+    const bg  = idx%2===0?'#ffffff':'#f5f5f5';
+    const labor = sel.frente===2?'Cortada':'Rampa';
+    const mkBtn=(v,lbl)=>{const s=val===v;return `<button onclick="selTareoBtn(this)" data-pid="${p.id}" data-val="${v}" style="padding:4px 9px;border-radius:4px;border:2px solid ${s?'#1a2744':'#bbb'};cursor:pointer;font-weight:700;font-size:11px;background:${s?'#1a2744':'#fff'};color:${s?'#fff':'#444'};touch-action:manipulation">${lbl}</button>`;};
+    return `<tr data-pid="${p.id}" data-frente="${sel.frente}" class="tareo-row" style="background:${bg}">
       <td style="padding:7px 10px;border:1px solid #ddd;text-align:center;font-size:11px;font-weight:700;color:#000;white-space:nowrap">${turno}</td>
       <td style="padding:7px 10px;border:1px solid #ddd;text-align:center;font-size:11px;color:#000;white-space:nowrap">${nivel}</td>
+      <td style="padding:7px 10px;border:1px solid #ddd;text-align:center;font-size:11px;color:#000;white-space:nowrap">${labor}</td>
       <td style="padding:7px 10px;border:1px solid #ddd;font-size:11px;color:#000">${p.rol}</td>
       <td style="padding:7px 10px;border:1px solid #ddd;font-size:11px;font-weight:700;color:#000">${p.nombre.toUpperCase()}</td>
       <td style="padding:5px 8px;border:1px solid #ddd;text-align:center">
@@ -4292,14 +4407,15 @@ function cargarGridTareo(){
       </td>
     </tr>`;
   });
-  // 5 filas vacías como en el tareo físico
-  for(let i=0;i<5;i++){
-    const bg=(activos.length+i)%2===0?'#fff':'#f5f5f5';
-    rows.push(`<tr style="background:${bg}"><td style="padding:10px;border:1px solid #ddd"></td><td style="border:1px solid #ddd"></td><td style="border:1px solid #ddd"></td><td style="border:1px solid #ddd"></td><td style="border:1px solid #ddd;height:32px"></td><td style="border:1px solid #ddd"></td></tr>`);
-  }
-  tbody.innerHTML = rows.join('');
+  tbody.innerHTML=rows.join('');
+  document.getElementById('tareo-setup').style.display='none';
+  document.getElementById('tareo-hoja').style.display='block';
+  document.getElementById('tareo-acciones').style.display='flex';
   actualizarKpisTareo(fecha);
 }
+
+// Compatibilidad: cargar directo (usado por renderPlanilla)
+function cargarGridTareo(){ /* el flujo ahora inicia con abrirSetupTareo */ }
 
 function selTareoBtn(btn){
   const pid=btn.dataset.pid;
@@ -4341,21 +4457,23 @@ async function guardarTareo(){
     const mult   = parseFloat(btn.dataset.val)||1;
     const obsEl  = row.querySelector('.tareo-obs');
     const obs    = obsEl ? obsEl.value : '';
+    const frente = parseInt(row.dataset.frente||'',10) || undefined;
     const p      = state.personal.find(x=>String(x.id)===String(pid));
     const jornal = p?.jornal||0;
+    const fr     = frente || p?.frente || 1;
     const existe = state.tareas.find(t=>t.fecha===fecha && String(t.trabajadorId)===String(pid) && (t.turno||'DIA')===turno);
     if(existe){
-      existe.mult=mult; existe.jornal=jornal; existe.obs=obs; existe.turno=turno;
-      try{if(existe.id) await sb.from('tareas').update({mult,obs,turno}).eq('id',existe.id);}catch(e){}
+      existe.mult=mult; existe.jornal=jornal; existe.obs=obs; existe.turno=turno; existe.frente=fr;
+      try{if(existe.id) await sb.from('tareas').update({mult,obs,turno,frente:fr}).eq('id',existe.id);}catch(e){}
     } else {
-      const nv={fecha,trabajadorId:pid,tarea:'Tareo diario',frente:p?.frente||1,detalle:'',estadoTarea:'completado',mult,jornal,turno,obs};
-      try{const{data}=await sb.from('tareas').insert([{fecha,trabajador_id:pid,tarea:'Tareo diario',frente:nv.frente,detalle:'',estado_tarea:'completado',mult,mes_id:getMesId(),turno,obs}]).select().single();if(data)nv.id=data.id;}catch(e){}
+      const nv={fecha,trabajadorId:pid,tarea:'Tareo diario',frente:fr,detalle:'',estadoTarea:'completado',mult,jornal,turno,obs};
+      try{const{data}=await sb.from('tareas').insert([{fecha,trabajador_id:pid,tarea:'Tareo diario',frente:fr,detalle:'',estado_tarea:'completado',mult,mes_id:getMesId(),turno,obs}]).select().single();if(data)nv.id=data.id;}catch(e){}
       state.tareas.push(nv);
     }
     guardados++;
   }
   actualizarKpisTareo(fecha); renderCostoRRHH();
-  showNotif(`✓ Tareo ${turno} del ${fmtF(fecha)} guardado — ${guardados} trabajadores`);
+  showNotif(`✓ Tareo ${turno} registrado — ${guardados} trabajadores`);
 }
 
 function imprimirTareo(){
@@ -4376,7 +4494,15 @@ function imprimirTareo(){
 
 function renderPlanilla(){
   initTareoFecha();
-  cargarGridTareo();
+  // Estado inicial: mostrar botón Registrar Tareo
+  const ini=document.getElementById('tareo-inicio');
+  const setup=document.getElementById('tareo-setup');
+  const hoja=document.getElementById('tareo-hoja');
+  const acc=document.getElementById('tareo-acciones');
+  if(ini&&setup&&hoja&&acc){
+    if(setup.style.display==='none'&&hoja.style.display==='none') ini.style.display='block';
+  }
+  actualizarKpisTareo(hoy());
 }
 
 function registrarAsistencia(){}
