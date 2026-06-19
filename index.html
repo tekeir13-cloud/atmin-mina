@@ -1153,6 +1153,14 @@ select option{background:var(--coal3);}
   /* SEGURIDAD — foto preview más alta en móvil */
   #seg-foto-preview { height: 220px !important; }
 
+  /* TAREO HOJA — texto legible */
+  #tareo-hoja { color: #000; }
+  #tareo-hoja table td, #tareo-hoja table th { color: #000 !important; }
+  #tareo-hoja input, #tareo-hoja textarea { color: #333 !important; }
+  @media print {
+    .mod-tabs, .kpi-grid, .card, .btn-row, #tareo-resumen-dia { display:none!important; }
+    #tareo-hoja { box-shadow:none; border-radius:0; }
+  }
   /* CHART — altura mínima en móvil */
   canvas { max-height: 200px !important; }
   /* Gráficos de frente (visor): gestionan su propia altura — no recortar */
@@ -2357,19 +2365,70 @@ select option{background:var(--coal3);}
       <div class="kpi-card"><div class="kpi-label">Costo Tareo Hoy</div><div class="kpi-value warn" id="rr-costo-hoy">S/ 0</div></div>
       <div class="kpi-card"><div class="kpi-label">Costo Acum. Mes</div><div class="kpi-value red" id="rr-costo-mes">S/ 0</div></div>
     </div>
-    <div class="card" style="margin-bottom:18px">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+
+    <!-- Controles -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
         <div class="section-title" style="margin:0">Tareo del Día</div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <input type="date" id="tareo-fecha" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:13px">
+          <select id="tareo-turno" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:13px">
+            <option value="DIA">Turno DÍA</option>
+            <option value="NOCHE">Turno NOCHE</option>
+          </select>
+          <input type="text" id="tareo-nivel" placeholder="Nivel (ej: Nv 2820)" value="Nv 2820" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:13px;width:130px">
+          <input type="text" id="tareo-jefe" placeholder="Jefe de Turno" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:13px;width:150px">
           <button class="btn btn-outline" style="padding:7px 14px;font-size:12px" onclick="cargarGridTareo()">Cargar</button>
           <button id="btn-seed-demo" class="btn btn-outline" style="padding:7px 14px;font-size:11px;opacity:0.6;display:none" onclick="seedTareoDemo()">⚡ Demo</button>
         </div>
       </div>
-      <div id="tareo-grid" style="display:flex;flex-direction:column;gap:8px"></div>
-      <div class="btn-row" style="margin-top:14px">
-        <button class="btn btn-gold" onclick="guardarTareo()">💾 Guardar Tareo del Día</button>
+    </div>
+
+    <!-- Hoja de tareo física -->
+    <div id="tareo-hoja" style="background:#fff;border-radius:10px;overflow:hidden;margin-bottom:14px;box-shadow:0 4px 24px rgba(0,0,0,0.35)">
+      <div style="background:#FFD700;padding:10px 18px;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-weight:900;font-size:15px;color:#000;font-family:Arial,sans-serif;letter-spacing:0.5px">TAREO DIARIO: <span id="tareo-hoja-fecha">—</span></div>
+        <div style="font-weight:900;font-size:15px;color:#000;font-family:Arial,sans-serif;letter-spacing:0.5px">TURNO: <span id="tareo-hoja-turno">DÍA</span></div>
       </div>
+      <div style="background:#FFD700;border-top:1px solid #c8a800;padding:6px 18px;display:flex;gap:16px;align-items:center">
+        <span style="font-weight:900;font-size:12px;color:#000;font-family:Arial,sans-serif">ADMINISTRADOR:</span>
+        <span style="font-weight:700;font-size:12px;color:#000;font-family:Arial,sans-serif" id="tareo-hoja-admin">—</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px">
+          <thead>
+            <tr style="background:#1a1a1a">
+              <th style="padding:8px 10px;border:1px solid #444;color:#fff;font-size:11px;text-align:center;white-space:nowrap">TURNO</th>
+              <th style="padding:8px 10px;border:1px solid #444;color:#fff;font-size:11px;text-align:center;white-space:nowrap">NIVEL</th>
+              <th style="padding:8px 10px;border:1px solid #444;color:#fff;font-size:11px;text-align:center">CARGO</th>
+              <th style="padding:8px 10px;border:1px solid #444;color:#fff;font-size:11px;text-align:center;min-width:170px">APELLIDOS Y NOMBRES</th>
+              <th style="padding:8px 10px;border:1px solid #444;color:#fff;font-size:11px;text-align:center;min-width:130px">TAREA</th>
+              <th style="padding:8px 10px;border:1px solid #444;color:#fff;font-size:11px;text-align:center;min-width:140px">OBSERVACIONES</th>
+            </tr>
+          </thead>
+          <tbody id="tareo-grid"></tbody>
+        </table>
+      </div>
+      <!-- Pie -->
+      <div style="border-top:2px solid #bbb;display:flex">
+        <div style="flex:1;padding:12px 18px;border-right:1px solid #bbb">
+          <div style="font-weight:900;font-size:11px;color:#000;font-family:Arial,sans-serif">JEFE DE TURNO</div>
+          <div style="margin-top:18px;font-size:12px;color:#000;font-family:Arial,sans-serif;font-weight:600" id="tareo-hoja-jefe">—</div>
+        </div>
+        <div style="flex:1;padding:12px 18px">
+          <div style="font-weight:900;font-size:11px;color:#000;font-family:Arial,sans-serif">FIRMA</div>
+          <div style="margin-top:28px;border-bottom:1px solid #555;width:80%"></div>
+        </div>
+      </div>
+      <div style="border-top:1px solid #bbb;padding:12px 18px">
+        <div style="font-weight:900;font-size:11px;color:#000;font-family:Arial,sans-serif;margin-bottom:8px">OBSERVACIONES GENERALES:</div>
+        <textarea id="tareo-obs-gen" rows="3" style="width:100%;border:1px solid #ccc;border-radius:4px;padding:6px;font-family:Arial;font-size:12px;color:#333;resize:vertical;box-sizing:border-box" placeholder="Escribe las observaciones generales del turno..."></textarea>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-gold" onclick="guardarTareo()">💾 Guardar Tareo</button>
+      <button class="btn btn-outline" onclick="imprimirTareo()" style="padding:8px 16px;font-size:13px">🖨️ Imprimir</button>
     </div>
     <div id="tareo-resumen-dia" style="margin-top:8px"></div>
   </div>
@@ -4188,31 +4247,57 @@ function initTareoFecha(){
 
 function cargarGridTareo(){
   initTareoFecha();
-  const fecha=document.getElementById('tareo-fecha').value||hoy();
-  const lbl=document.getElementById('tareo-fecha-label');
-  if(lbl) lbl.textContent=fmtF(fecha);
-  const activos=state.personal.filter(p=>p.estado!=='baja');
-  const grid=document.getElementById('tareo-grid');
-  if(!grid) return;
-  if(!activos.length){grid.innerHTML='<div style="color:var(--text3);padding:16px;text-align:center;font-size:13px">Sin personal activo. Registra trabajadores en la pestaña Personal.</div>';return;}
-  const tareosDelDia=state.tareas.filter(t=>t.fecha===fecha);
-  grid.innerHTML=activos.map(p=>{
-    const t=tareosDelDia.find(t=>t.trabajadorId==p.id);
-    const val=t?String(t.mult):'';
-    const c=FC[p.frente]||'#888';
-    const ini=p.nombre.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
-    const btn=(v,lbl)=>`<button onclick="selTareoBtn(this)" data-pid="${p.id}" data-val="${v}" style="padding:6px 14px;border-radius:6px;border:1px solid ${val===v?'var(--gold)':'var(--border)'};cursor:pointer;font-weight:700;font-size:12px;touch-action:manipulation;background:${val===v?'rgba(201,168,76,0.25)':'var(--coal4)'};color:${val===v?'var(--gold-light)':'var(--text3)'};">${lbl}</button>`;
-    return`<div data-pid="${p.id}" class="tareo-row" style="display:flex;align-items:center;gap:10px;background:var(--coal3);border-radius:10px;padding:10px 14px;border:1px solid var(--border)">
-      <div style="width:36px;height:36px;border-radius:50%;background:${c}22;color:${c};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">${ini}</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:700;font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.nombre}</div>
-        <div style="font-size:10px;color:var(--text3)">${p.rol} · <span style="color:${c}">${FL[p.frente]||'—'}</span> · S/${p.jornal}/día</div>
-      </div>
-      <div style="display:flex;gap:6px;flex-shrink:0">
-        ${btn('1','×1')}${btn('1.5','×1.5')}${btn('2','×2')}
-      </div>
-    </div>`;
-  }).join('');
+  const fecha  = document.getElementById('tareo-fecha').value || hoy();
+  const turno  = document.getElementById('tareo-turno')?.value || 'DIA';
+  const nivel  = document.getElementById('tareo-nivel')?.value || 'Nv 2820';
+  const jefe   = document.getElementById('tareo-jefe')?.value  || '—';
+  // Actualizar encabezado de la hoja física
+  const [y,m,d] = fecha.split('-');
+  const hojaFecha = document.getElementById('tareo-hoja-fecha');
+  const hojaTurno = document.getElementById('tareo-hoja-turno');
+  const hojaAdmin = document.getElementById('tareo-hoja-admin');
+  const hojaJefe  = document.getElementById('tareo-hoja-jefe');
+  if(hojaFecha) hojaFecha.textContent = `${d}/${m}/${y}`;
+  if(hojaTurno) hojaTurno.textContent = turno === 'DIA' ? 'DÍA' : 'NOCHE';
+  if(hojaAdmin) hojaAdmin.textContent = (usuarioActivo?.nombre || '—').toUpperCase();
+  if(hojaJefe)  hojaJefe.textContent  = jefe;
+
+  const activos = state.personal.filter(p => p.estado !== 'baja');
+  const tbody   = document.getElementById('tareo-grid');
+  if(!tbody) return;
+  if(!activos.length){
+    tbody.innerHTML='<tr><td colspan="6" style="padding:20px;text-align:center;color:#888;font-family:Arial">Sin personal activo. Registra trabajadores en la pestaña Personal.</td></tr>';
+    return;
+  }
+  const tareosDelDia = state.tareas.filter(t => t.fecha === fecha && (t.turno||'DIA') === turno);
+  const rows = activos.map((p, idx) => {
+    const t   = tareosDelDia.find(t => String(t.trabajadorId) === String(p.id));
+    const val = t ? String(t.mult) : '';
+    const obs = t ? (t.obs||'') : '';
+    const bg  = idx % 2 === 0 ? '#ffffff' : '#f5f5f5';
+    const mkBtn = (v, lbl) => {
+      const sel = val === v;
+      return `<button onclick="selTareoBtn(this)" data-pid="${p.id}" data-val="${v}" style="padding:4px 9px;border-radius:4px;border:2px solid ${sel?'#1a2744':'#bbb'};cursor:pointer;font-weight:700;font-size:11px;background:${sel?'#1a2744':'#fff'};color:${sel?'#fff':'#444'};touch-action:manipulation">${lbl}</button>`;
+    };
+    return `<tr data-pid="${p.id}" class="tareo-row" style="background:${bg}">
+      <td style="padding:7px 10px;border:1px solid #ddd;text-align:center;font-size:11px;font-weight:700;color:#000;white-space:nowrap">${turno}</td>
+      <td style="padding:7px 10px;border:1px solid #ddd;text-align:center;font-size:11px;color:#000;white-space:nowrap">${nivel}</td>
+      <td style="padding:7px 10px;border:1px solid #ddd;font-size:11px;color:#000">${p.rol}</td>
+      <td style="padding:7px 10px;border:1px solid #ddd;font-size:11px;font-weight:700;color:#000">${p.nombre.toUpperCase()}</td>
+      <td style="padding:5px 8px;border:1px solid #ddd;text-align:center">
+        <div style="display:flex;gap:4px;justify-content:center">${mkBtn('1','×1')}${mkBtn('1.5','×1.5')}${mkBtn('2','×2')}</div>
+      </td>
+      <td style="padding:5px 8px;border:1px solid #ddd">
+        <input type="text" data-pid="${p.id}" class="tareo-obs" value="${obs.replace(/"/g,'&quot;')}" placeholder="—" style="width:100%;border:none;background:transparent;font-size:11px;color:#333;outline:none;font-family:Arial">
+      </td>
+    </tr>`;
+  });
+  // 5 filas vacías como en el tareo físico
+  for(let i=0;i<5;i++){
+    const bg=(activos.length+i)%2===0?'#fff':'#f5f5f5';
+    rows.push(`<tr style="background:${bg}"><td style="padding:10px;border:1px solid #ddd"></td><td style="border:1px solid #ddd"></td><td style="border:1px solid #ddd"></td><td style="border:1px solid #ddd"></td><td style="border:1px solid #ddd;height:32px"></td><td style="border:1px solid #ddd"></td></tr>`);
+  }
+  tbody.innerHTML = rows.join('');
   actualizarKpisTareo(fecha);
 }
 
@@ -4220,9 +4305,9 @@ function selTareoBtn(btn){
   const pid=btn.dataset.pid;
   const row=document.querySelector(`.tareo-row[data-pid="${pid}"]`);
   const btns=row.querySelectorAll('button');
-  const yaActivo=btn.style.background.includes('201,168');
-  btns.forEach(b=>{b.style.background='var(--coal4)';b.style.color='var(--text3)';b.style.borderColor='var(--border)';});
-  if(!yaActivo){btn.style.background='rgba(201,168,76,0.25)';btn.style.color='var(--gold-light)';btn.style.borderColor='var(--gold)';}
+  const yaActivo=btn.style.background==='#1a2744'||btn.style.background.includes('26,39,68');
+  btns.forEach(b=>{b.style.background='#fff';b.style.color='#444';b.style.borderColor='#bbb';});
+  if(!yaActivo){btn.style.background='#1a2744';btn.style.color='#fff';btn.style.borderColor='#1a2744';}
 }
 
 function actualizarKpisTareo(fecha){
@@ -4241,33 +4326,52 @@ function actualizarKpisTareo(fecha){
 }
 
 async function guardarTareo(){
-  const fecha=document.getElementById('tareo-fecha').value||hoy();
-  const mesFecha=fecha.slice(0,7);
+  const fecha    = document.getElementById('tareo-fecha').value || hoy();
+  const turno    = document.getElementById('tareo-turno')?.value || 'DIA';
+  const mesFecha = fecha.slice(0,7);
   if((state.mesesCerrados||[]).includes(mesFecha)){showNotif('Este mes está cerrado. Contacte al administrador.','error');return;}
-  const rows=document.querySelectorAll('#tareo-grid .tareo-row');
-  let guardados=0,omitidos=0;
+  const rows = document.querySelectorAll('#tareo-grid .tareo-row');
+  let guardados=0, omitidos=0;
   for(const row of rows){
-    const pid=row.dataset.pid;
-    const btn=row.querySelector('button[style*="201,168"]');
+    const pid = row.dataset.pid;
+    if(!pid) continue;
+    // Detectar botón seleccionado (fondo azul oscuro)
+    const btn = Array.from(row.querySelectorAll('button')).find(b => b.style.background==='#1a2744' || b.style.background.includes('26, 39, 68'));
     if(!btn){omitidos++;continue;}
-    const mult=parseFloat(btn.dataset.val)||1;
-    const p=state.personal.find(x=>String(x.id)===String(pid));
-    const jornal=p?.jornal||0;
-    const existe=state.tareas.find(t=>t.fecha===fecha&&String(t.trabajadorId)===String(pid));
+    const mult   = parseFloat(btn.dataset.val)||1;
+    const obsEl  = row.querySelector('.tareo-obs');
+    const obs    = obsEl ? obsEl.value : '';
+    const p      = state.personal.find(x=>String(x.id)===String(pid));
+    const jornal = p?.jornal||0;
+    const existe = state.tareas.find(t=>t.fecha===fecha && String(t.trabajadorId)===String(pid) && (t.turno||'DIA')===turno);
     if(existe){
-      existe.mult=mult;existe.jornal=jornal;
-      try{if(existe.id) await sb.from('tareas').update({mult}).eq('id',existe.id);}catch(e){}
+      existe.mult=mult; existe.jornal=jornal; existe.obs=obs; existe.turno=turno;
+      try{if(existe.id) await sb.from('tareas').update({mult,obs,turno}).eq('id',existe.id);}catch(e){}
     } else {
-      const nv={fecha,trabajadorId:pid,tarea:'Tareo diario',frente:p?.frente||1,detalle:'',estadoTarea:'completado',mult,jornal};
-      try{const{data}=await sb.from('tareas').insert([{fecha,trabajador_id:pid,tarea:'Tareo diario',frente:nv.frente,detalle:'',estado_tarea:'completado',mult,mes_id:getMesId()}]).select().single();if(data)nv.id=data.id;}catch(e){}
+      const nv={fecha,trabajadorId:pid,tarea:'Tareo diario',frente:p?.frente||1,detalle:'',estadoTarea:'completado',mult,jornal,turno,obs};
+      try{const{data}=await sb.from('tareas').insert([{fecha,trabajador_id:pid,tarea:'Tareo diario',frente:nv.frente,detalle:'',estado_tarea:'completado',mult,mes_id:getMesId(),turno,obs}]).select().single();if(data)nv.id=data.id;}catch(e){}
       state.tareas.push(nv);
     }
     guardados++;
   }
-  const msg=document.getElementById('tareo-save-msg');
-  if(msg){msg.textContent=`✓ ${guardados} tareados${omitidos?' · '+omitidos+' sin tarear':''}`;setTimeout(()=>{msg.textContent='';},4000);}
-  actualizarKpisTareo(fecha);renderCostoRRHH();
-  showNotif(`✓ Tareo del ${fmtF(fecha)} guardado — ${guardados} trabajadores`);
+  actualizarKpisTareo(fecha); renderCostoRRHH();
+  showNotif(`✓ Tareo ${turno} del ${fmtF(fecha)} guardado — ${guardados} trabajadores`);
+}
+
+function imprimirTareo(){
+  const el = document.getElementById('tareo-hoja');
+  if(!el) return;
+  const w = window.open('','_blank','width=900,height=700');
+  w.document.write(`<html><head><title>Tareo Diario</title><style>
+    body{margin:20px;font-family:Arial,sans-serif;}
+    table{width:100%;border-collapse:collapse;}
+    th,td{border:1px solid #555;padding:6px 8px;font-size:11px;}
+    textarea{border:1px solid #ccc;padding:4px;width:100%;font-family:Arial;}
+    input{border:none;border-bottom:1px solid #999;width:100%;font-family:Arial;font-size:11px;}
+    button{display:none;}
+  </style></head><body>${el.innerHTML}</body></html>`);
+  w.document.close();
+  setTimeout(()=>w.print(), 400);
 }
 
 function renderPlanilla(){
