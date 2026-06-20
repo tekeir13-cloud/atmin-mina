@@ -2252,6 +2252,7 @@ select option{background:var(--coal3);}
     <div class="card" style="margin:16px 0;display:flex;gap:14px;flex-wrap:wrap;align-items:center">
       <button class="btn btn-gold" style="font-size:14px;padding:12px 24px" onclick="abrirIngresoModal()">⬇ Registrar Ingreso</button>
       <button class="btn btn-outline" style="font-size:14px;padding:12px 24px;border-color:#f87171;color:#f87171" onclick="abrirSalidaModal()">⬆ Registrar Salida</button>
+      <button class="btn btn-outline" style="font-size:12px;padding:10px 16px" onclick="cargarDatosEjemplo()">🌱 Cargar datos de ejemplo</button>
       <div style="flex:1"></div>
       <label style="font-size:11px;color:var(--text3)">Mes:</label>
       <input type="month" id="alm-mes-sel" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px" onchange="renderAlmacen()">
@@ -2300,12 +2301,7 @@ select option{background:var(--coal3);}
 
   <!-- ════ TAB 3: COSTO DE INVENTARIO ════ -->
   <div class="mod-pane" style="display:none" id="log-inventario">
-    <div class="kpi-grid">
-      <div class="kpi-card"><div class="kpi-label">Valor de Stock Actual</div><div class="kpi-value gold" id="inv-kpi-valor">S/ 0</div><div class="kpi-sub" id="inv-kpi-items">0 productos</div></div>
-      <div class="kpi-card"><div class="kpi-label">Gasto del Mes (Salidas)</div><div class="kpi-value red" id="inv-kpi-gasto">S/ 0</div></div>
-      <div class="kpi-card"><div class="kpi-label">Gasto — General</div><div class="kpi-value blue" id="inv-kpi-gen">S/ 0</div></div>
-      <div class="kpi-card"><div class="kpi-label">Gasto — Mantenimiento</div><div class="kpi-value warn" id="inv-kpi-mant">S/ 0</div></div>
-    </div>
+    <div id="inv-semaforo"></div>
     <div class="card" style="margin:16px 0;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
       <label style="font-size:11px;color:var(--text3)">Mes:</label>
       <input type="month" id="inv-mes-sel" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px" onchange="renderInventario()">
@@ -4146,6 +4142,14 @@ function almacenSeedDemo(){
   almacenSave();
 }
 function almMesActual(){return hoy().slice(0,7);}
+function cargarDatosEjemplo(){
+  if((state.almacen.ingresos.length||state.almacen.salidas.length)&&!confirm('Esto reemplazará los movimientos actuales con los datos de ejemplo (marzo 2026). ¿Continuar?'))return;
+  almacenSeedDemo();
+  // Reiniciar selectores de mes para que apunten al mes con datos
+  ['alm-mes-sel','inv-mes-sel','cc-mes-sel','hist-mes-sel'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  renderAlmacen();renderHistorialAlmacen();renderInventario();renderCentroCostos();
+  showNotif('🌱 Datos de ejemplo cargados (marzo 2026)');
+}
 // Mes con datos más reciente (para que el selector no quede vacío al abrir)
 function almMesConDatos(){
   const meses=[];
@@ -4401,11 +4405,37 @@ function renderInventario(){
   const gGen=state.almacen.salidas.filter(s=>(s.fecha||'').startsWith(mes)&&s.almacen==='General').reduce((a,s)=>a+(Number(s.importe)||0),0);
   const gMant=state.almacen.salidas.filter(s=>(s.fecha||'').startsWith(mes)&&s.almacen==='Mantenimiento').reduce((a,s)=>a+(Number(s.importe)||0),0);
   const g=id=>document.getElementById(id);
-  if(g('inv-kpi-valor'))g('inv-kpi-valor').textContent=fmtS2(valorStock);
-  if(g('inv-kpi-items'))g('inv-kpi-items').textContent=stock.filter(r=>r.stock>0).length+' productos';
-  if(g('inv-kpi-gasto'))g('inv-kpi-gasto').textContent=fmtS2(gasto);
-  if(g('inv-kpi-gen'))g('inv-kpi-gen').textContent=fmtS2(gGen);
-  if(g('inv-kpi-mant'))g('inv-kpi-mant').textContent=fmtS2(gMant);
+  // Semáforos de stock: 🟢 OK (≥10) · 🟡 bajo (1-9) · 🔴 agotado (≤0)
+  const conStock=stock.filter(r=>r.stock>0);
+  const verde=conStock.filter(r=>r.stock>=10).length;
+  const amarillo=conStock.filter(r=>r.stock>0&&r.stock<10).length;
+  const rojo=stock.filter(r=>r.stock<=0).length;
+  const sem=g('inv-semaforo');
+  if(sem) sem.innerHTML=`
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px">
+      <div class="card" style="display:flex;align-items:center;gap:12px;padding:14px 16px">
+        <span style="width:16px;height:16px;border-radius:50%;background:#34d399;box-shadow:0 0 10px #34d399"></span>
+        <div><div style="font-size:22px;font-weight:800;color:#34d399">${verde}</div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Stock saludable<br>(≥10 und)</div></div>
+      </div>
+      <div class="card" style="display:flex;align-items:center;gap:12px;padding:14px 16px">
+        <span style="width:16px;height:16px;border-radius:50%;background:#fbbf24;box-shadow:0 0 10px #fbbf24"></span>
+        <div><div style="font-size:22px;font-weight:800;color:#fbbf24">${amarillo}</div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Stock bajo<br>(reponer)</div></div>
+      </div>
+      <div class="card" style="display:flex;align-items:center;gap:12px;padding:14px 16px">
+        <span style="width:16px;height:16px;border-radius:50%;background:#f87171;box-shadow:0 0 10px #f87171"></span>
+        <div><div style="font-size:22px;font-weight:800;color:#f87171">${rojo}</div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Agotado<br>(sin stock)</div></div>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Valor de Stock</div>
+        <div style="font-size:22px;font-weight:800;color:var(--gold-light)">${fmtS2(valorStock)}</div>
+        <div style="font-size:10px;color:var(--text3)">${conStock.length} productos</div>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Gasto del Mes</div>
+        <div style="font-size:22px;font-weight:800;color:#f87171">${fmtS2(gasto)}</div>
+        <div style="font-size:10px;color:var(--text3)">Gen: ${fmtS2(gGen)} · Mant: ${fmtS2(gMant)}</div>
+      </div>
+    </div>`;
   const tb=g('inv-tbody');
   if(tb) tb.innerHTML=stock.length?stock.map(r=>`<tr style="${r.stock<=0?'opacity:0.5':''}">
     <td><span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${r.almacen==='Mantenimiento'?'rgba(201,168,76,0.15);color:#d4b75e':'rgba(96,165,250,0.15);color:#60a5fa'}">${r.almacen}</span></td>
