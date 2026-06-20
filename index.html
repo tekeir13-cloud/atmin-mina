@@ -3688,7 +3688,8 @@ function seedData(){
     {nombre:'PAULOT SEGURA EDY VICTOR',rol:'Operador de Línea Amarilla',frente:2,jornal:130},
     {nombre:'PINEDO RODRIGUEZ CESAR',rol:'Operador de Scoop',frente:2,jornal:130},
     {nombre:'MOYA DURAN YONI WILY',rol:'Operador de Dumper',frente:2,jornal:130},
-    {nombre:'ROJAS GORMAS GUILLERMO RUBEN',rol:'Maestro Perforista 1',frente:1,jornal:140}
+    {nombre:'ROJAS GORMAS GUILLERMO RUBEN',rol:'Maestro Perforista 1',frente:1,jornal:140},
+    {nombre:'SALDAÑA ZAPATA JUNIOR',rol:'Capataz',frente:1,jornal:130}
   ];
   cuadrilla.forEach((c,i)=>state.personal.push({id:i+1,nombre:c.nombre,dni:String(10000000+i*731),rol:c.rol,frente:c.frente,estado:i<18?'activo':'ausente',jornal:c.jornal}));
   for(let d=6;d>=0;d--){const f=new Date();f.setDate(f.getDate()-d);const fs=f.toISOString().split('T')[0];[1,2].forEach(fr=>state.perforacion.push({fecha:fs,frente:fr,metros:15+Math.floor(Math.random()*10),personas:6+Math.floor(Math.random()*3),roca:['Media','Dura','Blanda'][Math.floor(Math.random()*3)],obs:''}));}
@@ -4313,7 +4314,7 @@ function initTareoFecha(){
 }
 
 // Cargos válidos que pueden ser Jefe de Turno
-const JEFES_TURNO_CARGOS = ['Capataz','Jefe de Guardia','Asistente de Residente'];
+const JEFES_TURNO_CARGOS = ['Capataz','Jefe de Guardia'];
 
 // Paso 0 → abrir asistente de configuración
 function abrirSetupTareo(){
@@ -4327,11 +4328,12 @@ function abrirSetupTareo(){
   const jefeSel=document.getElementById('tareo-jefe');
   if(jefeSel){
     const candidatos=state.personal.filter(p=>p.estado!=='baja'&&JEFES_TURNO_CARGOS.includes(p.rol));
+    const vistos=new Set();
     let opts='<option value="">— Seleccionar —</option>';
-    if(candidatos.length){
-      opts+=candidatos.map(p=>`<option value="${p.nombre} (${p.rol})">${p.nombre} — ${p.rol}</option>`).join('');
-    }
-    opts+=JEFES_TURNO_CARGOS.map(c=>`<option value="${c}">${c}</option>`).join('');
+    candidatos.forEach(p=>{
+      if(!vistos.has(p.id)){vistos.add(p.id);opts+=`<option value="${p.nombre}">${p.nombre} — ${p.rol}</option>`;}
+    });
+    if(!candidatos.length) opts+=`<option value="">Sin Jefes/Capataces registrados</option>`;
     jefeSel.innerHTML=opts;
   }
   // Poblar lista de personal con selección y labor
