@@ -2019,46 +2019,7 @@ select option{background:var(--coal3);}
 </div>
 
 <!-- ═══════════════ MODAL DAR DE BAJA ═══════════════ -->
-<div class="modal-overlay" id="modal-baja" onclick="if(event.target===this)cerrarModal('modal-baja')">
-  <div class="modal" style="width:min(480px,95vw)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
-      <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:#f87171">⬇ Dar de Baja</div>
-      <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-baja')">✕</button>
-    </div>
-    <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:11px;color:#f87171">
-      El trabajador quedará inactivo y no aparecerá en planilla ni en costos. Su historial se conserva.
-    </div>
-    <div class="form-grid" style="grid-template-columns:1fr">
-      <div class="form-group">
-        <label>Trabajador</label>
-        <select id="baja-trabajador" style="font-size:13px"></select>
-      </div>
-      <div class="form-group">
-        <label>Motivo de baja</label>
-        <select id="baja-motivo">
-          <option value="Renuncia voluntaria">Renuncia voluntaria</option>
-          <option value="Término de contrato">Término de contrato</option>
-          <option value="Despido">Despido</option>
-          <option value="Accidente / Salud">Accidente / Salud</option>
-          <option value="Abandono de trabajo">Abandono de trabajo</option>
-          <option value="Otro">Otro</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Fecha de baja</label>
-        <input type="date" id="baja-fecha">
-      </div>
-      <div class="form-group">
-        <label>Observaciones (opcional)</label>
-        <textarea id="baja-obs" rows="3" placeholder="Detalles adicionales..." style="resize:vertical;font-size:12px;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--text);width:100%;box-sizing:border-box"></textarea>
-      </div>
-    </div>
-    <div class="btn-row" style="margin-top:18px">
-      <button class="btn" style="background:rgba(239,68,68,0.2);color:#f87171;border:1px solid rgba(239,68,68,0.4);font-weight:700" onclick="confirmarBaja()">Confirmar Baja</button>
-      <button class="btn btn-outline" onclick="cerrarModal('modal-baja')">Cancelar</button>
-    </div>
-  </div>
-</div>
+<!-- modal-baja se crea dinámicamente por abrirBajaDesdeCard -->
 
 <!-- ═══════════════ MODAL ADMIN USUARIOS ═══════════════ -->
 <div class="modal-overlay" id="modal-admin-usuarios">
@@ -4767,23 +4728,67 @@ async function confirmarBaja(){
   showNotif(`${p.nombre} dado de baja: ${motivo}`,'warn');
 }
 
-function abrirBajaDesdeCard(id){
-  const todos=state.personal.filter(p=>p.estado!=='baja');
-  const sel=document.getElementById('baja-trabajador');
-  if(!sel){alert('Error: modal no encontrado');return;}
-  sel.innerHTML=todos.map(p=>`<option value="${p.id}">${p.nombre} — ${p.rol}</option>`).join('');
-  // Seleccionar el trabajador correcto por comparación de string
-  for(let i=0;i<sel.options.length;i++){
-    if(String(sel.options[i].value)===String(id)){sel.selectedIndex=i;break;}
-  }
-  document.getElementById('baja-motivo').value='Renuncia voluntaria';
-  document.getElementById('baja-fecha').value=hoy();
-  document.getElementById('baja-obs').value='';
-  // Mostrar modal usando ambas clases por compatibilidad
-  const modal=document.getElementById('modal-baja');
-  modal.classList.add('show');
-  modal.classList.add('active');
-  modal.style.display='flex';
+function abrirBajaDesdeCard(pid){
+  const p=state.personal.find(x=>String(x.id)===String(pid));
+  if(!p){return;}
+  // Eliminar modal anterior si existe
+  const prev=document.getElementById('modal-baja-dyn');
+  if(prev) prev.remove();
+  // Crear modal dinámico directo en body
+  const overlay=document.createElement('div');
+  overlay.id='modal-baja-dyn';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML=`
+    <div style="background:#1e2a3a;border-radius:14px;padding:28px;width:min(420px,95vw);box-shadow:0 20px 60px rgba(0,0,0,0.6);font-family:Arial,sans-serif">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <div style="font-size:17px;font-weight:800;color:#f87171">⬇ Dar de Baja</div>
+        <button onclick="document.getElementById('modal-baja-dyn').remove()" style="background:none;border:none;color:#aaa;font-size:22px;cursor:pointer;line-height:1">✕</button>
+      </div>
+      <div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:12px;color:#f87171">
+        Trabajador: <strong>${p.nombre}</strong> — ${p.rol}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div>
+          <label style="display:block;font-size:12px;color:#aaa;margin-bottom:5px">Motivo de baja</label>
+          <select id="baja-dyn-motivo" style="width:100%;background:#0f1c2e;border:1px solid #334;border-radius:8px;padding:9px 12px;color:#fff;font-size:13px">
+            <option>Renuncia voluntaria</option>
+            <option>Término de contrato</option>
+            <option>Despido</option>
+            <option>Accidente / Salud</option>
+            <option>Abandono de trabajo</option>
+            <option>Otro</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;color:#aaa;margin-bottom:5px">Fecha de baja</label>
+          <input id="baja-dyn-fecha" type="date" value="${hoy()}" style="width:100%;background:#0f1c2e;border:1px solid #334;border-radius:8px;padding:9px 12px;color:#fff;font-size:13px;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;color:#aaa;margin-bottom:5px">Observaciones (opcional)</label>
+          <textarea id="baja-dyn-obs" rows="3" placeholder="Detalles adicionales..." style="width:100%;background:#0f1c2e;border:1px solid #334;border-radius:8px;padding:9px 12px;color:#fff;font-size:13px;resize:vertical;box-sizing:border-box"></textarea>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:22px">
+        <button onclick="document.getElementById('modal-baja-dyn').remove()" style="flex:1;padding:10px;background:rgba(255,255,255,0.08);border:1px solid #334;border-radius:8px;color:#aaa;font-size:13px;cursor:pointer">Cancelar</button>
+        <button onclick="confirmarBajaDyn('${pid}')" style="flex:1;padding:10px;background:rgba(239,68,68,0.25);border:1px solid rgba(239,68,68,0.5);border-radius:8px;color:#f87171;font-size:13px;font-weight:700;cursor:pointer">✓ Confirmar Baja</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  // Cerrar al click en el fondo
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) overlay.remove(); });
+}
+
+async function confirmarBajaDyn(pid){
+  const motivo=document.getElementById('baja-dyn-motivo')?.value||'Sin motivo';
+  const fecha=document.getElementById('baja-dyn-fecha')?.value||hoy();
+  const obs=document.getElementById('baja-dyn-obs')?.value.trim()||'';
+  const p=state.personal.find(x=>String(x.id)===String(pid));
+  if(!p){return;}
+  p.estado='baja';p.motivoBaja=motivo;p.fechaBaja=fecha;p.obsBaja=obs;
+  try{await sb.from('personal').update({estado:'baja',motivoBaja:motivo,fechaBaja:fecha,obsBaja:obs}).eq('id',p.id);}catch(e){}
+  document.getElementById('modal-baja-dyn')?.remove();
+  poblarSelects();renderPersonal();renderCostoRRHH();
+  showNotif(`${p.nombre} dado de baja: ${motivo}`,'warn');
 }
 
 async function agregarPersonal(){
