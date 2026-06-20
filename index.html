@@ -4438,7 +4438,7 @@ function cargarHojaTareo(){
         <div style="display:flex;gap:4px;justify-content:center">${mkBtn('1','×1')}${mkBtn('1.5','×1.5')}${mkBtn('2','×2')}</div>
       </td>
       <td style="padding:5px 8px;border:1px solid #ddd">
-        <input type="text" data-pid="${p.id}" class="tareo-obs" value="${obs.replace(/"/g,'&quot;')}" placeholder="—" style="width:100%;border:none;background:transparent;font-size:11px;color:#333;outline:none;font-family:Arial">
+        <input type="text" data-pid="${p.id}" class="tareo-obs" value="${obs.replace(/"/g,'&quot;')}" placeholder="—" style="width:100%;border:none;background:transparent;font-size:11px;color:#1a1a1a;outline:none;font-family:Arial;caret-color:#1a1a1a">
       </td>
     </tr>`;
   });
@@ -4679,8 +4679,7 @@ function renderPersonal(){
       ${ingresoStr}
       <div style="font-size:10px;color:var(--text3);margin-top:4px">S/ ${p.jornal}/día</div>
       <div style="display:flex;gap:6px;margin-top:8px;justify-content:center">
-        <button onclick="abrirEditarPersonal('${p.id}')" style="flex:1;padding:4px 0;font-size:11px;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.35);border-radius:6px;cursor:pointer">✏ Editar</button>
-        <button onclick="eliminarPersonal('${p.id}')" style="flex:1;padding:4px 0;font-size:11px;background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.3);border-radius:6px;cursor:pointer">🗑 Eliminar</button>
+        <button onclick="abrirBajaDesdeCard('${p.id}')" style="width:100%;padding:5px 0;font-size:11px;background:rgba(239,68,68,0.12);color:#f87171;border:1px solid rgba(239,68,68,0.35);border-radius:6px;cursor:pointer;font-weight:600">⬇ Dar de Baja</button>
       </div>
     </div>`;
   }).join('')||'<div style="color:var(--text3);font-size:12px;padding:16px">Sin personal activo</div>';
@@ -4729,6 +4728,16 @@ async function confirmarBaja(){
   try{await sb.from('personal').update({estado:'baja',motivoBaja:motivo,fechaBaja:fecha,obsBaja:obs}).eq('id',id);}catch(e){}
   cerrarModal('modal-baja');poblarSelects();renderPersonal();renderCostoRRHH();
   showNotif(`${p.nombre} dado de baja: ${motivo}`,'warn');
+}
+
+function abrirBajaDesdeCard(id){
+  const activos=state.personal.filter(p=>p.estado!=='baja');
+  const sel=document.getElementById('baja-trabajador');
+  sel.innerHTML=activos.map(p=>`<option value="${p.id}">${p.nombre} — ${p.rol}</option>`).join('');
+  sel.value=id;
+  document.getElementById('baja-fecha').value=hoy();
+  document.getElementById('baja-obs').value='';
+  document.getElementById('modal-baja').classList.add('active');
 }
 
 async function agregarPersonal(){
@@ -4875,124 +4884,144 @@ function exportarPlanillaExcel(){
   const [anio,mesN]=mes.split('-');
   const nombreMes=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][parseInt(mesN)-1]||mes;
   const tMes=state.tareas.filter(t=>t.fecha.startsWith(mes));
-  const activos=state.personal.filter(p=>p.estado!=='baja');
-  if(!state.adelantos) state.adelantos={};
-  // Style helpers
-  const hdrS={font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'1A2744'}},alignment:{horizontal:'center'}};
-  const totS={font:{bold:true},fill:{fgColor:{rgb:'FFF3CD'}}};
-  const altS={fill:{fgColor:{rgb:'F5F5F5'}}};
-  const numS={numFmt:'#,##0.00'};
-  const filas=activos.map((p,i)=>{
+  const todos=state.personal;
+  // ── Estilos ──
+  const S={
+    titulo:{font:{bold:true,sz:16,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'0F1C3F'}},alignment:{horizontal:'center',vertical:'center'}},
+    sub:   {font:{bold:false,sz:11,color:{rgb:'C9A84C'}},fill:{fgColor:{rgb:'0F1C3F'}},alignment:{horizontal:'center'}},
+    hdr:   {font:{bold:true,sz:11,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'1A2744'}},alignment:{horizontal:'center',vertical:'center'},border:{bottom:{style:'medium',color:{rgb:'C9A84C'}}}},
+    alt:   {fill:{fgColor:{rgb:'F0F4FF'}}},
+    norm:  {fill:{fgColor:{rgb:'FFFFFF'}}},
+    num:   {numFmt:'S/ #,##0.00'},
+    numAlt:{numFmt:'S/ #,##0.00',fill:{fgColor:{rgb:'F0F4FF'}}},
+    gold:  {font:{bold:true,sz:12,color:{rgb:'C9A84C'}},fill:{fgColor:{rgb:'1A2744'}},numFmt:'S/ #,##0.00',alignment:{horizontal:'right'}},
+    baja:  {font:{bold:false,italic:true,color:{rgb:'888888'}},fill:{fgColor:{rgb:'F5F5F5'}}},
+    liq:   {font:{bold:true,color:{rgb:'DC2626'}},fill:{fgColor:{rgb:'FEF2F2'}},alignment:{horizontal:'center'}},
+    tot:   {font:{bold:true,sz:12,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'1A2744'}},numFmt:'S/ #,##0.00'},
+    totLbl:{font:{bold:true,sz:12,color:{rgb:'C9A84C'}},fill:{fgColor:{rgb:'1A2744'}}},
+  };
+  function cell(v,s){return{v,s,t:typeof v==='number'?'n':'s'};}
+  function applyRow(ws,r,cells){cells.forEach((c,ci)=>{if(c===null)return;const a=XLSX.utils.encode_cell({r,c:ci});ws[a]=cell(c.v,c.s);if(!ws['!ref'])ws['!ref']=a;});}
+  function makeWS(){return{'!ref':'A1:A1'};}
+
+  // ════ HOJA 1: RESUMEN MES ════
+  const ws1=makeWS();
+  const headers=['N°','APELLIDOS Y NOMBRES','DNI','CARGO','FRENTE','JORNAL/DÍA','DÍAS','×1','×1.5','×2','TOTAL S/','ESTADO'];
+  const COL=headers.length-1;
+  // Título
+  applyRow(ws1,0,[{v:`PLANILLA DE PERSONAL — ${nombreMes.toUpperCase()} ${anio}`,s:S.titulo},...Array(COL).fill({v:'',s:S.titulo})]);
+  ws1['!merges']=[{s:{r:0,c:0},e:{r:0,c:COL}}];
+  applyRow(ws1,1,[{v:`Exportado: ${new Date().toLocaleDateString('es-PE')}   |   Total trabajadores: ${todos.length}`,s:S.sub},...Array(COL).fill({v:'',s:S.sub})]);
+  ws1['!merges'].push({s:{r:1,c:0},e:{r:1,c:COL}});
+  applyRow(ws1,2,Array(COL+1).fill({v:'',s:S.sub}));
+  // Headers
+  applyRow(ws1,3,headers.map(h=>({v:h,s:S.hdr})));
+  // Datos
+  const filas=todos.map((p,i)=>{
     const pts=tMes.filter(t=>String(t.trabajadorId)===String(p.id));
     const dias=new Set(pts.map(t=>t.fecha)).size;
     const n1=pts.filter(t=>Number(t.mult||1)===1).length;
     const n15=pts.filter(t=>Number(t.mult||1)===1.5).length;
     const n2=pts.filter(t=>Number(t.mult||1)===2).length;
     const total=pts.reduce((s,t)=>{const j=t.jornal??p.jornal;return s+j*(t.mult||1);},0);
-    const adelanto=Number((state.adelantos[p.id]||{})[mes]||0);
-    const descuento=Number((state.adelantos[p.id]||{})[mes+'_desc']||0);
-    const neto=total-adelanto-descuento;
-    return[i+1,p.nombre,p.dni||'—',p.rol,FL[p.frente]||'—',p.jornal,dias,n1||0,n15||0,n2||0,+total.toFixed(2),+adelanto.toFixed(2),+descuento.toFixed(2),+neto.toFixed(2)];
+    const baja=p.estado==='baja';
+    return{p,dias,n1,n15,n2,total,baja,idx:i+1};
+  }).sort((a,b)=>b.total-a.total||a.p.nombre.localeCompare(b.p.nombre));
+  filas.forEach(({p,dias,n1,n15,n2,total,baja,idx},ri)=>{
+    const r=4+ri;
+    const bg=ri%2===1?'F0F4FF':'FFFFFF';
+    const ts=baja?S.baja:{fill:{fgColor:{rgb:bg}}};
+    const ns={...ts,numFmt:'S/ #,##0.00'};
+    const estado=baja?'LIQUIDADO':'ACTIVO';
+    const estS=baja?S.liq:{font:{bold:true,color:{rgb:'166534'}},fill:{fgColor:{rgb:bg}},alignment:{horizontal:'center'}};
+    applyRow(ws1,r,[
+      {v:idx,s:{...ts,alignment:{horizontal:'center'}}},
+      {v:p.nombre,s:baja?{...ts,font:{...S.baja.font,bold:true}}:{...ts,font:{bold:true}}},
+      {v:p.dni||'—',s:{...ts,alignment:{horizontal:'center'}}},
+      {v:p.rol,s:ts},{v:FL[p.frente]||'—',s:{...ts,alignment:{horizontal:'center'}}},
+      {v:p.jornal,s:ns},{v:dias,s:{...ts,alignment:{horizontal:'center'}}},
+      {v:n1||0,s:{...ts,alignment:{horizontal:'center'}}},
+      {v:n15||0,s:{...ts,alignment:{horizontal:'center'}}},
+      {v:n2||0,s:{...ts,alignment:{horizontal:'center'}}},
+      {v:+total.toFixed(2),s:baja?{...S.liq,numFmt:'S/ #,##0.00'}:{font:{bold:true,color:{rgb:'C9A84C'}},fill:{fgColor:{rgb:bg}},numFmt:'S/ #,##0.00'}},
+      {v:estado,s:estS},
+    ]);
   });
-  const totRow=['','TOTALES','','','','',
-    filas.reduce((s,f)=>s+f[6],0),
-    filas.reduce((s,f)=>s+f[7],0),
-    filas.reduce((s,f)=>s+f[8],0),
-    filas.reduce((s,f)=>s+f[9],0),
-    +filas.reduce((s,f)=>s+f[10],0).toFixed(2),
-    +filas.reduce((s,f)=>s+f[11],0).toFixed(2),
-    +filas.reduce((s,f)=>s+f[12],0).toFixed(2),
-    +filas.reduce((s,f)=>s+f[13],0).toFixed(2)
-  ];
-  const headers=['N°','Trabajador','DNI','Cargo','Frente','Jornal/día S/','Días Trab.','Jorn. ×1','Jorn. ×1.5','Jorn. ×2','TOTAL S/','Adelanto S/','Descuento S/','NETO S/'];
-  const wsData=[
-    [`ATMIN / DEEPMINE — PLANILLA DE PERSONAL`],
-    [`Período: ${nombreMes} ${anio}`],
-    [`Exportado: ${new Date().toLocaleDateString('es-PE',{day:'2-digit',month:'2-digit',year:'numeric'})}`],
-    [],
-    headers,
-    ...filas,
-    totRow,
-    [],[],[],
-    ['','Firma Administrador del Proyecto:','','','','','Firma Jefe de Finanzas:'],
-    ['','___________________________','','','','','___________________________'],
-  ];
-  const ws1=XLSX.utils.aoa_to_sheet(wsData);
-  ws1['!cols']=[{wch:4},{wch:28},{wch:12},{wch:24},{wch:16},{wch:13},{wch:11},{wch:9},{wch:10},{wch:9},{wch:13},{wch:13},{wch:13},{wch:13}];
-  ws1['!merges']=[{s:{r:0,c:0},e:{r:0,c:13}}];
-  // Apply styles to header row (row index 4)
-  const hdrRow=4;
-  headers.forEach((_,ci)=>{
-    const addr=XLSX.utils.encode_cell({r:hdrRow,c:ci});
-    if(ws1[addr]) ws1[addr].s=hdrS;
-  });
-  // Apply alternating row styles and number formats
-  filas.forEach((f,ri)=>{
-    const rowIdx=hdrRow+1+ri;
-    const bg=ri%2===1?altS:{};
-    f.forEach((_,ci)=>{
-      const addr=XLSX.utils.encode_cell({r:rowIdx,c:ci});
-      if(ws1[addr]){
-        if(ci>=5) ws1[addr].s={...bg,...numS};
-        else ws1[addr].s=bg;
-      }
-    });
-  });
-  // Apply totals row style
-  const totIdx=hdrRow+1+filas.length;
-  totRow.forEach((_,ci)=>{
-    const addr=XLSX.utils.encode_cell({r:totIdx,c:ci});
-    if(ws1[addr]) ws1[addr].s={...totS,...(ci>=5?numS:{})};
-  });
-  // Sheet 2 detalle diario
-  const det=[['Fecha','Trabajador','DNI','Cargo','Frente','Tareas','Jornal/día S/','Monto S/']];
-  [...tMes].sort((a,b)=>a.fecha.localeCompare(b.fecha)||String(a.trabajadorId).localeCompare(String(b.trabajadorId))).forEach(t=>{
-    const p=state.personal.find(x=>String(x.id)===String(t.trabajadorId));
-    if(!p) return;
+  // Fila total
+  const rTot=4+filas.length;
+  const totTotal=filas.reduce((s,f)=>s+f.total,0);
+  const totDias=filas.reduce((s,f)=>s+f.dias,0);
+  applyRow(ws1,rTot,[
+    {v:'',s:S.totLbl},{v:'TOTAL MES',s:S.totLbl},{v:'',s:S.totLbl},{v:'',s:S.totLbl},{v:'',s:S.totLbl},
+    {v:'',s:S.totLbl},{v:totDias,s:{...S.tot,alignment:{horizontal:'center'}}},
+    {v:'',s:S.tot},{v:'',s:S.tot},{v:'',s:S.tot},
+    {v:+totTotal.toFixed(2),s:S.gold},{v:'',s:S.totLbl},
+  ]);
+  // Firmas
+  applyRow(ws1,rTot+2,[null,{v:'Firma Administrador del Proyecto:',s:{}},null,null,null,null,null,{v:'Firma Jefe de Finanzas:',s:{}}]);
+  applyRow(ws1,rTot+4,[null,{v:'___________________________',s:{}},null,null,null,null,null,{v:'___________________________',s:{}}]);
+  ws1['!cols']=[{wch:4},{wch:30},{wch:13},{wch:26},{wch:12},{wch:13},{wch:7},{wch:6},{wch:7},{wch:6},{wch:14},{wch:11}];
+  ws1['!rows']=[{hpt:28},{hpt:18},{hpt:6},{hpt:20}];
+  // Actualizar ref
+  ws1['!ref']=`A1:${XLSX.utils.encode_cell({r:rTot+4,c:COL})}`;
+
+  // ════ HOJA 2: DETALLE DIARIO ════
+  const ws2=makeWS();
+  const h2=['FECHA','TRABAJADOR','DNI','CARGO','FRENTE','TURNO','×','JORNAL/DÍA','MONTO S/'];
+  applyRow(ws2,0,h2.map(h=>({v:h,s:S.hdr})));
+  const detRows=[...tMes].sort((a,b)=>a.fecha.localeCompare(b.fecha)||String(a.trabajadorId).localeCompare(String(b.trabajadorId)));
+  detRows.forEach((t,ri)=>{
+    const p=state.personal.find(x=>String(x.id)===String(t.trabajadorId));if(!p)return;
     const j=t.jornal??p.jornal;
-    det.push([t.fecha,p.nombre,p.dni||'—',p.rol,FL[p.frente]||'—',`×${t.mult||1}`,j,+(j*(t.mult||1)).toFixed(2)]);
+    const bg=ri%2===1?'F0F4FF':'FFFFFF';
+    const ts={fill:{fgColor:{rgb:bg}}};
+    applyRow(ws2,ri+1,[
+      {v:t.fecha,s:{...ts,alignment:{horizontal:'center'}}},
+      {v:p.nombre,s:{...ts,font:{bold:true}}},
+      {v:p.dni||'—',s:{...ts,alignment:{horizontal:'center'}}},
+      {v:p.rol,s:ts},
+      {v:FL[p.frente]||'—',s:{...ts,alignment:{horizontal:'center'}}},
+      {v:t.turno||'DIA',s:{...ts,alignment:{horizontal:'center'}}},
+      {v:`×${t.mult||1}`,s:{...ts,alignment:{horizontal:'center'}}},
+      {v:j,s:{...ts,numFmt:'S/ #,##0.00'}},
+      {v:+(j*(t.mult||1)).toFixed(2),s:{font:{bold:true,color:{rgb:'C9A84C'}},fill:{fgColor:{rgb:bg}},numFmt:'S/ #,##0.00'}},
+    ]);
   });
-  const ws2=XLSX.utils.aoa_to_sheet(det);
-  ws2['!cols']=[{wch:12},{wch:28},{wch:12},{wch:24},{wch:16},{wch:8},{wch:13},{wch:13}];
-  // Apply header style to ws2
-  det[0].forEach((_,ci)=>{
-    const addr=XLSX.utils.encode_cell({r:0,c:ci});
-    if(ws2[addr]) ws2[addr].s=hdrS;
-  });
-  // Sheet 3 — Gráfico Costos (data table by cargo)
+  ws2['!cols']=[{wch:12},{wch:30},{wch:13},{wch:26},{wch:12},{wch:8},{wch:6},{wch:13},{wch:14}];
+  ws2['!ref']=`A1:${XLSX.utils.encode_cell({r:detRows.length,c:8})}`;
+
+  // ════ HOJA 3: RANKING POR CARGO ════
+  const ws3=makeWS();
   const byRol={};
-  filas.forEach(f=>{
-    const rol=f[3];
-    if(!byRol[rol]) byRol[rol]=0;
-    byRol[rol]+=f[10];
+  filas.forEach(({p,total})=>{if(!byRol[p.rol])byRol[p.rol]={total:0,n:0};byRol[p.rol].total+=total;byRol[p.rol].n++;});
+  const rolEntries=Object.entries(byRol).sort((a,b)=>b[1].total-a[1].total);
+  const totalGeneral=rolEntries.reduce((s,[,v])=>s+v.total,0)||1;
+  applyRow(ws3,0,[{v:`DISTRIBUCIÓN DE COSTOS POR CARGO — ${nombreMes} ${anio}`,s:S.titulo},...Array(4).fill({v:'',s:S.titulo})]);
+  ws3['!merges']=[{s:{r:0,c:0},e:{r:0,c:4}}];
+  applyRow(ws3,2,['CARGO','TRABAJADORES','TOTAL S/','% DEL TOTAL','BARRA VISUAL'].map(h=>({v:h,s:S.hdr})));
+  const maxT=rolEntries[0]?rolEntries[0][1].total:1;
+  rolEntries.forEach(([rol,{total,n}],ri)=>{
+    const pct=(total/totalGeneral*100);
+    const bars=Math.round((total/maxT)*40);
+    const bg=ri%2===1?'F0F4FF':'FFFFFF';
+    const ts={fill:{fgColor:{rgb:bg}}};
+    applyRow(ws3,3+ri,[
+      {v:rol,s:{...ts,font:{bold:true}}},
+      {v:n,s:{...ts,alignment:{horizontal:'center'}}},
+      {v:+total.toFixed(2),s:{font:{bold:true,color:{rgb:'C9A84C'}},fill:{fgColor:{rgb:bg}},numFmt:'S/ #,##0.00'}},
+      {v:+(pct).toFixed(1),s:{...ts,numFmt:'0.0"%"',alignment:{horizontal:'center'}}},
+      {v:'█'.repeat(bars)||'▏',s:{...ts,font:{color:{rgb:'1A2744'}}}},
+    ]);
   });
-  const rolEntries=Object.entries(byRol).sort((a,b)=>b[1]-a[1]);
-  const maxCosto=rolEntries[0]?rolEntries[0][1]:1;
-  const barWidth=30;
-  const graficoData=[
-    ['DISTRIBUCIÓN DE COSTOS POR CARGO'],
-    [`Período: ${nombreMes} ${anio}`],
-    [],
-    ['Cargo','Total S/','% del Total','Barra (visual)'],
-    ...rolEntries.map(([rol,total])=>{
-      const pct=maxCosto>0?(total/rolEntries.reduce((s,[,v])=>s+v,0)*100):0;
-      const bars=Math.round((total/maxCosto)*barWidth);
-      return[rol,+total.toFixed(2),+(pct).toFixed(1),'█'.repeat(bars)||'▏'];
-    }),
-    [],
-    ['TOTAL',+rolEntries.reduce((s,[,v])=>s+v,0).toFixed(2),100,''],
-  ];
-  const ws3=XLSX.utils.aoa_to_sheet(graficoData);
-  ws3['!cols']=[{wch:28},{wch:14},{wch:12},{wch:35}];
-  // Header style ws3
-  ['Cargo','Total S/','% del Total','Barra (visual)'].forEach((_,ci)=>{
-    const addr=XLSX.utils.encode_cell({r:3,c:ci});
-    if(ws3[addr]) ws3[addr].s=hdrS;
-  });
+  const rT3=3+rolEntries.length;
+  applyRow(ws3,rT3,[{v:'TOTAL',s:S.totLbl},{v:todos.length,s:{...S.tot,alignment:{horizontal:'center'}}},{v:+totalGeneral.toFixed(2),s:S.gold},{v:100,s:{...S.tot,numFmt:'0.0"%"',alignment:{horizontal:'center'}}},{v:'',s:S.tot}]);
+  ws3['!cols']=[{wch:28},{wch:15},{wch:15},{wch:13},{wch:42}];
+  ws3['!ref']=`A1:${XLSX.utils.encode_cell({r:rT3,c:4})}`;
+
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws1,'Resumen Mes');
   XLSX.utils.book_append_sheet(wb,ws2,'Detalle Diario');
-  XLSX.utils.book_append_sheet(wb,ws3,'Gráfico Costos');
+  XLSX.utils.book_append_sheet(wb,ws3,'Distribución por Cargo');
   XLSX.writeFile(wb,`Planilla_${nombreMes}_${anio}.xlsx`);
   showNotif(`✓ Excel descargado: Planilla_${nombreMes}_${anio}.xlsx`);
 }
