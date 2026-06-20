@@ -5059,10 +5059,39 @@ function exportarPlanillaExcel(){
   ws3['!cols']=[{wch:28},{wch:15},{wch:15},{wch:13},{wch:42}];
   ws3['!ref']=`A1:${XLSX.utils.encode_cell({r:rT3,c:4})}`;
 
+  // ════ HOJA 4: LIQUIDADOS ════
+  const ws4=makeWS();
+  const bajas=state.personal.filter(p=>p.estado==='baja');
+  const h4=['N°','APELLIDOS Y NOMBRES','DNI','CARGO','FRENTE','FECHA INGRESO','FECHA BAJA','MOTIVO DE BAJA','OBSERVACIONES'];
+  applyRow(ws4,0,[{v:'REGISTRO DE LIQUIDADOS',s:S.titulo},...Array(h4.length-1).fill({v:'',s:S.titulo})]);
+  ws4['!merges']=[{s:{r:0,c:0},e:{r:0,c:h4.length-1}}];
+  applyRow(ws4,1,[{v:`Total liquidados: ${bajas.length}   |   Exportado: ${new Date().toLocaleDateString('es-PE')}`,s:S.sub},...Array(h4.length-1).fill({v:'',s:S.sub})]);
+  ws4['!merges'].push({s:{r:1,c:0},e:{r:1,c:h4.length-1}});
+  applyRow(ws4,3,h4.map(h=>({v:h,s:S.hdr})));
+  bajas.forEach((p,ri)=>{
+    const bg=ri%2===1?'FEF2F2':'FFF5F5';
+    const ts={fill:{fgColor:{rgb:bg}}};
+    applyRow(ws4,4+ri,[
+      {v:ri+1,s:{...ts,alignment:{horizontal:'center'}}},
+      {v:p.nombre,s:{...ts,font:{bold:true}}},
+      {v:p.dni||'—',s:{...ts,alignment:{horizontal:'center'}}},
+      {v:p.rol,s:ts},
+      {v:FL[p.frente]||'—',s:{...ts,alignment:{horizontal:'center'}}},
+      {v:p.ingreso||'—',s:{...ts,alignment:{horizontal:'center'}}},
+      {v:p.fechaBaja||'—',s:{font:{bold:true,color:{rgb:'DC2626'}},fill:{fgColor:{rgb:bg}},alignment:{horizontal:'center'}}},
+      {v:p.motivoBaja||'—',s:{font:{bold:true,color:{rgb:'DC2626'}},fill:{fgColor:{rgb:bg}}}},
+      {v:p.obsBaja||'—',s:ts},
+    ]);
+  });
+  if(!bajas.length) applyRow(ws4,4,[{v:'Sin trabajadores liquidados',s:{font:{italic:true,color:{rgb:'888888'}},alignment:{horizontal:'center'}}}]);
+  ws4['!cols']=[{wch:4},{wch:30},{wch:13},{wch:26},{wch:12},{wch:14},{wch:12},{wch:26},{wch:30}];
+  ws4['!ref']=`A1:${XLSX.utils.encode_cell({r:Math.max(4,3+bajas.length),c:h4.length-1})}`;
+
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws1,'Resumen Mes');
   XLSX.utils.book_append_sheet(wb,ws2,'Detalle Diario');
   XLSX.utils.book_append_sheet(wb,ws3,'Distribución por Cargo');
+  XLSX.utils.book_append_sheet(wb,ws4,'Liquidados');
   XLSX.writeFile(wb,`Planilla_${nombreMes}_${anio}.xlsx`);
   showNotif(`✓ Excel descargado: Planilla_${nombreMes}_${anio}.xlsx`);
 }
