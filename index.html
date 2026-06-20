@@ -2488,26 +2488,13 @@ select option{background:var(--coal3);}
   </div>
 
   <div class="mod-pane" style="display:none" id="rrhh-tareas">
-    <div class="card" style="margin-bottom:14px">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
-        <div class="section-title" style="margin:0">Historial &amp; Edición de Tareos</div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <select id="hist-mes" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:12px" onchange="renderTareas()">
-            <option value="">— Todos los meses —</option>
-          </select>
-          <select id="hist-trabajador" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:12px" onchange="renderTareas()">
-            <option value="">— Todos —</option>
-          </select>
-        </div>
-      </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;color:var(--text2)">Tareos archivados por turno</div>
+      <select id="hist-mes" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:7px 12px;color:var(--text);font-size:12px" onchange="renderTareas()">
+        <option value="">— Todos los meses —</option>
+      </select>
     </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Fecha</th><th>Trabajador</th><th>Cargo</th><th>Tareas</th><th>Pago S/</th><th>Acción</th></tr></thead>
-        <tbody id="tareas-tbody"></tbody>
-      </table>
-    </div>
-    <div id="tareas-resumen" style="margin-top:12px"></div>
+    <div id="tareos-archivados"></div>
   </div>
 
   <div class="mod-pane" style="display:none" id="rrhh-personal">
@@ -4578,80 +4565,91 @@ function seedTareoDemo(){
 }
 
 function renderTareas(){
-  const tbody=document.getElementById('tareas-tbody');if(!tbody)return;
-  // Poblar filtros
   const hMes=document.getElementById('hist-mes');
-  const hTrab=document.getElementById('hist-trabajador');
   const meses=[...new Set(state.tareas.map(t=>t.fecha.slice(0,7)))].sort().reverse();
   if(hMes){
-    const prevMes=hMes.value;
-    hMes.innerHTML='<option value="">— Todos los meses —</option>'+meses.map(m=>`<option value="${m}"${m===prevMes?' selected':''}>${m}</option>`).join('');
-  }
-  if(hTrab){
-    const prevT=hTrab.value;
-    const activos=state.personal.filter(p=>p.estado!=='baja');
-    hTrab.innerHTML='<option value="">— Todos —</option>'+activos.map(p=>`<option value="${p.id}"${String(p.id)===prevT?' selected':''}>${p.nombre}</option>`).join('');
+    const prev=hMes.value;
+    hMes.innerHTML='<option value="">— Todos los meses —</option>'+meses.map(m=>`<option value="${m}"${m===prev?' selected':''}>${m}</option>`).join('');
   }
   const filtMes=hMes?hMes.value:'';
-  const filtTrab=hTrab?hTrab.value:'';
-  let tareas=[...state.tareas].sort((a,b)=>b.fecha.localeCompare(a.fecha));
-  if(filtMes) tareas=tareas.filter(t=>t.fecha.startsWith(filtMes));
-  if(filtTrab) tareas=tareas.filter(t=>String(t.trabajadorId)===String(filtTrab));
-  const diasMap={};
-  tareas.forEach(t=>{if(!diasMap[t.trabajadorId])diasMap[t.trabajadorId]=new Set();diasMap[t.trabajadorId].add(t.fecha);});
-  tbody.innerHTML=tareas.map((t,i)=>{
-    const p=state.personal.find(x=>String(x.id)===String(t.trabajadorId));
-    const mult=Number(t.mult||1);
-    const jornal=p?Number(p.jornal):0;
-    const pago=jornal*mult;
-    const multCol=mult>=2?'#f87171':mult>1?'#f59e0b':'#60a5fa';
-    const dias=diasMap[t.trabajadorId]?diasMap[t.trabajadorId].size:1;
-    const uid=t.id||t._tmpId||i;
-    return`<tr id="tareo-row-${uid}">
-      <td>${fmtF(t.fecha)}</td>
-      <td><strong>${p?p.nombre:'—'}</strong><div style="font-size:10px;color:var(--text3)">${p?p.rol:''}</div></td>
-      <td style="font-size:11px;color:var(--text3)">${p?p.cargo||p.rol:'—'}</td>
-      <td><span style="font-weight:700;color:${multCol}">×${mult}</span></td>
-      <td style="font-family:'DM Mono',monospace">${fmtS(jornal)}</td>
-      <td style="font-family:'DM Mono',monospace;color:var(--gold-light);font-weight:700">${fmtS(pago)}</td>
-      <td style="text-align:center"><span class="badge badge-ok">${dias}</span></td>
-      <td><button onclick="editarTareoRow('${uid}')" style="background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-weight:600">Editar</button></td>
-    </tr>`;
-  }).join('')||'<tr><td colspan="8" class="empty-state">Sin registros</td></tr>';
-  const totalPago=tareas.reduce((s,t)=>{const p=state.personal.find(x=>String(x.id)===String(t.trabajadorId));return s+(p?p.jornal*(t.mult||1):0);},0);
-  const resumen=document.getElementById('tareas-resumen');
-  if(resumen) resumen.innerHTML=`<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;padding:12px;background:var(--coal3);border-radius:9px;border:1px solid var(--border)">
-    <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase">Registros</div><div style="font-size:22px;font-weight:700;color:var(--gold-light)">${tareas.length}</div></div>
-    <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase">Trabajadores</div><div style="font-size:22px;font-weight:700;color:var(--text2)">${new Set(tareas.map(t=>t.trabajadorId)).size}</div></div>
-    <div style="background:rgba(201,168,76,0.1);border:1px solid rgba(201,168,76,0.3);border-radius:8px;padding:10px 16px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase">Total a pagar</div><div style="font-size:26px;font-weight:800;color:var(--gold-light)">${fmtS(totalPago)}</div></div>
-  </div>`;
+  // Agrupar tareas por fecha+turno para formar "hojas de tareo"
+  const hojas={};
+  state.tareas.forEach(t=>{
+    const key=`${t.fecha}__${t.turno||'DIA'}`;
+    if(filtMes && !t.fecha.startsWith(filtMes)) return;
+    if(!hojas[key]) hojas[key]={fecha:t.fecha,turno:t.turno||'DIA',tareas:[]};
+    hojas[key].tareas.push(t);
+  });
+  const hojasArr=Object.values(hojas).sort((a,b)=>b.fecha.localeCompare(a.fecha)||(a.turno<b.turno?-1:1));
+  const cont=document.getElementById('tareos-archivados');if(!cont)return;
+  if(!hojasArr.length){cont.innerHTML='<div style="text-align:center;color:var(--text3);padding:40px;font-size:13px">Sin tareos registrados</div>';return;}
+  cont.innerHTML=hojasArr.map((h,hi)=>{
+    const total=h.tareas.reduce((s,t)=>{const p=state.personal.find(x=>String(x.id)===String(t.trabajadorId));return s+(p?p.jornal*(t.mult||1):0);},0);
+    const key=`${h.fecha}__${h.turno}`;
+    const rows=h.tareas.map(t=>{
+      const p=state.personal.find(x=>String(x.id)===String(t.trabajadorId));
+      const mult=Number(t.mult||1);
+      const j=t.jornal??p?.jornal??0;
+      const monto=j*mult;
+      const multColor=mult>=2?'#f87171':mult>1?'#f59e0b':'#60a5fa';
+      const uid=t.id||t._uid||Math.random().toString(36).slice(2);
+      if(!t._uid) t._uid=uid;
+      return`<tr>
+        <td style="padding:6px 10px;border:1px solid #e5e7eb;font-size:12px;color:#111">${p?p.nombre:'—'}</td>
+        <td style="padding:6px 10px;border:1px solid #e5e7eb;font-size:11px;color:#555">${p?p.rol:'—'}</td>
+        <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:center">
+          <div style="display:flex;gap:3px;justify-content:center" id="mult-btns-${uid}">
+            ${['1','1.5','2'].map(v=>`<button onclick="editarMultTareo('${uid}','${v}')" style="padding:3px 8px;border-radius:5px;border:1px solid ${String(mult)===v?'#1a2744':'#ccc'};font-size:11px;font-weight:700;background:${String(mult)===v?'#1a2744':'#fff'};color:${String(mult)===v?'#fff':'#444'};cursor:pointer">×${v}</button>`).join('')}
+          </div>
+        </td>
+        <td style="padding:6px 10px;border:1px solid #e5e7eb;font-size:11px;color:#555;text-align:center">${t.obs||'—'}</td>
+        <td style="padding:6px 10px;border:1px solid #e5e7eb;font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:${monto>0?'#1a2744':'#999'};text-align:right">${monto>0?fmtS(monto):'—'}</td>
+      </tr>`;
+    }).join('');
+    return`<div style="background:#fff;border-radius:10px;overflow:hidden;margin-bottom:16px;box-shadow:0 2px 12px rgba(0,0,0,0.25)">
+      <div style="background:#FFD700;padding:10px 18px;display:flex;align-items:center;justify-content:space-between">
+        <div style="font-weight:900;font-size:14px;color:#000;font-family:Arial,sans-serif">TAREO DIARIO — ${fmtF(h.fecha)} &nbsp;|&nbsp; TURNO: ${h.turno}</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-family:'DM Mono',monospace;font-weight:800;font-size:13px;color:#1a2744">Total: ${fmtS(total)}</span>
+          <span style="font-size:11px;font-weight:700;background:rgba(26,39,68,0.15);color:#1a2744;border-radius:6px;padding:3px 10px">${h.tareas.length} trabajadores</span>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif">
+          <thead>
+            <tr style="background:#f3f4f6">
+              <th style="padding:7px 10px;border:1px solid #e5e7eb;font-size:11px;color:#444;text-align:left">NOMBRE</th>
+              <th style="padding:7px 10px;border:1px solid #e5e7eb;font-size:11px;color:#444;text-align:left">CARGO</th>
+              <th style="padding:7px 10px;border:1px solid #e5e7eb;font-size:11px;color:#444;text-align:center">TAREA</th>
+              <th style="padding:7px 10px;border:1px solid #e5e7eb;font-size:11px;color:#444;text-align:center">OBS</th>
+              <th style="padding:7px 10px;border:1px solid #e5e7eb;font-size:11px;color:#444;text-align:right">MONTO</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
 }
 
-// _tareoEditIndex: índice temporal en state.tareas del registro siendo editado
-let _tareoEditIdx={};
-function editarTareoRow(uid){
-  const idx=state.tareas.findIndex(t=>String(t.id||t._tmpId)===String(uid)||String(state.tareas.indexOf(t))===String(uid));
-  const t=state.tareas.find(t=>String(t.id||t._tmpId)===String(uid));
-  if(!t) return;
-  const row=document.getElementById('tareo-row-'+uid);if(!row) return;
-  const actual=t.mult||1;
-  _tareoEditIdx[uid]=t;
-  row.cells[3].innerHTML=`<div style="display:flex;gap:5px;flex-wrap:wrap">
-    ${['1','1.5','2'].map(v=>`<button onclick="aplicarEditTareo('${uid}','${v}')" style="padding:3px 10px;border-radius:6px;border:1px solid ${String(actual)===v?'var(--gold)':'var(--border)'};cursor:pointer;font-size:11px;font-weight:700;background:${String(actual)===v?'rgba(201,168,76,0.25)':'var(--coal4)'};color:${String(actual)===v?'var(--gold-light)':'var(--text3)'}">×${v}</button>`).join('')}
-    <button onclick="renderTareas()" style="padding:3px 8px;border-radius:6px;border:1px solid var(--border);cursor:pointer;font-size:11px;color:var(--text3);background:var(--coal4)">✕</button>
-  </div>`;
-}
-
-async function aplicarEditTareo(uid, multStr){
+async function editarMultTareo(uid, multStr){
   const mult=parseFloat(multStr);
-  const t=state.tareas.find(t=>String(t.id||t._tmpId)===String(uid));
+  const t=state.tareas.find(x=>String(x.id||x._uid)===String(uid));
   if(!t) return;
-  const mesFecha=t.fecha.slice(0,7);
-  if((state.mesesCerrados||[]).includes(mesFecha)){showNotif('Este mes está cerrado. Contacte al administrador.','error');renderTareas();return;}
+  if((state.mesesCerrados||[]).includes(t.fecha.slice(0,7))){showNotif('Este mes está cerrado','error');return;}
   t.mult=mult;
   try{if(t.id) await sb.from('tareas').update({mult}).eq('id',t.id);}catch(e){}
-  renderTareas();renderCostoRRHH();actualizarKpisTareo(hoy());
-  showNotif('✓ Tareo actualizado correctamente');
+  // Actualizar solo los botones de esa fila sin re-renderizar todo
+  const btns=document.getElementById('mult-btns-'+uid);
+  if(btns) btns.innerHTML=['1','1.5','2'].map(v=>`<button onclick="editarMultTareo('${uid}','${v}')" style="padding:3px 8px;border-radius:5px;border:1px solid ${String(mult)===String(v)?'#1a2744':'#ccc'};font-size:11px;font-weight:700;background:${String(mult)===String(v)?'#1a2744':'#fff'};color:${String(mult)===String(v)?'#fff':'#444'};cursor:pointer">×${v}</button>`).join('');
+  // Actualizar monto en la celda
+  const p=state.personal.find(x=>String(x.id)===String(t.trabajadorId));
+  const j=t.jornal??p?.jornal??0;
+  const monto=j*mult;
+  const cells=btns?.closest('tr')?.cells;
+  if(cells&&cells[4]) cells[4].textContent=fmtS(monto);
+  renderCostoRRHH();actualizarKpisTareo(hoy());
+  showNotif('✓ Tarea actualizada');
 }
 
 async function registrarTarea(){
@@ -4724,8 +4722,11 @@ async function confirmarBaja(){
   const obs=document.getElementById('baja-obs').value.trim();
   const p=state.personal.find(x=>String(x.id)===String(id));
   if(!p){showNotif('Trabajador no encontrado','error');return;}
+  // Marcar como baja con motivo (queda en Excel como LIQUIDADO)
   p.estado='baja';p.motivoBaja=motivo;p.fechaBaja=fecha;p.obsBaja=obs;
-  try{await sb.from('personal').update({estado:'baja',motivoBaja:motivo,fechaBaja:fecha,obsBaja:obs}).eq('id',id);}catch(e){}
+  try{
+    await sb.from('personal').update({estado:'baja',motivoBaja:motivo,fechaBaja:fecha,obsBaja:obs}).eq('id',id);
+  }catch(e){}
   cerrarModal('modal-baja');poblarSelects();renderPersonal();renderCostoRRHH();
   showNotif(`${p.nombre} dado de baja: ${motivo}`,'warn');
 }
