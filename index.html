@@ -2556,48 +2556,43 @@ select option{background:var(--coal3);}
     </div>
   </div>
   <div class="mod-pane" style="display:none" id="rrhh-costorrhh">
-    <div class="kpi-grid">
-      <div class="kpi-card"><div class="kpi-label">Costo Hoy</div><div class="kpi-value red" id="cr-diario">S/ 0</div></div>
-      <div class="kpi-card"><div class="kpi-label">Costo Semana</div><div class="kpi-value warn" id="cr-semanal">S/ 0</div></div>
-      <div class="kpi-card"><div class="kpi-label">Costo Mes Acum.</div><div class="kpi-value red" id="cr-mensual">S/ 0</div></div>
-      <div class="kpi-card"><div class="kpi-label">Proyectado Mes</div><div class="kpi-value blue" id="cr-proyectado">S/ —</div></div>
-    </div>
-    <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <select id="costo-mes-sel" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;font-weight:600" onchange="renderCostoRRHH()">
+        <option value="">— Mes actual —</option>
+      </select>
+      <span style="font-size:12px;color:var(--text3)">Total acumulado mes:</span>
+      <span id="cr-mensual" style="font-weight:800;font-size:15px;color:var(--gold)">S/ 0</span>
+      <div style="flex:1"></div>
       <button class="btn btn-gold" style="padding:8px 18px;font-size:12px" onclick="exportarPlanillaExcel()">📊 Exportar Excel</button>
     </div>
     <div class="table-wrap">
       <table id="costo-planilla-table">
         <thead>
           <tr style="background:#1a2744">
-            <th style="color:#fff">Trabajador</th>
-            <th style="color:#fff">Cargo</th>
-            <th style="color:#fff">Jornal/día</th>
-            <th style="color:#fff">Días Trab.</th>
-            <th style="color:#fff">x1</th>
-            <th style="color:#fff">x1.5</th>
-            <th style="color:#fff">x2</th>
-            <th style="color:#fff">TOTAL S/</th>
-            <th style="color:#fff">Adelanto</th>
-            <th style="color:#fff">Descuento</th>
-            <th style="color:#fff">NETO S/</th>
+            <th style="color:#fff;text-align:left;padding:10px 12px">#</th>
+            <th style="color:#fff;text-align:left;padding:10px 12px">Trabajador</th>
+            <th style="color:#fff;text-align:left;padding:10px 12px">Cargo</th>
+            <th style="color:#fff;text-align:center;padding:10px 12px">Jornal/día</th>
+            <th style="color:#fff;text-align:center;padding:10px 12px">Tareas</th>
+            <th style="color:#fff;text-align:center;padding:10px 12px">Días</th>
+            <th style="color:#fff;text-align:center;padding:10px 12px">x1</th>
+            <th style="color:#fff;text-align:center;padding:10px 12px">x1.5</th>
+            <th style="color:#fff;text-align:center;padding:10px 12px">x2</th>
+            <th style="color:#fff;text-align:right;padding:10px 12px">TOTAL S/</th>
           </tr>
         </thead>
         <tbody id="cr-tabla-tbody"></tbody>
-        <tfoot id="cr-tfoot"></tfoot>
       </table>
     </div>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0 8px">
-      <select id="costo-mes-sel" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px" onchange="renderCostoRRHH()">
-        <option value="">— Mes actual —</option>
-      </select>
-      <button id="btn-cerrar-mes" class="btn" style="padding:8px 14px;font-size:12px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#f87171" onclick="cerrarMes()">🔒 Cerrar Mes</button>
-      <button id="btn-reabrir-mes" class="btn" style="display:none;padding:8px 14px;font-size:12px;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.4);color:#4ade80" onclick="reabrirMes()">🔓 Reabrir Mes</button>
-      <span id="cr-por-metro" style="display:none"></span>
-    </div>
-    <div class="two-col" style="margin-top:14px">
-      <div class="card"><div class="section-title">Por Frente</div><div id="cr-por-frente"></div></div>
-      <div class="card"><div class="section-title">Por Cargo</div><div id="cr-por-rol"></div></div>
-    </div>
+    <!-- IDs ocultos para compatibilidad con código existente -->
+    <span id="cr-diario" style="display:none"></span>
+    <span id="cr-semanal" style="display:none"></span>
+    <span id="cr-proyectado" style="display:none"></span>
+    <span id="cr-por-metro" style="display:none"></span>
+    <div id="cr-por-frente" style="display:none"></div>
+    <div id="cr-por-rol" style="display:none"></div>
+    <button id="btn-cerrar-mes" style="display:none" onclick="cerrarMes()"></button>
+    <button id="btn-reabrir-mes" style="display:none" onclick="reabrirMes()"></button>
   </div>
 </div>
 
@@ -4788,92 +4783,53 @@ async function eliminarPersonal(id){
 }
 
 function renderCostoRRHH(){
-  const mes=document.getElementById('costo-mes-sel')?.value||hoy().slice(0,7);
-  const hoyStr=hoy();
-  const semD=new Date();semD.setDate(semD.getDate()-semD.getDay());
-  const semStr=semD.toISOString().slice(0,10);
-  const tMes=state.tareas.filter(t=>t.fecha.startsWith(mes));
-  const tHoy=state.tareas.filter(t=>t.fecha===hoyStr);
-  const tSem=state.tareas.filter(t=>t.fecha>=semStr);
-  const calc=arr=>arr.reduce((s,t)=>{const p=state.personal.find(x=>String(x.id)===String(t.trabajadorId));const j=t.jornal??p?.jornal??0;return s+j*(t.mult||1);},0);
-  const costHoy=calc(tHoy),costSem=calc(tSem),costMes=calc(tMes);
-  const diasMes=new Set(tMes.map(t=>t.fecha)).size;
-  const prom=diasMes>0?costMes/diasMes:0;
-  const proyMes=prom*26;
-  const tm=state.perforacion.reduce((s,p)=>s+p.metros,0)||1;
   const g=id=>document.getElementById(id);
-  if(g('cr-diario')) g('cr-diario').textContent=fmtS(costHoy);
-  if(g('cr-semanal')) g('cr-semanal').textContent=fmtS(costSem);
-  if(g('cr-mensual')) g('cr-mensual').textContent=fmtS(costMes);
-  if(g('cr-proyectado')) g('cr-proyectado').textContent=fmtS(proyMes);
-  if(g('cr-por-metro')) g('cr-por-metro').textContent=fmtS(costMes/tm);
-  // Cerrar/Reabrir mes buttons
-  const mesCerrado=(state.mesesCerrados||[]).includes(mes);
-  const btnCerrar=g('btn-cerrar-mes');const btnReabrir=g('btn-reabrir-mes');
-  if(btnCerrar) btnCerrar.style.display=mesCerrado?'none':'';
-  if(btnReabrir) btnReabrir.style.display=mesCerrado?'':'none';
-  // Tabla por trabajador
-  const activos=state.personal.filter(p=>p.estado!=='baja');
+  const mes=g('costo-mes-sel')?.value||hoy().slice(0,7);
+  const tMes=state.tareas.filter(t=>t.fecha.startsWith(mes));
+  const todos=state.personal; // todos, incluyendo bajas
   const tbody=g('cr-tabla-tbody');if(!tbody) return;
-  let totDias=0,totTotal=0,totAdelanto=0,totDescuento=0;
-  if(!state.adelantos) state.adelantos={};
-  const filas=activos.map(p=>{
+  let totTotal=0,totTareas=0,totDias=0;
+  const filas=todos.map((p,i)=>{
     const pts=tMes.filter(t=>String(t.trabajadorId)===String(p.id));
     const dias=new Set(pts.map(t=>t.fecha)).size;
     const n1=pts.filter(t=>Number(t.mult||1)===1).length;
     const n15=pts.filter(t=>Number(t.mult||1)===1.5).length;
     const n2=pts.filter(t=>Number(t.mult||1)===2).length;
     const total=pts.reduce((s,t)=>{const j=t.jornal??p.jornal;return s+j*(t.mult||1);},0);
-    const adelanto=Number((state.adelantos[p.id]||{})[mes]||0);
-    const descuento=Number((state.adelantos[p.id]||{})[mes+'_desc']||0);
-    const neto=total-adelanto-descuento;
-    totDias+=dias;totTotal+=total;totAdelanto+=adelanto;totDescuento+=descuento;
-    return{p,dias,n1,n15,n2,total,adelanto,descuento,neto};
-  }).filter(f=>f.dias>0||f.total>0).sort((a,b)=>b.total-a.total);
-  tbody.innerHTML=filas.map(({p,dias,n1,n15,n2,total,adelanto,descuento,neto})=>`<tr>
-    <td><strong>${p.nombre}</strong></td>
-    <td style="font-size:11px;color:var(--text3)">${p.rol}</td>
-    <td style="font-family:'DM Mono',monospace">${fmtS(p.jornal)}</td>
-    <td style="text-align:center;font-weight:700;color:var(--positive)">${dias}</td>
-    <td style="text-align:center;color:#60a5fa">${n1||'—'}</td>
-    <td style="text-align:center;color:#f59e0b">${n15||'—'}</td>
-    <td style="text-align:center;color:#f87171">${n2||'—'}</td>
-    <td style="font-family:'DM Mono',monospace;font-weight:700;color:var(--gold-light)">${fmtS(total)}</td>
-    <td><input type="number" min="0" step="0.01" value="${adelanto||''}" placeholder="0" style="width:80px;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:4px 6px;color:var(--text);font-size:11px;font-family:'DM Mono',monospace" onchange="setAdelanto('${p.id}','${mes}','adelanto',this.value)"></td>
-    <td><input type="number" min="0" step="0.01" value="${descuento||''}" placeholder="0" style="width:80px;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:4px 6px;color:var(--text);font-size:11px;font-family:'DM Mono',monospace" onchange="setAdelanto('${p.id}','${mes}','descuento',this.value)"></td>
-    <td style="font-family:'DM Mono',monospace;font-weight:700;color:${neto<0?'#f87171':'var(--positive)'}">${fmtS(neto)}</td>
-  </tr>`).join('')+`<tr style="background:rgba(201,168,76,0.08);border-top:2px solid rgba(201,168,76,0.3)">
-    <td colspan="3" style="font-weight:700;color:var(--gold)">TOTALES MES</td>
+    totTotal+=total;totTareas+=pts.length;totDias+=dias;
+    return{p,pts:pts.length,dias,n1,n15,n2,total,idx:i+1};
+  }).sort((a,b)=>b.total-a.total||a.p.nombre.localeCompare(b.p.nombre));
+  tbody.innerHTML=filas.map(({p,pts,dias,n1,n15,n2,total},i)=>{
+    const baja=p.estado==='baja';
+    const rowStyle=baja?'opacity:0.5':'';
+    const totalColor=total>0?'color:var(--gold-light);font-weight:800':'color:var(--text3)';
+    return`<tr style="${rowStyle}${i%2===1?';background:rgba(255,255,255,0.02)':''}">
+      <td style="text-align:center;color:var(--text3);font-size:11px">${i+1}</td>
+      <td><strong style="font-size:13px">${p.nombre}</strong>${baja?'<span style="font-size:9px;color:#f87171;margin-left:6px">BAJA</span>':''}</td>
+      <td style="font-size:11px;color:var(--text3)">${p.rol}</td>
+      <td style="text-align:center;font-family:'DM Mono',monospace;font-size:12px">${fmtS(p.jornal)}</td>
+      <td style="text-align:center;font-weight:700;color:${pts>0?'#a78bfa':'var(--text3)'}">${pts||'—'}</td>
+      <td style="text-align:center;font-weight:700;color:${dias>0?'var(--positive)':'var(--text3)'}">${dias||'—'}</td>
+      <td style="text-align:center;color:#60a5fa">${n1||'—'}</td>
+      <td style="text-align:center;color:#f59e0b">${n15||'—'}</td>
+      <td style="text-align:center;color:#f87171">${n2||'—'}</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;font-size:13px;${totalColor}">${total>0?fmtS(total):'—'}</td>
+    </tr>`;
+  }).join('')+`<tr style="background:rgba(201,168,76,0.1);border-top:2px solid rgba(201,168,76,0.4)">
+    <td colspan="4" style="font-weight:800;color:var(--gold);padding:10px 12px">TOTAL MES ${mes}</td>
+    <td style="text-align:center;font-weight:700;color:#a78bfa">${totTareas}</td>
     <td style="text-align:center;font-weight:700;color:var(--positive)">${totDias}</td>
     <td colspan="3"></td>
-    <td style="font-family:'DM Mono',monospace;font-weight:800;color:var(--gold-light);font-size:15px">${fmtS(totTotal)}</td>
-    <td style="font-family:'DM Mono',monospace;font-weight:700;color:#f87171">${fmtS(totAdelanto)}</td>
-    <td style="font-family:'DM Mono',monospace;font-weight:700;color:#f59e0b">${fmtS(totDescuento)}</td>
-    <td style="font-family:'DM Mono',monospace;font-weight:800;color:var(--positive);font-size:15px">${fmtS(totTotal-totAdelanto-totDescuento)}</td>
+    <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:900;font-size:15px;color:var(--gold-light)">${fmtS(totTotal)}</td>
   </tr>`;
-  // Desglose frentes
-  const calcF=fr=>tMes.filter(t=>{const p=state.personal.find(x=>String(x.id)===String(t.trabajadorId));return p&&p.frente===fr;});
-  if(g('cr-por-frente')) g('cr-por-frente').innerHTML=`
-    <div class="vs-row"><div class="vs-label">Rampa Brenda</div><div class="vs-real">${fmtS(calc(calcF(1)))}</div></div>
-    <div class="vs-row"><div class="vs-label">Cortada Noreste</div><div class="vs-real">${fmtS(calc(calcF(2)))}</div></div>`;
-  const byRol={};
-  filas.forEach(({p,total})=>{if(!byRol[p.rol])byRol[p.rol]=0;byRol[p.rol]+=total;});
-  if(g('cr-por-rol')) g('cr-por-rol').innerHTML=Object.entries(byRol).sort((a,b)=>b[1]-a[1]).map(([r,c])=>`<div class="vs-row"><div class="vs-label">${r}</div><div class="vs-real">${fmtS(c)}</div></div>`).join('');
-  // Selector meses
+  if(g('cr-mensual')) g('cr-mensual').textContent=fmtS(totTotal);
+  // Actualizar selector de meses
   const selMes=g('costo-mes-sel');
   if(selMes){
     const meses=[...new Set(state.tareas.map(t=>t.fecha.slice(0,7)))].sort().reverse();
     meses.forEach(m=>{
       if(!selMes.querySelector(`option[value="${m}"]`)){
-        const o=document.createElement('option');
-        o.value=m;
-        const cerrado=(state.mesesCerrados||[]).includes(m);
-        o.textContent=cerrado?`🔒 ${m}`:m;
-        selMes.appendChild(o);
-      } else {
-        const o=selMes.querySelector(`option[value="${m}"]`);
-        const cerrado=(state.mesesCerrados||[]).includes(m);
-        o.textContent=cerrado?`🔒 ${m}`:m;
+        const o=document.createElement('option');o.value=m;o.textContent=m;selMes.appendChild(o);
       }
     });
   }
