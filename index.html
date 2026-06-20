@@ -2209,6 +2209,7 @@ select option{background:var(--coal3);}
 <div class="page" id="page-logistica">
   <div class="mod-tabs">
     <button class="mod-tab active" onclick="modTab('log','almacen',this)">📦 Almacén General</button>
+    <button class="mod-tab" onclick="modTab('log','historial',this)">📂 Historial &amp; Edición</button>
     <button class="mod-tab" onclick="modTab('log','inventario',this)">📊 Costo de Inventario</button>
     <button class="mod-tab" onclick="modTab('log','centrocostos',this)">🎯 Centro de Costos</button>
   </div>
@@ -2259,7 +2260,7 @@ select option{background:var(--coal3);}
     <div class="section-title">📥 Ingresos del Mes</div>
     <div class="table-wrap" style="margin-bottom:24px">
       <table>
-        <thead><tr><th>Fecha</th><th>Vale</th><th>Origen</th><th>Almacén</th><th>Cód.</th><th>Producto / Descripción</th><th>U.M.</th><th>Cant.</th><th>Precio</th><th>Total S/</th><th></th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Vale</th><th>Origen</th><th>Almacén</th><th>Producto / Descripción</th><th>U.M.</th><th>Cant.</th><th>Precio</th><th>Total S/</th><th></th></tr></thead>
         <tbody id="alm-ingresos-tbody"></tbody>
       </table>
     </div>
@@ -2267,13 +2268,37 @@ select option{background:var(--coal3);}
     <div class="section-title">📤 Salidas del Mes</div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Fecha</th><th>Destino</th><th>Almacén</th><th>Cód. Máquina</th><th>Cód.</th><th>Producto / Descripción</th><th>U.M.</th><th>P.U.</th><th>Cant.</th><th>Importe S/</th><th></th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Destino</th><th>Almacén</th><th>Cód. Máquina</th><th>Producto / Descripción</th><th>U.M.</th><th>P.U.</th><th>Cant.</th><th>Importe S/</th><th></th></tr></thead>
         <tbody id="alm-salidas-tbody"></tbody>
       </table>
     </div>
   </div>
 
-  <!-- ════ TAB 2: COSTO DE INVENTARIO ════ -->
+  <!-- ════ TAB 2: HISTORIAL & EDICIÓN ════ -->
+  <div class="mod-pane" style="display:none" id="log-historial">
+    <div class="card" style="margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+      <label style="font-size:11px;color:var(--text3)">Mes:</label>
+      <input type="month" id="hist-mes-sel" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px" onchange="renderHistorialAlmacen()">
+      <span style="font-size:11px;color:var(--text3)">Deja vacío para ver todos los meses</span>
+      <button class="btn btn-outline" style="padding:6px 14px;font-size:11px" onclick="document.getElementById('hist-mes-sel').value='';renderHistorialAlmacen()">Ver todo el historial</button>
+    </div>
+    <div class="section-title">📥 Historial de Ingresos</div>
+    <div class="table-wrap" style="margin-bottom:24px">
+      <table>
+        <thead><tr><th>Fecha</th><th>Vale</th><th>Origen</th><th>Almacén</th><th>Producto / Descripción</th><th>U.M.</th><th>Cant.</th><th>Precio</th><th>Total S/</th><th>Acción</th></tr></thead>
+        <tbody id="hist-ingresos-tbody"></tbody>
+      </table>
+    </div>
+    <div class="section-title">📤 Historial de Salidas</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Fecha</th><th>Nivel</th><th>Almacén</th><th>Cód. Máquina</th><th>Producto / Descripción</th><th>U.M.</th><th>P.U.</th><th>Cant.</th><th>Importe S/</th><th>Acción</th></tr></thead>
+        <tbody id="hist-salidas-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ════ TAB 3: COSTO DE INVENTARIO ════ -->
   <div class="mod-pane" style="display:none" id="log-inventario">
     <div class="kpi-grid">
       <div class="kpi-card"><div class="kpi-label">Valor de Stock Actual</div><div class="kpi-value gold" id="inv-kpi-valor">S/ 0</div><div class="kpi-sub" id="inv-kpi-items">0 productos</div></div>
@@ -2296,7 +2321,7 @@ select option{background:var(--coal3);}
     <div class="section-title">Stock Actual de Inventario</div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Almacén</th><th>Cód.</th><th>Producto</th><th>Descripción</th><th>U.M.</th><th>Ingresos</th><th>Salidas</th><th>Stock</th><th>P.U.</th><th>Valor Stock</th></tr></thead>
+        <thead><tr><th>Almacén</th><th>Producto</th><th>Descripción</th><th>U.M.</th><th>Ingresos</th><th>Salidas</th><th>Stock</th><th>P.U.</th><th>Valor Stock</th></tr></thead>
         <tbody id="inv-tbody"></tbody>
       </table>
     </div>
@@ -3460,7 +3485,6 @@ select option{background:var(--coal3);}
       <div class="form-group"><label>Vale N°</label><input type="text" id="in-vale" placeholder="Ej: 114715"></div>
       <div class="form-group"><label>Origen</label><select id="in-detalle"><option value="Almacen Poderosa">Almacen Poderosa</option><option value="Logistica Trujillo">Logistica Trujillo</option></select></div>
       <div class="form-group"><label>Almacén destino</label><select id="in-almacen"><option value="General">General</option><option value="Mantenimiento">Mantenimiento</option></select></div>
-      <div class="form-group"><label>Código Producto <span style="color:var(--text3);font-size:10px">(opcional)</span></label><input type="text" id="in-codigo" placeholder="Ej: 30"></div>
       <div class="form-group"><label>Producto <span style="color:var(--text3);font-size:10px">(nombre corto)</span></label><input type="text" id="in-producto" placeholder="Ej: Aleta / Cemento"></div>
       <div class="form-group" style="grid-column:1/-1"><label>Descripción</label><input type="text" id="in-descripcion" placeholder="Ej: RNR91-11A  ó  CEMENTO GRIS ANTISALITRE TIPO MS"></div>
       <div class="form-group"><label>Unidad de medida</label><select id="in-unidad"><option>UND</option><option>KG</option><option>BOL</option><option>ROLL</option><option>JGO</option><option>PZA</option><option>M</option></select></div>
@@ -3498,6 +3522,60 @@ select option{background:var(--coal3);}
     <div class="btn-row" style="margin-top:8px">
       <button class="btn btn-gold" onclick="guardarSalida()">✓ Registrar Salida</button>
       <button class="btn btn-outline" onclick="cerrarModal('modal-salida')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ MODAL: EDITAR INGRESO ════ -->
+<div class="modal-overlay" id="modal-edit-ingreso" onclick="if(event.target===this)cerrarModal('modal-edit-ingreso')">
+  <div class="modal" style="width:min(620px,95vw)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+      <div class="modal-title" style="margin-bottom:0;color:#60a5fa">✏ Editar Ingreso</div>
+      <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-edit-ingreso')">✕</button>
+    </div>
+    <input type="hidden" id="ei-id">
+    <div class="form-grid">
+      <div class="form-group"><label>Fecha</label><input type="date" id="ei-fecha"></div>
+      <div class="form-group"><label>Vale N°</label><input type="text" id="ei-vale"></div>
+      <div class="form-group"><label>Origen</label><select id="ei-detalle"><option value="Almacen Poderosa">Almacen Poderosa</option><option value="Logistica Trujillo">Logistica Trujillo</option></select></div>
+      <div class="form-group"><label>Almacén</label><select id="ei-almacen"><option value="General">General</option><option value="Mantenimiento">Mantenimiento</option></select></div>
+      <div class="form-group"><label>Producto</label><input type="text" id="ei-producto"></div>
+      <div class="form-group" style="grid-column:1/-1"><label>Descripción</label><input type="text" id="ei-descripcion"></div>
+      <div class="form-group"><label>Unidad</label><select id="ei-unidad"><option>UND</option><option>KG</option><option>BOL</option><option>ROLL</option><option>JGO</option><option>PZA</option><option>M</option></select></div>
+      <div class="form-group"><label>Cantidad</label><input type="number" id="ei-cantidad" min="0" step="any" oninput="calcTotalEditIngreso()"></div>
+      <div class="form-group"><label>Precio (S/)</label><input type="number" id="ei-precio" min="0" step="any" oninput="calcTotalEditIngreso()"></div>
+      <div class="form-group"><label>Total</label><div id="ei-total" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:9px 11px;font-family:'DM Mono',monospace;font-size:14px;color:var(--gold-light);font-weight:700">S/ 0.00</div></div>
+    </div>
+    <div class="btn-row" style="margin-top:8px">
+      <button class="btn btn-gold" onclick="guardarEdicionIngreso()">✓ Guardar Cambios</button>
+      <button class="btn btn-outline" onclick="cerrarModal('modal-edit-ingreso')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ MODAL: EDITAR SALIDA ════ -->
+<div class="modal-overlay" id="modal-edit-salida" onclick="if(event.target===this)cerrarModal('modal-edit-salida')">
+  <div class="modal" style="width:min(620px,95vw)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+      <div class="modal-title" style="margin-bottom:0;color:#f87171">✏ Editar Salida</div>
+      <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-edit-salida')">✕</button>
+    </div>
+    <input type="hidden" id="es-id">
+    <div class="form-grid">
+      <div class="form-group"><label>Fecha</label><input type="date" id="es-fecha"></div>
+      <div class="form-group"><label>Destino / Nivel</label><select id="es-destino"><option value="2820">NV2820</option><option value="2830">NV2830</option></select></div>
+      <div class="form-group"><label>Almacén</label><select id="es-almacen"><option value="General">General</option><option value="Mantenimiento">Mantenimiento</option></select></div>
+      <div class="form-group"><label>Código de Máquina</label><input type="text" id="es-maquina"></div>
+      <div class="form-group"><label>Producto</label><input type="text" id="es-producto"></div>
+      <div class="form-group" style="grid-column:1/-1"><label>Descripción</label><input type="text" id="es-descripcion"></div>
+      <div class="form-group"><label>Unidad</label><select id="es-unidad"><option>UND</option><option>KG</option><option>BOL</option><option>ROLL</option><option>JGO</option><option>PZA</option><option>M</option></select></div>
+      <div class="form-group"><label>P.U. (S/)</label><input type="number" id="es-precio" min="0" step="any" oninput="calcImporteEditSalida()"></div>
+      <div class="form-group"><label>Cantidad</label><input type="number" id="es-cantidad" min="0" step="any" oninput="calcImporteEditSalida()"></div>
+      <div class="form-group"><label>Importe</label><div id="es-importe" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:9px 11px;font-family:'DM Mono',monospace;font-size:14px;color:#f87171;font-weight:700">S/ 0.00</div></div>
+    </div>
+    <div class="btn-row" style="margin-top:8px">
+      <button class="btn btn-gold" onclick="guardarEdicionSalida()">✓ Guardar Cambios</button>
+      <button class="btn btn-outline" onclick="cerrarModal('modal-edit-salida')">Cancelar</button>
     </div>
   </div>
 </div>
@@ -3577,7 +3655,7 @@ function navigate(page){
 }
 // Mapa explícito de todos los panes por módulo
 const MODULE_PANES = {
-  'log': ['almacen','inventario','centrocostos'],
+  'log': ['almacen','historial','inventario','centrocostos'],
   'rrhh': ['planilla','tareas','personal','costorrhh'],
   'op': ['avance','vsproyectado','distribucion','rendimientos','ia'],
   'mant': ['registro','horometros','costosmant'],
@@ -3807,6 +3885,7 @@ function renderPage(page){
 function renderModPane(mod,pane){
   const k=mod+'-'+pane;
   if(k==='log-almacen')renderAlmacen();
+  else if(k==='log-historial')renderHistorialAlmacen();
   else if(k==='log-inventario')renderInventario();
   else if(k==='log-centrocostos')renderCentroCostos();
   else if(k==='rrhh-planilla')renderPlanilla();
@@ -4027,7 +4106,7 @@ function almacenLoad(){
   }catch(e){}
 }
 function almMesActual(){return hoy().slice(0,7);}
-function prodKey(almacen,codigo,desc){return (almacen||'')+'|'+String(codigo||'').trim()+'|'+String(desc||'').trim().toUpperCase();}
+function prodKey(almacen,codigo,desc){return (almacen||'')+'|'+String(desc||'').trim().toUpperCase();}
 function nivelLabel(d){return d?('NV'+d):'—';}
 
 // Stock = inventario inicial + ingresos - salidas (acumulado histórico, no por mes)
@@ -4072,26 +4151,26 @@ function renderAlmacen(){
   if(it) it.innerHTML=ings.length?ings.slice().reverse().map(i=>`<tr>
     <td>${fmtF(i.fecha)}</td><td>${i.vale||'—'}</td><td>${i.detalle||'—'}</td>
     <td><span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${i.almacen==='Mantenimiento'?'rgba(201,168,76,0.15);color:#d4b75e':'rgba(96,165,250,0.15);color:#60a5fa'}">${i.almacen}</span></td>
-    <td>${i.codigo||'—'}</td><td><strong>${i.producto||''}</strong><br><span style="font-size:10px;color:var(--text3)">${i.descripcion||''}</span></td>
+    <td><strong>${i.producto||''}</strong><br><span style="font-size:10px;color:var(--text3)">${i.descripcion||''}</span></td>
     <td>${i.unidad}</td><td>${fmt3(i.cantidad)}</td><td>${fmtS2(i.precio)}</td><td style="color:#60a5fa;font-weight:700">${fmtS2(i.total)}</td>
     <td><button onclick="eliminarIngreso('${i.id}')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px">🗑</button></td></tr>`).join('')
-    :`<tr><td colspan="11" style="text-align:center;color:var(--text3);padding:18px">Sin ingresos este mes</td></tr>`;
+    :`<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:18px">Sin ingresos este mes</td></tr>`;
   // Tabla salidas
   const st=g('alm-salidas-tbody');
   if(st) st.innerHTML=sals.length?sals.slice().reverse().map(s=>`<tr>
     <td>${fmtF(s.fecha)}</td><td><strong>${nivelLabel(s.destino)}</strong></td>
     <td><span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${s.almacen==='Mantenimiento'?'rgba(201,168,76,0.15);color:#d4b75e':'rgba(96,165,250,0.15);color:#60a5fa'}">${s.almacen}</span></td>
-    <td>${s.maquina||'—'}</td><td>${s.codigo||'—'}</td><td><strong>${s.producto||''}</strong><br><span style="font-size:10px;color:var(--text3)">${s.descripcion||''}</span></td>
+    <td>${s.maquina||'—'}</td><td><strong>${s.producto||''}</strong><br><span style="font-size:10px;color:var(--text3)">${s.descripcion||''}</span></td>
     <td>${s.unidad}</td><td>${fmtS2(s.precio)}</td><td>${fmt3(s.cantidad)}</td><td style="color:#f87171;font-weight:700">${fmtS2(s.importe)}</td>
     <td><button onclick="eliminarSalida('${s.id}')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px">🗑</button></td></tr>`).join('')
-    :`<tr><td colspan="11" style="text-align:center;color:var(--text3);padding:18px">Sin salidas este mes</td></tr>`;
+    :`<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:18px">Sin salidas este mes</td></tr>`;
 }
 
 // ── Modal Ingreso ──
 function abrirIngresoModal(){
   const g=id=>document.getElementById(id);
   g('in-fecha').value=hoy();g('in-vale').value='';g('in-detalle').value='Almacen Poderosa';
-  g('in-almacen').value='General';g('in-codigo').value='';g('in-producto').value='';
+  g('in-almacen').value='General';g('in-producto').value='';
   g('in-descripcion').value='';g('in-unidad').value='UND';g('in-cantidad').value='';g('in-precio').value='';
   g('in-total').textContent='S/ 0.00';
   abrirModal('modal-ingreso');
@@ -4108,8 +4187,8 @@ function guardarIngreso(){
   if(!desc){showNotif('⚠ Ingresa la descripción del producto','error');return;}
   if(cant<=0){showNotif('⚠ Ingresa una cantidad válida','error');return;}
   const precio=parseFloat(g('in-precio').value)||0;
-  const reg={id:'I'+Date.now(),fecha:g('in-fecha').value||hoy(),vale:g('in-vale').value.trim(),detalle:g('in-detalle').value.trim()||'CONTRATA',
-    almacen:g('in-almacen').value,codigo:g('in-codigo').value.trim(),producto:g('in-producto').value.trim(),descripcion:desc,
+  const reg={id:'I'+Date.now(),fecha:g('in-fecha').value||hoy(),vale:g('in-vale').value.trim(),detalle:g('in-detalle').value||'Almacen Poderosa',
+    almacen:g('in-almacen').value,codigo:'',producto:g('in-producto').value.trim(),descripcion:desc,
     unidad:g('in-unidad').value,cantidad:cant,precio:precio,total:cant*precio};
   state.almacen.ingresos.push(reg);almacenSave();
   cerrarModal('modal-ingreso');renderAlmacen();
@@ -4168,14 +4247,99 @@ function guardarSalida(){
 }
 function eliminarIngreso(id){
   if(!confirm('¿Eliminar este ingreso?'))return;
-  state.almacen.ingresos=state.almacen.ingresos.filter(i=>i.id!==id);almacenSave();renderAlmacen();showNotif('Ingreso eliminado','warn');
+  state.almacen.ingresos=state.almacen.ingresos.filter(i=>i.id!==id);almacenSave();renderAlmacen();renderHistorialAlmacen();showNotif('Ingreso eliminado','warn');
 }
 function eliminarSalida(id){
   if(!confirm('¿Eliminar esta salida?'))return;
-  state.almacen.salidas=state.almacen.salidas.filter(s=>s.id!==id);almacenSave();renderAlmacen();showNotif('Salida eliminada','warn');
+  state.almacen.salidas=state.almacen.salidas.filter(s=>s.id!==id);almacenSave();renderAlmacen();renderHistorialAlmacen();showNotif('Salida eliminada','warn');
 }
 
-// ── TAB 2: COSTO DE INVENTARIO ──
+// ── TAB HISTORIAL & EDICIÓN ──
+function renderHistorialAlmacen(){
+  const sel=document.getElementById('hist-mes-sel');
+  const mes=(sel&&sel.value)||'';
+  let ings=state.almacen.ingresos.slice();
+  let sals=state.almacen.salidas.slice();
+  if(mes){ings=ings.filter(i=>(i.fecha||'').startsWith(mes));sals=sals.filter(s=>(s.fecha||'').startsWith(mes));}
+  ings.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  sals.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  const it=document.getElementById('hist-ingresos-tbody');
+  if(it) it.innerHTML=ings.length?ings.map(i=>`<tr>
+    <td>${fmtF(i.fecha)}</td><td>${i.vale||'—'}</td><td>${i.detalle||'—'}</td>
+    <td><span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${i.almacen==='Mantenimiento'?'rgba(201,168,76,0.15);color:#d4b75e':'rgba(96,165,250,0.15);color:#60a5fa'}">${i.almacen}</span></td>
+    <td><strong>${i.producto||''}</strong><br><span style="font-size:10px;color:var(--text3)">${i.descripcion||''}</span></td>
+    <td>${i.unidad}</td><td>${fmt3(i.cantidad)}</td><td>${fmtS2(i.precio)}</td><td style="color:#60a5fa;font-weight:700">${fmtS2(i.total)}</td>
+    <td><button onclick="abrirEditarIngreso('${i.id}')" style="padding:4px 10px;font-size:11px;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.4);border-radius:6px;cursor:pointer;font-weight:600">✏ Editar</button>
+        <button onclick="eliminarIngreso('${i.id}')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px">🗑</button></td></tr>`).join('')
+    :`<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:18px">Sin ingresos registrados</td></tr>`;
+  const st=document.getElementById('hist-salidas-tbody');
+  if(st) st.innerHTML=sals.length?sals.map(s=>`<tr>
+    <td>${fmtF(s.fecha)}</td><td><strong>${nivelLabel(s.destino)}</strong></td>
+    <td><span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${s.almacen==='Mantenimiento'?'rgba(201,168,76,0.15);color:#d4b75e':'rgba(96,165,250,0.15);color:#60a5fa'}">${s.almacen}</span></td>
+    <td>${s.maquina||'—'}</td><td><strong>${s.producto||''}</strong><br><span style="font-size:10px;color:var(--text3)">${s.descripcion||''}</span></td>
+    <td>${s.unidad}</td><td>${fmtS2(s.precio)}</td><td>${fmt3(s.cantidad)}</td><td style="color:#f87171;font-weight:700">${fmtS2(s.importe)}</td>
+    <td><button onclick="abrirEditarSalida('${s.id}')" style="padding:4px 10px;font-size:11px;background:rgba(248,113,113,0.15);color:#f87171;border:1px solid rgba(248,113,113,0.4);border-radius:6px;cursor:pointer;font-weight:600">✏ Editar</button>
+        <button onclick="eliminarSalida('${s.id}')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px">🗑</button></td></tr>`).join('')
+    :`<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:18px">Sin salidas registradas</td></tr>`;
+}
+
+function abrirEditarIngreso(id){
+  const i=state.almacen.ingresos.find(x=>x.id===id);
+  if(!i){showNotif('Ingreso no encontrado','error');return;}
+  const g=id=>document.getElementById(id);
+  g('ei-id').value=i.id;g('ei-fecha').value=i.fecha||hoy();g('ei-vale').value=i.vale||'';
+  g('ei-detalle').value=i.detalle||'Almacen Poderosa';g('ei-almacen').value=i.almacen||'General';
+  g('ei-producto').value=i.producto||'';g('ei-descripcion').value=i.descripcion||'';
+  g('ei-unidad').value=i.unidad||'UND';g('ei-cantidad').value=i.cantidad;g('ei-precio').value=i.precio;
+  calcTotalEditIngreso();abrirModal('modal-edit-ingreso');
+}
+function calcTotalEditIngreso(){
+  const c=parseFloat(document.getElementById('ei-cantidad').value)||0;
+  const p=parseFloat(document.getElementById('ei-precio').value)||0;
+  document.getElementById('ei-total').textContent=fmtS2(c*p);
+}
+function guardarEdicionIngreso(){
+  const g=id=>document.getElementById(id);
+  const i=state.almacen.ingresos.find(x=>x.id===g('ei-id').value);
+  if(!i){showNotif('Ingreso no encontrado','error');return;}
+  const desc=g('ei-descripcion').value.trim();const cant=parseFloat(g('ei-cantidad').value)||0;
+  if(!desc){showNotif('⚠ Ingresa la descripción','error');return;}
+  if(cant<=0){showNotif('⚠ Cantidad inválida','error');return;}
+  i.fecha=g('ei-fecha').value||hoy();i.vale=g('ei-vale').value.trim();i.detalle=g('ei-detalle').value;
+  i.almacen=g('ei-almacen').value;i.producto=g('ei-producto').value.trim();i.descripcion=desc;
+  i.unidad=g('ei-unidad').value;i.cantidad=cant;i.precio=parseFloat(g('ei-precio').value)||0;i.total=i.cantidad*i.precio;
+  almacenSave();cerrarModal('modal-edit-ingreso');renderHistorialAlmacen();renderAlmacen();showNotif('✓ Ingreso actualizado');
+}
+
+function abrirEditarSalida(id){
+  const s=state.almacen.salidas.find(x=>x.id===id);
+  if(!s){showNotif('Salida no encontrada','error');return;}
+  const g=id=>document.getElementById(id);
+  g('es-id').value=s.id;g('es-fecha').value=s.fecha||hoy();g('es-destino').value=String(s.destino||'2820');
+  g('es-almacen').value=s.almacen||'General';g('es-maquina').value=s.maquina||'';
+  g('es-producto').value=s.producto||'';g('es-descripcion').value=s.descripcion||'';
+  g('es-unidad').value=s.unidad||'UND';g('es-precio').value=s.precio;g('es-cantidad').value=s.cantidad;
+  calcImporteEditSalida();abrirModal('modal-edit-salida');
+}
+function calcImporteEditSalida(){
+  const c=parseFloat(document.getElementById('es-cantidad').value)||0;
+  const p=parseFloat(document.getElementById('es-precio').value)||0;
+  document.getElementById('es-importe').textContent=fmtS2(c*p);
+}
+function guardarEdicionSalida(){
+  const g=id=>document.getElementById(id);
+  const s=state.almacen.salidas.find(x=>x.id===g('es-id').value);
+  if(!s){showNotif('Salida no encontrada','error');return;}
+  const desc=g('es-descripcion').value.trim();const cant=parseFloat(g('es-cantidad').value)||0;
+  if(!desc){showNotif('⚠ Ingresa la descripción','error');return;}
+  if(cant<=0){showNotif('⚠ Cantidad inválida','error');return;}
+  s.fecha=g('es-fecha').value||hoy();s.destino=g('es-destino').value;s.almacen=g('es-almacen').value;
+  s.maquina=g('es-maquina').value.trim();s.producto=g('es-producto').value.trim();s.descripcion=desc;
+  s.unidad=g('es-unidad').value;s.precio=parseFloat(g('es-precio').value)||0;s.cantidad=cant;s.importe=s.cantidad*s.precio;
+  almacenSave();cerrarModal('modal-edit-salida');renderHistorialAlmacen();renderAlmacen();showNotif('✓ Salida actualizada');
+}
+
+// ── TAB: COSTO DE INVENTARIO ──
 function renderInventario(){
   const sel=document.getElementById('inv-mes-sel'); if(sel&&!sel.value)sel.value=almMesActual();
   const mes=(sel&&sel.value)||almMesActual();
@@ -4197,11 +4361,11 @@ function renderInventario(){
   const tb=g('inv-tbody');
   if(tb) tb.innerHTML=stock.length?stock.map(r=>`<tr style="${r.stock<=0?'opacity:0.5':''}">
     <td><span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${r.almacen==='Mantenimiento'?'rgba(201,168,76,0.15);color:#d4b75e':'rgba(96,165,250,0.15);color:#60a5fa'}">${r.almacen}</span></td>
-    <td>${r.codigo||'—'}</td><td><strong>${r.producto||'—'}</strong></td><td style="font-size:11px;color:var(--text3)">${r.descripcion}</td>
+    <td><strong>${r.producto||'—'}</strong></td><td style="font-size:11px;color:var(--text3)">${r.descripcion}</td>
     <td>${r.unidad}</td><td style="color:#60a5fa">${fmt3(r.ingreso)}</td><td style="color:#f87171">${fmt3(r.salida)}</td>
     <td style="font-weight:700;color:${r.stock>0?'var(--accent-light)':'#f87171'}">${fmt3(r.stock)}</td>
     <td>${fmtS2(r.precio)}</td><td style="color:var(--gold-light);font-weight:600">${fmtS2(r.stock*r.precio)}</td></tr>`).join('')
-    :`<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:18px">Sin inventario. Registra ingresos en la pestaña Almacén.</td></tr>`;
+    :`<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:18px">Sin inventario. Registra ingresos en la pestaña Almacén.</td></tr>`;
   // Historial de meses cerrados
   const hist=g('inv-historial');
   if(hist){
@@ -4317,19 +4481,19 @@ function exportarInventarioExcel(){
   const subt=`${nombreMes} ${anio}  |  Exportado: ${new Date().toLocaleDateString('es-PE')}`;
   // Hoja 1: SALIDAS (centro de costos)
   const ws1=sheet('SALIDAS — CENTRO DE COSTOS',subt,
-    ['FECHA','NIVEL','ALMACÉN','CÓD. MÁQUINA','CÓD. PROD.','PRODUCTO','DESCRIPCIÓN','U.M.','P.U. SIN IGV','CANTIDAD','IMPORTE SIN IGV'],
-    sals.slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')).map(s=>[fmtF(s.fecha),nivelLabel(s.destino),s.almacen,s.maquina||'',s.codigo||'',s.producto||'',s.descripcion||'',s.unidad,Number(s.precio)||0,Number(s.cantidad)||0,Number(s.importe)||0]),
-    [12,9,15,16,10,22,30,7,13,11,15],[8,10],[9]);
+    ['FECHA','NIVEL','ALMACÉN','CÓD. MÁQUINA','PRODUCTO','DESCRIPCIÓN','U.M.','P.U. SIN IGV','CANTIDAD','IMPORTE SIN IGV'],
+    sals.slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')).map(s=>[fmtF(s.fecha),nivelLabel(s.destino),s.almacen,s.maquina||'',s.producto||'',s.descripcion||'',s.unidad,Number(s.precio)||0,Number(s.cantidad)||0,Number(s.importe)||0]),
+    [12,9,15,16,22,30,7,13,11,15],[7,9],[8]);
   // Hoja 2: INGRESOS
   const ws2=sheet('INGRESOS DE MATERIAL',subt,
-    ['FECHA','VALE','DETALLE','ALMACÉN','CÓD.','PRODUCTO','DESCRIPCIÓN','U.M.','CANTIDAD','PRECIO','TOTAL'],
-    ings.slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')).map(i=>[fmtF(i.fecha),i.vale||'',i.detalle||'',i.almacen,i.codigo||'',i.producto||'',i.descripcion||'',i.unidad,Number(i.cantidad)||0,Number(i.precio)||0,Number(i.total)||0]),
-    [12,10,12,15,8,22,30,7,11,12,14],[9,10],[8]);
+    ['FECHA','VALE','ORIGEN','ALMACÉN','PRODUCTO','DESCRIPCIÓN','U.M.','CANTIDAD','PRECIO','TOTAL'],
+    ings.slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')).map(i=>[fmtF(i.fecha),i.vale||'',i.detalle||'',i.almacen,i.producto||'',i.descripcion||'',i.unidad,Number(i.cantidad)||0,Number(i.precio)||0,Number(i.total)||0]),
+    [12,10,18,15,22,30,7,11,12,14],[8,9],[7]);
   // Hoja 3: STOCK
   const ws3=sheet('STOCK / INVENTARIO',subt,
-    ['ALMACÉN','CÓD.','PRODUCTO','DESCRIPCIÓN','U.M.','INGRESOS','SALIDAS','STOCK','P.U.','VALOR STOCK'],
-    stock.sort((a,b)=>a.almacen.localeCompare(b.almacen)||(a.producto||a.descripcion).localeCompare(b.producto||b.descripcion)).map(r=>[r.almacen,r.codigo||'',r.producto||'',r.descripcion,r.unidad,Number(r.ingreso)||0,Number(r.salida)||0,Number(r.stock)||0,Number(r.precio)||0,(Number(r.stock)||0)*(Number(r.precio)||0)]),
-    [15,8,22,30,7,11,11,11,12,15],[8,9],[5,6,7]);
+    ['ALMACÉN','PRODUCTO','DESCRIPCIÓN','U.M.','INGRESOS','SALIDAS','STOCK','P.U.','VALOR STOCK'],
+    stock.sort((a,b)=>a.almacen.localeCompare(b.almacen)||(a.producto||a.descripcion).localeCompare(b.producto||b.descripcion)).map(r=>[r.almacen,r.producto||'',r.descripcion,r.unidad,Number(r.ingreso)||0,Number(r.salida)||0,Number(r.stock)||0,Number(r.precio)||0,(Number(r.stock)||0)*(Number(r.precio)||0)]),
+    [15,22,30,7,11,11,11,12,15],[7,8],[4,5,6]);
   // Hoja 4: RESUMEN por nivel y almacén
   const combos={};sals.forEach(s=>{const key=nivelLabel(s.destino)+' | '+s.almacen;combos[key]=(combos[key]||0)+(Number(s.importe)||0);});
   const totalGasto=sals.reduce((a,s)=>a+(Number(s.importe)||0),0);
