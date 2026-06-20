@@ -3580,8 +3580,8 @@ function showNotif(msg,type){
   n.style.color='var(--text)';
   n.classList.add('show');setTimeout(()=>n.classList.remove('show'),2800);
 }
-function cerrarModal(id){document.getElementById(id).classList.remove('show');}
-function abrirModal(id){document.getElementById(id).classList.add('show');}
+function cerrarModal(id){const m=document.getElementById(id);if(!m)return;m.classList.remove('show');m.classList.remove('active');m.style.display='';}
+function abrirModal(id){const m=document.getElementById(id);if(!m)return;m.classList.add('show');m.style.display='flex';}
 
 async function init(){
   // Mostrar login inmediatamente — no esperar a Supabase
@@ -4768,16 +4768,22 @@ async function confirmarBaja(){
 }
 
 function abrirBajaDesdeCard(id){
-  const activos=state.personal.filter(p=>p.estado!=='baja');
+  const todos=state.personal.filter(p=>p.estado!=='baja');
   const sel=document.getElementById('baja-trabajador');
-  sel.innerHTML=activos.map(p=>`<option value="${p.id}">${p.nombre} — ${p.rol}</option>`).join('');
-  // Force string match
-  const opt=Array.from(sel.options).find(o=>String(o.value)===String(id));
-  if(opt) opt.selected=true;
+  if(!sel){alert('Error: modal no encontrado');return;}
+  sel.innerHTML=todos.map(p=>`<option value="${p.id}">${p.nombre} — ${p.rol}</option>`).join('');
+  // Seleccionar el trabajador correcto por comparación de string
+  for(let i=0;i<sel.options.length;i++){
+    if(String(sel.options[i].value)===String(id)){sel.selectedIndex=i;break;}
+  }
   document.getElementById('baja-motivo').value='Renuncia voluntaria';
   document.getElementById('baja-fecha').value=hoy();
   document.getElementById('baja-obs').value='';
-  abrirModal('modal-baja');
+  // Mostrar modal usando ambas clases por compatibilidad
+  const modal=document.getElementById('modal-baja');
+  modal.classList.add('show');
+  modal.classList.add('active');
+  modal.style.display='flex';
 }
 
 async function agregarPersonal(){
