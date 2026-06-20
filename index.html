@@ -2368,6 +2368,11 @@ select option{background:var(--coal3);}
 
     <!-- Botón inicial -->
     <div class="card" id="tareo-inicio" style="margin-bottom:14px;text-align:center;padding:24px">
+      <div id="tareo-exito-msg" style="display:none;background:rgba(22,101,52,0.25);border:1.5px solid #22c55e;border-radius:10px;padding:16px 20px;margin-bottom:16px">
+        <div style="font-size:22px;margin-bottom:6px">✅</div>
+        <div id="tareo-exito-texto" style="font-weight:700;font-size:14px;color:#bbf7d0;margin-bottom:4px"></div>
+        <div style="font-size:12px;color:var(--text3)">El tareo fue guardado exitosamente en la base de datos.</div>
+      </div>
       <div style="font-size:13px;color:var(--text3);margin-bottom:14px">Registra el tareo del turno seleccionando personal y asignando tareas.</div>
       <button class="btn btn-gold" style="padding:12px 28px;font-size:15px" onclick="abrirSetupTareo()">➕ Registrar Tareo</button>
     </div>
@@ -4308,6 +4313,7 @@ const JEFES_TURNO_CARGOS = ['Capataz','Jefe de Guardia','Asistente de Residente'
 // Paso 0 → abrir asistente de configuración
 function abrirSetupTareo(){
   initTareoFecha();
+  const em=document.getElementById('tareo-exito-msg');if(em)em.style.display='none';
   document.getElementById('tareo-inicio').style.display='none';
   document.getElementById('tareo-setup').style.display='block';
   document.getElementById('tareo-hoja').style.display='none';
@@ -4472,8 +4478,15 @@ async function guardarTareo(){
     }
     guardados++;
   }
-  // Cerrar la hoja y volver al estado inicial PRIMERO
+  // Cerrar la hoja y volver al estado inicial
   cancelarSetupTareo();
+  // Mostrar mensaje de éxito en pantalla
+  const exitoMsg = document.getElementById('tareo-exito-msg');
+  const exitoTxt = document.getElementById('tareo-exito-texto');
+  if(exitoMsg && exitoTxt){
+    exitoTxt.textContent = `Tareo ${turno} del ${fmtF(fecha)} guardado — ${guardados} trabajador${guardados!==1?'es':''} registrado${guardados!==1?'s':''}`;
+    exitoMsg.style.display='block';
+  }
   showNotif(`✓ Tareo ${turno} registrado — ${guardados} trabajadores`);
   try{ actualizarKpisTareo(fecha); }catch(e){}
   try{ renderCostoRRHH(); }catch(e){}
