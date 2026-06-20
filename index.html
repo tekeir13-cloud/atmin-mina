@@ -4425,7 +4425,7 @@ function cargarHojaTareo(){
         <div style="display:flex;gap:4px;justify-content:center">${mkBtn('1','×1')}${mkBtn('1.5','×1.5')}${mkBtn('2','×2')}</div>
       </td>
       <td style="padding:5px 8px;border:1px solid #ddd">
-        <input type="text" data-pid="${p.id}" class="tareo-obs" value="${obs.replace(/"/g,'&quot;')}" placeholder="—" style="width:100%;border:none;background:transparent;font-size:11px;color:#1a1a1a;outline:none;font-family:Arial;caret-color:#1a1a1a">
+        <input type="text" data-pid="${p.id}" class="tareo-obs" value="${obs.replace(/"/g,'&quot;')}" placeholder="—" style="width:100%;border:1px solid #ddd;border-radius:3px;background:#fff;font-size:11px;color:#000;outline:none;font-family:Arial;padding:2px 4px">
       </td>
     </tr>`;
   });
@@ -4591,7 +4591,6 @@ function renderTareas(){
       const mult=Number(t.mult||1);
       const j=t.jornal??p?.jornal??0;
       const monto=j*mult;
-      const multColor=mult>=2?'#f87171':mult>1?'#f59e0b':'#60a5fa';
       const uid=t.id||t._uid||Math.random().toString(36).slice(2);
       if(!t._uid) t._uid=uid;
       return`<tr>
@@ -4599,22 +4598,26 @@ function renderTareas(){
         <td style="padding:6px 10px;border:1px solid #e5e7eb;font-size:11px;color:#555">${p?p.rol:'—'}</td>
         <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:center">
           <div style="display:flex;gap:3px;justify-content:center" id="mult-btns-${uid}">
-            ${['1','1.5','2'].map(v=>`<button onclick="editarMultTareo('${uid}','${v}')" style="padding:3px 8px;border-radius:5px;border:1px solid ${String(mult)===v?'#1a2744':'#ccc'};font-size:11px;font-weight:700;background:${String(mult)===v?'#1a2744':'#fff'};color:${String(mult)===v?'#fff':'#444'};cursor:pointer">×${v}</button>`).join('')}
+            ${['1','1.5','2'].map(v=>`<button onclick="editarMultTareo('${uid}','${v}')" class="mult-edit-btn-${hi}" style="padding:3px 8px;border-radius:5px;border:1px solid ${String(mult)===v?'#1a2744':'#ccc'};font-size:11px;font-weight:700;background:${String(mult)===v?'#1a2744':'#fff'};color:${String(mult)===v?'#fff':'#444'};cursor:not-allowed;pointer-events:none;opacity:0.6">×${v}</button>`).join('')}
           </div>
         </td>
-        <td style="padding:6px 10px;border:1px solid #e5e7eb;font-size:11px;color:#555;text-align:center">${t.obs||'—'}</td>
+        <td style="padding:6px 10px;border:1px solid #e5e7eb;font-size:11px;color:#111;text-align:center">${t.obs||'—'}</td>
         <td style="padding:6px 10px;border:1px solid #e5e7eb;font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:${monto>0?'#1a2744':'#999'};text-align:right">${monto>0?fmtS(monto):'—'}</td>
       </tr>`;
     }).join('');
     return`<div style="background:#fff;border-radius:10px;overflow:hidden;margin-bottom:16px;box-shadow:0 2px 12px rgba(0,0,0,0.25)">
-      <div style="background:#FFD700;padding:10px 18px;display:flex;align-items:center;justify-content:space-between">
-        <div style="font-weight:900;font-size:14px;color:#000;font-family:Arial,sans-serif">TAREO DIARIO — ${fmtF(h.fecha)} &nbsp;|&nbsp; TURNO: ${h.turno}</div>
+      <div style="background:#FFD700;padding:10px 18px;display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="toggleTareoArch(${hi})">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span id="tareo-arch-chevron-${hi}" style="font-size:14px;color:#1a2744">▶</span>
+          <div style="font-weight:900;font-size:14px;color:#000;font-family:Arial,sans-serif">TAREO — ${fmtF(h.fecha)} &nbsp;|&nbsp; TURNO: ${h.turno}</div>
+        </div>
         <div style="display:flex;align-items:center;gap:10px">
-          <span style="font-family:'DM Mono',monospace;font-weight:800;font-size:13px;color:#1a2744">Total: ${fmtS(total)}</span>
-          <span style="font-size:11px;font-weight:700;background:rgba(26,39,68,0.15);color:#1a2744;border-radius:6px;padding:3px 10px">${h.tareas.length} trabajadores</span>
+          <span style="font-family:'DM Mono',monospace;font-weight:800;font-size:13px;color:#1a2744">${fmtS(total)}</span>
+          <span style="font-size:11px;font-weight:700;background:rgba(26,39,68,0.15);color:#1a2744;border-radius:6px;padding:3px 10px">${h.tareas.length} trab.</span>
+          <button id="tareo-arch-edit-${hi}" onclick="event.stopPropagation();toggleEditTareoArch(${hi})" style="padding:4px 12px;font-size:11px;font-weight:700;border-radius:6px;border:1.5px solid #1a2744;background:#1a2744;color:#FFD700;cursor:pointer">✏ Editar</button>
         </div>
       </div>
-      <div style="overflow-x:auto">
+      <div id="tareo-arch-body-${hi}" style="display:none;overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif">
           <thead>
             <tr style="background:#f3f4f6">
@@ -4650,6 +4653,40 @@ async function editarMultTareo(uid, multStr){
   if(cells&&cells[4]) cells[4].textContent=fmtS(monto);
   renderCostoRRHH();actualizarKpisTareo(hoy());
   showNotif('✓ Tarea actualizada');
+}
+
+function toggleTareoArch(hi){
+  const body=document.getElementById('tareo-arch-body-'+hi);
+  const chev=document.getElementById('tareo-arch-chevron-'+hi);
+  if(!body)return;
+  const open=body.style.display==='none';
+  body.style.display=open?'block':'none';
+  if(chev) chev.textContent=open?'▼':'▶';
+}
+
+function toggleEditTareoArch(hi){
+  const btn=document.getElementById('tareo-arch-edit-'+hi);
+  const btns=document.querySelectorAll('.mult-edit-btn-'+hi);
+  const isEdit=btn&&btn.dataset.edit==='1';
+  if(btn){
+    btn.dataset.edit=isEdit?'0':'1';
+    btn.textContent=isEdit?'✏ Editar':'✅ Editando';
+    btn.style.background=isEdit?'#1a2744':'#166534';
+    btn.style.color=isEdit?'#FFD700':'#bbf7d0';
+    btn.style.borderColor=isEdit?'#1a2744':'#166534';
+  }
+  btns.forEach(b=>{
+    b.style.pointerEvents=isEdit?'none':'auto';
+    b.style.cursor=isEdit?'not-allowed':'pointer';
+    b.style.opacity=isEdit?'0.6':'1';
+  });
+  // Also open the body if not already open
+  if(!isEdit){
+    const body=document.getElementById('tareo-arch-body-'+hi);
+    const chev=document.getElementById('tareo-arch-chevron-'+hi);
+    if(body) body.style.display='block';
+    if(chev) chev.textContent='▼';
+  }
 }
 
 async function registrarTarea(){
@@ -4735,7 +4772,10 @@ function abrirBajaDesdeCard(id){
   const activos=state.personal.filter(p=>p.estado!=='baja');
   const sel=document.getElementById('baja-trabajador');
   sel.innerHTML=activos.map(p=>`<option value="${p.id}">${p.nombre} — ${p.rol}</option>`).join('');
-  sel.value=id;
+  // Force string match
+  const opt=Array.from(sel.options).find(o=>String(o.value)===String(id));
+  if(opt) opt.selected=true;
+  document.getElementById('baja-motivo').value='Renuncia voluntaria';
   document.getElementById('baja-fecha').value=hoy();
   document.getElementById('baja-obs').value='';
   document.getElementById('modal-baja').classList.add('active');
