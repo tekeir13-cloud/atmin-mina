@@ -4103,7 +4103,8 @@ function almacenLoad(){
   try{
     const raw=localStorage.getItem(ALM_KEY);
     if(raw){const d=JSON.parse(raw);state.almacen={ingresos:d.ingresos||[],salidas:d.salidas||[],inventarioInicial:d.inventarioInicial||[],historialMeses:d.historialMeses||[]};}
-    else{almacenSeedDemo();}
+    // Sembrar demo si está totalmente vacío (incluye visitas previas que guardaron arrays vacíos)
+    if(!state.almacen.ingresos.length && !state.almacen.salidas.length && !(state.almacen.historialMeses||[]).length){almacenSeedDemo();}
   }catch(e){}
 }
 function almacenSeedDemo(){
@@ -4145,6 +4146,14 @@ function almacenSeedDemo(){
   almacenSave();
 }
 function almMesActual(){return hoy().slice(0,7);}
+// Mes con datos más reciente (para que el selector no quede vacío al abrir)
+function almMesConDatos(){
+  const meses=[];
+  (state.almacen.ingresos||[]).forEach(i=>{if(i.fecha)meses.push(i.fecha.slice(0,7));});
+  (state.almacen.salidas||[]).forEach(s=>{if(s.fecha)meses.push(s.fecha.slice(0,7));});
+  if(!meses.length)return almMesActual();
+  return meses.sort().reverse()[0];
+}
 function prodKey(almacen,codigo,desc){return (almacen||'')+'|'+String(desc||'').trim().toUpperCase();}
 function nivelLabel(d){return d?('NV'+d):'—';}
 
@@ -4167,8 +4176,8 @@ function fmtS2(n){return 'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFra
 
 // ── TAB 1: ALMACÉN ──
 function renderAlmacen(){
-  const sel=document.getElementById('alm-mes-sel'); if(sel&&!sel.value)sel.value=almMesActual();
-  const mes=(sel&&sel.value)||almMesActual();
+  const sel=document.getElementById('alm-mes-sel'); if(sel&&!sel.value)sel.value=almMesConDatos();
+  const mes=(sel&&sel.value)||almMesConDatos();
   const g=id=>document.getElementById(id);
   // Filtros
   const fOrigen=g('alm-f-ingreso-origen')?.value||'';
@@ -4380,8 +4389,8 @@ function guardarEdicionSalida(){
 
 // ── TAB: COSTO DE INVENTARIO ──
 function renderInventario(){
-  const sel=document.getElementById('inv-mes-sel'); if(sel&&!sel.value)sel.value=almMesActual();
-  const mes=(sel&&sel.value)||almMesActual();
+  const sel=document.getElementById('inv-mes-sel'); if(sel&&!sel.value)sel.value=almMesConDatos();
+  const mes=(sel&&sel.value)||almMesConDatos();
   const filtroAlm=document.getElementById('inv-filtro-alm')?.value||'';
   let stock=calcStock();
   if(filtroAlm) stock=stock.filter(r=>r.almacen===filtroAlm);
@@ -4439,8 +4448,8 @@ function cerrarMesInventario(){
 
 // ── TAB 3: CENTRO DE COSTOS ──
 function renderCentroCostos(){
-  const sel=document.getElementById('cc-mes-sel'); if(sel&&!sel.value)sel.value=almMesActual();
-  const mes=(sel&&sel.value)||almMesActual();
+  const sel=document.getElementById('cc-mes-sel'); if(sel&&!sel.value)sel.value=almMesConDatos();
+  const mes=(sel&&sel.value)||almMesConDatos();
   const fNivel=document.getElementById('cc-filtro-nivel')?.value||'';
   const fAlm=document.getElementById('cc-filtro-alm')?.value||'';
   let sals=state.almacen.salidas.filter(s=>(s.fecha||'').startsWith(mes));
