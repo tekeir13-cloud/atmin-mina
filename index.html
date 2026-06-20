@@ -1984,6 +1984,40 @@ select option{background:var(--coal3);}
   </div>
 </div>
 
+<!-- ═══════════════ MODAL EDITAR PERSONAL ═══════════════ -->
+<div class="modal-overlay" id="modal-editar-personal" onclick="if(event.target===this)cerrarModal('modal-editar-personal')">
+  <div class="modal" style="width:min(480px,95vw)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+      <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:#60a5fa">✏ Editar Trabajador</div>
+      <button onclick="cerrarModal('modal-editar-personal')" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <input type="hidden" id="edit-p-id">
+    <div class="form-grid" style="gap:12px">
+      <div class="form-group"><label class="form-label">Nombre completo</label><input class="form-input" id="edit-p-nombre" placeholder="Apellidos y nombres"></div>
+      <div class="form-group"><label class="form-label">DNI</label><input class="form-input" id="edit-p-dni" placeholder="12345678" maxlength="8"></div>
+      <div class="form-group"><label class="form-label">Cargo / Rol</label>
+        <select class="form-input" id="edit-p-rol">
+          <option>Capataz</option><option>Jefe de Guardia</option><option>Asistente de Residente</option>
+          <option>Maestro Perforista 1</option><option>Maestro Perforista 2</option>
+          <option>Ayudante Perforista</option><option>Operador Múltiple</option>
+          <option>Ayudante Mecánico</option><option>Ayudante Minero</option><option>Limpiador</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Frente</label>
+        <select class="form-input" id="edit-p-frente">
+          <option value="1">Rampa</option><option value="2">Cortada</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Jornal diario (S/)</label><input class="form-input" type="number" id="edit-p-jornal" min="0" step="0.01"></div>
+      <div class="form-group"><label class="form-label">Fecha de ingreso</label><input class="form-input" type="date" id="edit-p-ingreso"></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button class="btn" style="flex:1;background:var(--coal3);color:var(--text)" onclick="cerrarModal('modal-editar-personal')">Cancelar</button>
+      <button class="btn btn-gold" style="flex:1" onclick="guardarEditarPersonal()">💾 Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════════ MODAL DAR DE BAJA ═══════════════ -->
 <div class="modal-overlay" id="modal-baja" onclick="if(event.target===this)cerrarModal('modal-baja')">
   <div class="modal" style="width:min(480px,95vw)">
@@ -4641,7 +4675,7 @@ function renderPersonal(){
     const ini=p.nombre.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
     const c=FC[p.frente]||'#888';
     const ingresoStr=p.ingreso?`<div style="font-size:9px;color:var(--text3);margin-top:2px">Ingresó: ${p.ingreso}</div>`:'';
-    return`<div class="persona-card">
+    return`<div class="persona-card" style="position:relative">
       <div class="persona-avatar" style="background:${c}22;color:${c}">${ini}</div>
       <div class="persona-name">${p.nombre}</div>
       <div class="persona-role">${p.rol}</div>
@@ -4649,6 +4683,10 @@ function renderPersonal(){
       <span class="badge ${p.estado==='activo'?'badge-ok':p.estado==='ausente'?'badge-danger':'badge-warn'}">${p.estado}</span>
       ${ingresoStr}
       <div style="font-size:10px;color:var(--text3);margin-top:4px">S/ ${p.jornal}/día</div>
+      <div style="display:flex;gap:6px;margin-top:8px;justify-content:center">
+        <button onclick="abrirEditarPersonal('${p.id}')" style="flex:1;padding:4px 0;font-size:11px;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.35);border-radius:6px;cursor:pointer">✏ Editar</button>
+        <button onclick="eliminarPersonal('${p.id}')" style="flex:1;padding:4px 0;font-size:11px;background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.3);border-radius:6px;cursor:pointer">🗑 Eliminar</button>
+      </div>
     </div>`;
   }).join('')||'<div style="color:var(--text3);font-size:12px;padding:16px">Sin personal activo</div>';
   const bSec=g('baja-section');if(bSec) bSec.style.display=bajas.length?'block':'none';
@@ -4707,6 +4745,47 @@ async function agregarPersonal(){
   limpiarFormPersonal();poblarSelects();renderPersonal();renderCostoRRHH();showNotif('✓ Personal agregado');
 }
 function limpiarFormPersonal(){['p-nombre','p-dni','p-jornal','p-ingreso'].forEach(id=>document.getElementById(id).value='');}
+
+function abrirEditarPersonal(id){
+  const p=state.personal.find(x=>String(x.id)===String(id));
+  if(!p) return;
+  document.getElementById('edit-p-id').value=p.id;
+  document.getElementById('edit-p-nombre').value=p.nombre||'';
+  document.getElementById('edit-p-dni').value=p.dni||'';
+  document.getElementById('edit-p-rol').value=p.rol||'';
+  document.getElementById('edit-p-frente').value=p.frente||1;
+  document.getElementById('edit-p-jornal').value=p.jornal||80;
+  document.getElementById('edit-p-ingreso').value=p.ingreso||'';
+  document.getElementById('modal-editar-personal').classList.add('active');
+}
+
+async function guardarEditarPersonal(){
+  const id=document.getElementById('edit-p-id').value;
+  const p=state.personal.find(x=>String(x.id)===String(id));
+  if(!p){showNotif('Trabajador no encontrado','error');return;}
+  const nombre=document.getElementById('edit-p-nombre').value.trim();
+  if(!nombre){showNotif('⚠ Ingresa el nombre','error');return;}
+  p.nombre=nombre;
+  p.dni=document.getElementById('edit-p-dni').value.trim();
+  p.rol=document.getElementById('edit-p-rol').value;
+  p.frente=parseInt(document.getElementById('edit-p-frente').value);
+  p.jornal=parseFloat(document.getElementById('edit-p-jornal').value)||80;
+  p.ingreso=document.getElementById('edit-p-ingreso').value;
+  try{ await sb.from('personal').update({nombre:p.nombre,dni:p.dni,rol:p.rol,frente:p.frente,jornal:p.jornal,ingreso:p.ingreso}).eq('id',id); }catch(e){}
+  cerrarModal('modal-editar-personal');
+  poblarSelects();renderPersonal();renderCostoRRHH();
+  showNotif(`✓ ${p.nombre} actualizado`);
+}
+
+async function eliminarPersonal(id){
+  const p=state.personal.find(x=>String(x.id)===String(id));
+  if(!p) return;
+  if(!confirm(`¿Eliminar a ${p.nombre}? Esta acción no se puede deshacer.`)) return;
+  state.personal=state.personal.filter(x=>String(x.id)!==String(id));
+  try{ await sb.from('personal').delete().eq('id',id); }catch(e){}
+  poblarSelects();renderPersonal();renderCostoRRHH();
+  showNotif(`🗑 ${p.nombre} eliminado`,'warn');
+}
 
 function renderCostoRRHH(){
   const mes=document.getElementById('costo-mes-sel')?.value||hoy().slice(0,7);
