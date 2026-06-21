@@ -2312,6 +2312,7 @@ select option{background:var(--coal3);}
     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:18px">
       <button class="btn btn-gold" style="font-size:14px;padding:12px 24px" onclick="abrirModalExploIngreso()">⬇ Registrar Ingreso</button>
       <button class="btn btn-outline" style="font-size:14px;padding:12px 24px;border-color:#f87171;color:#f87171" onclick="abrirModalExploSalida()">⬆ Registrar Salida</button>
+      <button class="btn btn-outline" style="font-size:14px;padding:12px 24px;border-color:#22c55e;color:#22c55e" onclick="exportarExplosivosExcel()">📊 Exportar Excel</button>
       <div style="font-size:12px;color:var(--text3);margin-left:8px">Ingreso: Polvorín Santa María → NV3190 &nbsp;|&nbsp; Salida: NV3190 → Almacén NV2820</div>
     </div>
     <div class="section-title">📋 Trazabilidad de Explosivos</div>
@@ -3699,10 +3700,7 @@ select option{background:var(--coal3);}
       <div class="form-group" style="margin:0"><label>Cajas</label><input type="number" id="exi-cajas" min="0" step="1" placeholder="0" oninput="calcTotalExplo('exi')"></div>
       <div class="form-group" style="margin:0"><label>Unidades sueltas</label><input type="number" id="exi-unidades" min="0" step="1" placeholder="0" oninput="calcTotalExplo('exi')"></div>
     </div>
-    <div style="background:var(--coal4);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:12px">
-      <span style="font-size:12px;color:var(--text3)">Total a ingresar:</span>
-      <span id="exi-total" style="font-family:'DM Mono',monospace;font-size:16px;font-weight:700;color:#60a5fa;margin-left:8px">Selecciona producto y cantidad</span>
-    </div>
+    <span id="exi-total" style="display:none"></span>
     <div class="form-group" style="margin-bottom:12px">
       <label>📷 Foto del Vale</label>
       <input type="file" id="exi-foto" accept="image/*" onchange="previsualizarFoto('exi-foto','exi-foto-preview')" style="display:block;margin-bottom:6px">
@@ -3736,11 +3734,10 @@ select option{background:var(--coal3);}
       <div class="form-group" style="margin:0"><label>Cajas</label><input type="number" id="es-cajas" min="0" step="1" placeholder="0" oninput="calcTotalExplo('es')"></div>
       <div class="form-group" style="margin:0"><label>Unidades sueltas</label><input type="number" id="es-unidades" min="0" step="1" placeholder="0" oninput="calcTotalExplo('es')"></div>
     </div>
-    <div style="background:var(--coal4);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between">
-      <div><span style="font-size:12px;color:var(--text3)">Total a retirar:</span>
-      <span id="es-total" style="font-family:'DM Mono',monospace;font-size:16px;font-weight:700;color:#f87171;margin-left:8px">— und</span></div>
-      <div><span style="font-size:12px;color:var(--text3)">Stock disponible:</span>
-      <span id="es-stock-disp" style="font-size:14px;font-weight:700;color:#22c55e;margin-left:8px">—</span></div>
+    <div style="background:var(--coal4);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:12px">
+      <span style="font-size:12px;color:var(--text3)">Stock disponible:</span>
+      <span id="es-stock-disp" style="font-size:14px;font-weight:700;color:#22c55e;margin-left:8px">—</span>
+      <span id="es-total" style="display:none"></span>
     </div>
     <div class="form-group" style="margin-bottom:12px">
       <label>📷 Foto del Vale</label>
@@ -5115,6 +5112,75 @@ function guardarExploSalida(){
   });
   almacenSave();cerrarModal('modal-explo-salida');renderExploTab();
   showNotif(`✓ Salida registrada: ${total} ${exploGetCat(prodId)?.unidad||'und'} de ${exploGetCat(prodId)?.nombre}`);
+}
+
+function exportarExplosivosExcel(){
+  if(typeof XLSX==='undefined'){showNotif('Error: librería Excel no cargada','error');return;}
+  const exp=state.almacen.explosivos||{ingresos:[],salidas:[]};
+  const ings=exp.ingresos||[],sals=exp.salidas||[];
+  if(!ings.length && !sals.length){showNotif('⚠ No hay movimientos para exportar','error');return;}
+  const C_AZUL='1E40AF',C_ROJO='B91C1C',C_VERDE='15803D',C_HEAD='111827';
+  const border={style:'thin',color:{rgb:'D1D5DB'}};
+  const allBorders={top:border,bottom:border,left:border,right:border};
+  const cell=(v,s)=>({v:v==null?'':v,t:typeof v==='number'?'n':'s',s:s||{}});
+  const hStyle=bg=>({font:{bold:true,color:{rgb:'FFFFFF'},sz:11},fill:{fgColor:{rgb:bg}},alignment:{horizontal:'center',vertical:'center'},border:allBorders});
+  const tStyle=(bold,align)=>({font:{bold:!!bold,sz:10},alignment:{horizontal:align||'left',vertical:'center'},border:allBorders});
+  function sheetFromAOA(aoa,colW){
+    const ws={};let maxC=0;
+    aoa.forEach((row,r)=>{row.forEach((c,ci)=>{if(c==null)return;ws[XLSX.utils.encode_cell({r,c:ci})]=cell(c.v,c.s);if(ci>maxC)maxC=ci;});});
+    ws['!ref']=`A1:${XLSX.utils.encode_cell({r:Math.max(0,aoa.length-1),c:maxC})}`;
+    if(colW)ws['!cols']=colW.map(w=>({wch:w}));
+    return ws;
+  }
+  // ── Hoja 1: Trazabilidad (todos los movimientos ordenados por fecha) ──
+  const movs=[
+    ...ings.map(r=>({...r,tipo:'INGRESO',ruta:'Polvorín Santa María → NV3190'})),
+    ...sals.map(r=>({...r,tipo:'SALIDA',ruta:'NV3190 → Almacén NV2820'}))
+  ].sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  const head1=['Fecha','Tipo','Vale/Guía','Explosivo','Cajas','Und. Sueltas','Total','Unidad','Ruta'];
+  const aoa1=[ [ {v:'TRAZABILIDAD DE EXPLOSIVOS — Polvorín NV3190',s:{font:{bold:true,sz:13,color:{rgb:C_HEAD}}}} ], [], head1.map(h=>({v:h,s:hStyle(C_HEAD)})) ];
+  movs.forEach(r=>{const c=exploGetCat(r.producto);const bg=r.tipo==='INGRESO'?C_AZUL:C_ROJO;
+    aoa1.push([
+      cell(fmtF(r.fecha),tStyle(0,'center')),
+      cell(r.tipo,{font:{bold:true,color:{rgb:'FFFFFF'},sz:10},fill:{fgColor:{rgb:bg}},alignment:{horizontal:'center',vertical:'center'},border:allBorders}),
+      cell(r.vale||'—',tStyle(0,'center')),
+      cell(c?.nombre||r.producto,tStyle(1)),
+      cell(r.cajas||0,tStyle(0,'center')),
+      cell(r.unidades||0,tStyle(0,'center')),
+      cell(r.totalUnidades||0,tStyle(1,'center')),
+      cell(c?.unidad||'und',tStyle(0,'center')),
+      cell(r.ruta,tStyle(0))
+    ]);
+  });
+  const ws1=sheetFromAOA(aoa1,[13,11,14,20,8,11,9,9,28]);
+  // ── Hoja 2: Balance de Stock ──
+  const stock=exploStockActual();
+  const head2=['Explosivo','Total Ingresado','Total Salido','Stock Actual','Cajas','Sueltas','Unidad','Estado'];
+  const aoa2=[ [ {v:'BALANCE DE STOCK — Polvorín NV3190',s:{font:{bold:true,sz:13,color:{rgb:C_HEAD}}}} ],
+    [ {v:'Generado: '+fmtF(hoy()),s:{font:{italic:true,sz:9,color:{rgb:'6B7280'}}}} ], head2.map(h=>({v:h,s:hStyle(C_VERDE)})) ];
+  EXPLO_CATALOGO.forEach(c=>{
+    const tIn=ings.filter(i=>i.producto===c.id).reduce((a,i)=>a+(i.totalUnidades||0),0);
+    const tOut=sals.filter(s=>s.producto===c.id).reduce((a,s)=>a+(s.totalUnidades||0),0);
+    const q=stock[c.id]||0;const cajas=Math.floor(q/c.upCaja);const sueltas=q%c.upCaja;
+    const estado=q>20?'OK':q>0?'BAJO':'AGOTADO';const ec=q>20?C_VERDE:q>0?'B45309':C_ROJO;
+    aoa2.push([
+      cell(c.nombre,tStyle(1)),
+      cell(tIn,tStyle(0,'center')),
+      cell(tOut,tStyle(0,'center')),
+      cell(q,tStyle(1,'center')),
+      cell(cajas,tStyle(0,'center')),
+      cell(sueltas,tStyle(0,'center')),
+      cell(c.unidad,tStyle(0,'center')),
+      cell(estado,{font:{bold:true,color:{rgb:'FFFFFF'},sz:10},fill:{fgColor:{rgb:ec}},alignment:{horizontal:'center',vertical:'center'},border:allBorders})
+    ]);
+  });
+  const ws2=sheetFromAOA(aoa2,[20,16,14,13,8,9,9,12]);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws2,'Balance Stock');
+  XLSX.utils.book_append_sheet(wb,ws1,'Trazabilidad');
+  const fn=`Explosivos_NV3190_${hoy()}.xlsx`;
+  XLSX.writeFile(wb,fn);
+  showNotif(`✓ Excel descargado: ${fn}`);
 }
 
 function renderSolicitudCompra(){
