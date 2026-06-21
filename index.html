@@ -3680,12 +3680,12 @@ select option{background:var(--coal3);}
     </div>
     <div style="font-size:12px;color:var(--text3);margin-bottom:14px">Origen: <strong>Polvorín Santa María (Poderosa)</strong> → Polvorín NV3190</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-      <div class="form-group" style="margin:0"><label>Fecha</label><input type="date" id="ei-fecha"></div>
-      <div class="form-group" style="margin:0"><label>N° Vale / Guía</label><input type="text" id="ei-vale" placeholder="Ej: VE-2026-001"></div>
+      <div class="form-group" style="margin:0"><label>Fecha</label><input type="date" id="exi-fecha"></div>
+      <div class="form-group" style="margin:0"><label>N° Vale / Guía</label><input type="text" id="exi-vale" placeholder="Ej: VE-2026-001"></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
       <div class="form-group" style="margin:0"><label>Explosivo</label>
-        <select id="ei-producto" onchange="calcTotalExplo('ei')" style="width:100%">
+        <select id="exi-producto" onchange="calcTotalExplo('exi');document.getElementById('exi-cajas').focus()" style="width:100%">
           <option value="">— Seleccionar —</option>
           <option value="M1000">M-1000 (264/caja)</option>
           <option value="M3000">M-3000 (228/caja)</option>
@@ -3696,17 +3696,17 @@ select option{background:var(--coal3);}
           <option value="NEITHER">Neither/Cordón (10 rollos/caja)</option>
         </select>
       </div>
-      <div class="form-group" style="margin:0"><label>Cajas</label><input type="number" id="ei-cajas" min="0" step="1" placeholder="0" oninput="calcTotalExplo('ei')"></div>
-      <div class="form-group" style="margin:0"><label>Unidades sueltas</label><input type="number" id="ei-unidades" min="0" step="1" placeholder="0" oninput="calcTotalExplo('ei')"></div>
+      <div class="form-group" style="margin:0"><label>Cajas</label><input type="number" id="exi-cajas" min="0" step="1" placeholder="0" oninput="calcTotalExplo('exi')"></div>
+      <div class="form-group" style="margin:0"><label>Unidades sueltas</label><input type="number" id="exi-unidades" min="0" step="1" placeholder="0" oninput="calcTotalExplo('exi')"></div>
     </div>
     <div style="background:var(--coal4);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:12px">
       <span style="font-size:12px;color:var(--text3)">Total a ingresar:</span>
-      <span id="ei-total" style="font-family:'DM Mono',monospace;font-size:16px;font-weight:700;color:#60a5fa;margin-left:8px">— und</span>
+      <span id="exi-total" style="font-family:'DM Mono',monospace;font-size:16px;font-weight:700;color:#60a5fa;margin-left:8px">Selecciona producto y cantidad</span>
     </div>
     <div class="form-group" style="margin-bottom:12px">
       <label>📷 Foto del Vale</label>
-      <input type="file" id="ei-foto" accept="image/*" onchange="previsualizarFoto('ei-foto','ei-foto-preview')" style="display:block;margin-bottom:6px">
-      <img id="ei-foto-preview" src="" style="display:none;max-width:100%;max-height:120px;border-radius:8px;border:1px solid var(--border)">
+      <input type="file" id="exi-foto" accept="image/*" onchange="previsualizarFoto('exi-foto','exi-foto-preview')" style="display:block;margin-bottom:6px">
+      <img id="exi-foto-preview" src="" style="display:none;max-width:100%;max-height:120px;border-radius:8px;border:1px solid var(--border)">
     </div>
     <div class="btn-row">
       <button class="btn btn-gold" onclick="guardarExploIngreso()">✓ Registrar Ingreso</button>
@@ -5045,31 +5045,31 @@ function calcTotalExplo(pfx){
   const c=exploGetCat(prodId);
   const total=c?cajas*c.upCaja+und:0;
   const el=document.getElementById(pfx+'-total');
-  if(el)el.textContent=c?`${total} ${c.unidad}`:'— und';
+  if(el)el.textContent=c?`${total} ${c.unidad}`:'Selecciona producto y cantidad';
   return total;
 }
 function abrirModalExploIngreso(){
   const g=id=>document.getElementById(id);
-  g('ei-fecha').value=hoy();g('ei-vale').value='';g('ei-producto').value='';
-  g('ei-cajas').value='';g('ei-unidades').value='';g('ei-total').textContent='— und';
-  g('ei-foto').value='';delete g('ei-foto').dataset.b64;
-  g('ei-foto-preview').style.display='none';g('ei-foto-preview').src='';
+  g('exi-fecha').value=hoy();g('exi-vale').value='';g('exi-producto').value='';
+  g('exi-cajas').value='';g('exi-unidades').value='';g('exi-total').textContent='Selecciona producto y cantidad';
+  g('exi-foto').value='';delete g('exi-foto').dataset.b64;
+  g('exi-foto-preview').style.display='none';g('exi-foto-preview').src='';
   abrirModal('modal-explo-ingreso');
 }
 function guardarExploIngreso(){
   const g=id=>document.getElementById(id);
-  const prodId=g('ei-producto').value;
+  const prodId=g('exi-producto').value;
   if(!prodId){showNotif('⚠ Selecciona el tipo de explosivo','error');return;}
-  const vale=g('ei-vale').value.trim();
+  const vale=g('exi-vale').value.trim();
   if(!vale){showNotif('⚠ Ingresa el N° de vale','error');return;}
-  const total=calcTotalExplo('ei');
+  const total=calcTotalExplo('exi');
   if(total<=0){showNotif('⚠ Ingresa cajas o unidades','error');return;}
   if(!state.almacen.explosivos)state.almacen.explosivos={ingresos:[],salidas:[]};
-  const fotoBase64=g('ei-foto').dataset.b64||null;
+  const fotoBase64=g('exi-foto').dataset.b64||null;
   state.almacen.explosivos.ingresos.push({
-    id:'EI'+Date.now(),fecha:g('ei-fecha').value||hoy(),vale,
-    producto:prodId,cajas:parseInt(g('ei-cajas').value)||0,
-    unidades:parseInt(g('ei-unidades').value)||0,totalUnidades:total,
+    id:'EI'+Date.now(),fecha:g('exi-fecha').value||hoy(),vale,
+    producto:prodId,cajas:parseInt(g('exi-cajas').value)||0,
+    unidades:parseInt(g('exi-unidades').value)||0,totalUnidades:total,
     origen:'Polvorin Santa Maria',fotoBase64
   });
   almacenSave();cerrarModal('modal-explo-ingreso');renderExploTab();
