@@ -3467,20 +3467,36 @@ select option{background:var(--coal3);}
       <div class="modal-title" style="margin-bottom:0;color:#60a5fa">⬇ Registrar Ingreso de Material</div>
       <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-ingreso')">✕</button>
     </div>
+    <!-- Datos generales de la hoja de registro (comunes a todos los ítems) -->
     <div class="form-grid">
       <div class="form-group"><label>Fecha</label><input type="date" id="in-fecha"></div>
-      <div class="form-group"><label>Vale N°</label><input type="text" id="in-vale" placeholder="Ej: 114715"></div>
       <div class="form-group"><label>Origen</label><select id="in-detalle"><option value="Almacen Poderosa">Almacen Poderosa</option><option value="Logistica Trujillo">Logistica Trujillo</option><option value="Devolución">Devolución</option></select></div>
       <div class="form-group"><label>Almacén destino</label><select id="in-almacen"><option value="General">General</option><option value="Mantenimiento">Mantenimiento</option></select></div>
+    </div>
+    <!-- Agregar producto (cada uno con su propio vale) -->
+    <div class="section-title" style="margin:14px 0 8px;font-size:12px">Agregar producto</div>
+    <div class="form-grid">
+      <div class="form-group"><label>Vale N° <span style="color:var(--text3);font-size:10px">(de este ítem)</span></label><input type="text" id="in-vale" placeholder="Ej: 114715"></div>
       <div class="form-group"><label>Producto <span style="color:var(--text3);font-size:10px">(nombre corto)</span></label><input type="text" id="in-producto" placeholder="Ej: Aleta / Cemento"></div>
       <div class="form-group" style="grid-column:1/-1"><label>Descripción</label><input type="text" id="in-descripcion" placeholder="Ej: RNR91-11A  ó  CEMENTO GRIS ANTISALITRE TIPO MS"></div>
       <div class="form-group"><label>Unidad de medida</label><select id="in-unidad"><option>UND</option><option>KG</option><option>BOL</option><option>ROLL</option><option>JGO</option><option>PZA</option><option>M</option></select></div>
       <div class="form-group"><label>Cantidad</label><input type="number" id="in-cantidad" placeholder="Ej: 100" min="0" step="any" oninput="calcTotalIngreso()"></div>
       <div class="form-group"><label>Precio unitario (S/)</label><input type="number" id="in-precio" placeholder="Ej: 27.73" min="0" step="any" oninput="calcTotalIngreso()"></div>
-      <div class="form-group"><label>Total</label><div id="in-total" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:9px 11px;font-family:'DM Mono',monospace;font-size:14px;color:var(--gold-light);font-weight:700">S/ 0.00</div></div>
+      <div class="form-group"><label>Total ítem</label><div id="in-total" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:9px 11px;font-family:'DM Mono',monospace;font-size:14px;color:var(--gold-light);font-weight:700">S/ 0.00</div></div>
+    </div>
+    <div style="margin:10px 0">
+      <button class="btn btn-outline" style="padding:8px 18px;font-size:12px" onclick="agregarItemIngreso()">➕ Agregar ítem a la hoja</button>
+    </div>
+    <!-- Hoja de registro: ítems agregados -->
+    <div class="table-wrap" style="margin:6px 0">
+      <table>
+        <thead><tr><th>Vale</th><th>Producto</th><th>U.M.</th><th>Cant.</th><th>Precio</th><th>Total</th><th></th></tr></thead>
+        <tbody id="in-cart-tbody"></tbody>
+        <tfoot><tr><td colspan="5" style="text-align:right;font-weight:700">Total</td><td id="in-cart-total" style="color:var(--gold-light);font-weight:700">S/ 0.00</td><td></td></tr></tfoot>
+      </table>
     </div>
     <div class="btn-row" style="margin-top:8px">
-      <button class="btn btn-gold" onclick="guardarIngreso()">✓ Registrar Ingreso</button>
+      <button class="btn btn-gold" onclick="guardarIngreso()">✓ Registrar Ingreso (toda la hoja)</button>
       <button class="btn btn-outline" onclick="cerrarModal('modal-ingreso')">Cancelar</button>
     </div>
   </div>
@@ -4145,6 +4161,8 @@ function almacenSeedDemo(){
     {id:'S015',fecha:'2026-03-25',destino:'2820',almacen:'General',maquina:'',producto:'PERNO',descripcion:'PERNO SPLIT SET 33 X 5 PIES CON PLATINA',unidad:'UND',precio:12.50,cantidad:80,importe:1000.00},
     {id:'S016',fecha:'2026-03-25',destino:'2820',almacen:'General',maquina:'',producto:'RESINA',descripcion:'RESINA POLESTER RAPIDA 330CC',unidad:'UND',precio:8.90,cantidad:40,importe:356.00},
   ];
+  // Agrupar ingresos demo en hojas de registro (por fecha+origen+almacén; una hoja puede tener varios vales)
+  ing.forEach(i=>{i.grupo='GI|'+i.fecha+'|'+i.detalle+'|'+i.almacen;});
   // Agrupar la demo en formatos de salida y asignar solicitante
   const solMap={'AN20B11197':'Carlos Mendoza','AN21A24189':'Luis Ramírez'};
   sal.forEach(s=>{
@@ -4225,13 +4243,15 @@ function renderAlmacen(){
     :`<tr><td colspan="11" style="text-align:center;color:var(--text3);padding:18px">Sin salidas este mes</td></tr>`;
 }
 
-// ── Modal Ingreso ──
+// ── Modal Ingreso (hoja de registro multi-ítem) ──
+let ingresoCart=[];
 function abrirIngresoModal(){
   const g=id=>document.getElementById(id);
   g('in-fecha').value=hoy();g('in-vale').value='';g('in-detalle').value='Almacen Poderosa';
   g('in-almacen').value='General';g('in-producto').value='';
   g('in-descripcion').value='';g('in-unidad').value='UND';g('in-cantidad').value='';g('in-precio').value='';
   g('in-total').textContent='S/ 0.00';
+  ingresoCart=[];renderIngresoCart();
   abrirModal('modal-ingreso');
 }
 function calcTotalIngreso(){
@@ -4239,19 +4259,46 @@ function calcTotalIngreso(){
   const p=parseFloat(document.getElementById('in-precio').value)||0;
   document.getElementById('in-total').textContent=fmtS2(c*p);
 }
-function guardarIngreso(){
+function agregarItemIngreso(){
   const g=id=>document.getElementById(id);
   const desc=g('in-descripcion').value.trim();
   const cant=parseFloat(g('in-cantidad').value)||0;
   if(!desc){showNotif('⚠ Ingresa la descripción del producto','error');return;}
   if(cant<=0){showNotif('⚠ Ingresa una cantidad válida','error');return;}
   const precio=parseFloat(g('in-precio').value)||0;
-  const reg={id:'I'+Date.now(),fecha:g('in-fecha').value||hoy(),vale:g('in-vale').value.trim(),detalle:g('in-detalle').value||'Almacen Poderosa',
-    almacen:g('in-almacen').value,codigo:'',producto:g('in-producto').value.trim(),descripcion:desc,
-    unidad:g('in-unidad').value,cantidad:cant,precio:precio,total:cant*precio};
-  state.almacen.ingresos.push(reg);almacenSave();
-  cerrarModal('modal-ingreso');renderAlmacen();
-  showNotif('✓ Ingreso registrado: '+(reg.producto||desc));
+  ingresoCart.push({vale:g('in-vale').value.trim(),producto:g('in-producto').value.trim(),descripcion:desc,unidad:g('in-unidad').value,cantidad:cant,precio:precio,total:cant*precio});
+  renderIngresoCart();
+  // Limpiar campos de ítem para el siguiente (mantiene vale por si es el mismo)
+  g('in-producto').value='';g('in-descripcion').value='';g('in-cantidad').value='';g('in-precio').value='';
+  g('in-total').textContent='S/ 0.00';g('in-producto').focus();
+}
+function quitarItemIngreso(idx){ingresoCart.splice(idx,1);renderIngresoCart();}
+function renderIngresoCart(){
+  const tb=document.getElementById('in-cart-tbody');
+  if(tb) tb.innerHTML=ingresoCart.length?ingresoCart.map((i,idx)=>`<tr>
+    <td>${i.vale||'—'}</td>
+    <td><strong>${i.producto||''}</strong><br><span style="font-size:10px;color:var(--text3)">${i.descripcion||''}</span></td>
+    <td>${i.unidad}</td><td>${fmt3(i.cantidad)}</td><td>${fmtS2(i.precio)}</td><td style="color:var(--gold-light);font-weight:700">${fmtS2(i.total)}</td>
+    <td><button onclick="quitarItemIngreso(${idx})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px">🗑</button></td></tr>`).join('')
+    :`<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:14px">Aún no has agregado ítems</td></tr>`;
+  const tot=ingresoCart.reduce((a,i)=>a+i.total,0);
+  const t=document.getElementById('in-cart-total');if(t)t.textContent=fmtS2(tot);
+}
+function guardarIngreso(){
+  const g=id=>document.getElementById(id);
+  if(!ingresoCart.length){showNotif('⚠ Agrega al menos un ítem a la hoja','error');return;}
+  const fecha=g('in-fecha').value||hoy();
+  const detalle=g('in-detalle').value||'Almacen Poderosa';
+  const almacen=g('in-almacen').value;
+  const base=Date.now();const grupo='GI'+base;
+  ingresoCart.forEach((i,idx)=>{
+    state.almacen.ingresos.push({id:'I'+(base+idx),grupo,fecha,vale:i.vale,detalle,almacen,codigo:'',
+      producto:i.producto,descripcion:i.descripcion,unidad:i.unidad,cantidad:i.cantidad,precio:i.precio,total:i.total});
+  });
+  almacenSave();
+  const n=ingresoCart.length;ingresoCart=[];
+  cerrarModal('modal-ingreso');renderAlmacen();renderHistorialAlmacen();
+  showNotif(`✓ Ingreso registrado: ${n} ítem${n>1?'s':''}`);
 }
 
 // ── Modal Salida (multi-ítem) ──
@@ -4364,26 +4411,29 @@ function renderHistorialAlmacen(){
   let ings=state.almacen.ingresos.slice();
   let sals=state.almacen.salidas.slice();
   if(mes){ings=ings.filter(i=>(i.fecha||'').startsWith(mes));sals=sals.filter(s=>(s.fecha||'').startsWith(mes));}
-  // ── INGRESOS agrupados por Vale (formato de ingreso) ──
+  // ── INGRESOS agrupados por hoja de registro (grupo); fallback a vale para datos antiguos ──
   const gIn={};
-  ings.forEach(i=>{const k=i.vale?('V'+i.vale):('U'+i.id);(gIn[k]=gIn[k]||[]).push(i);});
-  const gruposIn=Object.entries(gIn).map(([k,items])=>({k,items,fecha:items[0].fecha,vale:items[0].vale,detalle:items[0].detalle,almacen:items[0].almacen,total:items.reduce((a,x)=>a+(Number(x.total)||0),0)}))
-    .sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  ings.forEach(i=>{const k=i.grupo||(i.vale?('V'+i.vale):('U'+i.id));(gIn[k]=gIn[k]||[]).push(i);});
+  const gruposIn=Object.entries(gIn).map(([k,items])=>{
+    const vales=[...new Set(items.map(x=>x.vale).filter(Boolean))];
+    return {k,items,fecha:items[0].fecha,vales,detalle:items[0].detalle,almacen:items[0].almacen,total:items.reduce((a,x)=>a+(Number(x.total)||0),0)};
+  }).sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
   const cIn=document.getElementById('hist-ingresos-grupos');
   if(cIn) cIn.innerHTML=gruposIn.length?gruposIn.map((g,gi)=>{
     const gid='gin-'+gi;
     return `<div class="card" style="margin-bottom:10px;padding:0;overflow:hidden">
       <div onclick="histToggleGrupo('${gid}')" style="display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;flex-wrap:wrap">
         <span id="${gid}-arrow" style="color:var(--text3)">▸</span>
-        <div><div style="font-weight:700">📋 Vale ${g.vale||'—'} <span style="color:var(--text3);font-weight:400;font-size:11px">· ${fmtF(g.fecha)}</span></div>
-          <div style="font-size:11px;color:var(--text3)">${g.detalle||'—'} · ${almBadge(g.almacen)} · ${g.items.length} ítem${g.items.length>1?'s':''}</div></div>
+        <div><div style="font-weight:700">📋 Hoja de Ingreso <span style="color:var(--text3);font-weight:400;font-size:11px">· ${fmtF(g.fecha)}</span></div>
+          <div style="font-size:11px;color:var(--text3)">${g.detalle||'—'} · ${almBadge(g.almacen)} · ${g.items.length} ítem${g.items.length>1?'s':''} · ${g.vales.length?'Vale'+(g.vales.length>1?'s':'')+': '+g.vales.join(', '):'sin vale'}</div></div>
         <div style="flex:1"></div>
         <div style="color:#60a5fa;font-weight:700;font-size:15px">${fmtS2(g.total)}</div>
       </div>
       <div id="${gid}" style="display:none;border-top:1px solid var(--border)">
         <div class="table-wrap"><table>
-          <thead><tr><th>Producto / Descripción</th><th>U.M.</th><th>Cant.</th><th>Precio</th><th>Total S/</th><th>Acción</th></tr></thead>
+          <thead><tr><th>Vale</th><th>Producto / Descripción</th><th>U.M.</th><th>Cant.</th><th>Precio</th><th>Total S/</th><th>Acción</th></tr></thead>
           <tbody>${g.items.map(i=>`<tr>
+            <td>${i.vale||'—'}</td>
             <td><strong>${i.producto||''}</strong><br><span style="font-size:10px;color:var(--text3)">${i.descripcion||''}</span></td>
             <td>${i.unidad}</td><td>${fmt3(i.cantidad)}</td><td>${fmtS2(i.precio)}</td><td style="color:#60a5fa;font-weight:700">${fmtS2(i.total)}</td>
             <td><button onclick="abrirEditarIngreso('${i.id}')" style="padding:4px 10px;font-size:11px;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.4);border-radius:6px;cursor:pointer;font-weight:600">✏ Editar</button>
