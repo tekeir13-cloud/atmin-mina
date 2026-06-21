@@ -4064,6 +4064,7 @@ function renderModPane(mod,pane){
   else if(k==='log-inventario')renderInventario();
   else if(k==='log-solicitudcompra')renderSolicitudCompra();
   else if(k==='log-productos')renderProductos();
+  else if(k==='log-explosivos')renderExploTab();
   else if(k==='rrhh-planilla')renderPlanilla();
   else if(k==='rrhh-tareas')renderTareas();
   else if(k==='rrhh-personal')renderPersonal();
@@ -4944,6 +4945,177 @@ function cerrarMesInventario(){
 // ── SOLICITUD DE COMPRA ──
 const SC_UMBRAL_URGENTE=5;
 const SC_UMBRAL_BAJO=15;
+
+// ── EXPLOSIVOS NV3190 ──
+const EXPLO_CATALOGO=[
+  {id:'M1000',nombre:'M-1000',upCaja:264,unidad:'und'},
+  {id:'M3000',nombre:'M-3000',upCaja:228,unidad:'und'},
+  {id:'M5000',nombre:'M-5000',upCaja:216,unidad:'und'},
+  {id:'CARMEX18',nombre:'Carmex 1.8"',upCaja:350,unidad:'und'},
+  {id:'CARMEX240',nombre:'Carmex 2.40"',upCaja:300,unidad:'und'},
+  {id:'FAMECORTE',nombre:'Famecorte',upCaja:144,unidad:'und'},
+  {id:'NEITHER',nombre:'Neither (Cordón)',upCaja:10,unidad:'rollo',mPorRollo:150},
+];
+function exploGetCat(id){return EXPLO_CATALOGO.find(c=>c.id===id)||null;}
+function exploStockActual(){
+  const exp=state.almacen.explosivos||{ingresos:[],salidas:[]};
+  const map={};EXPLO_CATALOGO.forEach(c=>{map[c.id]=0;});
+  (exp.ingresos||[]).forEach(i=>{map[i.producto]=(map[i.producto]||0)+i.totalUnidades;});
+  (exp.salidas||[]).forEach(s=>{map[s.producto]=(map[s.producto]||0)-s.totalUnidades;});
+  return map;
+}
+function renderExploTab(){renderExploStock();renderExploHistorial();}
+function renderExploStock(){
+  const wrap=document.getElementById('exp-stock-wrap');if(!wrap)return;
+  const stock=exploStockActual();
+  const cards=EXPLO_CATALOGO.map(c=>{
+    const qty=stock[c.id]||0;
+    const color=qty>20?'#22c55e':qty>0?'#f59e0b':'#ef4444';
+    const cajas=Math.floor(qty/c.upCaja);const sueltas=qty%c.upCaja;
+    const label=c.id==='NEITHER'?`${qty} rollos (${qty*c.mPorRollo} m)`:`${cajas} caj${cajas!==1?'as':'a'} + ${sueltas} sueltas`;
+    return `<div class="kpi-card" style="padding:14px 16px">
+      <div class="kpi-label" style="font-size:11px">${c.nombre}</div>
+      <div style="font-size:24px;font-weight:800;color:${color};font-family:'DM Mono',monospace;margin:6px 0">${qty}</div>
+      <div style="font-size:11px;color:var(--text3)">${label}</div>
+      <div style="background:var(--coal4);border-radius:4px;height:6px;margin-top:8px;overflow:hidden">
+        <div style="height:100%;width:${Math.min(100,qty/c.upCaja*10)}%;background:${color};border-radius:4px"></div>
+      </div>
+    </div>`;
+  }).join('');
+  wrap.innerHTML=`<div class="section-title" style="margin-top:0">📦 Stock Actual — Polvorín NV3190</div>
+    <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:0">${cards}</div>`;
+}
+function renderExploHistorial(){
+  const wrap=document.getElementById('exp-historial-wrap');if(!wrap)return;
+  const exp=state.almacen.explosivos||{ingresos:[],salidas:[]};
+  const todos=[
+    ...(exp.ingresos||[]).map(r=>({...r,tipo:'ingreso'})),
+    ...(exp.salidas||[]).map(r=>({...r,tipo:'salida'}))
+  ].sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  if(!todos.length){wrap.innerHTML='<div style="color:var(--text3);font-size:13px;padding:20px 0">Sin movimientos registrados.</div>';return;}
+  wrap.innerHTML=todos.map(r=>{
+    const c=exploGetCat(r.producto);const esIng=r.tipo==='ingreso';
+    const color=esIng?'#60a5fa':'#f87171';
+    const cajas=Math.floor(r.totalUnidades/(c?.upCaja||1));const sueltas=r.totalUnidades%(c?.upCaja||1);
+    const cantLabel=`${r.totalUnidades} ${c?.unidad||'und'} (${cajas} caj. + ${sueltas} sueltas)`;
+    return `<div class="card" style="margin-bottom:8px;padding:12px 16px;border-left:3px solid ${color}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div>
+          <div style="font-weight:700;font-size:13px">${esIng?'⬇ Ingreso':'⬆ Salida'} · <span style="color:${color}">${c?.nombre||r.producto}</span> <span style="color:var(--text3);font-weight:400;font-size:11px">· ${fmtF(r.fecha)}</span></div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">${esIng?'Polvorín Santa María → NV3190':'NV3190 → Almacén NV2820'}</div>
+          <div style="font-size:12px;margin-top:4px">Vale: <strong>${r.vale||'—'}</strong> · Cantidad: <strong style="color:${color}">${cantLabel}</strong></div>
+        </div>
+        ${r.fotoBase64?`<img src="${r.fotoBase64}" style="max-height:64px;max-width:100px;border-radius:6px;border:1px solid var(--border);cursor:pointer" onclick="verFotoExplo('${r.id}')" title="Ver foto del vale">`:'<div style="color:var(--text3);font-size:11px;padding:4px">Sin foto</div>'}
+      </div>
+    </div>`;
+  }).join('');
+}
+function verFotoExplo(id){
+  const exp=state.almacen.explosivos||{ingresos:[],salidas:[]};
+  const r=[...exp.ingresos,...exp.salidas].find(x=>x.id===id);
+  if(!r||!r.fotoBase64)return;
+  const w=window.open('','_blank');
+  w.document.write(`<html><body style="margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${r.fotoBase64}" style="max-width:100%;max-height:100vh"></body></html>`);
+}
+function previsualizarFoto(inputId,previewId){
+  const inp=document.getElementById(inputId);const prev=document.getElementById(previewId);
+  if(!inp||!inp.files[0])return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const img=new Image();
+    img.onload=()=>{
+      const canvas=document.createElement('canvas');const max=800;
+      let w=img.width,h=img.height;
+      if(w>max){h=Math.round(h*max/w);w=max;}
+      if(h>max){w=Math.round(w*max/h);h=max;}
+      canvas.width=w;canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      const b64=canvas.toDataURL('image/jpeg',0.75);
+      if(prev){prev.src=b64;prev.style.display='block';}
+      inp.dataset.b64=b64;
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(inp.files[0]);
+}
+function calcTotalExplo(pfx){
+  const prodId=document.getElementById(pfx+'-producto')?.value;
+  const cajas=parseInt(document.getElementById(pfx+'-cajas')?.value)||0;
+  const und=parseInt(document.getElementById(pfx+'-unidades')?.value)||0;
+  const c=exploGetCat(prodId);
+  const total=c?cajas*c.upCaja+und:0;
+  const el=document.getElementById(pfx+'-total');
+  if(el)el.textContent=c?`${total} ${c.unidad}`:'— und';
+  return total;
+}
+function abrirModalExploIngreso(){
+  const g=id=>document.getElementById(id);
+  g('ei-fecha').value=hoy();g('ei-vale').value='';g('ei-producto').value='';
+  g('ei-cajas').value='';g('ei-unidades').value='';g('ei-total').textContent='— und';
+  g('ei-foto').value='';delete g('ei-foto').dataset.b64;
+  g('ei-foto-preview').style.display='none';g('ei-foto-preview').src='';
+  abrirModal('modal-explo-ingreso');
+}
+function guardarExploIngreso(){
+  const g=id=>document.getElementById(id);
+  const prodId=g('ei-producto').value;
+  if(!prodId){showNotif('⚠ Selecciona el tipo de explosivo','error');return;}
+  const vale=g('ei-vale').value.trim();
+  if(!vale){showNotif('⚠ Ingresa el N° de vale','error');return;}
+  const total=calcTotalExplo('ei');
+  if(total<=0){showNotif('⚠ Ingresa cajas o unidades','error');return;}
+  if(!state.almacen.explosivos)state.almacen.explosivos={ingresos:[],salidas:[]};
+  const fotoBase64=g('ei-foto').dataset.b64||null;
+  state.almacen.explosivos.ingresos.push({
+    id:'EI'+Date.now(),fecha:g('ei-fecha').value||hoy(),vale,
+    producto:prodId,cajas:parseInt(g('ei-cajas').value)||0,
+    unidades:parseInt(g('ei-unidades').value)||0,totalUnidades:total,
+    origen:'Polvorin Santa Maria',fotoBase64
+  });
+  almacenSave();cerrarModal('modal-explo-ingreso');renderExploTab();
+  showNotif(`✓ Ingreso registrado: ${total} ${exploGetCat(prodId)?.unidad||'und'} de ${exploGetCat(prodId)?.nombre}`);
+}
+function autoFillExploSalida(){
+  const prodId=document.getElementById('es-producto')?.value;
+  const stock=exploStockActual();const disp=stock[prodId]||0;
+  const el=document.getElementById('es-stock-disp');const c=exploGetCat(prodId);
+  if(el)el.textContent=c?`${disp} ${c.unidad}`:'—';
+  calcTotalExplo('es');
+}
+function abrirModalExploSalida(){
+  const g=id=>document.getElementById(id);
+  g('es-fecha').value=hoy();g('es-vale').value='';
+  g('es-cajas').value='';g('es-unidades').value='';
+  g('es-total').textContent='— und';g('es-stock-disp').textContent='—';
+  g('es-foto').value='';delete g('es-foto').dataset.b64;
+  g('es-foto-preview').style.display='none';g('es-foto-preview').src='';
+  const stock=exploStockActual();const sel=g('es-producto');
+  sel.innerHTML='<option value="">— Seleccionar —</option>'+
+    EXPLO_CATALOGO.filter(c=>stock[c.id]>0).map(c=>`<option value="${c.id}">${c.nombre} (stock: ${stock[c.id]} ${c.unidad})</option>`).join('');
+  if(!EXPLO_CATALOGO.some(c=>stock[c.id]>0))sel.innerHTML='<option value="">Sin stock disponible</option>';
+  abrirModal('modal-explo-salida');
+}
+function guardarExploSalida(){
+  const g=id=>document.getElementById(id);
+  const prodId=g('es-producto').value;
+  if(!prodId){showNotif('⚠ Selecciona el tipo de explosivo','error');return;}
+  const vale=g('es-vale').value.trim();
+  if(!vale){showNotif('⚠ Ingresa el N° de vale','error');return;}
+  const total=calcTotalExplo('es');
+  if(total<=0){showNotif('⚠ Ingresa cajas o unidades','error');return;}
+  const stock=exploStockActual();
+  if(total>(stock[prodId]||0)){showNotif(`⚠ Stock insuficiente. Disponible: ${stock[prodId]||0} ${exploGetCat(prodId)?.unidad||'und'}`,'error');return;}
+  if(!state.almacen.explosivos)state.almacen.explosivos={ingresos:[],salidas:[]};
+  const fotoBase64=g('es-foto').dataset.b64||null;
+  state.almacen.explosivos.salidas.push({
+    id:'ES'+Date.now(),fecha:g('es-fecha').value||hoy(),vale,
+    producto:prodId,cajas:parseInt(g('es-cajas').value)||0,
+    unidades:parseInt(g('es-unidades').value)||0,totalUnidades:total,
+    destino:'Almacen NV2820',fotoBase64
+  });
+  almacenSave();cerrarModal('modal-explo-salida');renderExploTab();
+  showNotif(`✓ Salida registrada: ${total} ${exploGetCat(prodId)?.unidad||'und'} de ${exploGetCat(prodId)?.nombre}`);
+}
 
 function renderSolicitudCompra(){
   renderAlertasStock();
