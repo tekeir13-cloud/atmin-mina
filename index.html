@@ -2213,6 +2213,7 @@ select option{background:var(--coal3);}
     <button class="mod-tab" onclick="modTab('log','historial',this)">📂 Historial &amp; Edición</button>
     <button class="mod-tab" onclick="modTab('log','inventario',this)">📊 Costo de Inventario</button>
     <button class="mod-tab" onclick="modTab('log','centrocostos',this)">🎯 Centro de Costos</button>
+    <button class="mod-tab" id="tab-productos" onclick="modTab('log','productos',this);renderProductos()">📦 Productos</button>
   </div>
 
   <!-- ════ TAB 1: ALMACÉN GENERAL ════ -->
@@ -2344,6 +2345,26 @@ select option{background:var(--coal3);}
       </table>
     </div>
   </div>
+
+  <!-- ════ TAB 4: PRODUCTOS ════ -->
+  <div class="mod-pane" id="log-productos" style="display:none">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+    <div>
+      <div class="kpi-label">Maestro de Productos</div>
+      <div style="font-size:12px;color:var(--text3)">Catálogo de materiales con código único</div>
+    </div>
+    <button class="btn btn-gold" onclick="abrirModalProducto()">+ Nuevo Producto</button>
+  </div>
+  <div style="margin-bottom:12px">
+    <input type="text" id="prod-buscar" placeholder="🔍 Buscar por código, nombre o descripción..." style="width:100%;max-width:400px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--coal4);color:var(--text1)" oninput="renderProductos()">
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Código</th><th>Nombre</th><th>Descripción</th><th>U.M.</th><th>Acciones</th></tr></thead>
+      <tbody id="prod-tbody"></tbody>
+    </table>
+  </div>
+</div>
 </div>
 
 <!-- RRHH -->
@@ -3482,7 +3503,7 @@ select option{background:var(--coal3);}
         <div class="form-group" style="margin:0"><label style="font-size:11px">U.M.</label><select id="in-unidad" style="font-size:13px"><option>UND</option><option>KG</option><option>BOL</option><option>ROLL</option><option>JGO</option><option>PZA</option><option>M</option></select></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 90px 110px 120px auto;gap:8px;align-items:flex-end">
-        <div class="form-group" style="margin:0"><label style="font-size:11px">Producto (nombre corto)</label><input type="text" id="in-producto" placeholder="Ej: Aleta / Cemento" style="font-size:13px"></div>
+        <div class="form-group" style="margin:0"><label style="font-size:11px">Producto (nombre corto)</label><input type="text" id="in-producto" list="prod-datalist" oninput="autoFillProductoIngreso()" placeholder="Ej: Aleta / Cemento" style="font-size:13px"></div>
         <div class="form-group" style="margin:0"><label style="font-size:11px">Cantidad</label><input type="number" id="in-cantidad" placeholder="100" min="0" step="any" oninput="calcTotalIngreso()" style="font-size:13px"></div>
         <div class="form-group" style="margin:0"><label style="font-size:11px">Precio unit. (S/)</label><input type="number" id="in-precio" placeholder="27.73" min="0" step="any" oninput="calcTotalIngreso()" style="font-size:13px"></div>
         <div class="form-group" style="margin:0"><label style="font-size:11px">Total ítem</label><div id="in-total" style="background:var(--coal3);border:1px solid var(--border);border-radius:7px;padding:8px 10px;font-family:'DM Mono',monospace;font-size:13px;color:var(--gold-light);font-weight:700">S/ 0.00</div></div>
@@ -3503,6 +3524,7 @@ select option{background:var(--coal3);}
     </div>
   </div>
 </div>
+<datalist id="prod-datalist"></datalist>
 
 <!-- ════ MODAL: REGISTRAR SALIDA ════ -->
 <div class="modal-overlay" id="modal-salida" onclick="if(event.target===this)cerrarModal('modal-salida')">
@@ -3601,6 +3623,27 @@ select option{background:var(--coal3);}
     </div>
   </div>
 </div>
+
+<!-- ════ MODAL: PRODUCTO ════ -->
+<div class="modal-overlay" id="modal-producto" onclick="if(event.target===this)cerrarModal('modal-producto')">
+  <div class="modal" style="width:min(500px,95vw)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+      <div class="modal-title" style="margin-bottom:0">📦 <span id="modal-prod-titulo">Nuevo Producto</span></div>
+      <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-producto')">✕</button>
+    </div>
+    <input type="hidden" id="prod-edit-id">
+    <div class="form-grid">
+      <div class="form-group"><label>Código</label><input type="text" id="prod-codigo" readonly style="opacity:0.7;font-family:'DM Mono',monospace" placeholder="Auto-generado"></div>
+      <div class="form-group"><label>Unidad de medida</label><select id="prod-unidad"><option>UND</option><option>KG</option><option>BOL</option><option>ROLL</option><option>JGO</option><option>PZA</option><option>M</option><option>LT</option><option>GLN</option></select></div>
+      <div class="form-group" style="grid-column:1/-1"><label>Nombre corto</label><input type="text" id="prod-nombre" placeholder="Ej: Aleta / Cemento / Aceite"></div>
+      <div class="form-group" style="grid-column:1/-1"><label>Descripción completa</label><input type="text" id="prod-descripcion" placeholder="Ej: CEMENTO GRIS ANTISALITRE TIPO MS x 42.5 KG"></div>
+    </div>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn btn-gold" onclick="guardarProductoCatalogo()">✓ Guardar</button>
+      <button class="btn btn-outline" onclick="cerrarModal('modal-producto')">Cancelar</button>
+    </div>
+  </div>
+</div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
@@ -3642,7 +3685,7 @@ const state={
   aceros:{stock:120,historial:[]},
   epp:{historial:[]},
   petroleo:{stock:200,historial:[]},
-  almacen:{ingresos:[],salidas:[],inventarioInicial:[],historialMeses:[]},
+  almacen:{ingresos:[],salidas:[],inventarioInicial:[],historialMeses:[],productos:[]},
   perforacion:[],mantenimiento:[],horometros:[],tareas:[],
   ordenes:[],valorizaciones:[],
   compresorista:[],
@@ -3677,7 +3720,7 @@ function navigate(page){
 }
 // Mapa explícito de todos los panes por módulo
 const MODULE_PANES = {
-  'log': ['almacen','historial','inventario','centrocostos'],
+  'log': ['almacen','historial','inventario','centrocostos','productos'],
   'rrhh': ['planilla','tareas','personal','costorrhh'],
   'op': ['avance','vsproyectado','distribucion','rendimientos','ia'],
   'mant': ['registro','horometros','costosmant'],
@@ -4120,14 +4163,90 @@ function renderDashboard(){
 
 // ════════════════ MÓDULO ALMACÉN / INVENTARIO ════════════════
 const ALM_KEY='atmin_almacen';
-function almacenSave(){try{localStorage.setItem(ALM_KEY,JSON.stringify(state.almacen));}catch(e){}}
+function almacenSave(){try{localStorage.setItem(ALM_KEY,JSON.stringify({...state.almacen,productos:state.almacen.productos||[]}));}catch(e){}}
 function almacenLoad(){
   try{
     const raw=localStorage.getItem(ALM_KEY);
-    if(raw){const d=JSON.parse(raw);state.almacen={ingresos:d.ingresos||[],salidas:d.salidas||[],inventarioInicial:d.inventarioInicial||[],historialMeses:d.historialMeses||[]};}
+    if(raw){const d=JSON.parse(raw);state.almacen={ingresos:d.ingresos||[],salidas:d.salidas||[],inventarioInicial:d.inventarioInicial||[],historialMeses:d.historialMeses||[],productos:d.productos||[]};}
     // Sembrar demo si está totalmente vacío (incluye visitas previas que guardaron arrays vacíos)
     if(!state.almacen.ingresos.length && !state.almacen.salidas.length && !(state.almacen.historialMeses||[]).length){almacenSeedDemo();}
   }catch(e){}
+}
+// ── AUTOCOMPLETE INGRESO ──
+function autoFillProductoIngreso(){
+  const val=document.getElementById('in-producto').value.trim().toLowerCase();
+  const p=(state.almacen.productos||[]).find(x=>x.codigo.toLowerCase()===val||x.nombre.toLowerCase()===val);
+  if(p){
+    document.getElementById('in-descripcion').value=p.descripcion||'';
+    document.getElementById('in-unidad').value=p.unidad;
+  }
+  // rebuild datalist
+  const dl=document.getElementById('prod-datalist');
+  if(dl){dl.innerHTML=(state.almacen.productos||[]).map(x=>`<option value="${x.nombre}" label="${x.codigo} · ${x.nombre}">`).join('');}
+}
+function poblarDatalistProductos(){
+  const dl=document.getElementById('prod-datalist');
+  if(dl)dl.innerHTML=(state.almacen.productos||[]).map(x=>`<option value="${x.nombre}">${x.codigo} · ${x.nombre}</option>`).join('');
+}
+// ── MAESTRO DE PRODUCTOS ──
+function nextCodigoProducto(){
+  const nums=(state.almacen.productos||[]).map(p=>parseInt((p.codigo||'PRD-000').split('-')[1]||0)).filter(n=>!isNaN(n));
+  const max=nums.length?Math.max(...nums):0;
+  return 'PRD-'+ String(max+1).padStart(3,'0');
+}
+function abrirModalProducto(id){
+  const g=k=>document.getElementById(k);
+  if(id){
+    const p=(state.almacen.productos||[]).find(x=>x.id===id);
+    if(!p)return;
+    g('modal-prod-titulo').textContent='Editar Producto';
+    g('prod-edit-id').value=p.id;
+    g('prod-codigo').value=p.codigo;
+    g('prod-nombre').value=p.nombre;
+    g('prod-descripcion').value=p.descripcion||'';
+    g('prod-unidad').value=p.unidad;
+  }else{
+    g('modal-prod-titulo').textContent='Nuevo Producto';
+    g('prod-edit-id').value='';
+    g('prod-codigo').value=nextCodigoProducto();
+    g('prod-nombre').value='';
+    g('prod-descripcion').value='';
+    g('prod-unidad').value='UND';
+  }
+  abrirModal('modal-producto');
+}
+function guardarProductoCatalogo(){
+  const g=k=>document.getElementById(k);
+  const nombre=g('prod-nombre').value.trim();
+  if(!nombre){showNotif('⚠ El nombre es requerido','error');return;}
+  const editId=g('prod-edit-id').value;
+  if(!state.almacen.productos)state.almacen.productos=[];
+  if(editId){
+    const p=state.almacen.productos.find(x=>x.id===editId);
+    if(p){p.nombre=nombre;p.descripcion=g('prod-descripcion').value.trim();p.unidad=g('prod-unidad').value;}
+  }else{
+    state.almacen.productos.push({id:'P'+Date.now(),codigo:g('prod-codigo').value,nombre,descripcion:g('prod-descripcion').value.trim(),unidad:g('prod-unidad').value});
+  }
+  almacenSave();cerrarModal('modal-producto');renderProductos();
+  showNotif('Producto guardado','success');
+}
+function eliminarProducto(id){
+  if(!confirm('¿Eliminar este producto del catálogo?'))return;
+  state.almacen.productos=(state.almacen.productos||[]).filter(p=>p.id!==id);
+  almacenSave();renderProductos();
+}
+function renderProductos(){
+  if(!document.getElementById('prod-tbody'))return;
+  const q=(document.getElementById('prod-buscar')?.value||'').toLowerCase();
+  let lista=(state.almacen.productos||[]).filter(p=>!q||p.codigo.toLowerCase().includes(q)||p.nombre.toLowerCase().includes(q)||(p.descripcion||'').toLowerCase().includes(q));
+  lista=[...lista].sort((a,b)=>a.codigo.localeCompare(b.codigo));
+  document.getElementById('prod-tbody').innerHTML=lista.length?lista.map(p=>`<tr>
+    <td style="font-family:'DM Mono',monospace;font-weight:700;color:var(--gold-light)">${p.codigo}</td>
+    <td style="font-weight:600">${p.nombre}</td>
+    <td style="font-size:12px;color:var(--text3)">${p.descripcion||'—'}</td>
+    <td>${p.unidad}</td>
+    <td><button class="btn btn-outline" style="padding:3px 10px;font-size:11px" onclick="abrirModalProducto('${p.id}')">✏</button> <button style="background:none;border:none;color:#f87171;cursor:pointer;font-size:13px" onclick="eliminarProducto('${p.id}')">🗑</button></td>
+  </tr>`).join(''):`<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:24px">No hay productos en el catálogo. Agrega el primero.</td></tr>`;
 }
 function almacenSeedDemo(){
   const ing=[
@@ -4173,6 +4292,15 @@ function almacenSeedDemo(){
   });
   state.almacen.ingresos=ing;
   state.almacen.salidas=sal;
+  if(!(state.almacen.productos||[]).length){
+    state.almacen.productos=[
+      {id:'P1',codigo:'PRD-001',nombre:'Aleta',descripcion:'ALETA DE REDUCCION RNR91-11A',unidad:'UND'},
+      {id:'P2',codigo:'PRD-002',nombre:'Cemento',descripcion:'CEMENTO GRIS ANTISALITRE TIPO MS x 42.5 KG',unidad:'BOL'},
+      {id:'P3',codigo:'PRD-003',nombre:'Aceite Motor',descripcion:'ACEITE DE MOTOR 15W-40 MINERAL',unidad:'GLN'},
+      {id:'P4',codigo:'PRD-004',nombre:'Grasa',descripcion:'GRASA MULTIPROPOSITO EP2',unidad:'KG'},
+      {id:'P5',codigo:'PRD-005',nombre:'Cable Eléctrico',descripcion:'CABLE ELECTRICO VULCANIZADO 3x10mm²',unidad:'M'},
+    ];
+  }
   almacenSave();
 }
 function almMesActual(){return hoy().slice(0,7);}
@@ -4254,6 +4382,7 @@ function abrirIngresoModal(){
   g('in-descripcion').value='';g('in-unidad').value='UND';g('in-cantidad').value='';g('in-precio').value='';
   g('in-total').textContent='S/ 0.00';
   ingresoCart=[];renderIngresoCart();
+  poblarDatalistProductos();
   abrirModal('modal-ingreso');
 }
 function calcTotalIngreso(){
