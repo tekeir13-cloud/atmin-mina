@@ -2213,6 +2213,7 @@ select option{background:var(--coal3);}
     <button class="mod-tab" onclick="modTab('log','inventario',this)">📊 Costo de Inventario</button>
     <button class="mod-tab" onclick="modTab('log','solicitudcompra',this)">🛒 Solicitud de Compra</button>
     <button class="mod-tab" id="tab-productos" onclick="modTab('log','productos',this);renderProductos()">📦 Productos</button>
+    <button class="mod-tab" onclick="modTab('log','explosivos',this)">💣 Explosivos NV3190</button>
   </div>
 
   <!-- ════ TAB 1: ALMACÉN GENERAL ════ -->
@@ -2303,6 +2304,18 @@ select option{background:var(--coal3);}
     </div>
     <!-- Historial solicitudes -->
     <div id="sc-historial"></div>
+  </div>
+
+  <!-- ════ TAB: EXPLOSIVOS NV3190 ════ -->
+  <div class="mod-pane" style="display:none" id="log-explosivos">
+    <div id="exp-stock-wrap" style="margin-bottom:18px"></div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:18px">
+      <button class="btn btn-gold" style="font-size:14px;padding:12px 24px" onclick="abrirModalExploIngreso()">⬇ Registrar Ingreso</button>
+      <button class="btn btn-outline" style="font-size:14px;padding:12px 24px;border-color:#f87171;color:#f87171" onclick="abrirModalExploSalida()">⬆ Registrar Salida</button>
+      <div style="font-size:12px;color:var(--text3);margin-left:8px">Ingreso: Polvorín Santa María → NV3190 &nbsp;|&nbsp; Salida: NV3190 → Almacén NV2820</div>
+    </div>
+    <div class="section-title">📋 Trazabilidad de Explosivos</div>
+    <div id="exp-historial-wrap"></div>
   </div>
 
   <!-- ════ TAB 4: PRODUCTOS ════ -->
@@ -3658,6 +3671,89 @@ select option{background:var(--coal3);}
   </div>
 </div>
 
+<!-- ════ MODAL: INGRESO EXPLOSIVO ════ -->
+<div class="modal-overlay" id="modal-explo-ingreso" onclick="if(event.target===this)cerrarModal('modal-explo-ingreso')">
+  <div class="modal" style="width:min(600px,96vw)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="modal-title" style="margin-bottom:0;color:#60a5fa">⬇ Ingreso de Explosivos — NV3190</div>
+      <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-explo-ingreso')">✕</button>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px">Origen: <strong>Polvorín Santa María (Poderosa)</strong> → Polvorín NV3190</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div class="form-group" style="margin:0"><label>Fecha</label><input type="date" id="ei-fecha"></div>
+      <div class="form-group" style="margin:0"><label>N° Vale / Guía</label><input type="text" id="ei-vale" placeholder="Ej: VE-2026-001"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+      <div class="form-group" style="margin:0"><label>Explosivo</label>
+        <select id="ei-producto" onchange="calcTotalExplo('ei')" style="width:100%">
+          <option value="">— Seleccionar —</option>
+          <option value="M1000">M-1000 (264/caja)</option>
+          <option value="M3000">M-3000 (228/caja)</option>
+          <option value="M5000">M-5000 (216/caja)</option>
+          <option value="CARMEX18">Carmex 1.8" (350/caja)</option>
+          <option value="CARMEX240">Carmex 2.40" (300/caja)</option>
+          <option value="FAMECORTE">Famecorte (144/caja)</option>
+          <option value="NEITHER">Neither/Cordón (10 rollos/caja)</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin:0"><label>Cajas</label><input type="number" id="ei-cajas" min="0" step="1" placeholder="0" oninput="calcTotalExplo('ei')"></div>
+      <div class="form-group" style="margin:0"><label>Unidades sueltas</label><input type="number" id="ei-unidades" min="0" step="1" placeholder="0" oninput="calcTotalExplo('ei')"></div>
+    </div>
+    <div style="background:var(--coal4);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:12px">
+      <span style="font-size:12px;color:var(--text3)">Total a ingresar:</span>
+      <span id="ei-total" style="font-family:'DM Mono',monospace;font-size:16px;font-weight:700;color:#60a5fa;margin-left:8px">— und</span>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>📷 Foto del Vale</label>
+      <input type="file" id="ei-foto" accept="image/*" onchange="previsualizarFoto('ei-foto','ei-foto-preview')" style="display:block;margin-bottom:6px">
+      <img id="ei-foto-preview" src="" style="display:none;max-width:100%;max-height:120px;border-radius:8px;border:1px solid var(--border)">
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-gold" onclick="guardarExploIngreso()">✓ Registrar Ingreso</button>
+      <button class="btn btn-outline" onclick="cerrarModal('modal-explo-ingreso')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ MODAL: SALIDA EXPLOSIVO ════ -->
+<div class="modal-overlay" id="modal-explo-salida" onclick="if(event.target===this)cerrarModal('modal-explo-salida')">
+  <div class="modal" style="width:min(600px,96vw)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="modal-title" style="margin-bottom:0;color:#f87171">⬆ Salida de Explosivos — NV3190</div>
+      <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-explo-salida')">✕</button>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px">Origen: <strong>Polvorín NV3190</strong> → Almacén NV2820</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div class="form-group" style="margin:0"><label>Fecha</label><input type="date" id="es-fecha"></div>
+      <div class="form-group" style="margin:0"><label>N° Vale / Guía</label><input type="text" id="es-vale" placeholder="Ej: VS-2026-001"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+      <div class="form-group" style="margin:0"><label>Explosivo</label>
+        <select id="es-producto" onchange="autoFillExploSalida()" style="width:100%">
+          <option value="">— Seleccionar —</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin:0"><label>Cajas</label><input type="number" id="es-cajas" min="0" step="1" placeholder="0" oninput="calcTotalExplo('es')"></div>
+      <div class="form-group" style="margin:0"><label>Unidades sueltas</label><input type="number" id="es-unidades" min="0" step="1" placeholder="0" oninput="calcTotalExplo('es')"></div>
+    </div>
+    <div style="background:var(--coal4);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between">
+      <div><span style="font-size:12px;color:var(--text3)">Total a retirar:</span>
+      <span id="es-total" style="font-family:'DM Mono',monospace;font-size:16px;font-weight:700;color:#f87171;margin-left:8px">— und</span></div>
+      <div><span style="font-size:12px;color:var(--text3)">Stock disponible:</span>
+      <span id="es-stock-disp" style="font-size:14px;font-weight:700;color:#22c55e;margin-left:8px">—</span></div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>📷 Foto del Vale</label>
+      <input type="file" id="es-foto" accept="image/*" onchange="previsualizarFoto('es-foto','es-foto-preview')" style="display:block;margin-bottom:6px">
+      <img id="es-foto-preview" src="" style="display:none;max-width:100%;max-height:120px;border-radius:8px;border:1px solid var(--border)">
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-gold" onclick="guardarExploSalida()">✓ Registrar Salida</button>
+      <button class="btn btn-outline" onclick="cerrarModal('modal-explo-salida')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
@@ -3699,7 +3795,7 @@ const state={
   aceros:{stock:120,historial:[]},
   epp:{historial:[]},
   petroleo:{stock:200,historial:[]},
-  almacen:{ingresos:[],salidas:[],inventarioInicial:[],historialMeses:[],productos:[],solicitudesCompra:[]},
+  almacen:{ingresos:[],salidas:[],inventarioInicial:[],historialMeses:[],productos:[],solicitudesCompra:[],explosivos:{ingresos:[],salidas:[]}},
   perforacion:[],mantenimiento:[],horometros:[],tareas:[],
   ordenes:[],valorizaciones:[],
   compresorista:[],
@@ -3734,7 +3830,7 @@ function navigate(page){
 }
 // Mapa explícito de todos los panes por módulo
 const MODULE_PANES = {
-  'log': ['almacen','historial','inventario','solicitudcompra','productos'],
+  'log': ['almacen','historial','inventario','solicitudcompra','productos','explosivos'],
   'rrhh': ['planilla','tareas','personal','costorrhh'],
   'op': ['avance','vsproyectado','distribucion','rendimientos','ia'],
   'mant': ['registro','horometros','costosmant'],
@@ -4182,7 +4278,7 @@ function almacenSave(){try{localStorage.setItem(ALM_KEY,JSON.stringify({...state
 function almacenLoad(){
   try{
     const raw=localStorage.getItem(ALM_KEY);
-    if(raw){const d=JSON.parse(raw);state.almacen={ingresos:d.ingresos||[],salidas:d.salidas||[],inventarioInicial:d.inventarioInicial||[],historialMeses:d.historialMeses||[],productos:d.productos||[],solicitudesCompra:d.solicitudesCompra||[]};}
+    if(raw){const d=JSON.parse(raw);state.almacen={ingresos:d.ingresos||[],salidas:d.salidas||[],inventarioInicial:d.inventarioInicial||[],historialMeses:d.historialMeses||[],productos:d.productos||[],solicitudesCompra:d.solicitudesCompra||[],explosivos:d.explosivos||{ingresos:[],salidas:[]}};}
     // Sembrar demo si está totalmente vacío (incluye visitas previas que guardaron arrays vacíos)
     if(!state.almacen.ingresos.length && !state.almacen.salidas.length && !(state.almacen.historialMeses||[]).length){almacenSeedDemo();}
     // Migrar catálogo genérico antiguo a catálogo real de facturas Poderosa
