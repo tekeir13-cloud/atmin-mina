@@ -2260,6 +2260,19 @@ select option{background:var(--coal3);}
       <input type="month" id="alm-mes-sel" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px" onchange="renderAlmacen()">
     </div>
 
+    <!-- ── STOCK VIGENTE ── -->
+    <div class="section-title" style="margin-top:4px">📦 Stock Vigente — Todos los Productos</div>
+    <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input type="text" id="stock-buscar" placeholder="🔍 Filtrar producto..." oninput="renderStockVigente()" style="padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--coal4);color:var(--text1);font-size:12px;width:220px">
+      <select id="stock-alm-fil" onchange="renderStockVigente()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px">
+        <option value="">Todos los almacenes</option>
+        <option value="General">Insumos Generales</option>
+        <option value="Mantenimiento">Mantenimiento</option>
+      </select>
+      <label style="font-size:11px;color:var(--text3);margin-left:4px"><input type="checkbox" id="stock-solo-con" onchange="renderStockVigente()" style="margin-right:4px">Solo con stock</label>
+    </div>
+    <div id="stock-vigente-wrap" style="margin-bottom:24px"></div>
+
     <div class="section-title">📥 Ingresos del Mes</div>
     <div class="table-wrap" style="margin-bottom:24px">
       <table>
@@ -3949,7 +3962,7 @@ function renderPage(page){
 
 function renderModPane(mod,pane){
   const k=mod+'-'+pane;
-  if(k==='log-almacen')renderAlmacen();
+  if(k==='log-almacen'){renderAlmacen();renderStockVigente();}
   else if(k==='log-historial')renderHistorialAlmacen();
   else if(k==='log-inventario')renderInventario();
   else if(k==='log-centrocostos')renderCentroCostos();
@@ -4369,6 +4382,67 @@ function calcStock(){
 function fmt3(n){return (Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:0,maximumFractionDigits:3});}
 function fmtS2(n){return 'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2});}
 
+// ── STOCK VIGENTE CON GRÁFICA ──
+function renderStockVigente(){
+  const wrap=document.getElementById('stock-vigente-wrap');if(!wrap)return;
+  const q=(document.getElementById('stock-buscar')?.value||'').toLowerCase();
+  const almFil=document.getElementById('stock-alm-fil')?.value||'';
+  const soloCon=document.getElementById('stock-solo-con')?.checked||false;
+
+  let stock=calcStock();
+  if(almFil) stock=stock.filter(r=>r.almacen===almFil);
+  if(q) stock=stock.filter(r=>(r.producto||r.descripcion||'').toLowerCase().includes(q)||(r.descripcion||'').toLowerCase().includes(q));
+  if(soloCon) stock=stock.filter(r=>r.stock>0);
+  stock.sort((a,b)=>b.stock-a.stock);
+
+  if(!stock.length){wrap.innerHTML='<div style="text-align:center;color:var(--text3);padding:24px">Sin productos con movimientos aún.</div>';return;}
+
+  const maxStock=Math.max(...stock.map(r=>Math.abs(r.stock)),1);
+
+  // KPI resumen rápido
+  const conStock=stock.filter(r=>r.stock>0);
+  const sinStock=stock.filter(r=>r.stock<=0);
+  const valorTotal=conStock.reduce((a,r)=>a+r.stock*r.precio,0);
+
+  const kpiHtml=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px">
+    <div class="kpi-card" style="padding:12px 14px">
+      <div class="kpi-label" style="font-size:10px">Productos con stock</div>
+      <div class="kpi-value" style="font-size:22px;color:#22c55e">${conStock.length}</div>
+    </div>
+    <div class="kpi-card" style="padding:12px 14px">
+      <div class="kpi-label" style="font-size:10px">Productos agotados / sin mov.</div>
+      <div class="kpi-value" style="font-size:22px;color:#f87171">${sinStock.length}</div>
+    </div>
+    <div class="kpi-card" style="padding:12px 14px">
+      <div class="kpi-label" style="font-size:10px">Valor total en stock</div>
+      <div class="kpi-value" style="font-size:18px;color:var(--gold-light)">${fmtS2(valorTotal)}</div>
+    </div>
+    <div class="kpi-card" style="padding:12px 14px">
+      <div class="kpi-label" style="font-size:10px">Total ítems en stock</div>
+      <div class="kpi-value" style="font-size:22px;color:#60a5fa">${conStock.reduce((a,r)=>a+r.stock,0).toLocaleString('es-PE',{maximumFractionDigits:1})}</div>
+    </div>
+  </div>`;
+
+  // Gráfica de barras horizontales
+  const bars=stock.slice(0,40).map(r=>{
+    const pct=Math.max(0,(r.stock/maxStock)*100);
+    const color=r.stock>10?'#22c55e':r.stock>0?'#f59e0b':'#ef4444';
+    const almBadge=r.almacen==='Mantenimiento'?'<span style="font-size:9px;background:rgba(201,168,76,0.2);color:#d4b75e;border-radius:4px;padding:1px 5px;margin-left:4px">MANT</span>':'<span style="font-size:9px;background:rgba(96,165,250,0.2);color:#60a5fa;border-radius:4px;padding:1px 5px;margin-left:4px">GEN</span>';
+    return `<div style="margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px">
+        <div style="font-size:12px;font-weight:600;color:var(--text1)">${r.producto||r.descripcion.slice(0,35)}${almBadge}</div>
+        <div style="font-size:12px;font-family:'DM Mono',monospace;color:${color};font-weight:700;white-space:nowrap;margin-left:8px">${fmt3(r.stock)} ${r.unidad}</div>
+      </div>
+      <div style="background:var(--coal4);border-radius:4px;height:8px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${color};border-radius:4px;transition:width .3s"></div>
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-top:2px">${r.descripcion.slice(0,60)}${r.descripcion.length>60?'…':''} · Valor: ${fmtS2(r.stock*r.precio)}</div>
+    </div>`;
+  }).join('');
+
+  wrap.innerHTML=kpiHtml+`<div class="card" style="padding:16px 18px">${bars}</div>`;
+}
+
 // ── TAB 1: ALMACÉN ──
 function renderAlmacen(){
   const sel=document.getElementById('alm-mes-sel'); if(sel&&!sel.value)sel.value=almMesConDatos();
@@ -4467,7 +4541,7 @@ function guardarIngreso(){
   });
   almacenSave();
   const n=ingresoCart.length;ingresoCart=[];
-  cerrarModal('modal-ingreso');renderAlmacen();renderHistorialAlmacen();
+  cerrarModal('modal-ingreso');renderAlmacen();renderHistorialAlmacen();renderStockVigente();
   showNotif(`✓ Ingreso registrado: ${n} ítem${n>1?'s':''}`);
 }
 
@@ -4555,7 +4629,7 @@ function guardarSalida(){
   });
   almacenSave();
   const n=salidaCart.length;salidaCart=[];
-  cerrarModal('modal-salida');renderAlmacen();renderHistorialAlmacen();
+  cerrarModal('modal-salida');renderAlmacen();renderHistorialAlmacen();renderStockVigente();
   showNotif(`✓ Salida registrada: ${n} ítem${n>1?'s':''} → ${nivelLabel(destino)}`);
 }
 function eliminarIngreso(id){
