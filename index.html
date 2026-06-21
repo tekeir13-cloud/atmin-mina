@@ -3723,30 +3723,30 @@ select option{background:var(--coal3);}
     </div>
     <div style="font-size:12px;color:var(--text3);margin-bottom:14px">Origen: <strong>Polvorín NV3190</strong> → Almacén NV2820</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-      <div class="form-group" style="margin:0"><label>Fecha</label><input type="date" id="es-fecha"></div>
-      <div class="form-group" style="margin:0"><label>N° Vale / Guía</label><input type="text" id="es-vale" placeholder="Ej: VS-2026-001"></div>
+      <div class="form-group" style="margin:0"><label>Fecha</label><input type="date" id="exs-fecha"></div>
+      <div class="form-group" style="margin:0"><label>N° Vale / Guía</label><input type="text" id="exs-vale" placeholder="Ej: VS-2026-001"></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
       <div class="form-group" style="margin:0"><label>Explosivo</label>
-        <select id="es-producto" onchange="autoFillExploSalida()" style="width:100%">
+        <select id="exs-producto" onchange="autoFillExploSalida()" style="width:100%">
           <option value="">— Seleccionar —</option>
         </select>
       </div>
-      <div class="form-group" style="margin:0"><label>Cajas</label><input type="number" id="es-cajas" min="0" step="1" placeholder="0" oninput="calcTotalExplo('es');validarLimiteSalida()"></div>
-      <div class="form-group" style="margin:0"><label>Unidades</label><input type="number" id="es-unidades" min="0" step="1" placeholder="0" oninput="calcTotalExplo('es');validarLimiteSalida()"></div>
+      <div class="form-group" style="margin:0"><label>Cajas</label><input type="number" id="exs-cajas" min="0" step="1" placeholder="0" oninput="calcTotalExplo('exs');validarLimiteSalida()"></div>
+      <div class="form-group" style="margin:0"><label>Unidades</label><input type="number" id="exs-unidades" min="0" step="1" placeholder="0" oninput="calcTotalExplo('exs');validarLimiteSalida()"></div>
     </div>
     <div style="background:var(--coal4);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <div><span style="font-size:12px;color:var(--text3)">Stock disponible:</span>
-        <span id="es-stock-disp" style="font-size:14px;font-weight:700;color:#22c55e;margin-left:8px">—</span></div>
-        <div id="es-stock-warn" style="font-size:12px;color:#f87171;font-weight:600;display:none">⚠ Excede el stock</div>
+        <span id="exs-stock-disp" style="font-size:14px;font-weight:700;color:#22c55e;margin-left:8px">—</span></div>
+        <div id="exs-stock-warn" style="font-size:12px;color:#f87171;font-weight:600;display:none">⚠ Excede el stock</div>
       </div>
-      <span id="es-total" style="display:none"></span>
+      <span id="exs-total" style="display:none"></span>
     </div>
     <div class="form-group" style="margin-bottom:12px">
       <label>📷 Foto del Vale</label>
-      <input type="file" id="es-foto" accept="image/*" onchange="previsualizarFoto('es-foto','es-foto-preview')" style="display:block;margin-bottom:6px">
-      <img id="es-foto-preview" src="" style="display:none;max-width:100%;max-height:120px;border-radius:8px;border:1px solid var(--border)">
+      <input type="file" id="exs-foto" accept="image/*" onchange="previsualizarFoto('exs-foto','exs-foto-preview')" style="display:block;margin-bottom:6px">
+      <img id="exs-foto-preview" src="" style="display:none;max-width:100%;max-height:120px;border-radius:8px;border:1px solid var(--border)">
     </div>
     <div class="btn-row">
       <button class="btn btn-gold" onclick="guardarExploSalida()">✓ Registrar Salida</button>
@@ -5092,52 +5092,50 @@ function guardarExploIngreso(){
   showNotif(`✓ Ingreso registrado: ${total} ${exploGetCat(prodId)?.unidad||'und'} de ${exploGetCat(prodId)?.nombre}`);
 }
 function autoFillExploSalida(){
-  const prodId=document.getElementById('es-producto')?.value;
+  const prodId=document.getElementById('exs-producto')?.value;
   const stock=exploStockActual();const disp=stock[prodId]||0;
-  const el=document.getElementById('es-stock-disp');const c=exploGetCat(prodId);
-  // Resetear campos de cantidad al cambiar de producto
-  document.getElementById('es-cajas').value='';
-  document.getElementById('es-unidades').value='';
-  document.getElementById('es-stock-warn').style.display='none';
+  const el=document.getElementById('exs-stock-disp');const c=exploGetCat(prodId);
+  document.getElementById('exs-cajas').value='';
+  document.getElementById('exs-unidades').value='';
+  document.getElementById('exs-stock-warn').style.display='none';
   if(el){
     if(c&&disp>0){
       const cajasDisp=Math.floor(disp/c.upCaja);const sueltasDisp=disp%c.upCaja;
-      // Poner el máximo permitido en los inputs según stock
-      document.getElementById('es-cajas').max=cajasDisp;
-      document.getElementById('es-unidades').max=disp;
+      document.getElementById('exs-cajas').max=cajasDisp;
+      document.getElementById('exs-unidades').max=disp;
       el.innerHTML=c.id==='NEITHER'
         ?`${disp} rollos (${disp*(c.mPorRollo||0)} m)`
         :`<strong style="color:#22c55e">${cajasDisp}</strong> <span style="font-size:11px;color:var(--text3)">caj.</span> + <strong style="color:#22c55e">${sueltasDisp}</strong> <span style="font-size:11px;color:var(--text3)">und disponibles</span>`;
     }else{
       el.textContent=c?'Sin stock disponible':'—';
-      document.getElementById('es-cajas').max=0;
-      document.getElementById('es-unidades').max=0;
+      document.getElementById('exs-cajas').max=0;
+      document.getElementById('exs-unidades').max=0;
     }
   }
-  calcTotalExplo('es');
+  calcTotalExplo('exs');
 }
 function validarLimiteSalida(){
-  const prodId=document.getElementById('es-producto')?.value;
+  const prodId=document.getElementById('exs-producto')?.value;
   if(!prodId)return;
   const stock=exploStockActual();const disp=stock[prodId]||0;
-  const total=calcTotalExplo('es');
-  const warn=document.getElementById('es-stock-warn');
+  const total=calcTotalExplo('exs');
+  const warn=document.getElementById('exs-stock-warn');
   if(warn)warn.style.display=total>disp?'block':'none';
 }
 function abrirModalExploSalida(){
   const g=id=>document.getElementById(id);
-  g('es-fecha').value=hoy();
-  g('es-vale').value='';
-  g('es-cajas').value='';
-  g('es-unidades').value='';
-  g('es-foto').value='';
-  delete g('es-foto').dataset.b64;
-  g('es-foto-preview').style.display='none';
-  g('es-foto-preview').src='';
-  const warn=g('es-stock-warn');if(warn)warn.style.display='none';
-  const disp=g('es-stock-disp');if(disp)disp.textContent='—';
+  g('exs-fecha').value=hoy();
+  g('exs-vale').value='';
+  g('exs-cajas').value='';
+  g('exs-unidades').value='';
+  g('exs-foto').value='';
+  delete g('exs-foto').dataset.b64;
+  g('exs-foto-preview').style.display='none';
+  g('exs-foto-preview').src='';
+  const warn=g('exs-stock-warn');if(warn)warn.style.display='none';
+  const disp=g('exs-stock-disp');if(disp)disp.textContent='—';
   const stock=exploStockActual();
-  const sel=g('es-producto');
+  const sel=g('exs-producto');
   if(sel){
     sel.innerHTML='<option value="">— Seleccionar explosivo —</option>'+
       EXPLO_CATALOGO.map(c=>{
@@ -5151,20 +5149,20 @@ function abrirModalExploSalida(){
 }
 function guardarExploSalida(){
   const g=id=>document.getElementById(id);
-  const prodId=g('es-producto').value;
+  const prodId=g('exs-producto').value;
   if(!prodId){showNotif('⚠ Selecciona el tipo de explosivo','error');return;}
-  const vale=g('es-vale').value.trim();
+  const vale=g('exs-vale').value.trim();
   if(!vale){showNotif('⚠ Ingresa el N° de vale','error');return;}
-  const total=calcTotalExplo('es');
+  const total=calcTotalExplo('exs');
   if(total<=0){showNotif('⚠ Ingresa cajas o unidades','error');return;}
   const stock=exploStockActual();
   if(total>(stock[prodId]||0)){showNotif(`⚠ Stock insuficiente. Disponible: ${stock[prodId]||0} ${exploGetCat(prodId)?.unidad||'und'}`,'error');return;}
   if(!state.almacen.explosivos)state.almacen.explosivos={ingresos:[],salidas:[]};
-  const fotoBase64=g('es-foto').dataset.b64||null;
+  const fotoBase64=g('exs-foto').dataset.b64||null;
   const reg={
-    id:'ES'+Date.now(),fecha:g('es-fecha').value||hoy(),vale,
-    producto:prodId,cajas:parseInt(g('es-cajas').value)||0,
-    unidades:parseInt(g('es-unidades').value)||0,totalUnidades:total,
+    id:'ES'+Date.now(),fecha:g('exs-fecha').value||hoy(),vale,
+    producto:prodId,cajas:parseInt(g('exs-cajas').value)||0,
+    unidades:parseInt(g('exs-unidades').value)||0,totalUnidades:total,
     destino:'Almacen NV2820',fotoBase64
   };
   state.almacen.explosivos.salidas.push(reg);
