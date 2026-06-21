@@ -2212,7 +2212,7 @@ select option{background:var(--coal3);}
     <button class="mod-tab active" onclick="modTab('log','almacen',this)">📦 Almacén General</button>
     <button class="mod-tab" onclick="modTab('log','historial',this)">📂 Historial &amp; Edición</button>
     <button class="mod-tab" onclick="modTab('log','inventario',this)">📊 Costo de Inventario</button>
-    <button class="mod-tab" onclick="modTab('log','centrocostos',this)">🎯 Centro de Costos</button>
+    <button class="mod-tab" onclick="modTab('log','solicitudcompra',this)">🛒 Solicitud de Compra</button>
     <button class="mod-tab" id="tab-productos" onclick="modTab('log','productos',this);renderProductos()">📦 Productos</button>
   </div>
 
@@ -2292,33 +2292,18 @@ select option{background:var(--coal3);}
   </div>
 
   <!-- ════ TAB 3: CENTRO DE COSTOS ════ -->
-  <div class="mod-pane" style="display:none" id="log-centrocostos">
-    <div class="card" style="margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-      <label style="font-size:11px;color:var(--text3)">Mes:</label>
-      <input type="month" id="cc-mes-sel" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px" onchange="renderCentroCostos()">
-      <select id="cc-filtro-nivel" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px" onchange="renderCentroCostos()">
-        <option value="">— Todos los niveles —</option>
-        <option value="2820">NV2820</option>
-        <option value="2830">NV2830</option>
-      </select>
-      <select id="cc-filtro-alm" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px" onchange="renderCentroCostos()">
-        <option value="">— Todos los almacenes —</option>
-        <option value="General">General</option>
-        <option value="Mantenimiento">Mantenimiento</option>
-      </select>
-      <div style="flex:1"></div>
-      <button class="btn btn-gold" style="padding:8px 18px;font-size:12px" onclick="exportarInventarioExcel()">📊 Exportar Excel</button>
+  <!-- ════ TAB: SOLICITUD DE COMPRA ════ -->
+  <div class="mod-pane" style="display:none" id="log-solicitudcompra">
+    <!-- Alertas de stock bajo -->
+    <div class="section-title" style="margin-top:0">⚠️ Alertas de Stock</div>
+    <div id="sc-alertas" style="margin-bottom:20px"></div>
+    <!-- Acción principal -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <div class="section-title" style="margin:0">🛒 Solicitudes de Compra</div>
+      <button class="btn btn-gold" style="padding:10px 22px" onclick="abrirModalSolicitud()">+ Registrar Nueva Solicitud</button>
     </div>
-    <div class="kpi-grid" id="cc-kpis"></div>
-    <div class="section-title" style="margin-top:18px">Distribución de Gasto por Nivel y Almacén</div>
-    <div id="cc-resumen"></div>
-    <div class="section-title" style="margin-top:18px">Detalle de Salidas (¿A dónde fue el material?)</div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Fecha</th><th>Nivel</th><th>Almacén</th><th>Solicitante</th><th>Cód. Máquina</th><th>Producto</th><th>Descripción</th><th>U.M.</th><th>P.U.</th><th>Cant.</th><th>Importe S/</th></tr></thead>
-        <tbody id="cc-tbody"></tbody>
-      </table>
-    </div>
+    <!-- Historial solicitudes -->
+    <div id="sc-historial"></div>
   </div>
 
   <!-- ════ TAB 4: PRODUCTOS ════ -->
@@ -2580,6 +2565,11 @@ select option{background:var(--coal3);}
     <button class="mod-tab" onclick="modTab('op','ia',this)">🤖 IA</button>
   </div>
   <div class="mod-pane active" style="display:block" id="op-avance">
+    <!-- Solicitudes de Compra pendientes de aprobación Operaciones -->
+    <div style="margin-bottom:18px">
+      <div class="section-title" style="margin-top:0">🛒 Solicitudes de Compra — Pendientes de tu aprobación</div>
+      <div id="op-sc-wrap"></div>
+    </div>
     <div class="kpi-grid">
       <div class="kpi-card"><div class="kpi-label">Metros Hoy (Total)</div><div class="kpi-value gold" id="op-metros-hoy">—</div></div>
       <div class="kpi-card"><div class="kpi-label">Metros Hoy Rampa</div><div class="kpi-value blue" id="op-f1-hoy">—</div></div>
@@ -2901,6 +2891,11 @@ select option{background:var(--coal3);}
     <button class="mod-tab" onclick="modTab('fin','utilidad',this)">💰 Utilidad</button>
   </div>
   <div class="mod-pane active" style="display:block" id="fin-ordenes">
+    <!-- Solicitudes de Compra pendientes de aprobación Finanzas -->
+    <div style="margin-bottom:18px">
+      <div class="section-title" style="margin-top:0">🛒 Solicitudes de Compra — Pendientes de tu aprobación</div>
+      <div id="fin-sc-wrap"></div>
+    </div>
     <div class="kpi-grid">
       <div class="kpi-card"><div class="kpi-label">OC Pendientes</div><div class="kpi-value warn" id="oc-pendientes">0</div></div>
       <div class="kpi-card"><div class="kpi-label">OC Aprobadas</div><div class="kpi-value green" id="oc-aprobadas">0</div></div>
@@ -3619,6 +3614,51 @@ select option{background:var(--coal3);}
     </div>
   </div>
 </div>
+
+<!-- ════ MODAL: SOLICITUD DE COMPRA ════ -->
+<div class="modal-overlay" id="modal-solicitud" onclick="if(event.target===this)cerrarModal('modal-solicitud')">
+  <div class="modal" style="width:min(820px,97vw)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div class="modal-title" style="margin-bottom:0">🛒 Nueva Solicitud de Compra</div>
+      <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-solicitud')">✕</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+      <div class="form-group" style="margin:0"><label>Fecha</label><input type="date" id="sc-fecha"></div>
+      <div class="form-group" style="margin:0"><label>Solicitante</label><input type="text" id="sc-solicitante" placeholder="Tu nombre"></div>
+      <div class="form-group" style="margin:0"><label>Prioridad</label>
+        <select id="sc-prioridad" style="width:100%">
+          <option value="normal">Normal</option>
+          <option value="urgente">🔴 Urgente</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:14px"><label>Observaciones / Justificación</label><input type="text" id="sc-obs" placeholder="Ej: Stock agotado de brocas, producción parada"></div>
+    <!-- Agregar producto -->
+    <div style="background:var(--coal4);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
+      <div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Agregar producto a la solicitud</div>
+      <div style="display:grid;grid-template-columns:120px 1fr 70px 90px 110px auto;gap:8px;align-items:flex-end">
+        <div class="form-group" style="margin:0"><label style="font-size:11px">Código</label><input type="text" id="sc-prod-cod" list="sc-prod-datalist" oninput="autoFillSolicitudProd()" placeholder="PRD-001" style="font-size:13px"><datalist id="sc-prod-datalist"></datalist></div>
+        <div class="form-group" style="margin:0"><label style="font-size:11px">Descripción</label><input type="text" id="sc-prod-desc" placeholder="Descripción del producto" style="font-size:13px"></div>
+        <div class="form-group" style="margin:0"><label style="font-size:11px">U.M.</label><select id="sc-prod-um" style="font-size:13px"><option>UND</option><option>KG</option><option>BOL</option><option>ROLL</option><option>JGO</option><option>PZA</option><option>M</option><option>GAL</option><option>LT</option><option>GLN</option></select></div>
+        <div class="form-group" style="margin:0"><label style="font-size:11px">Cantidad</label><input type="number" id="sc-prod-cant" min="1" step="any" placeholder="Ej: 10" style="font-size:13px"></div>
+        <div class="form-group" style="margin:0"><label style="font-size:11px">Precio est. (S/)</label><input type="number" id="sc-prod-precio" min="0" step="any" placeholder="Opcional" style="font-size:13px"></div>
+        <button class="btn btn-outline" style="padding:8px 12px;font-size:12px;height:38px" onclick="agregarItemSolicitud()">➕</button>
+      </div>
+    </div>
+    <div class="table-wrap" style="max-height:200px;overflow-y:auto;margin-bottom:10px">
+      <table>
+        <thead><tr><th>Código</th><th>Descripción</th><th>U.M.</th><th>Cant.</th><th>Precio Est.</th><th>Total Est.</th><th></th></tr></thead>
+        <tbody id="sc-cart-tbody"><tr><td colspan="7" style="text-align:center;color:var(--text3);padding:16px;font-size:13px">Agrega productos arriba</td></tr></tbody>
+        <tfoot><tr><td colspan="5" style="text-align:right;font-weight:700">Total estimado</td><td id="sc-cart-total" style="color:var(--gold-light);font-weight:700">S/ 0.00</td><td></td></tr></tfoot>
+      </table>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-gold" onclick="guardarSolicitud()">✓ Enviar Solicitud</button>
+      <button class="btn btn-outline" onclick="cerrarModal('modal-solicitud')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
@@ -3660,7 +3700,7 @@ const state={
   aceros:{stock:120,historial:[]},
   epp:{historial:[]},
   petroleo:{stock:200,historial:[]},
-  almacen:{ingresos:[],salidas:[],inventarioInicial:[],historialMeses:[],productos:[]},
+  almacen:{ingresos:[],salidas:[],inventarioInicial:[],historialMeses:[],productos:[],solicitudesCompra:[]},
   perforacion:[],mantenimiento:[],horometros:[],tareas:[],
   ordenes:[],valorizaciones:[],
   compresorista:[],
@@ -3695,7 +3735,7 @@ function navigate(page){
 }
 // Mapa explícito de todos los panes por módulo
 const MODULE_PANES = {
-  'log': ['almacen','historial','inventario','centrocostos','productos'],
+  'log': ['almacen','historial','inventario','solicitudcompra','productos'],
   'rrhh': ['planilla','tareas','personal','costorrhh'],
   'op': ['avance','vsproyectado','distribucion','rendimientos','ia'],
   'mant': ['registro','horometros','costosmant'],
@@ -3927,13 +3967,13 @@ function renderModPane(mod,pane){
   if(k==='log-almacen'){renderAlmacen();renderStockVigente();}
   else if(k==='log-historial')renderHistorialAlmacen();
   else if(k==='log-inventario')renderInventario();
-  else if(k==='log-centrocostos')renderCentroCostos();
+  else if(k==='log-solicitudcompra')renderSolicitudCompra();
   else if(k==='log-productos')renderProductos();
   else if(k==='rrhh-planilla')renderPlanilla();
   else if(k==='rrhh-tareas')renderTareas();
   else if(k==='rrhh-personal')renderPersonal();
   else if(k==='rrhh-costorrhh')renderCostoRRHH();
-  else if(k==='op-avance')renderAvance();
+  else if(k==='op-avance'){renderAvance();renderSolicitudesPendientesOp();}
   else if(k==='op-vsproyectado')renderVsProyectado();
   else if(k==='op-distribucion')renderDistribucion();
   else if(k==='op-rendimientos')renderRendimiento();
@@ -3947,7 +3987,7 @@ function renderModPane(mod,pane){
   else if(k==='tar-frentes')renderTarifaFrentes();
   else if(k==='tar-roles')renderTarifaRoles();
   else if(k==='tar-resumen')renderTarifaResumen();
-  else if(k==='fin-ordenes')renderOrdenes();
+  else if(k==='fin-ordenes'){renderOrdenes();renderSolicitudesPendientesFin();}
   else if(k==='fin-valorizaciones')renderValorizaciones();
   else if(k==='fin-proyeccion')renderProyeccion();
   else if(k==='fin-utilidad')renderUtilidad();
@@ -4143,7 +4183,7 @@ function almacenSave(){try{localStorage.setItem(ALM_KEY,JSON.stringify({...state
 function almacenLoad(){
   try{
     const raw=localStorage.getItem(ALM_KEY);
-    if(raw){const d=JSON.parse(raw);state.almacen={ingresos:d.ingresos||[],salidas:d.salidas||[],inventarioInicial:d.inventarioInicial||[],historialMeses:d.historialMeses||[],productos:d.productos||[]};}
+    if(raw){const d=JSON.parse(raw);state.almacen={ingresos:d.ingresos||[],salidas:d.salidas||[],inventarioInicial:d.inventarioInicial||[],historialMeses:d.historialMeses||[],productos:d.productos||[],solicitudesCompra:d.solicitudesCompra||[]};}
     // Sembrar demo si está totalmente vacío (incluye visitas previas que guardaron arrays vacíos)
     if(!state.almacen.ingresos.length && !state.almacen.salidas.length && !(state.almacen.historialMeses||[]).length){almacenSeedDemo();}
     // Migrar catálogo genérico antiguo a catálogo real de facturas Poderosa
@@ -4806,6 +4846,200 @@ function cerrarMesInventario(){
 }
 
 // ── TAB 3: CENTRO DE COSTOS ──
+// ── SOLICITUD DE COMPRA ──
+const SC_UMBRAL_URGENTE=5;
+const SC_UMBRAL_BAJO=15;
+
+function renderSolicitudCompra(){
+  renderAlertasStock();
+  renderHistorialSolicitudes();
+}
+
+function renderAlertasStock(){
+  const wrap=document.getElementById('sc-alertas');if(!wrap)return;
+  const stock=calcStock().filter(r=>r.stock<=SC_UMBRAL_BAJO).sort((a,b)=>a.stock-b.stock);
+  if(!stock.length){wrap.innerHTML='<div style="color:#22c55e;font-size:13px;padding:10px 0">✅ Todos los productos tienen stock suficiente.</div>';return;}
+  wrap.innerHTML=stock.map(r=>{
+    const urgente=r.stock<=SC_UMBRAL_URGENTE;
+    const color=urgente?'#ef4444':'#f59e0b';
+    const bg=urgente?'rgba(239,68,68,0.08)':'rgba(245,158,11,0.08)';
+    const border=urgente?'rgba(239,68,68,0.4)':'rgba(245,158,11,0.4)';
+    const badge=urgente?'<span style="background:#ef4444;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:6px">🔴 URGENTE</span>':'<span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:6px">🟠 HACER PEDIDO</span>';
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:${bg};border:1px solid ${border};border-radius:8px;padding:10px 14px;margin-bottom:8px;flex-wrap:wrap">
+      <div>
+        <div style="font-weight:700;color:${color}">${r.producto||r.descripcion}${badge}</div>
+        <div style="font-size:11px;color:var(--text3)">${r.descripcion} · ${r.almacen} · Stock actual: <strong style="color:${color}">${fmt3(r.stock)} ${r.unidad}</strong></div>
+      </div>
+      <button class="btn btn-outline" style="font-size:11px;padding:5px 12px;border-color:${color};color:${color}" onclick="abrirModalSolicitudProd('${encodeURIComponent(r.descripcion)}','${r.unidad}')">📋 Solicitar</button>
+    </div>`;
+  }).join('');
+}
+
+function abrirModalSolicitudProd(desc,um){
+  abrirModalSolicitud();
+  setTimeout(()=>{
+    const d=document.getElementById('sc-prod-desc');if(d)d.value=decodeURIComponent(desc);
+    const u=document.getElementById('sc-prod-um');if(u)u.value=um;
+    document.getElementById('sc-prod-cant')?.focus();
+  },200);
+}
+
+let solicitudCart=[];
+function abrirModalSolicitud(){
+  const g=id=>document.getElementById(id);
+  g('sc-fecha').value=hoy();
+  g('sc-solicitante').value='';g('sc-obs').value='';g('sc-prioridad').value='normal';
+  g('sc-prod-cod').value='';g('sc-prod-desc').value='';g('sc-prod-um').value='UND';
+  g('sc-prod-cant').value='';g('sc-prod-precio').value='';
+  solicitudCart=[];renderSolicitudCart();
+  // poblar datalist de productos
+  const dl=g('sc-prod-datalist');
+  if(dl)dl.innerHTML=(state.almacen.productos||[]).map(p=>`<option value="${p.codigo}">${p.codigo} · ${p.nombre}</option>`).join('');
+  abrirModal('modal-solicitud');
+}
+
+function autoFillSolicitudProd(){
+  const val=(document.getElementById('sc-prod-cod')?.value||'').trim().toLowerCase();
+  const p=(state.almacen.productos||[]).find(x=>x.codigo.toLowerCase()===val||x.nombre.toLowerCase()===val);
+  if(p){
+    const d=document.getElementById('sc-prod-desc');if(d)d.value=p.descripcion||p.nombre;
+    const u=document.getElementById('sc-prod-um');if(u)u.value=p.unidad;
+  }
+}
+
+function agregarItemSolicitud(){
+  const g=id=>document.getElementById(id);
+  const desc=g('sc-prod-desc').value.trim();
+  const cant=parseFloat(g('sc-prod-cant').value)||0;
+  if(!desc){showNotif('⚠ Ingresa la descripción','error');return;}
+  if(cant<=0){showNotif('⚠ Ingresa una cantidad válida','error');return;}
+  const precio=parseFloat(g('sc-prod-precio').value)||0;
+  solicitudCart.push({codigo:g('sc-prod-cod').value.trim(),descripcion:desc,unidad:g('sc-prod-um').value,cantidad:cant,precio,total:cant*precio});
+  renderSolicitudCart();
+  g('sc-prod-cod').value='';g('sc-prod-desc').value='';g('sc-prod-cant').value='';g('sc-prod-precio').value='';
+  g('sc-prod-cod').focus();
+}
+
+function renderSolicitudCart(){
+  const tb=document.getElementById('sc-cart-tbody');
+  if(tb)tb.innerHTML=solicitudCart.length?solicitudCart.map((i,idx)=>`<tr>
+    <td style="font-size:12px;font-family:'DM Mono',monospace">${i.codigo||'—'}</td>
+    <td style="font-size:12px">${i.descripcion}</td><td style="font-size:12px">${i.unidad}</td>
+    <td style="font-size:12px">${fmt3(i.cantidad)}</td>
+    <td style="font-size:12px">${i.precio?fmtS2(i.precio):'—'}</td>
+    <td style="color:var(--gold-light);font-weight:700;font-size:12px">${i.total?fmtS2(i.total):'—'}</td>
+    <td><button onclick="solicitudCart.splice(${idx},1);renderSolicitudCart()" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px">🗑</button></td>
+  </tr>`).join(''):`<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:16px;font-size:13px">Agrega productos arriba</td></tr>`;
+  const tot=solicitudCart.reduce((a,i)=>a+i.total,0);
+  const t=document.getElementById('sc-cart-total');if(t)t.textContent=fmtS2(tot);
+}
+
+function guardarSolicitud(){
+  const g=id=>document.getElementById(id);
+  if(!solicitudCart.length){showNotif('⚠ Agrega al menos un producto','error');return;}
+  const sol={
+    id:'SC'+Date.now(),
+    fecha:g('sc-fecha').value||hoy(),
+    solicitante:g('sc-solicitante').value.trim()||'—',
+    prioridad:g('sc-prioridad').value,
+    observaciones:g('sc-obs').value.trim(),
+    productos:[...solicitudCart],
+    totalEst:solicitudCart.reduce((a,i)=>a+i.total,0),
+    estado:'espera',
+    aprobFinanzas:null,
+    aprobOperaciones:null,
+    fechaAprobFin:null,fechaAprobOp:null,
+    creadoEn:new Date().toISOString()
+  };
+  if(!state.almacen.solicitudesCompra)state.almacen.solicitudesCompra=[];
+  state.almacen.solicitudesCompra.unshift(sol);
+  almacenSave();
+  cerrarModal('modal-solicitud');
+  renderSolicitudCompra();
+  showNotif('✓ Solicitud enviada — pendiente de aprobación de Finanzas y Operaciones');
+}
+
+function aprobarSolicitud(id,area,valor){
+  const sc=state.almacen.solicitudesCompra||[];
+  const sol=sc.find(s=>s.id===id);
+  if(!sol)return;
+  if(area==='fin'){sol.aprobFinanzas=valor;sol.fechaAprobFin=hoy();}
+  if(area==='op'){sol.aprobOperaciones=valor;sol.fechaAprobOp=hoy();}
+  // Actualizar estado
+  if(sol.aprobFinanzas===false||sol.aprobOperaciones===false){sol.estado='desaprobado';}
+  else if(sol.aprobFinanzas===true&&sol.aprobOperaciones===true){sol.estado='aprobado';}
+  else{sol.estado='espera';}
+  almacenSave();
+  renderSolicitudCompra();
+  // Re-render en finanzas/operaciones si están activos
+  if(document.getElementById('fin-sc-wrap'))renderSolicitudesPendientesFin();
+  if(document.getElementById('op-sc-wrap'))renderSolicitudesPendientesOp();
+  showNotif(valor?'✓ Solicitud aprobada':'Solicitud rechazada',valor?'success':'warn');
+}
+
+function renderHistorialSolicitudes(){
+  const wrap=document.getElementById('sc-historial');if(!wrap)return;
+  const lista=(state.almacen.solicitudesCompra||[]);
+  if(!lista.length){wrap.innerHTML='<div style="color:var(--text3);font-size:13px;padding:20px 0">Aún no hay solicitudes de compra registradas.</div>';return;}
+  const estadoBadge=(s)=>{
+    if(s.estado==='aprobado')return '<span style="background:rgba(34,197,94,0.2);color:#22c55e;font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px">✅ Aprobado</span>';
+    if(s.estado==='desaprobado')return '<span style="background:rgba(239,68,68,0.2);color:#ef4444;font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px">❌ Desaprobado</span>';
+    return '<span style="background:rgba(245,158,11,0.2);color:#f59e0b;font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px">⏳ En espera</span>';
+  };
+  const aprobBadge=(v,area)=>{
+    if(v===null)return `<span style="color:var(--text3);font-size:10px">${area}: pendiente</span>`;
+    return v?`<span style="color:#22c55e;font-size:10px">${area}: ✓ aprobado</span>`:`<span style="color:#ef4444;font-size:10px">${area}: ✗ rechazado</span>`;
+  };
+  wrap.innerHTML=lista.map(s=>`
+    <div class="card" style="margin-bottom:10px;padding:14px 16px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+        <div>
+          <div style="font-weight:700;font-size:14px">${s.prioridad==='urgente'?'🔴 ':''}<span style="color:var(--gold-light)">SC-${s.id.slice(-6)}</span> · ${fmtF(s.fecha)} · 👤 ${s.solicitante}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">${s.observaciones||'Sin observaciones'}</div>
+          <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">${aprobBadge(s.aprobFinanzas,'Finanzas')} ${aprobBadge(s.aprobOperaciones,'Operaciones')}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+          ${estadoBadge(s)}
+          <div style="font-size:13px;color:var(--gold-light);font-weight:700">${s.totalEst?fmtS2(s.totalEst):''}</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text3)">${s.productos.map(p=>`${p.descripcion} × ${fmt3(p.cantidad)} ${p.unidad}`).join(' · ')}</div>
+      ${s.estado==='espera'?`<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        ${s.aprobFinanzas===null?`<button class="btn btn-outline" style="font-size:11px;padding:4px 12px;color:#22c55e;border-color:#22c55e" onclick="aprobarSolicitud('${s.id}','fin',true)">✓ Aprobar (Fin.)</button><button class="btn btn-outline" style="font-size:11px;padding:4px 12px;color:#f87171;border-color:#f87171" onclick="aprobarSolicitud('${s.id}','fin',false)">✗ Rechazar (Fin.)</button>`:''}
+        ${s.aprobOperaciones===null?`<button class="btn btn-outline" style="font-size:11px;padding:4px 12px;color:#22c55e;border-color:#22c55e" onclick="aprobarSolicitud('${s.id}','op',true)">✓ Aprobar (Op.)</button><button class="btn btn-outline" style="font-size:11px;padding:4px 12px;color:#f87171;border-color:#f87171" onclick="aprobarSolicitud('${s.id}','op',false)">✗ Rechazar (Op.)</button>`:''}
+      </div>`:''}
+    </div>`).join('');
+}
+
+// Funciones para usar en módulos Finanzas y Operaciones
+function renderSolicitudesPendientesFin(){
+  const wrap=document.getElementById('fin-sc-wrap');if(!wrap)return;
+  _renderSolicitudesPendientes(wrap,'fin');
+}
+function renderSolicitudesPendientesOp(){
+  const wrap=document.getElementById('op-sc-wrap');if(!wrap)return;
+  _renderSolicitudesPendientes(wrap,'op');
+}
+function _renderSolicitudesPendientes(wrap,area){
+  const lista=(state.almacen.solicitudesCompra||[]).filter(s=>area==='fin'?s.aprobFinanzas===null:s.aprobOperaciones===null);
+  if(!lista.length){wrap.innerHTML='<div style="color:var(--text3);font-size:13px;padding:14px">Sin solicitudes pendientes de aprobación.</div>';return;}
+  wrap.innerHTML=lista.map(s=>`
+    <div class="card" style="margin-bottom:10px;padding:14px 16px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div>
+          <div style="font-weight:700">${s.prioridad==='urgente'?'🔴 ':''}<span style="color:var(--gold-light)">SC-${s.id.slice(-6)}</span> · ${fmtF(s.fecha)} · 👤 ${s.solicitante}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:4px">${s.observaciones||''}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:4px">${s.productos.map(p=>`${p.descripcion} × ${fmt3(p.cantidad)} ${p.unidad}`).join(' · ')}</div>
+        </div>
+        <div style="font-size:14px;color:var(--gold-light);font-weight:700">${s.totalEst?fmtS2(s.totalEst):''}</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn btn-outline" style="font-size:12px;padding:6px 16px;color:#22c55e;border-color:#22c55e" onclick="aprobarSolicitud('${s.id}','${area}',true)">✓ Aprobar</button>
+        <button class="btn btn-outline" style="font-size:12px;padding:6px 16px;color:#f87171;border-color:#f87171" onclick="aprobarSolicitud('${s.id}','${area}',false)">✗ Rechazar</button>
+      </div>
+    </div>`).join('');
+}
+
 function renderCentroCostos(){
   const sel=document.getElementById('cc-mes-sel'); if(sel&&!sel.value)sel.value=almMesConDatos();
   const mes=(sel&&sel.value)||almMesConDatos();
