@@ -3699,7 +3699,7 @@ select option{background:var(--coal3);}
         </select>
       </div>
       <div class="form-group" style="margin:0"><label>Cajas</label><input type="number" id="exi-cajas" min="0" step="1" placeholder="0" oninput="calcTotalExplo('exi')"></div>
-      <div class="form-group" style="margin:0"><label>Unidades sueltas</label><input type="number" id="exi-unidades" min="0" step="1" placeholder="0" oninput="calcTotalExplo('exi')"></div>
+      <div class="form-group" style="margin:0"><label>Unidades</label><input type="number" id="exi-unidades" min="0" step="1" placeholder="0" oninput="calcTotalExplo('exi')"></div>
     </div>
     <span id="exi-total" style="display:none"></span>
     <div class="form-group" style="margin-bottom:12px">
@@ -3732,12 +3732,15 @@ select option{background:var(--coal3);}
           <option value="">— Seleccionar —</option>
         </select>
       </div>
-      <div class="form-group" style="margin:0"><label>Cajas</label><input type="number" id="es-cajas" min="0" step="1" placeholder="0" oninput="calcTotalExplo('es')"></div>
-      <div class="form-group" style="margin:0"><label>Unidades sueltas</label><input type="number" id="es-unidades" min="0" step="1" placeholder="0" oninput="calcTotalExplo('es')"></div>
+      <div class="form-group" style="margin:0"><label>Cajas</label><input type="number" id="es-cajas" min="0" step="1" placeholder="0" oninput="calcTotalExplo('es');validarLimiteSalida()"></div>
+      <div class="form-group" style="margin:0"><label>Unidades</label><input type="number" id="es-unidades" min="0" step="1" placeholder="0" oninput="calcTotalExplo('es');validarLimiteSalida()"></div>
     </div>
     <div style="background:var(--coal4);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:12px">
-      <span style="font-size:12px;color:var(--text3)">Stock disponible:</span>
-      <span id="es-stock-disp" style="font-size:14px;font-weight:700;color:#22c55e;margin-left:8px">—</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <div><span style="font-size:12px;color:var(--text3)">Stock disponible:</span>
+        <span id="es-stock-disp" style="font-size:14px;font-weight:700;color:#22c55e;margin-left:8px">—</span></div>
+        <div id="es-stock-warn" style="font-size:12px;color:#f87171;font-weight:600;display:none">⚠ Excede el stock</div>
+      </div>
       <span id="es-total" style="display:none"></span>
     </div>
     <div class="form-group" style="margin-bottom:12px">
@@ -4983,7 +4986,7 @@ function renderExploStock(){
     const qty=stock[c.id]||0;
     const color=qty>20?'#22c55e':qty>0?'#f59e0b':'#ef4444';
     const cajas=Math.floor(qty/c.upCaja);const sueltas=qty%c.upCaja;
-    const label=c.id==='NEITHER'?`${qty} rollos (${qty*c.mPorRollo} m)`:`${cajas} caj${cajas!==1?'as':'a'} + ${sueltas} sueltas`;
+    const label=c.id==='NEITHER'?`${qty} rollos (${qty*c.mPorRollo} m)`:`${cajas} caj${cajas!==1?'as':'a'} + ${sueltas} und`;
     return `<div class="kpi-card" style="padding:14px 16px">
       <div class="kpi-label" style="font-size:11px">${c.nombre}</div>
       <div style="font-size:24px;font-weight:800;color:${color};font-family:'DM Mono',monospace;margin:6px 0">${qty}</div>
@@ -5008,7 +5011,7 @@ function renderExploHistorial(){
     const c=exploGetCat(r.producto);const esIng=r.tipo==='ingreso';
     const color=esIng?'#60a5fa':'#f87171';
     const cajas=Math.floor(r.totalUnidades/(c?.upCaja||1));const sueltas=r.totalUnidades%(c?.upCaja||1);
-    const cantLabel=`${r.totalUnidades} ${c?.unidad||'und'} (${cajas} caj. + ${sueltas} sueltas)`;
+    const cantLabel=`${r.totalUnidades} ${c?.unidad||'und'} (${cajas} caj. + ${sueltas} und)`;
     return `<div class="card" style="margin-bottom:8px;padding:12px 16px;border-left:3px solid ${color}">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
         <div>
@@ -5092,15 +5095,34 @@ function autoFillExploSalida(){
   const prodId=document.getElementById('es-producto')?.value;
   const stock=exploStockActual();const disp=stock[prodId]||0;
   const el=document.getElementById('es-stock-disp');const c=exploGetCat(prodId);
+  // Resetear campos de cantidad al cambiar de producto
+  document.getElementById('es-cajas').value='';
+  document.getElementById('es-unidades').value='';
+  document.getElementById('es-stock-warn').style.display='none';
   if(el){
     if(c&&disp>0){
       const cajasDisp=Math.floor(disp/c.upCaja);const sueltasDisp=disp%c.upCaja;
-      el.textContent=c.id==='NEITHER'
-        ?`${disp} rollos (${disp*c.mPorRollo} m)`
-        :`${disp} ${c.unidad} = ${cajasDisp} caj. + ${sueltasDisp} sueltas`;
-    }else{el.textContent=c?'Sin stock':'—';}
+      // Poner el máximo permitido en los inputs según stock
+      document.getElementById('es-cajas').max=cajasDisp;
+      document.getElementById('es-unidades').max=disp;
+      el.innerHTML=c.id==='NEITHER'
+        ?`${disp} rollos (${disp*(c.mPorRollo||0)} m)`
+        :`<strong style="color:#22c55e">${cajasDisp}</strong> <span style="font-size:11px;color:var(--text3)">caj.</span> + <strong style="color:#22c55e">${sueltasDisp}</strong> <span style="font-size:11px;color:var(--text3)">und disponibles</span>`;
+    }else{
+      el.textContent=c?'Sin stock disponible':'—';
+      document.getElementById('es-cajas').max=0;
+      document.getElementById('es-unidades').max=0;
+    }
   }
   calcTotalExplo('es');
+}
+function validarLimiteSalida(){
+  const prodId=document.getElementById('es-producto')?.value;
+  if(!prodId)return;
+  const stock=exploStockActual();const disp=stock[prodId]||0;
+  const total=calcTotalExplo('es');
+  const warn=document.getElementById('es-stock-warn');
+  if(warn)warn.style.display=total>disp?'block':'none';
 }
 function abrirModalExploSalida(){
   const g=id=>document.getElementById(id);
@@ -5113,7 +5135,7 @@ function abrirModalExploSalida(){
   sel.innerHTML='<option value="">— Seleccionar —</option>'+
     EXPLO_CATALOGO.filter(c=>stock[c.id]>0).map(c=>{
       const q=stock[c.id];const cajas=Math.floor(q/c.upCaja);const sueltas=q%c.upCaja;
-      const label=c.id==='NEITHER'?`${q} rollos`:`${cajas} caj. + ${sueltas} sueltas`;
+      const label=c.id==='NEITHER'?`${q} rollos`:`${cajas} caj. + ${sueltas} und`;
       return `<option value="${c.id}">${c.nombre} · ${label}</option>`;
     }).join('');
   if(!EXPLO_CATALOGO.some(c=>stock[c.id]>0))sel.innerHTML='<option value="">Sin stock disponible</option>';
@@ -5165,7 +5187,7 @@ async function exportarExplosivosExcel(){
   const t1=ws1.getCell('A1');t1.value='TRAZABILIDAD DE EXPLOSIVOS — Polvorín NV3190';
   t1.font={bold:true,size:13,color:{argb:C_HEAD}};
   ws1.getRow(2).height=4;
-  const head1=['Fecha','Tipo','N° Vale / Guía','Explosivo','Cajas','Und. Sueltas','Total Und.','Unidad','Ruta','Foto Vale'];
+  const head1=['Fecha','Tipo','N° Vale / Guía','Explosivo','Cajas','Unidades','Total Und.','Unidad','Ruta','Foto Vale'];
   const hr1=ws1.getRow(3);
   head1.forEach((h,i)=>{const c=hr1.getCell(i+1);c.value=h;c.font={bold:true,color:{argb:'FFFFFFFF'},size:11};
     c.fill={type:'pattern',pattern:'solid',fgColor:{argb:C_HEAD}};c.alignment={horizontal:'center',vertical:'middle'};c.border=allB;});
@@ -5220,7 +5242,7 @@ async function exportarExplosivosExcel(){
   const t2=ws2.getCell('A1');t2.value='BALANCE DE STOCK — Polvorín NV3190';t2.font={bold:true,size:13,color:{argb:C_HEAD}};
   ws2.mergeCells('A2:J2');
   const t2b=ws2.getCell('A2');t2b.value='Generado: '+fmtF(hoy());t2b.font={italic:true,size:9,color:{argb:'FF6B7280'}};
-  const head2=['Explosivo','Ingresado (und)','Ingresado (cajas)','Salido (und)','Salido (cajas)','Stock Actual (und)','Cajas','Sueltas','Unidad','Estado'];
+  const head2=['Explosivo','Ingresado (und)','Ingresado (cajas)','Salido (und)','Salido (cajas)','Stock Actual (und)','Cajas','Unidades','Unidad','Estado'];
   const hr2=ws2.getRow(3);
   head2.forEach((h,i)=>{const c=hr2.getCell(i+1);c.value=h;c.font={bold:true,color:{argb:'FFFFFFFF'},size:11};
     c.fill={type:'pattern',pattern:'solid',fgColor:{argb:C_VERDE}};c.alignment={horizontal:'center',vertical:'middle'};c.border=allB;});
@@ -5235,7 +5257,7 @@ async function exportarExplosivosExcel(){
     const cajas=Math.floor(q/c.upCaja);const sueltas=q%c.upCaja;
     const estado=q>20?'OK':q>0?'BAJO':'AGOTADO';const ec=q>20?C_VERDE:q>0?'FFB45309':C_ROJO;
     const row=ws2.getRow(r2);
-    const vals=[c.nombre,tIn,`${cajasIn} caj. + ${sueltasIn} sueltas`,tOut,cajasOut>0?`${cajasOut} caj.`:'—',q,cajas,sueltas,c.unidad,estado];
+    const vals=[c.nombre,tIn,`${cajasIn} caj. + ${sueltasIn} und`,tOut,cajasOut>0?`${cajasOut} caj.`:'—',q,cajas,sueltas,c.unidad,estado];
     vals.forEach((v,i)=>{const cc=row.getCell(i+1);cc.value=v;cc.border=allB;cc.alignment={horizontal:i===0?'left':'center',vertical:'middle'};cc.font={size:10};});
     row.getCell(1).font={bold:true,size:10};
     row.getCell(6).font={bold:true,size:10};
