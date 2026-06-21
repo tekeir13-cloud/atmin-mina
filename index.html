@@ -4272,7 +4272,20 @@ function renderDashboard(){
 
 // ════════════════ MÓDULO ALMACÉN / INVENTARIO ════════════════
 const ALM_KEY='atmin_almacen';
-function almacenSave(){try{localStorage.setItem(ALM_KEY,JSON.stringify({...state.almacen,productos:state.almacen.productos||[]}));}catch(e){}}
+function almacenSave(){
+  try{
+    localStorage.setItem(ALM_KEY,JSON.stringify({...state.almacen,productos:state.almacen.productos||[]}));
+    return true;
+  }catch(e){
+    // Cuota excedida (típicamente por fotos en base64): avisar en vez de fallar en silencio
+    if(e&&(e.name==='QuotaExceededError'||e.code===22||e.code===1014)){
+      showNotif('⚠ Almacenamiento lleno: se guardó el registro pero sin la foto. Reduce fotos o migra a la base de datos.','error');
+    }else{
+      showNotif('⚠ Error al guardar el registro','error');
+    }
+    return false;
+  }
+}
 function almacenLoad(){
   try{
     const raw=localStorage.getItem(ALM_KEY);
@@ -5021,13 +5034,13 @@ function previsualizarFoto(inputId,previewId){
   reader.onload=e=>{
     const img=new Image();
     img.onload=()=>{
-      const canvas=document.createElement('canvas');const max=800;
+      const canvas=document.createElement('canvas');const max=640;
       let w=img.width,h=img.height;
       if(w>max){h=Math.round(h*max/w);w=max;}
       if(h>max){w=Math.round(w*max/h);h=max;}
       canvas.width=w;canvas.height=h;
       canvas.getContext('2d').drawImage(img,0,0,w,h);
-      const b64=canvas.toDataURL('image/jpeg',0.75);
+      const b64=canvas.toDataURL('image/jpeg',0.55);
       if(prev){prev.src=b64;prev.style.display='block';}
       inp.dataset.b64=b64;
     };
@@ -5063,13 +5076,15 @@ function guardarExploIngreso(){
   if(total<=0){showNotif('⚠ Ingresa cajas o unidades','error');return;}
   if(!state.almacen.explosivos)state.almacen.explosivos={ingresos:[],salidas:[]};
   const fotoBase64=g('exi-foto').dataset.b64||null;
-  state.almacen.explosivos.ingresos.push({
+  const reg={
     id:'EI'+Date.now(),fecha:g('exi-fecha').value||hoy(),vale,
     producto:prodId,cajas:parseInt(g('exi-cajas').value)||0,
     unidades:parseInt(g('exi-unidades').value)||0,totalUnidades:total,
     origen:'Polvorin Santa Maria',fotoBase64
-  });
-  almacenSave();cerrarModal('modal-explo-ingreso');renderExploTab();
+  };
+  state.almacen.explosivos.ingresos.push(reg);
+  if(fotoBase64 && !almacenSave()){reg.fotoBase64=null;almacenSave();}  // si la foto desbordó la cuota, guarda al menos el registro
+  cerrarModal('modal-explo-ingreso');renderExploTab();
   showNotif(`✓ Ingreso registrado: ${total} ${exploGetCat(prodId)?.unidad||'und'} de ${exploGetCat(prodId)?.nombre}`);
 }
 function autoFillExploSalida(){
@@ -5104,13 +5119,15 @@ function guardarExploSalida(){
   if(total>(stock[prodId]||0)){showNotif(`⚠ Stock insuficiente. Disponible: ${stock[prodId]||0} ${exploGetCat(prodId)?.unidad||'und'}`,'error');return;}
   if(!state.almacen.explosivos)state.almacen.explosivos={ingresos:[],salidas:[]};
   const fotoBase64=g('es-foto').dataset.b64||null;
-  state.almacen.explosivos.salidas.push({
+  const reg={
     id:'ES'+Date.now(),fecha:g('es-fecha').value||hoy(),vale,
     producto:prodId,cajas:parseInt(g('es-cajas').value)||0,
     unidades:parseInt(g('es-unidades').value)||0,totalUnidades:total,
     destino:'Almacen NV2820',fotoBase64
-  });
-  almacenSave();cerrarModal('modal-explo-salida');renderExploTab();
+  };
+  state.almacen.explosivos.salidas.push(reg);
+  if(fotoBase64 && !almacenSave()){reg.fotoBase64=null;almacenSave();}
+  cerrarModal('modal-explo-salida');renderExploTab();
   showNotif(`✓ Salida registrada: ${total} ${exploGetCat(prodId)?.unidad||'und'} de ${exploGetCat(prodId)?.nombre}`);
 }
 
@@ -5127,7 +5144,7 @@ function exportarExplosivosExcel(){
   const tStyle=(bold,align)=>({font:{bold:!!bold,sz:10},alignment:{horizontal:align||'left',vertical:'center'},border:allBorders});
   function sheetFromAOA(aoa,colW){
     const ws={};let maxC=0;
-    aoa.forEach((row,r)=>{row.forEach((c,ci)=>{if(c==null)return;ws[XLSX.utils.encode_cell({r,c:ci})]=cell(c.v,c.s);if(ci>maxC)maxC=ci;});});
+    aoa.forEach((row,r)=>{row.forEach((c,ci)=>{if(c==null)return;const cc=cell(c.v,c.s);if(c.l)cc.l=c.l;ws[XLSX.utils.encode_cell({r,c:ci})]=cc;if(ci>maxC)maxC=ci;});});
     ws['!ref']=`A1:${XLSX.utils.encode_cell({r:Math.max(0,aoa.length-1),c:maxC})}`;
     if(colW)ws['!cols']=colW.map(w=>({wch:w}));
     return ws;
@@ -5137,9 +5154,13 @@ function exportarExplosivosExcel(){
     ...ings.map(r=>({...r,tipo:'INGRESO',ruta:'Polvorín Santa María → NV3190'})),
     ...sals.map(r=>({...r,tipo:'SALIDA',ruta:'NV3190 → Almacén NV2820'}))
   ].sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
-  const head1=['Fecha','Tipo','Vale/Guía','Explosivo','Cajas','Und. Sueltas','Total','Unidad','Ruta'];
+  const head1=['Fecha','Tipo','Vale/Guía','Explosivo','Cajas','Und. Sueltas','Total','Unidad','Ruta','Foto Vale'];
   const aoa1=[ [ {v:'TRAZABILIDAD DE EXPLOSIVOS — Polvorín NV3190',s:{font:{bold:true,sz:13,color:{rgb:C_HEAD}}}} ], [], head1.map(h=>({v:h,s:hStyle(C_HEAD)})) ];
+  const linkStyle={font:{bold:true,color:{rgb:'1D4ED8'},underline:true,sz:10},alignment:{horizontal:'center',vertical:'center'},border:allBorders};
   movs.forEach(r=>{const c=exploGetCat(r.producto);const bg=r.tipo==='INGRESO'?C_AZUL:C_ROJO;
+    const fotoCell=r.fotoBase64
+      ? {v:'📷 Ver foto',s:linkStyle,l:{Target:r.fotoBase64,Tooltip:'Abrir foto del vale'}}
+      : {v:'—',s:tStyle(0,'center')};
     aoa1.push([
       cell(fmtF(r.fecha),tStyle(0,'center')),
       cell(r.tipo,{font:{bold:true,color:{rgb:'FFFFFF'},sz:10},fill:{fgColor:{rgb:bg}},alignment:{horizontal:'center',vertical:'center'},border:allBorders}),
@@ -5149,10 +5170,11 @@ function exportarExplosivosExcel(){
       cell(r.unidades||0,tStyle(0,'center')),
       cell(r.totalUnidades||0,tStyle(1,'center')),
       cell(c?.unidad||'und',tStyle(0,'center')),
-      cell(r.ruta,tStyle(0))
+      cell(r.ruta,tStyle(0)),
+      fotoCell
     ]);
   });
-  const ws1=sheetFromAOA(aoa1,[13,11,14,20,8,11,9,9,28]);
+  const ws1=sheetFromAOA(aoa1,[13,11,14,20,8,11,9,9,28,14]);
   // ── Hoja 2: Balance de Stock ──
   const stock=exploStockActual();
   const head2=['Explosivo','Total Ingresado','Total Salido','Stock Actual','Cajas','Sueltas','Unidad','Estado'];
