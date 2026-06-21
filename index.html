@@ -1911,6 +1911,7 @@ select option{background:var(--coal3);}
 #ia-messages::-webkit-scrollbar-thumb { background:var(--coal5); border-radius:4px; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 </head>
 <body>
 
@@ -5142,61 +5143,90 @@ function guardarExploSalida(){
   showNotif(`✓ Salida registrada: ${total} ${exploGetCat(prodId)?.unidad||'und'} de ${exploGetCat(prodId)?.nombre}`);
 }
 
-function exportarExplosivosExcel(){
-  if(typeof XLSX==='undefined'){showNotif('Error: librería Excel no cargada','error');return;}
+async function exportarExplosivosExcel(){
+  if(typeof ExcelJS==='undefined'){showNotif('Error: librería Excel (ExcelJS) no cargada','error');return;}
   const exp=state.almacen.explosivos||{ingresos:[],salidas:[]};
   const ings=exp.ingresos||[],sals=exp.salidas||[];
   if(!ings.length && !sals.length){showNotif('⚠ No hay movimientos para exportar','error');return;}
-  const C_AZUL='1E40AF',C_ROJO='B91C1C',C_VERDE='15803D',C_HEAD='111827';
-  const border={style:'thin',color:{rgb:'D1D5DB'}};
-  const allBorders={top:border,bottom:border,left:border,right:border};
-  const cell=(v,s)=>({v:v==null?'':v,t:typeof v==='number'?'n':'s',s:s||{}});
-  const hStyle=bg=>({font:{bold:true,color:{rgb:'FFFFFF'},sz:11},fill:{fgColor:{rgb:bg}},alignment:{horizontal:'center',vertical:'center'},border:allBorders});
-  const tStyle=(bold,align)=>({font:{bold:!!bold,sz:10},alignment:{horizontal:align||'left',vertical:'center'},border:allBorders});
-  function sheetFromAOA(aoa,colW){
-    const ws={};let maxC=0;
-    aoa.forEach((row,r)=>{row.forEach((c,ci)=>{if(c==null)return;const cc=cell(c.v,c.s);if(c.l)cc.l=c.l;ws[XLSX.utils.encode_cell({r,c:ci})]=cc;if(ci>maxC)maxC=ci;});});
-    ws['!ref']=`A1:${XLSX.utils.encode_cell({r:Math.max(0,aoa.length-1),c:maxC})}`;
-    if(colW)ws['!cols']=colW.map(w=>({wch:w}));
-    return ws;
-  }
-  // ── Hoja 1: Trazabilidad (todos los movimientos ordenados por fecha) ──
+  showNotif('⏳ Generando Excel con fotos…');
+  const C_AZUL='FF1E40AF',C_ROJO='FFB91C1C',C_VERDE='FF15803D',C_HEAD='FF111827',C_VALEBG='FFFEF3C7',C_VALEFG='FFB45309';
+  const thin={style:'thin',color:{argb:'FFD1D5DB'}};
+  const allB={top:thin,bottom:thin,left:thin,right:thin};
+  const wb=new ExcelJS.Workbook();
+
+  // ── Hoja 1: Trazabilidad ──
+  const ws1=wb.addWorksheet('Trazabilidad',{views:[{state:'frozen',ySplit:3}]});
+  ws1.columns=[
+    {header:'',width:13},{header:'',width:11},{header:'',width:16},{header:'',width:20},
+    {header:'',width:8},{header:'',width:12},{header:'',width:10},{header:'',width:9},
+    {header:'',width:28},{header:'',width:16}
+  ];
+  ws1.mergeCells('A1:J1');
+  const t1=ws1.getCell('A1');t1.value='TRAZABILIDAD DE EXPLOSIVOS — Polvorín NV3190';
+  t1.font={bold:true,size:13,color:{argb:C_HEAD}};
+  ws1.getRow(2).height=4;
+  const head1=['Fecha','Tipo','N° Vale / Guía','Explosivo','Cajas','Und. Sueltas','Total Und.','Unidad','Ruta','Foto Vale'];
+  const hr1=ws1.getRow(3);
+  head1.forEach((h,i)=>{const c=hr1.getCell(i+1);c.value=h;c.font={bold:true,color:{argb:'FFFFFFFF'},size:11};
+    c.fill={type:'pattern',pattern:'solid',fgColor:{argb:C_HEAD}};c.alignment={horizontal:'center',vertical:'middle'};c.border=allB;});
+  hr1.height=20;
   const movs=[
     ...ings.map(r=>({...r,tipo:'INGRESO',ruta:'Polvorín Santa María → NV3190'})),
     ...sals.map(r=>({...r,tipo:'SALIDA',ruta:'NV3190 → Almacén NV2820'}))
   ].sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
-  const valeStyle={font:{bold:true,color:{rgb:'B45309'},sz:10},fill:{fgColor:{rgb:'FEF3C7'}},alignment:{horizontal:'center',vertical:'center'},border:allBorders};
-  const head1=['Fecha','Tipo','N° Vale / Guía','Explosivo','Cajas','Und. Sueltas','Total Und.','Unidad','Ruta','Foto Vale'];
-  const aoa1=[ [ {v:'TRAZABILIDAD DE EXPLOSIVOS — Polvorín NV3190',s:{font:{bold:true,sz:13,color:{rgb:C_HEAD}}}} ], [], head1.map(h=>({v:h,s:hStyle(C_HEAD)})) ];
-  const linkStyle={font:{bold:true,color:{rgb:'1D4ED8'},underline:true,sz:10},alignment:{horizontal:'center',vertical:'center'},border:allBorders};
+  let rowIdx=4;
   movs.forEach(r=>{
     const c=exploGetCat(r.producto);const bg=r.tipo==='INGRESO'?C_AZUL:C_ROJO;
-    // Carry logic: recalculate cajas and sueltas from totalUnidades
     const upCaja=c?.upCaja||1;
     const cajasR=Math.floor((r.totalUnidades||0)/upCaja);
     const sueltasR=(r.totalUnidades||0)%upCaja;
-    const fotoCell=r.fotoBase64
-      ? {v:'📷 Ver foto',s:linkStyle,l:{Target:r.fotoBase64,Tooltip:'Abrir foto del vale'}}
-      : {v:'—',s:tStyle(0,'center')};
-    aoa1.push([
-      cell(fmtF(r.fecha),tStyle(0,'center')),
-      cell(r.tipo,{font:{bold:true,color:{rgb:'FFFFFF'},sz:10},fill:{fgColor:{rgb:bg}},alignment:{horizontal:'center',vertical:'center'},border:allBorders}),
-      {v:r.vale||'—',s:valeStyle},
-      cell(c?.nombre||r.producto,tStyle(1)),
-      cell(cajasR,tStyle(0,'center')),
-      cell(sueltasR,tStyle(0,'center')),
-      cell(r.totalUnidades||0,tStyle(1,'center')),
-      cell(c?.unidad||'und',tStyle(0,'center')),
-      cell(r.ruta,tStyle(0)),
-      fotoCell
-    ]);
+    const row=ws1.getRow(rowIdx);
+    row.getCell(1).value=fmtF(r.fecha);
+    row.getCell(2).value=r.tipo;
+    row.getCell(3).value=r.vale||'—';
+    row.getCell(4).value=c?.nombre||r.producto;
+    row.getCell(5).value=cajasR;
+    row.getCell(6).value=sueltasR;
+    row.getCell(7).value=r.totalUnidades||0;
+    row.getCell(8).value=c?.unidad||'und';
+    row.getCell(9).value=r.ruta;
+    // estilos base
+    for(let i=1;i<=10;i++){const cc=row.getCell(i);cc.border=allB;cc.alignment={horizontal:i===4||i===9?'left':'center',vertical:'middle'};cc.font={size:10};}
+    row.getCell(2).font={bold:true,color:{argb:'FFFFFFFF'},size:10};
+    row.getCell(2).fill={type:'pattern',pattern:'solid',fgColor:{argb:bg}};
+    row.getCell(3).font={bold:true,color:{argb:C_VALEFG},size:10};
+    row.getCell(3).fill={type:'pattern',pattern:'solid',fgColor:{argb:C_VALEBG}};
+    row.getCell(4).font={bold:true,size:10};
+    row.getCell(7).font={bold:true,size:10};
+    // foto embebida
+    if(r.fotoBase64){
+      try{
+        const ext=r.fotoBase64.indexOf('image/png')>=0?'png':'jpeg';
+        const imgId=wb.addImage({base64:r.fotoBase64,extension:ext});
+        row.height=72;
+        // ancla la imagen dentro de la celda de la columna 10 (índice 9)
+        ws1.addImage(imgId,{tl:{col:9.1,row:rowIdx-1+0.1},ext:{width:110,height:80},editAs:'oneCell'});
+      }catch(e){row.getCell(10).value='(foto)';}
+    }else{
+      row.getCell(10).value='—';
+    }
+    rowIdx++;
   });
-  const ws1=sheetFromAOA(aoa1,[13,11,16,20,8,12,10,9,28,14]);
+
   // ── Hoja 2: Balance de Stock ──
   const stock=exploStockActual();
+  const ws2=wb.addWorksheet('Balance Stock');
+  ws2.columns=[{width:20},{width:14},{width:20},{width:13},{width:14},{width:16},{width:9},{width:9},{width:9},{width:12}];
+  ws2.mergeCells('A1:J1');
+  const t2=ws2.getCell('A1');t2.value='BALANCE DE STOCK — Polvorín NV3190';t2.font={bold:true,size:13,color:{argb:C_HEAD}};
+  ws2.mergeCells('A2:J2');
+  const t2b=ws2.getCell('A2');t2b.value='Generado: '+fmtF(hoy());t2b.font={italic:true,size:9,color:{argb:'FF6B7280'}};
   const head2=['Explosivo','Ingresado (und)','Ingresado (cajas)','Salido (und)','Salido (cajas)','Stock Actual (und)','Cajas','Sueltas','Unidad','Estado'];
-  const aoa2=[ [ {v:'BALANCE DE STOCK — Polvorín NV3190',s:{font:{bold:true,sz:13,color:{rgb:C_HEAD}}}} ],
-    [ {v:'Generado: '+fmtF(hoy()),s:{font:{italic:true,sz:9,color:{rgb:'6B7280'}}}} ], head2.map(h=>({v:h,s:hStyle(C_VERDE)})) ];
+  const hr2=ws2.getRow(3);
+  head2.forEach((h,i)=>{const c=hr2.getCell(i+1);c.value=h;c.font={bold:true,color:{argb:'FFFFFFFF'},size:11};
+    c.fill={type:'pattern',pattern:'solid',fgColor:{argb:C_VERDE}};c.alignment={horizontal:'center',vertical:'middle'};c.border=allB;});
+  hr2.height=20;
+  let r2=4;
   EXPLO_CATALOGO.forEach(c=>{
     const tIn=ings.filter(i=>i.producto===c.id).reduce((a,i)=>a+(i.totalUnidades||0),0);
     const tOut=sals.filter(s=>s.producto===c.id).reduce((a,s)=>a+(s.totalUnidades||0),0);
@@ -5204,28 +5234,25 @@ function exportarExplosivosExcel(){
     const cajasIn=Math.floor(tIn/c.upCaja);const sueltasIn=tIn%c.upCaja;
     const cajasOut=Math.floor(tOut/c.upCaja);
     const cajas=Math.floor(q/c.upCaja);const sueltas=q%c.upCaja;
-    const estado=q>20?'OK':q>0?'BAJO':'AGOTADO';const ec=q>20?C_VERDE:q>0?'B45309':C_ROJO;
-    aoa2.push([
-      cell(c.nombre,tStyle(1)),
-      cell(tIn,tStyle(0,'center')),
-      cell(`${cajasIn} caj. + ${sueltasIn} sueltas`,tStyle(0,'center')),
-      cell(tOut,tStyle(0,'center')),
-      cell(cajasOut>0?`${cajasOut} caj.`:'—',tStyle(0,'center')),
-      cell(q,tStyle(1,'center')),
-      cell(cajas,tStyle(1,'center')),
-      cell(sueltas,tStyle(0,'center')),
-      cell(c.unidad,tStyle(0,'center')),
-      cell(estado,{font:{bold:true,color:{rgb:'FFFFFF'},sz:10},fill:{fgColor:{rgb:ec}},alignment:{horizontal:'center',vertical:'center'},border:allBorders})
-    ]);
+    const estado=q>20?'OK':q>0?'BAJO':'AGOTADO';const ec=q>20?C_VERDE:q>0?'FFB45309':C_ROJO;
+    const row=ws2.getRow(r2);
+    const vals=[c.nombre,tIn,`${cajasIn} caj. + ${sueltasIn} sueltas`,tOut,cajasOut>0?`${cajasOut} caj.`:'—',q,cajas,sueltas,c.unidad,estado];
+    vals.forEach((v,i)=>{const cc=row.getCell(i+1);cc.value=v;cc.border=allB;cc.alignment={horizontal:i===0?'left':'center',vertical:'middle'};cc.font={size:10};});
+    row.getCell(1).font={bold:true,size:10};
+    row.getCell(6).font={bold:true,size:10};
+    row.getCell(7).font={bold:true,size:10};
+    row.getCell(10).font={bold:true,color:{argb:'FFFFFFFF'},size:10};
+    row.getCell(10).fill={type:'pattern',pattern:'solid',fgColor:{argb:ec}};
+    r2++;
   });
-  const ws2=sheetFromAOA(aoa2,[20,14,20,13,14,16,9,9,9,12]);
-  const wb=XLSX.utils.book_new();
-  // Trazabilidad primero (lo que el usuario ve al abrir el Excel)
-  XLSX.utils.book_append_sheet(wb,ws1,'Trazabilidad');
-  XLSX.utils.book_append_sheet(wb,ws2,'Balance Stock');
+
   const fn=`Explosivos_NV3190_${hoy()}.xlsx`;
-  XLSX.writeFile(wb,fn);
-  showNotif(`✓ Excel descargado: ${fn}`);
+  const buf=await wb.xlsx.writeBuffer();
+  const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=fn;document.body.appendChild(a);a.click();
+  document.body.removeChild(a);URL.revokeObjectURL(url);
+  showNotif(`✓ Excel descargado con fotos: ${fn}`);
 }
 
 function renderSolicitudCompra(){
