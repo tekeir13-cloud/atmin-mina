@@ -5091,7 +5091,14 @@ function autoFillExploSalida(){
   const prodId=document.getElementById('es-producto')?.value;
   const stock=exploStockActual();const disp=stock[prodId]||0;
   const el=document.getElementById('es-stock-disp');const c=exploGetCat(prodId);
-  if(el)el.textContent=c?`${disp} ${c.unidad}`:'—';
+  if(el){
+    if(c&&disp>0){
+      const cajasDisp=Math.floor(disp/c.upCaja);const sueltasDisp=disp%c.upCaja;
+      el.textContent=c.id==='NEITHER'
+        ?`${disp} rollos (${disp*c.mPorRollo} m)`
+        :`${disp} ${c.unidad} = ${cajasDisp} caj. + ${sueltasDisp} sueltas`;
+    }else{el.textContent=c?'Sin stock':'—';}
+  }
   calcTotalExplo('es');
 }
 function abrirModalExploSalida(){
@@ -5103,7 +5110,11 @@ function abrirModalExploSalida(){
   g('es-foto-preview').style.display='none';g('es-foto-preview').src='';
   const stock=exploStockActual();const sel=g('es-producto');
   sel.innerHTML='<option value="">— Seleccionar —</option>'+
-    EXPLO_CATALOGO.filter(c=>stock[c.id]>0).map(c=>`<option value="${c.id}">${c.nombre} (stock: ${stock[c.id]} ${c.unidad})</option>`).join('');
+    EXPLO_CATALOGO.filter(c=>stock[c.id]>0).map(c=>{
+      const q=stock[c.id];const cajas=Math.floor(q/c.upCaja);const sueltas=q%c.upCaja;
+      const label=c.id==='NEITHER'?`${q} rollos`:`${cajas} caj. + ${sueltas} sueltas`;
+      return `<option value="${c.id}">${c.nombre} · ${label}</option>`;
+    }).join('');
   if(!EXPLO_CATALOGO.some(c=>stock[c.id]>0))sel.innerHTML='<option value="">Sin stock disponible</option>';
   abrirModal('modal-explo-salida');
 }
@@ -5154,52 +5165,64 @@ function exportarExplosivosExcel(){
     ...ings.map(r=>({...r,tipo:'INGRESO',ruta:'Polvorín Santa María → NV3190'})),
     ...sals.map(r=>({...r,tipo:'SALIDA',ruta:'NV3190 → Almacén NV2820'}))
   ].sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
-  const head1=['Fecha','Tipo','Vale/Guía','Explosivo','Cajas','Und. Sueltas','Total','Unidad','Ruta','Foto Vale'];
+  const valeStyle={font:{bold:true,color:{rgb:'B45309'},sz:10},fill:{fgColor:{rgb:'FEF3C7'}},alignment:{horizontal:'center',vertical:'center'},border:allBorders};
+  const head1=['Fecha','Tipo','N° Vale / Guía','Explosivo','Cajas','Und. Sueltas','Total Und.','Unidad','Ruta','Foto Vale'];
   const aoa1=[ [ {v:'TRAZABILIDAD DE EXPLOSIVOS — Polvorín NV3190',s:{font:{bold:true,sz:13,color:{rgb:C_HEAD}}}} ], [], head1.map(h=>({v:h,s:hStyle(C_HEAD)})) ];
   const linkStyle={font:{bold:true,color:{rgb:'1D4ED8'},underline:true,sz:10},alignment:{horizontal:'center',vertical:'center'},border:allBorders};
-  movs.forEach(r=>{const c=exploGetCat(r.producto);const bg=r.tipo==='INGRESO'?C_AZUL:C_ROJO;
+  movs.forEach(r=>{
+    const c=exploGetCat(r.producto);const bg=r.tipo==='INGRESO'?C_AZUL:C_ROJO;
+    // Carry logic: recalculate cajas and sueltas from totalUnidades
+    const upCaja=c?.upCaja||1;
+    const cajasR=Math.floor((r.totalUnidades||0)/upCaja);
+    const sueltasR=(r.totalUnidades||0)%upCaja;
     const fotoCell=r.fotoBase64
       ? {v:'📷 Ver foto',s:linkStyle,l:{Target:r.fotoBase64,Tooltip:'Abrir foto del vale'}}
       : {v:'—',s:tStyle(0,'center')};
     aoa1.push([
       cell(fmtF(r.fecha),tStyle(0,'center')),
       cell(r.tipo,{font:{bold:true,color:{rgb:'FFFFFF'},sz:10},fill:{fgColor:{rgb:bg}},alignment:{horizontal:'center',vertical:'center'},border:allBorders}),
-      cell(r.vale||'—',tStyle(0,'center')),
+      {v:r.vale||'—',s:valeStyle},
       cell(c?.nombre||r.producto,tStyle(1)),
-      cell(r.cajas||0,tStyle(0,'center')),
-      cell(r.unidades||0,tStyle(0,'center')),
+      cell(cajasR,tStyle(0,'center')),
+      cell(sueltasR,tStyle(0,'center')),
       cell(r.totalUnidades||0,tStyle(1,'center')),
       cell(c?.unidad||'und',tStyle(0,'center')),
       cell(r.ruta,tStyle(0)),
       fotoCell
     ]);
   });
-  const ws1=sheetFromAOA(aoa1,[13,11,14,20,8,11,9,9,28,14]);
+  const ws1=sheetFromAOA(aoa1,[13,11,16,20,8,12,10,9,28,14]);
   // ── Hoja 2: Balance de Stock ──
   const stock=exploStockActual();
-  const head2=['Explosivo','Total Ingresado','Total Salido','Stock Actual','Cajas','Sueltas','Unidad','Estado'];
+  const head2=['Explosivo','Ingresado (und)','Ingresado (cajas)','Salido (und)','Salido (cajas)','Stock Actual (und)','Cajas','Sueltas','Unidad','Estado'];
   const aoa2=[ [ {v:'BALANCE DE STOCK — Polvorín NV3190',s:{font:{bold:true,sz:13,color:{rgb:C_HEAD}}}} ],
     [ {v:'Generado: '+fmtF(hoy()),s:{font:{italic:true,sz:9,color:{rgb:'6B7280'}}}} ], head2.map(h=>({v:h,s:hStyle(C_VERDE)})) ];
   EXPLO_CATALOGO.forEach(c=>{
     const tIn=ings.filter(i=>i.producto===c.id).reduce((a,i)=>a+(i.totalUnidades||0),0);
     const tOut=sals.filter(s=>s.producto===c.id).reduce((a,s)=>a+(s.totalUnidades||0),0);
-    const q=stock[c.id]||0;const cajas=Math.floor(q/c.upCaja);const sueltas=q%c.upCaja;
+    const q=stock[c.id]||0;
+    const cajasIn=Math.floor(tIn/c.upCaja);const sueltasIn=tIn%c.upCaja;
+    const cajasOut=Math.floor(tOut/c.upCaja);
+    const cajas=Math.floor(q/c.upCaja);const sueltas=q%c.upCaja;
     const estado=q>20?'OK':q>0?'BAJO':'AGOTADO';const ec=q>20?C_VERDE:q>0?'B45309':C_ROJO;
     aoa2.push([
       cell(c.nombre,tStyle(1)),
       cell(tIn,tStyle(0,'center')),
+      cell(`${cajasIn} caj. + ${sueltasIn} sueltas`,tStyle(0,'center')),
       cell(tOut,tStyle(0,'center')),
+      cell(cajasOut>0?`${cajasOut} caj.`:'—',tStyle(0,'center')),
       cell(q,tStyle(1,'center')),
-      cell(cajas,tStyle(0,'center')),
+      cell(cajas,tStyle(1,'center')),
       cell(sueltas,tStyle(0,'center')),
       cell(c.unidad,tStyle(0,'center')),
       cell(estado,{font:{bold:true,color:{rgb:'FFFFFF'},sz:10},fill:{fgColor:{rgb:ec}},alignment:{horizontal:'center',vertical:'center'},border:allBorders})
     ]);
   });
-  const ws2=sheetFromAOA(aoa2,[20,16,14,13,8,9,9,12]);
+  const ws2=sheetFromAOA(aoa2,[20,14,20,13,14,16,9,9,9,12]);
   const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws2,'Balance Stock');
+  // Trazabilidad primero (lo que el usuario ve al abrir el Excel)
   XLSX.utils.book_append_sheet(wb,ws1,'Trazabilidad');
+  XLSX.utils.book_append_sheet(wb,ws2,'Balance Stock');
   const fn=`Explosivos_NV3190_${hoy()}.xlsx`;
   XLSX.writeFile(wb,fn);
   showNotif(`✓ Excel descargado: ${fn}`);
