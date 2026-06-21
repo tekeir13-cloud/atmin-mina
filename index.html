@@ -5159,13 +5159,13 @@ async function exportarExplosivosExcel(){
   ws1.columns=[
     {header:'',width:13},{header:'',width:11},{header:'',width:16},{header:'',width:20},
     {header:'',width:8},{header:'',width:12},{header:'',width:10},{header:'',width:9},
-    {header:'',width:28},{header:'',width:16}
+    {header:'',width:28},{header:'',width:16},{header:'',width:14}
   ];
-  ws1.mergeCells('A1:J1');
+  ws1.mergeCells('A1:K1');
   const t1=ws1.getCell('A1');t1.value='TRAZABILIDAD DE EXPLOSIVOS — Polvorín NV3190';
   t1.font={bold:true,size:13,color:{argb:C_HEAD}};
   ws1.getRow(2).height=4;
-  const head1=['Fecha','Tipo','N° Vale / Guía','Explosivo','Cajas','Und. Sueltas','Total Und.','Unidad','Ruta','Foto Vale'];
+  const head1=['Fecha','Tipo','N° Vale / Guía','Explosivo','Cajas','Und. Sueltas','Total Und.','Unidad','Ruta','Foto Vale','🔗 Abrir'];
   const hr1=ws1.getRow(3);
   head1.forEach((h,i)=>{const c=hr1.getCell(i+1);c.value=h;c.font={bold:true,color:{argb:'FFFFFFFF'},size:11};
     c.fill={type:'pattern',pattern:'solid',fgColor:{argb:C_HEAD}};c.alignment={horizontal:'center',vertical:'middle'};c.border=allB;});
@@ -5191,24 +5191,29 @@ async function exportarExplosivosExcel(){
     row.getCell(8).value=c?.unidad||'und';
     row.getCell(9).value=r.ruta;
     // estilos base
-    for(let i=1;i<=10;i++){const cc=row.getCell(i);cc.border=allB;cc.alignment={horizontal:i===4||i===9?'left':'center',vertical:'middle'};cc.font={size:10};}
+    for(let i=1;i<=11;i++){const cc=row.getCell(i);cc.border=allB;cc.alignment={horizontal:i===4||i===9?'left':'center',vertical:'middle'};cc.font={size:10};}
     row.getCell(2).font={bold:true,color:{argb:'FFFFFFFF'},size:10};
     row.getCell(2).fill={type:'pattern',pattern:'solid',fgColor:{argb:bg}};
     row.getCell(3).font={bold:true,color:{argb:C_VALEFG},size:10};
     row.getCell(3).fill={type:'pattern',pattern:'solid',fgColor:{argb:C_VALEBG}};
     row.getCell(4).font={bold:true,size:10};
     row.getCell(7).font={bold:true,size:10};
-    // foto embebida
+    // col 10: foto incrustada como miniatura; col 11: hipervínculo cliqueable
     if(r.fotoBase64){
       try{
         const ext=r.fotoBase64.indexOf('image/png')>=0?'png':'jpeg';
         const imgId=wb.addImage({base64:r.fotoBase64,extension:ext});
         row.height=72;
-        // ancla la imagen dentro de la celda de la columna 10 (índice 9)
         ws1.addImage(imgId,{tl:{col:9.1,row:rowIdx-1+0.1},ext:{width:110,height:80},editAs:'oneCell'});
-      }catch(e){row.getCell(10).value='(foto)';}
+      }catch(e){row.getCell(10).value='(foto error)';}
+      // celda cliqueable — abre el data URI directamente
+      const lc=row.getCell(11);
+      lc.value={text:'🔗 Abrir foto',hyperlink:r.fotoBase64};
+      lc.font={color:{argb:'FF1D4ED8'},underline:true,size:10};
+      lc.alignment={horizontal:'center',vertical:'middle'};
     }else{
       row.getCell(10).value='—';
+      row.getCell(11).value='—';
     }
     rowIdx++;
   });
