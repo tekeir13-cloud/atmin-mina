@@ -2575,30 +2575,26 @@ select option{background:var(--coal3);}
     <button class="mod-tab" onclick="modTab('op','solicitudes',this);renderSolicitudesPendientesOp()">🛒 Solicitudes</button>
   </div>
   <div class="mod-pane active" style="display:block" id="op-tablero">
-    <div style="margin-bottom:8px"><div class="section-title" style="margin:0">🎯 Tablero de Operaciones</div><div style="font-size:12px;color:var(--text3);margin-top:4px">Vista consolidada de avance, taladros, personal y voladuras — <span id="tab-mes-label"></span></div></div>
+    <div style="margin-bottom:8px"><div class="section-title" style="margin:0">🎯 Tablero de Operaciones</div><div style="font-size:12px;color:var(--text3);margin-top:4px">Vista consolidada de avance, taladros, personal y explosivos — <span id="tab-mes-label"></span></div></div>
     <div class="kpi-grid" id="tab-kpis"></div>
     <div id="tab-frentes" style="margin-top:8px"></div>
     <div id="tab-alertas" style="margin-top:8px"></div>
   </div>
-  <div class="mod-pane" style="display:none" id="op-voladuras">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
-      <div><div class="section-title" style="margin:0">💥 Control de Voladuras</div><div style="font-size:12px;color:var(--text3);margin-top:4px">Disparos programados vs ejecutados por frente, conectado al consumo de explosivos</div></div>
-      <button class="btn btn-gold" onclick="abrirModalVoladura()">➕ Registrar Disparo</button>
-    </div>
-    <div class="kpi-grid" id="vol-kpis"></div>
-    <div id="vol-lista" style="margin-top:8px"></div>
-  </div>
   <div class="mod-pane" style="display:none" id="op-valorizaciones">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
-      <div><div class="section-title" style="margin:0">💵 Valorizaciones</div><div style="font-size:12px;color:var(--text3);margin-top:4px">Digitaliza la valorización mensual de avance hacia la contrata</div></div>
-    </div>
-    <div class="card">
-      <div class="empty-state" style="padding:30px 20px">
-        <div style="font-size:34px;margin-bottom:10px">📄</div>
-        <div style="font-size:14px;color:var(--text2);font-weight:600;margin-bottom:6px">Pendiente de configurar el formato</div>
-        <div style="font-size:12px;color:var(--text3);max-width:440px;margin:0 auto">Sube o comparte tu formato de valorización (Excel / foto / PDF) y lo replico aquí en digital: partidas, metrados, precios unitarios, totales y firma. Una vez tenga el formato, esta pestaña permitirá generar y exportar la valorización.</div>
+      <div><div class="section-title" style="margin:0">💵 Valorizaciones</div><div style="font-size:12px;color:var(--text3);margin-top:4px">Digitaliza la valorización mensual de compra de labor (contrata)</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input type="file" id="val-file" accept=".xlsx,.xls" style="display:none" onchange="importarValorizacion(this)">
+        <button class="btn btn-gold" onclick="document.getElementById('val-file').click()">📥 Importar Excel</button>
+        <button class="btn btn-outline" id="val-btn-export" onclick="exportarValorizacion()" style="display:none">📤 Exportar</button>
+        <button class="btn btn-outline" id="val-btn-del" onclick="eliminarValorizacion()" style="display:none;color:#f87171;border-color:#f87171">🗑 Eliminar</button>
       </div>
     </div>
+    <div id="val-selector" style="margin-bottom:14px;display:none">
+      <label style="font-size:12px;color:var(--text3);margin-right:8px">Periodo:</label>
+      <select id="val-periodo" onchange="renderValorizacionOp()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:13px"></select>
+    </div>
+    <div id="val-contenido"></div>
   </div>
   <div class="mod-pane" style="display:none" id="op-avance">
     <!-- Solicitudes de Compra pendientes de aprobación Operaciones -->
@@ -3730,10 +3726,10 @@ const state={
   petroleo:{stock:200,historial:[]},
   almacen:{ingresos:[],salidas:[],inventarioInicial:[],historialMeses:[],productos:[],solicitudesCompra:[],explosivos:{ingresos:[],salidas:[]}},
   perforacion:[],reportesGuardia:[],mantenimiento:[],horometros:[],tareas:[],
-  ordenes:[],valorizaciones:[],
+  ordenes:[],valorizaciones:[],valorizacionesLabor:[],
   compresorista:[],
   metas:{f1:20,f2:20,dias:26,mensualF1:520,mensualF2:520},frenteActivo:1,
-  distribucion:{},reuniones:[],voladuras:[],
+  distribucion:{},reuniones:[],
   mesActivo:{ id:null, mes:null, año:null },
   mesesCerrados:[],
   adelantos:{},
@@ -4000,7 +3996,7 @@ function renderModPane(mod,pane){
   else if(k==='rrhh-personal')renderPersonal();
   else if(k==='rrhh-costorrhh')renderCostoRRHH();
   else if(k==='op-tablero'){renderTableroOp();}
-  else if(k==='op-valorizaciones'){}
+  else if(k==='op-valorizaciones'){renderValorizacionOp();}
   else if(k==='op-avance'){renderAvance();}
   else if(k==='op-solicitudes')renderSolicitudesPendientesOp();
   else if(k==='op-vsproyectado')renderResidente();
@@ -7098,7 +7094,6 @@ function renderTableroOp(){
   if(typeof reportesGuardiaLoad==='function')reportesGuardiaLoad();
   if(typeof metasLoad==='function')metasLoad();
   if(typeof distribLoad==='function')distribLoad();
-  if(typeof voladurasLoad==='function')voladurasLoad();
   const ts=hoy(), mesAct=ts.slice(0,7);
   const rg=(state.reportesGuardia||[]);
   const rgMes=rg.filter(r=>(r.fecha||'').slice(0,7)===mesAct);
@@ -7120,10 +7115,8 @@ function renderTableroOp(){
   const dist=state.distribucion||{};
   const persF1=Object.values(dist).filter(f=>f==1).length;
   const persF2=Object.values(dist).filter(f=>f==2).length;
-  // Voladuras hoy
-  const vols=(state.voladuras||[]);
-  const volHoy=vols.filter(v=>v.fecha===ts);
-  const volEjec=volHoy.filter(v=>v.estado==='ejecutado').length;
+  // Masas / explosivos consumidos hoy (de los reportes de guardia)
+  const masasHoy=rgHoy.reduce((s,r)=>s+(r.brenda?.masas||[]).reduce((ss,m)=>ss+(m.cant||0),0)+(r.crne?.masas||[]).reduce((ss,m)=>ss+(m.cant||0),0),0);
   // Días transcurridos hábiles (aprox por fecha del mes)
   const diaDelMes=parseInt(ts.slice(8,10),10);
   const lbl=document.getElementById('tab-mes-label');if(lbl)lbl.textContent=`mes ${mesAct} · día ${diaDelMes}`;
@@ -7135,7 +7128,7 @@ function renderTableroOp(){
     <div class="kpi-card"><div class="kpi-label">Cumplimiento Mes</div><div class="kpi-value ${pcTot>=100?'green':(pcTot>=60?'warn':'red')}">${pcTot}%</div><div class="kpi-sub">del programa</div></div>
     <div class="kpi-card"><div class="kpi-label">Taladros Hoy</div><div class="kpi-value warn">${tperfHoy} / ${tcargHoy}</div><div class="kpi-sub">perf. / carg.</div></div>
     <div class="kpi-card"><div class="kpi-label">Personal en Frentes</div><div class="kpi-value blue">${persF1+persF2}</div><div class="kpi-sub">Brenda ${persF1} · CRNE ${persF2}</div></div>
-    <div class="kpi-card"><div class="kpi-label">Disparos Hoy</div><div class="kpi-value gold">${volEjec}/${volHoy.length}</div><div class="kpi-sub">ejec. / total</div></div>`;
+    <div class="kpi-card"><div class="kpi-label">Masas / Explosivos Hoy</div><div class="kpi-value gold">${masasHoy}</div><div class="kpi-sub">unidades consumidas</div></div>`;
   // Frentes
   const frenteCard=(nom,color,mes,meta,pc,hoyM,pers,ritmoObj)=>`
     <div class="card">
@@ -7167,6 +7160,222 @@ function renderTableroOp(){
   if(ta)ta.innerHTML=alertas.length?
     `<div class="card" style="border-left:3px solid #fbbf24"><div class="section-title" style="margin-top:0;font-size:13px;color:#fbbf24">⚠ Alertas Operativas</div>${alertas.map(a=>`<div style="font-size:12px;color:var(--text2);padding:5px 0;border-bottom:1px solid var(--border)">${a}</div>`).join('')}</div>`:
     `<div class="card" style="border-left:3px solid #34d399"><div style="font-size:12px;color:#34d399;font-weight:600">✅ Sin alertas — operación dentro de programa.</div></div>`;
+}
+
+// ════════════════════════════════════════════════════
+//  VALORIZACIONES — COMPRA DE LABOR (contrata)
+// ════════════════════════════════════════════════════
+const VALLAB_KEY='atmin_valorizaciones_labor';
+function valLaborLoad(){try{const d=localStorage.getItem(VALLAB_KEY);if(d)state.valorizacionesLabor=JSON.parse(d)||[];}catch(e){}}
+function valLaborSave(){try{localStorage.setItem(VALLAB_KEY,JSON.stringify(state.valorizacionesLabor||[]));}catch(e){}}
+
+// Clasificación de subactividades en rubros para análisis gerencial
+function valRubro(sact){
+  const s=(sact||'').toUpperCase();
+  if(s.includes('AVANCE'))return 'Avance';
+  if(s.includes('CIMBRA')||s.includes('PERNO')||s.includes('MALLA')||s.includes('BOLSACRET')||s.includes('SHOTCRETE')||s.includes('SOSTEN'))return 'Sostenimiento';
+  if(s.includes('VOLQUETE')||s.includes('DUMPER')||s.includes('ACARREO')||s.includes('LIMPIEZA'))return 'Acarreo / Limpieza';
+  if(s.includes('OPERACIÓN DE EQUIPO')||s.includes('OPERACION DE EQUIPO')||s.includes('EQUIPO'))return 'Operación de Equipos';
+  return 'Complementarios';
+}
+const VAL_RUBRO_COLOR={'Avance':'#fbbf24','Sostenimiento':'#60a5fa','Acarreo / Limpieza':'#a78bfa','Operación de Equipos':'#f87171','Complementarios':'#34d399'};
+
+async function importarValorizacion(input){
+  const file=input.files&&input.files[0];if(!file)return;
+  if(typeof ExcelJS==='undefined'){showNotif('Error: librería Excel (ExcelJS) no cargada','error');return;}
+  try{
+    const buf=await file.arrayBuffer();
+    const wb=new ExcelJS.Workbook();await wb.xlsx.load(buf);
+    const ws=wb.worksheets[0];
+    // Localizar fila de encabezado (contiene "ITEM" y "IMPORTE")
+    let headerRow=-1,colMap={};
+    ws.eachRow((row,rn)=>{
+      if(headerRow>0)return;
+      const vals=row.values.map(v=>(v==null?'':String(v).trim().toUpperCase()));
+      if(vals.includes('ITEM')&&vals.some(v=>v.includes('IMPORTE'))){
+        headerRow=rn;
+        vals.forEach((v,ci)=>{
+          if(v==='ITEM')colMap.item=ci; else if(v==='CONCESION')colMap.concesion=ci;
+          else if(v==='VETA')colMap.veta=ci; else if(v==='LABOR')colMap.labor=ci;
+          else if(v==='ETAPA')colMap.etapa=ci; else if(v.startsWith('ACTIVIDAD'))colMap.actividad=ci;
+          else if(v.startsWith('S.ACT'))colMap.sact=ci; else if(v==='UND')colMap.und=ci;
+          else if(v.startsWith('S.TAREA'))colMap.starea=ci; else if(v==='CANT.'||v==='CANT')colMap.cant=ci;
+          else if(v==='PRECIO')colMap.precio=ci; else if(v.startsWith('IMPORTE'))colMap.importe=ci;
+          else if(v.startsWith('TIP.ROCA'))colMap.roca=ci; else if(v.includes('CUMPL'))colMap.cumpl=ci;
+          else if(v.startsWith('TIPO EXPLO'))colMap.explo=ci; else if(v.startsWith('OBSERVAC'))colMap.obs=ci;
+        });
+      }
+    });
+    if(headerRow<0){showNotif('No se encontró el encabezado (ITEM / IMPORTE) en el Excel','error');input.value='';return;}
+    const titulo=String(ws.getCell('A1').value||file.name).trim();
+    const rows=[];let subtotal=0,descuento=0,total=0;
+    const gc=(row,ci)=>ci?row.values[ci]:undefined;
+    const num=v=>{const n=parseFloat(v);return isNaN(n)?0:n;};
+    ws.eachRow((row,rn)=>{
+      if(rn<=headerRow)return;
+      const itm=gc(row,colMap.item);
+      const sact=gc(row,colMap.sact);
+      // Filas de totales: detectar por texto en S.TAREA / S.ACT
+      const rowTxt=row.values.map(v=>(v==null?'':String(v).toUpperCase())).join(' ');
+      if(rowTxt.includes('SUB TOTAL')){subtotal=num((row.values.find(v=>typeof v==='number'&&v>1000)));return;}
+      if(rowTxt.includes('DESCUENTO')){const negs=row.values.filter(v=>typeof v==='number');descuento=negs.length?num(negs[negs.length-1]):0;return;}
+      if(rowTxt.includes('TOTAL LIQUID')){const nums=row.values.filter(v=>typeof v==='number');total=nums.length?num(nums[nums.length-1]):0;return;}
+      if(itm==null||itm==='')return;
+      const importe=num(gc(row,colMap.importe));
+      if(!importe&&!gc(row,colMap.sact))return;
+      rows.push({
+        item:itm, concesion:String(gc(row,colMap.concesion)||'').trim(),
+        veta:String(gc(row,colMap.veta)||'').trim(), labor:String(gc(row,colMap.labor)||'').trim(),
+        etapa:String(gc(row,colMap.etapa)||'').trim(), actividad:String(gc(row,colMap.actividad)||'').trim(),
+        sact:String(sact||'').trim(), und:String(gc(row,colMap.und)||'').trim(),
+        starea:String(gc(row,colMap.starea)||'').trim(), cant:num(gc(row,colMap.cant)),
+        precio:num(gc(row,colMap.precio)), importe,
+        roca:String(gc(row,colMap.roca)||'').trim(), cumpl:num(gc(row,colMap.cumpl)),
+        explo:String(gc(row,colMap.explo)||'').trim(), obs:String(gc(row,colMap.obs)||'').trim()
+      });
+    });
+    if(!rows.length){showNotif('No se encontraron partidas en el Excel','error');input.value='';return;}
+    const sumImp=rows.reduce((s,r)=>s+r.importe,0);
+    if(!subtotal)subtotal=sumImp;
+    if(!total)total=subtotal+descuento;
+    valLaborLoad();
+    const id='VL'+Date.now();
+    const periodo=titulo.replace(/VALORIZACIÓN.*?-/i,'').trim()||titulo;
+    state.valorizacionesLabor=(state.valorizacionesLabor||[]).filter(v=>v.titulo!==titulo);
+    state.valorizacionesLabor.push({id,titulo,periodo,rows,subtotal,descuento,total,importadoEn:Date.now()});
+    valLaborSave();
+    input.value='';
+    renderValorizacionOp(id);
+    showNotif(`✓ Valorización importada: ${rows.length} partidas`);
+  }catch(e){console.error(e);showNotif('Error al leer el Excel: '+e.message,'error');input.value='';}
+}
+
+function eliminarValorizacion(){
+  const sel=document.getElementById('val-periodo');const id=sel&&sel.value;if(!id)return;
+  if(!confirm('¿Eliminar esta valorización importada?'))return;
+  state.valorizacionesLabor=(state.valorizacionesLabor||[]).filter(v=>v.id!==id);
+  valLaborSave();renderValorizacionOp();showNotif('✓ Valorización eliminada');
+}
+
+function exportarValorizacion(){
+  const sel=document.getElementById('val-periodo');const id=sel&&sel.value;
+  const v=(state.valorizacionesLabor||[]).find(x=>x.id===id);if(!v)return;
+  if(typeof ExcelJS==='undefined'){showNotif('Error: librería Excel no cargada','error');return;}
+  const wb=new ExcelJS.Workbook();const ws=wb.addWorksheet('Valorizacion');
+  ws.addRow([v.titulo]);ws.addRow([]);
+  ws.addRow(['ITEM','CONCESION','VETA','LABOR','ETAPA','ACTIVIDAD','S.ACT.','UND','CANT.','PRECIO','IMPORTE','%CUMPL','RUBRO','OBSERVACIONES']);
+  v.rows.forEach(r=>ws.addRow([r.item,r.concesion,r.veta,r.labor,r.etapa,r.actividad,r.sact,r.und,r.cant,r.precio,r.importe,r.cumpl,valRubro(r.sact),r.obs]));
+  ws.addRow([]);ws.addRow(['','','','','','','','','','SUB TOTAL',v.subtotal]);
+  ws.addRow(['','','','','','','','','','DESCUENTO',v.descuento]);
+  ws.addRow(['','','','','','','','','','TOTAL',v.total]);
+  wb.xlsx.writeBuffer().then(buf=>{
+    const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Valorizacion_'+(v.periodo||'').replace(/\s+/g,'_')+'.xlsx';a.click();
+  });
+}
+
+function renderValorizacionOp(forceId){
+  valLaborLoad();
+  const cont=document.getElementById('val-contenido');if(!cont)return;
+  const lista=state.valorizacionesLabor||[];
+  const selWrap=document.getElementById('val-selector');
+  const btnExp=document.getElementById('val-btn-export'),btnDel=document.getElementById('val-btn-del');
+  if(!lista.length){
+    if(selWrap)selWrap.style.display='none';
+    if(btnExp)btnExp.style.display='none';if(btnDel)btnDel.style.display='none';
+    cont.innerHTML=`<div class="card"><div class="empty-state" style="padding:30px 20px">
+      <div style="font-size:34px;margin-bottom:10px">📄</div>
+      <div style="font-size:14px;color:var(--text2);font-weight:600;margin-bottom:6px">Sin valorizaciones importadas</div>
+      <div style="font-size:12px;color:var(--text3);max-width:440px;margin:0 auto">Haz clic en <strong>📥 Importar Excel</strong> y sube tu archivo de valorización (formato "Compra de Labor"). La app extraerá las partidas, calculará el resumen por rubro y frente, y el costo por metro avanzado para tu toma de decisiones.</div>
+    </div></div>`;
+    return;
+  }
+  if(selWrap)selWrap.style.display='block';
+  if(btnExp)btnExp.style.display='inline-block';if(btnDel)btnDel.style.display='inline-block';
+  const sel=document.getElementById('val-periodo');
+  const ordenadas=[...lista].sort((a,b)=>(b.importadoEn||0)-(a.importadoEn||0));
+  const curId=forceId||(sel&&sel.value)||ordenadas[0].id;
+  sel.innerHTML=ordenadas.map(v=>`<option value="${v.id}" ${v.id===curId?'selected':''}>${v.periodo||v.titulo}</option>`).join('');
+  const v=lista.find(x=>x.id===curId)||ordenadas[0];
+
+  // ── Agregaciones ──
+  const rubro={},labor={},avanceFrente={};
+  v.rows.forEach(r=>{
+    const ru=valRubro(r.sact);
+    rubro[ru]=(rubro[ru]||0)+r.importe;
+    if(r.labor)labor[r.labor]=(labor[r.labor]||0)+r.importe;
+    // metros de avance por frente (und = M y rubro Avance)
+    if(ru==='Avance'&&/^M\b/i.test(r.und||'')){ if(r.labor){avanceFrente[r.labor]=avanceFrente[r.labor]||{m:0,imp:0};avanceFrente[r.labor].m+=r.cant;avanceFrente[r.labor].imp+=r.importe;} }
+  });
+  const totMetros=Object.values(avanceFrente).reduce((s,x)=>s+x.m,0);
+  const totAvanceImp=rubro['Avance']||0;
+  const costoMetro=totMetros>0?totAvanceImp/totMetros:0;
+  const sostImp=rubro['Sostenimiento']||0;
+  const pcSost=v.subtotal>0?(sostImp/v.subtotal*100):0;
+  const cumplProm=v.rows.length?v.rows.reduce((s,r)=>s+(r.cumpl||0),0)/v.rows.length:0;
+
+  // ── KPIs ──
+  const kpis=`<div class="kpi-grid">
+    <div class="kpi-card"><div class="kpi-label">Total Liquidación</div><div class="kpi-value gold">${fmtS(v.total)}</div><div class="kpi-sub">${v.rows.length} partidas</div></div>
+    <div class="kpi-card"><div class="kpi-label">Sub Total</div><div class="kpi-value blue">${fmtS(v.subtotal)}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Descuento Almacén</div><div class="kpi-value red">${fmtS(v.descuento)}</div><div class="kpi-sub">explosivos consumidos</div></div>
+    <div class="kpi-card"><div class="kpi-label">Metros Avanzados</div><div class="kpi-value green">${totMetros.toFixed(1)} m</div></div>
+    <div class="kpi-card"><div class="kpi-label">Costo por Metro</div><div class="kpi-value warn">${fmtS(costoMetro)}</div><div class="kpi-sub">solo avance lineal</div></div>
+    <div class="kpi-card"><div class="kpi-label">% Sostenimiento</div><div class="kpi-value blue">${pcSost.toFixed(1)}%</div><div class="kpi-sub">del sub total</div></div>
+  </div>`;
+
+  // ── Distribución por rubro ──
+  const rubroOrden=Object.entries(rubro).sort((a,b)=>b[1]-a[1]);
+  const maxRu=rubroOrden.length?rubroOrden[0][1]:1;
+  const rubroHtml=`<div class="card"><div class="section-title" style="margin-top:0">📊 Distribución de Costo por Rubro</div>${
+    rubroOrden.map(([k,val])=>{const pc=v.subtotal>0?(val/v.subtotal*100):0;const col=VAL_RUBRO_COLOR[k]||'#888';
+    return `<div class="progress-row"><div class="progress-label" style="min-width:160px">${k}</div><div class="progress-bar"><div class="progress-fill" style="width:${Math.round(val/maxRu*100)}%;background:${col}"></div></div><div class="progress-val" style="min-width:130px;text-align:right">${fmtS(val)} · ${pc.toFixed(1)}%</div></div>`;}).join('')
+  }</div>`;
+
+  // ── Costo por frente/labor ──
+  const laborOrden=Object.entries(labor).sort((a,b)=>b[1]-a[1]);
+  const maxLab=laborOrden.length?laborOrden[0][1]:1;
+  const laborHtml=`<div class="card"><div class="section-title" style="margin-top:0">⛏ Costo por Labor / Frente</div>${
+    laborOrden.map(([k,val])=>{const af=avanceFrente[k];const cm=af&&af.m>0?` · ${fmtS(af.imp/af.m)}/m (${af.m.toFixed(1)}m)`:'';
+    return `<div class="progress-row"><div class="progress-label" style="min-width:160px">${k}</div><div class="progress-bar"><div class="progress-fill" style="width:${Math.round(val/maxLab*100)}%"></div></div><div class="progress-val" style="min-width:200px;text-align:right;font-size:11px">${fmtS(val)}${cm}</div></div>`;}).join('')
+  }</div>`;
+
+  // ── Alertas de decisión ──
+  const al=[];
+  if(pcSost>35)al.push(`🔵 Sostenimiento alto (${pcSost.toFixed(0)}% del costo) — posible terreno inestable o sobre-sostenimiento.`);
+  const equipoImp=rubro['Operación de Equipos']||0;
+  if(v.subtotal>0&&equipoImp/v.subtotal>0.25)al.push(`🔴 Operación de equipos representa ${(equipoImp/v.subtotal*100).toFixed(0)}% del costo — revisar horas y rendimiento.`);
+  if(cumplProm<100)al.push(`⚠ Cumplimiento promedio ${cumplProm.toFixed(0)}% — hay partidas no ejecutadas al 100%.`);
+  const acarreoImp=rubro['Acarreo / Limpieza']||0;
+  if(v.subtotal>0&&acarreoImp/v.subtotal>0.12)al.push(`🟣 Acarreo/limpieza ${(acarreoImp/v.subtotal*100).toFixed(0)}% — evaluar distancias y ciclo de extracción.`);
+  const alHtml=al.length?`<div class="card" style="border-left:3px solid #fbbf24"><div class="section-title" style="margin-top:0;font-size:13px;color:#fbbf24">⚠ Lecturas para Decisión</div>${al.map(a=>`<div style="font-size:12px;color:var(--text2);padding:5px 0;border-bottom:1px solid var(--border)">${a}</div>`).join('')}</div>`:'';
+
+  // ── Tabla detalle ──
+  const tabla=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="section-title" style="margin:0">📋 Detalle de Partidas</div><div style="font-size:11px;color:var(--text3)">${v.titulo}</div></div>
+  <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap">
+    <thead><tr style="color:var(--text3);text-align:left;border-bottom:1px solid var(--border)">
+      <th style="padding:6px 8px">#</th><th style="padding:6px 8px">Labor</th><th style="padding:6px 8px">S.Act.</th><th style="padding:6px 8px">Sub-tarea</th><th style="padding:6px 8px">Und</th><th style="padding:6px 8px;text-align:right">Cant.</th><th style="padding:6px 8px;text-align:right">Precio</th><th style="padding:6px 8px;text-align:right">Importe</th><th style="padding:6px 8px;text-align:center">%</th><th style="padding:6px 8px">Rubro</th></tr></thead>
+    <tbody>${v.rows.map(r=>{const col=VAL_RUBRO_COLOR[valRubro(r.sact)]||'#888';
+      return `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:5px 8px;color:var(--text3)">${r.item}</td>
+        <td style="padding:5px 8px;color:var(--text2)">${r.labor}</td>
+        <td style="padding:5px 8px;color:var(--text)">${r.sact}</td>
+        <td style="padding:5px 8px;color:var(--text3)">${r.starea}</td>
+        <td style="padding:5px 8px;color:var(--text3)">${r.und}</td>
+        <td style="padding:5px 8px;text-align:right;color:var(--text2)">${r.cant}</td>
+        <td style="padding:5px 8px;text-align:right;color:var(--text3)">${fmtS(r.precio)}</td>
+        <td style="padding:5px 8px;text-align:right;color:var(--text);font-weight:600">${fmtS(r.importe)}</td>
+        <td style="padding:5px 8px;text-align:center;color:${r.cumpl>=100?'#34d399':'#fbbf24'}">${r.cumpl}%</td>
+        <td style="padding:5px 8px"><span style="font-size:10px;color:${col}">●</span> <span style="color:var(--text3)">${valRubro(r.sact)}</span></td>
+      </tr>`;}).join('')}</tbody>
+    <tfoot>
+      <tr style="border-top:2px solid var(--border)"><td colspan="7" style="padding:6px 8px;text-align:right;color:var(--text2);font-weight:600">SUB TOTAL</td><td style="padding:6px 8px;text-align:right;color:var(--text);font-weight:700">${fmtS(v.subtotal)}</td><td colspan="2"></td></tr>
+      <tr><td colspan="7" style="padding:6px 8px;text-align:right;color:var(--text3)">Descuento almacén</td><td style="padding:6px 8px;text-align:right;color:#f87171">${fmtS(v.descuento)}</td><td colspan="2"></td></tr>
+      <tr><td colspan="7" style="padding:6px 8px;text-align:right;color:#fbbf24;font-weight:700">TOTAL LIQUIDACIÓN</td><td style="padding:6px 8px;text-align:right;color:#fbbf24;font-weight:700">${fmtS(v.total)}</td><td colspan="2"></td></tr>
+    </tfoot>
+  </table></div></div>`;
+
+  cont.innerHTML=kpis+alHtml+`<div class="two-col">${rubroHtml}${laborHtml}</div>`+tabla;
 }
 
 function exploNombre(id){const c=(typeof EXPLO_CATALOGO!=='undefined'?EXPLO_CATALOGO:[]).find(x=>x.id===id);return c?c.nombre:id;}
