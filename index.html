@@ -2573,6 +2573,7 @@ select option{background:var(--coal3);}
 <div class="page" id="page-operaciones">
   <div class="mod-tabs">
     <button class="mod-tab active" onclick="modTab('op','avance',this)">⛏ Avance Diario</button>
+    <button class="mod-tab" onclick="modTab('op','solicitudes',this);renderSolicitudesPendientesOp()">🛒 Solicitudes</button>
     <button class="mod-tab" onclick="modTab('op','vsproyectado',this)">📊 Real vs Proyectado</button>
     <button class="mod-tab" onclick="modTab('op','distribucion',this)">👥 Dist. Personal</button>
     <button class="mod-tab" onclick="modTab('op','rendimientos',this)">📈 Rendimientos</button>
@@ -2605,6 +2606,12 @@ select option{background:var(--coal3);}
       <div class="btn-row"><button class="btn btn-gold" onclick="registrarPerforacion()">Registrar Avance</button></div>
     </div>
     <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Frente</th><th>Metros</th><th>Perforistas</th><th>m/persona</th><th>Roca</th><th>Obs</th></tr></thead><tbody id="per-tbody"></tbody></table></div>
+  </div>
+  <div class="mod-pane" style="display:none" id="op-solicitudes">
+    <div class="section-title" style="margin-top:0">🛒 Solicitudes de Compra — Pendientes de aprobación</div>
+    <div id="op-sc-pendientes"></div>
+    <div class="section-title" style="margin-top:20px">📋 Historial de mis decisiones</div>
+    <div id="op-sc-historial"></div>
   </div>
   <div class="mod-pane" style="display:none" id="op-vsproyectado">
     <div class="card" style="margin-bottom:18px">
@@ -2900,6 +2907,7 @@ select option{background:var(--coal3);}
 <div class="page" id="page-finanzas">
   <div class="mod-tabs">
     <button class="mod-tab active" onclick="modTab('fin','ordenes',this)">📄 Órdenes de Compra</button>
+    <button class="mod-tab" onclick="modTab('fin','solicitudes',this);renderSolicitudesPendientesFin()">🛒 Solicitudes</button>
     <button class="mod-tab" onclick="modTab('fin','valorizaciones',this)">💵 Valorizaciones</button>
     <button class="mod-tab" onclick="modTab('fin','proyeccion',this)">📊 Proyección</button>
     <button class="mod-tab" onclick="modTab('fin','utilidad',this)">💰 Utilidad</button>
@@ -2932,6 +2940,12 @@ select option{background:var(--coal3);}
     <div id="oc-lista-pendientes"></div>
     <div class="section-title" style="margin-top:18px">Historial</div>
     <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Categoría</th><th>Proveedor</th><th>Descripción</th><th>Monto</th><th>Solicitante</th><th>Estado</th></tr></thead><tbody id="oc-tbody"></tbody></table></div>
+  </div>
+  <div class="mod-pane" style="display:none" id="fin-solicitudes">
+    <div class="section-title" style="margin-top:0">🛒 Solicitudes de Compra — Pendientes de aprobación</div>
+    <div id="fin-sc-pendientes"></div>
+    <div class="section-title" style="margin-top:20px">📋 Historial de mis decisiones</div>
+    <div id="fin-sc-historial"></div>
   </div>
   <div class="mod-pane" style="display:none" id="fin-valorizaciones">
     <div class="kpi-grid">
@@ -3636,13 +3650,20 @@ select option{background:var(--coal3);}
       <div class="modal-title" style="margin-bottom:0">🛒 Nueva Solicitud de Compra</div>
       <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-solicitud')">✕</button>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px">
       <div class="form-group" style="margin:0"><label>Fecha</label><input type="date" id="sc-fecha"></div>
       <div class="form-group" style="margin:0"><label>Solicitante</label><input type="text" id="sc-solicitante" placeholder="Tu nombre"></div>
       <div class="form-group" style="margin:0"><label>Prioridad</label>
         <select id="sc-prioridad" style="width:100%">
           <option value="normal">Normal</option>
           <option value="urgente">🔴 Urgente</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin:0"><label>Destino / Proveedor</label>
+        <select id="sc-destino" style="width:100%">
+          <option value="logistica-trujillo">Logística Trujillo</option>
+          <option value="almacen-poderosa">Almacén Poderosa</option>
+          <option value="otro">Otro proveedor</option>
         </select>
       </div>
     </div>
@@ -3833,10 +3854,10 @@ function navigate(page){
 const MODULE_PANES = {
   'log': ['almacen','historial','inventario','solicitudcompra','productos','explosivos'],
   'rrhh': ['planilla','tareas','personal','costorrhh'],
-  'op': ['avance','vsproyectado','distribucion','rendimientos','ia'],
+  'op': ['avance','solicitudes','vsproyectado','distribucion','rendimientos','ia'],
   'mant': ['registro','horometros','costosmant'],
   'maq': ['resumen','registro','flota'],
-  'fin': ['ordenes','valorizaciones','proyeccion','utilidad'],
+  'fin': ['ordenes','solicitudes','valorizaciones','proyeccion','utilidad'],
   'tar': ['maquinas','frentes','roles','resumen']
 };
 
@@ -4070,7 +4091,8 @@ function renderModPane(mod,pane){
   else if(k==='rrhh-tareas')renderTareas();
   else if(k==='rrhh-personal')renderPersonal();
   else if(k==='rrhh-costorrhh')renderCostoRRHH();
-  else if(k==='op-avance'){renderAvance();renderSolicitudesPendientesOp();}
+  else if(k==='op-avance'){renderAvance();}
+  else if(k==='op-solicitudes')renderSolicitudesPendientesOp();
   else if(k==='op-vsproyectado')renderVsProyectado();
   else if(k==='op-distribucion')renderDistribucion();
   else if(k==='op-rendimientos')renderRendimiento();
@@ -4084,7 +4106,8 @@ function renderModPane(mod,pane){
   else if(k==='tar-frentes')renderTarifaFrentes();
   else if(k==='tar-roles')renderTarifaRoles();
   else if(k==='tar-resumen')renderTarifaResumen();
-  else if(k==='fin-ordenes'){renderOrdenes();renderSolicitudesPendientesFin();}
+  else if(k==='fin-ordenes')renderOrdenes();
+  else if(k==='fin-solicitudes')renderSolicitudesPendientesFin();
   else if(k==='fin-valorizaciones')renderValorizaciones();
   else if(k==='fin-proyeccion')renderProyeccion();
   else if(k==='fin-utilidad')renderUtilidad();
@@ -5320,7 +5343,7 @@ let solicitudCart=[];
 function abrirModalSolicitud(){
   const g=id=>document.getElementById(id);
   g('sc-fecha').value=hoy();
-  g('sc-solicitante').value='';g('sc-obs').value='';g('sc-prioridad').value='normal';
+  g('sc-solicitante').value='';g('sc-obs').value='';g('sc-prioridad').value='normal';g('sc-destino').value='logistica-trujillo';
   g('sc-prod-cod').value='';g('sc-prod-desc').value='';g('sc-prod-um').value='UND';
   g('sc-prod-cant').value='';g('sc-prod-precio').value='';
   solicitudCart=[];renderSolicitudCart();
@@ -5374,6 +5397,7 @@ function guardarSolicitud(){
     fecha:g('sc-fecha').value||hoy(),
     solicitante:g('sc-solicitante').value.trim()||'—',
     prioridad:g('sc-prioridad').value,
+    destino:g('sc-destino').value||'logistica-trujillo',
     observaciones:g('sc-obs').value.trim(),
     productos:[...solicitudCart],
     totalEst:solicitudCart.reduce((a,i)=>a+i.total,0),
@@ -5403,9 +5427,9 @@ function aprobarSolicitud(id,area,valor){
   else{sol.estado='espera';}
   almacenSave();
   renderSolicitudCompra();
-  // Re-render en finanzas/operaciones si están activos
-  if(document.getElementById('fin-sc-wrap'))renderSolicitudesPendientesFin();
-  if(document.getElementById('op-sc-wrap'))renderSolicitudesPendientesOp();
+  // Re-render en finanzas/operaciones si sus panes están activos
+  if(document.getElementById('fin-sc-pendientes'))renderSolicitudesPendientesFin();
+  if(document.getElementById('op-sc-pendientes'))renderSolicitudesPendientesOp();
   showNotif(valor?'✓ Solicitud aprobada':'Solicitud rechazada',valor?'success':'warn');
 }
 
@@ -5436,40 +5460,148 @@ function renderHistorialSolicitudes(){
         </div>
       </div>
       <div style="font-size:11px;color:var(--text3)">${s.productos.map(p=>`${p.descripcion} × ${fmt3(p.cantidad)} ${p.unidad}`).join(' · ')}</div>
-      ${s.estado==='espera'?`<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-        ${s.aprobFinanzas===null?`<button class="btn btn-outline" style="font-size:11px;padding:4px 12px;color:#22c55e;border-color:#22c55e" onclick="aprobarSolicitud('${s.id}','fin',true)">✓ Aprobar (Fin.)</button><button class="btn btn-outline" style="font-size:11px;padding:4px 12px;color:#f87171;border-color:#f87171" onclick="aprobarSolicitud('${s.id}','fin',false)">✗ Rechazar (Fin.)</button>`:''}
-        ${s.aprobOperaciones===null?`<button class="btn btn-outline" style="font-size:11px;padding:4px 12px;color:#22c55e;border-color:#22c55e" onclick="aprobarSolicitud('${s.id}','op',true)">✓ Aprobar (Op.)</button><button class="btn btn-outline" style="font-size:11px;padding:4px 12px;color:#f87171;border-color:#f87171" onclick="aprobarSolicitud('${s.id}','op',false)">✗ Rechazar (Op.)</button>`:''}
-      </div>`:''}
+      ${s.estado==='aprobado'?`<div style="margin-top:10px"><button class="btn btn-outline" style="font-size:12px;padding:6px 18px;color:#22c55e;border-color:#22c55e" onclick="exportarOrdenCompra('${s.id}')">📄 Orden de Compra (Excel)</button></div>`:''}
     </div>`).join('');
 }
 
 // Funciones para usar en módulos Finanzas y Operaciones
 function renderSolicitudesPendientesFin(){
-  const wrap=document.getElementById('fin-sc-wrap');if(!wrap)return;
-  _renderSolicitudesPendientes(wrap,'fin');
+  const wPend=document.getElementById('fin-sc-pendientes');
+  const wHist=document.getElementById('fin-sc-historial');
+  _renderSolicitudesPendientes(wPend,'fin');
+  _renderSolicitudesHistorial(wHist,'fin');
 }
 function renderSolicitudesPendientesOp(){
-  const wrap=document.getElementById('op-sc-wrap');if(!wrap)return;
-  _renderSolicitudesPendientes(wrap,'op');
+  const wPend=document.getElementById('op-sc-pendientes');
+  const wHist=document.getElementById('op-sc-historial');
+  _renderSolicitudesPendientes(wPend,'op');
+  _renderSolicitudesHistorial(wHist,'op');
 }
 function _renderSolicitudesPendientes(wrap,area){
+  if(!wrap)return;
   const lista=(state.almacen.solicitudesCompra||[]).filter(s=>area==='fin'?s.aprobFinanzas===null:s.aprobOperaciones===null);
-  if(!lista.length){wrap.innerHTML='<div style="color:var(--text3);font-size:13px;padding:14px">Sin solicitudes pendientes de aprobación.</div>';return;}
+  if(!lista.length){wrap.innerHTML='<div style="color:var(--text3);font-size:13px;padding:14px 0">✅ Sin solicitudes pendientes de aprobación.</div>';return;}
+  const DEST={['logistica-trujillo']:'Logística Trujillo',['almacen-poderosa']:'Almacén Poderosa',['otro']:'Otro proveedor'};
   wrap.innerHTML=lista.map(s=>`
-    <div class="card" style="margin-bottom:10px;padding:14px 16px">
+    <div class="card" style="margin-bottom:10px;padding:14px 16px;border-left:3px solid #f59e0b">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
         <div>
-          <div style="font-weight:700">${s.prioridad==='urgente'?'🔴 ':''}<span style="color:var(--gold-light)">SC-${s.id.slice(-6)}</span> · ${fmtF(s.fecha)} · 👤 ${s.solicitante}</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:4px">${s.observaciones||''}</div>
+          <div style="font-weight:700;font-size:14px">${s.prioridad==='urgente'?'🔴 ':''}<span style="color:var(--gold-light)">SC-${s.id.slice(-6)}</span> · ${fmtF(s.fecha)} · 👤 ${s.solicitante}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">📦 ${DEST[s.destino||'logistica-trujillo']||s.destino} ${s.observaciones?'· '+s.observaciones:''}</div>
           <div style="font-size:11px;color:var(--text3);margin-top:4px">${s.productos.map(p=>`${p.descripcion} × ${fmt3(p.cantidad)} ${p.unidad}`).join(' · ')}</div>
         </div>
-        <div style="font-size:14px;color:var(--gold-light);font-weight:700">${s.totalEst?fmtS2(s.totalEst):''}</div>
+        <div style="text-align:right"><div style="font-size:14px;color:var(--gold-light);font-weight:700">${s.totalEst?fmtS2(s.totalEst):''}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:4px">${(s.productos||[]).length} producto(s)</div></div>
       </div>
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="btn btn-outline" style="font-size:12px;padding:6px 16px;color:#22c55e;border-color:#22c55e" onclick="aprobarSolicitud('${s.id}','${area}',true)">✓ Aprobar</button>
-        <button class="btn btn-outline" style="font-size:12px;padding:6px 16px;color:#f87171;border-color:#f87171" onclick="aprobarSolicitud('${s.id}','${area}',false)">✗ Rechazar</button>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-outline" style="font-size:12px;padding:6px 18px;color:#22c55e;border-color:#22c55e" onclick="aprobarSolicitud('${s.id}','${area}',true)">✓ Aprobar</button>
+        <button class="btn btn-outline" style="font-size:12px;padding:6px 18px;color:#f87171;border-color:#f87171" onclick="aprobarSolicitud('${s.id}','${area}',false)">✗ Rechazar</button>
       </div>
     </div>`).join('');
+}
+function _renderSolicitudesHistorial(wrap,area){
+  if(!wrap)return;
+  const lista=(state.almacen.solicitudesCompra||[]).filter(s=>area==='fin'?s.aprobFinanzas!==null:s.aprobOperaciones!==null);
+  if(!lista.length){wrap.innerHTML='<div style="color:var(--text3);font-size:13px;padding:14px 0">Sin historial aún.</div>';return;}
+  wrap.innerHTML=lista.map(s=>{
+    const dec=area==='fin'?s.aprobFinanzas:s.aprobOperaciones;
+    const badge=dec?'<span style="background:rgba(34,197,94,0.2);color:#22c55e;font-size:11px;font-weight:700;padding:2px 10px;border-radius:10px">✅ Aprobado</span>':'<span style="background:rgba(239,68,68,0.2);color:#ef4444;font-size:11px;font-weight:700;padding:2px 10px;border-radius:10px">❌ Rechazado</span>';
+    return `<div class="card" style="margin-bottom:8px;padding:12px 16px;opacity:0.8">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <div><div style="font-weight:700;font-size:13px">${s.prioridad==='urgente'?'🔴 ':''}<span style="color:var(--gold-light)">SC-${s.id.slice(-6)}</span> · ${fmtF(s.fecha)} · 👤 ${s.solicitante}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">${s.productos.map(p=>`${p.descripcion} × ${fmt3(p.cantidad)} ${p.unidad}`).join(' · ')}</div></div>
+        <div style="text-align:right">${badge}<div style="font-size:12px;color:var(--gold-light);font-weight:700;margin-top:4px">${s.totalEst?fmtS2(s.totalEst):''}</div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function exportarOrdenCompra(id){
+  if(typeof ExcelJS==='undefined'){showNotif('Error: librería Excel no cargada','error');return;}
+  const s=(state.almacen.solicitudesCompra||[]).find(x=>x.id===id);
+  if(!s){showNotif('⚠ Solicitud no encontrada','error');return;}
+  const DEST={['logistica-trujillo']:'Logística Trujillo — Poderosa',['almacen-poderosa']:'Almacén Poderosa',['otro']:'Otro proveedor'};
+  const destLabel=DEST[s.destino||'logistica-trujillo']||s.destino||'—';
+  const wb=new ExcelJS.Workbook();
+  const ws=wb.addWorksheet('Orden de Compra',{views:[{state:'frozen',ySplit:12}]});
+  ws.columns=[{width:6},{width:14},{width:40},{width:10},{width:12},{width:16},{width:16}];
+  const C_AZUL='FF1E3A5F',C_BLANCO='FFFFFFFF',C_GRIS='FFF3F4F6',C_VERDE='FF15803D',C_ORO='FFB45309';
+  const thin={style:'thin',color:{argb:'FFD1D5DB'}};
+  const bord={top:thin,bottom:thin,left:thin,right:thin};
+  const fill=(argb)=>({type:'pattern',pattern:'solid',fgColor:{argb}});
+  const font=(bold,sz,argb)=>({bold,size:sz||11,color:{argb:argb||'FF111827'}});
+  const aln=(h,v)=>({horizontal:h||'left',vertical:v||'middle',wrapText:true});
+  // ── Encabezado ──
+  ws.mergeCells('A1:G1');
+  const t=ws.getCell('A1');t.value='ORDEN DE COMPRA';
+  t.font={bold:true,size:20,color:{argb:C_BLANCO}};t.fill=fill(C_AZUL);t.alignment=aln('center');
+  ws.getRow(1).height=40;
+  ws.mergeCells('A2:G2');
+  const sub=ws.getCell('A2');sub.value='Minera Atmin — Unidad NV3190';
+  sub.font={bold:false,size:11,color:{argb:C_BLANCO}};sub.fill=fill(C_AZUL);sub.alignment=aln('center');
+  ws.getRow(2).height=20;
+  // Datos de cabecera
+  const addMeta=(r,label,val,bold)=>{
+    ws.getRow(r).height=18;
+    const a=ws.getCell(`A${r}`);a.value=label;a.font=font(true,10,'FF6B7280');a.alignment=aln('right');
+    ws.mergeCells(`A${r}:B${r}`);
+    const b=ws.getCell(`C${r}`);b.value=val;b.font=font(!!bold,11);b.alignment=aln('left');
+    ws.mergeCells(`C${r}:G${r}`);
+  };
+  addMeta(3,'N° OC:',`OC-${s.id.slice(-8).toUpperCase()}`,true);
+  addMeta(4,'Fecha emisión:',fmtF(s.fecha));
+  addMeta(5,'Solicitante:',s.solicitante,true);
+  addMeta(6,'Prioridad:',s.prioridad==='urgente'?'🔴 URGENTE':'Normal');
+  addMeta(7,'Destino / Proveedor:',destLabel,true);
+  addMeta(8,'Justificación:',s.observaciones||'—');
+  addMeta(9,'Aprobado Operaciones:',s.fechaAprobOp?`✓ ${fmtF(s.fechaAprobOp)}`:'—');
+  addMeta(10,'Aprobado Finanzas:',s.fechaAprobFin?`✓ ${fmtF(s.fechaAprobFin)}`:'—');
+  ws.getRow(11).height=10;
+  // ── Tabla de productos ──
+  const thead=['N°','Código','Descripción','U.M.','Cantidad','Precio Unit. (S/)','Total (S/)'];
+  const hr=ws.getRow(12);hr.height=22;
+  thead.forEach((h,i)=>{const c=hr.getCell(i+1);c.value=h;c.font={bold:true,size:11,color:{argb:C_BLANCO}};
+    c.fill=fill(C_AZUL);c.alignment=aln('center');c.border=bord;});
+  let r=13;let gran=0;
+  s.productos.forEach((p,i)=>{
+    const row=ws.getRow(r);row.height=18;
+    const bg=(i%2===0)?'FFFFFFFF':'FFF9FAFB';
+    const vals=[i+1,p.codigo||'—',p.descripcion,p.unidad,p.cantidad,p.precio||0,p.total||0];
+    vals.forEach((v,ci)=>{const c=row.getCell(ci+1);c.value=v;c.border=bord;
+      c.fill=fill(bg);c.font=font(ci===2,10);
+      c.alignment=aln(ci===2?'left':ci===0?'center':'right');
+      if(ci>=5)c.numFmt='"S/"#,##0.00';
+    });
+    gran+=p.total||0;r++;
+  });
+  // Total
+  ws.getRow(r).height=22;
+  ws.mergeCells(`A${r}:F${r}`);
+  const totL=ws.getCell(`A${r}`);totL.value='TOTAL ESTIMADO';totL.font={bold:true,size:12,color:{argb:C_BLANCO}};
+  totL.fill=fill(C_VERDE);totL.alignment=aln('right');totL.border=bord;
+  const totV=ws.getCell(`G${r}`);totV.value=gran;totV.font={bold:true,size:12,color:{argb:C_BLANCO}};
+  totV.numFmt='"S/"#,##0.00';totV.fill=fill(C_VERDE);totV.alignment=aln('right');totV.border=bord;
+  r+=2;
+  // ── Firmas ──
+  ws.mergeCells(`A${r}:C${r}`);ws.getCell(`A${r}`).value='_________________________________';ws.getRow(r).height=20;
+  ws.mergeCells(`E${r}:G${r}`);ws.getCell(`E${r}`).value='_________________________________';
+  r++;
+  ws.mergeCells(`A${r}:C${r}`);const fOp=ws.getCell(`A${r}`);fOp.value='Visto Bueno — Operaciones';fOp.font=font(true,10,C_AZUL);fOp.alignment=aln('center');
+  ws.mergeCells(`E${r}:G${r}`);const fFin=ws.getCell(`E${r}`);fFin.value='Visto Bueno — Finanzas';fFin.font=font(true,10,C_AZUL);fFin.alignment=aln('center');
+  r++;
+  ws.mergeCells(`A${r}:C${r}`);ws.getCell(`A${r}`).value=s.fechaAprobOp?fmtF(s.fechaAprobOp):'Fecha: ____________';ws.getCell(`A${r}`).alignment=aln('center');ws.getCell(`A${r}`).font=font(false,9,'FF6B7280');
+  ws.mergeCells(`E${r}:G${r}`);ws.getCell(`E${r}`).value=s.fechaAprobFin?fmtF(s.fechaAprobFin):'Fecha: ____________';ws.getCell(`E${r}`).alignment=aln('center');ws.getCell(`E${r}`).font=font(false,9,'FF6B7280');
+  r+=2;
+  ws.mergeCells(`A${r}:G${r}`);const nota=ws.getCell(`A${r}`);
+  nota.value=`Enviar a: ${destLabel} | Generado: ${fmtF(hoy())} | Sistema Atmin`;
+  nota.font={italic:true,size:9,color:{argb:'FF9CA3AF'}};nota.alignment=aln('center');
+  const fn=`OC_SC-${s.id.slice(-8)}_${hoy()}.xlsx`;
+  const buf=await wb.xlsx.writeBuffer();
+  const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=fn;document.body.appendChild(a);a.click();
+  document.body.removeChild(a);URL.revokeObjectURL(url);
+  showNotif(`✓ Orden de Compra descargada: ${fn}`);
 }
 
 function renderCentroCostos(){
