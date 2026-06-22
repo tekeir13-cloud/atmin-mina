@@ -2572,7 +2572,7 @@ select option{background:var(--coal3);}
 <!-- OPERACIONES -->
 <div class="page" id="page-operaciones">
   <div class="mod-tabs">
-    <button class="mod-tab active" onclick="modTab('op','avance',this)">⛏ Avance Diario</button>
+    <button class="mod-tab active" onclick="modTab('op','avance',this)">📋 Reporte Jefe de Guardia</button>
     <button class="mod-tab" onclick="modTab('op','solicitudes',this);renderSolicitudesPendientesOp()">🛒 Solicitudes</button>
     <button class="mod-tab" onclick="modTab('op','vsproyectado',this)">📊 Real vs Proyectado</button>
     <button class="mod-tab" onclick="modTab('op','distribucion',this)">👥 Dist. Personal</button>
@@ -2587,25 +2587,20 @@ select option{background:var(--coal3);}
     </div>
     <div class="kpi-grid">
       <div class="kpi-card"><div class="kpi-label">Metros Hoy (Total)</div><div class="kpi-value gold" id="op-metros-hoy">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Metros Hoy Rampa</div><div class="kpi-value blue" id="op-f1-hoy">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Metros Hoy Cortada</div><div class="kpi-value green" id="op-f2-hoy">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Metros Hoy RA Brenda</div><div class="kpi-value blue" id="op-f1-hoy">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Metros Hoy CRNE</div><div class="kpi-value green" id="op-f2-hoy">—</div></div>
       <div class="kpi-card"><div class="kpi-label">Meta Diaria</div><div class="kpi-value warn" id="op-meta">20 m</div><div class="kpi-sub">por frente</div></div>
       <div class="kpi-card"><div class="kpi-label">Total Mes</div><div class="kpi-value gold" id="op-mes">—</div></div>
       <div class="kpi-card"><div class="kpi-label">Prom. Diario</div><div class="kpi-value blue" id="op-prom">—</div></div>
     </div>
-    <div class="card" style="margin-bottom:18px">
-      <div class="section-title">Registrar Avance del Día</div>
-      <div class="form-grid">
-        <div class="form-group"><label>Fecha</label><input type="date" id="per-fecha"></div>
-        <div class="form-group"><label>Frente</label><select id="per-frente"><option value="1">Rampa</option><option value="2">Cortada</option></select></div>
-        <div class="form-group"><label>Metros Avanzados</label><input type="number" id="per-metros" placeholder="Ej: 18" min="0" step="0.5"></div>
-        <div class="form-group"><label>Perforistas activos</label><input type="number" id="per-personas" placeholder="Ej: 6" min="1"></div>
-        <div class="form-group"><label>Tipo de roca</label><select id="per-roca"><option>Blanda</option><option>Media</option><option>Dura</option><option>Muy dura</option></select></div>
-        <div class="form-group"><label>Observaciones</label><input type="text" id="per-obs" placeholder="Ej: Falla en sector norte"></div>
+    <div class="card" style="margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <div class="section-title" style="margin:0">Reportes de Jefe de Guardia</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:4px">Trabajos ejecutados, avance lineal con sostenimiento y taladros por frente</div>
       </div>
-      <div class="btn-row"><button class="btn btn-gold" onclick="registrarPerforacion()">Registrar Avance</button></div>
+      <button class="btn btn-gold" onclick="abrirModalReporteGuardia()">➕ Generar Reporte</button>
     </div>
-    <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Frente</th><th>Metros</th><th>Perforistas</th><th>m/persona</th><th>Roca</th><th>Obs</th></tr></thead><tbody id="per-tbody"></tbody></table></div>
+    <div id="rg-lista"></div>
   </div>
   <div class="mod-pane" style="display:none" id="op-solicitudes">
     <div class="section-title" style="margin-top:0">🛒 Solicitudes de Compra — Pendientes de aprobación</div>
@@ -3776,6 +3771,56 @@ select option{background:var(--coal3);}
   </div>
 </div>
 
+<!-- ════ MODAL: REPORTE JEFE DE GUARDIA ════ -->
+<div class="modal-overlay" id="modal-reporte-guardia" onclick="if(event.target===this)cerrarModal('modal-reporte-guardia')">
+  <div class="modal" style="width:min(760px,96vw);max-height:92vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="modal-title" style="margin-bottom:0;color:#fbbf24">📋 Reporte de Jefe de Guardia — NV3190</div>
+      <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-reporte-guardia')">✕</button>
+    </div>
+    <input type="hidden" id="rg-id">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
+      <div class="form-group" style="margin:0"><label>Jefe de Guardia</label><input type="text" id="rg-jefe" placeholder="Nombre"></div>
+      <div class="form-group" style="margin:0"><label>Turno</label><select id="rg-turno" style="width:100%"><option value="Día">Día</option><option value="Noche">Noche</option></select></div>
+      <div class="form-group" style="margin:0"><label>Fecha</label><input type="date" id="rg-fecha"></div>
+    </div>
+
+    <!-- ─── RA BRENDA ─── -->
+    <div class="card" style="margin-bottom:14px;border-left:3px solid #60a5fa">
+      <div class="section-title" style="margin-top:0;color:#60a5fa">🟦 RA Brenda — Rampa Brenda</div>
+      <div class="form-group" style="margin-bottom:10px"><label>Trabajos ejecutados</label><textarea id="rg-br-trabajos" rows="2" placeholder="Detalle de trabajos realizados en el turno..." style="width:100%;resize:vertical"></textarea></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div class="form-group" style="margin:0"><label>Avance metros lineales</label><input type="number" id="rg-br-metros" min="0" step="0.1" placeholder="Ej: 3.5"></div>
+        <div class="form-group" style="margin:0"><label>Cimbra (sostenimiento)</label><input type="number" id="rg-br-cimbra" min="0" step="1" placeholder="N° de cimbras"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-group" style="margin:0"><label>Taladros perforados</label><input type="number" id="rg-br-tperf" min="0" step="1" placeholder="0"></div>
+        <div class="form-group" style="margin:0"><label>Taladros cargados</label><input type="number" id="rg-br-tcarg" min="0" step="1" placeholder="0"></div>
+      </div>
+    </div>
+
+    <!-- ─── CRNE ─── -->
+    <div class="card" style="margin-bottom:16px;border-left:3px solid #34d399">
+      <div class="section-title" style="margin-top:0;color:#34d399">🟩 CRNE — Cortada Noroeste</div>
+      <div class="form-group" style="margin-bottom:10px"><label>Trabajos ejecutados</label><textarea id="rg-cr-trabajos" rows="2" placeholder="Detalle de trabajos realizados en el turno..." style="width:100%;resize:vertical"></textarea></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
+        <div class="form-group" style="margin:0"><label>Avance metros lineales</label><input type="number" id="rg-cr-metros" min="0" step="0.1" placeholder="Ej: 3.0"></div>
+        <div class="form-group" style="margin:0"><label>Perno (sostenimiento)</label><input type="number" id="rg-cr-perno" min="0" step="1" placeholder="N° de pernos"></div>
+        <div class="form-group" style="margin:0"><label>Malla (sostenimiento)</label><input type="number" id="rg-cr-malla" min="0" step="1" placeholder="N° de mallas"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-group" style="margin:0"><label>Taladros perforados</label><input type="number" id="rg-cr-tperf" min="0" step="1" placeholder="0"></div>
+        <div class="form-group" style="margin:0"><label>Taladros cargados</label><input type="number" id="rg-cr-tcarg" min="0" step="1" placeholder="0"></div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-gold" onclick="guardarReporteGuardia()">✓ Guardar Reporte</button>
+      <button class="btn btn-outline" onclick="cerrarModal('modal-reporte-guardia')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
@@ -3818,7 +3863,7 @@ const state={
   epp:{historial:[]},
   petroleo:{stock:200,historial:[]},
   almacen:{ingresos:[],salidas:[],inventarioInicial:[],historialMeses:[],productos:[],solicitudesCompra:[],explosivos:{ingresos:[],salidas:[]}},
-  perforacion:[],mantenimiento:[],horometros:[],tareas:[],
+  perforacion:[],reportesGuardia:[],mantenimiento:[],horometros:[],tareas:[],
   ordenes:[],valorizaciones:[],
   compresorista:[],
   metas:{f1:20,f2:20,dias:26},frenteActivo:1,
@@ -6905,26 +6950,107 @@ function exportarPlanillaExcel(){
   showNotif(`✓ Excel descargado: Planilla_${nombreMes}_${anio}.xlsx`);
 }
 // ── OPERACIONES ──
+const RG_KEY='atmin_reportes_guardia';
+function reportesGuardiaSave(){try{localStorage.setItem(RG_KEY,JSON.stringify(state.reportesGuardia||[]));}catch(e){}}
+function reportesGuardiaLoad(){try{const d=localStorage.getItem(RG_KEY);if(d)state.reportesGuardia=JSON.parse(d)||[];}catch(e){}}
+
 function renderAvance(){
+  reportesGuardiaLoad();
   const ts=hoy();
-  const f1h=state.perforacion.filter(p=>p.fecha===ts&&p.frente===1).reduce((s,p)=>s+p.metros,0);
-  const f2h=state.perforacion.filter(p=>p.fecha===ts&&p.frente===2).reduce((s,p)=>s+p.metros,0);
-  const tm=state.perforacion.reduce((s,p)=>s+p.metros,0);
-  const pr=state.perforacion.length>0?(tm/state.perforacion.length).toFixed(1):0;
-  document.getElementById('op-metros-hoy').textContent=(f1h+f2h)+' m';
-  document.getElementById('op-f1-hoy').textContent=f1h+' m';document.getElementById('op-f2-hoy').textContent=f2h+' m';
-  document.getElementById('op-mes').textContent=tm+' m';document.getElementById('op-prom').textContent=pr+' m';
-  document.getElementById('per-tbody').innerHTML=sortRegistros(state.perforacion).map(p=>{
-    const r=p.personas>0?(p.metros/p.personas).toFixed(1):0;
-    return`<tr><td>${fmtF(p.fecha)}</td><td style="color:${FC[p.frente]}">${FL[p.frente]}</td><td><strong style="color:var(--text)">${p.metros} m</strong></td><td>${p.personas}</td><td>${r} m/p</td><td>${p.roca}</td><td style="color:var(--text3)">${p.obs||'—'}</td></tr>`;
-  }).join('')||'<tr><td colspan="7" class="empty-state">Sin registros</td></tr>';
+  const rg=state.reportesGuardia||[];
+  const f1h=rg.filter(r=>r.fecha===ts).reduce((s,r)=>s+(r.brenda?.metros||0),0);
+  const f2h=rg.filter(r=>r.fecha===ts).reduce((s,r)=>s+(r.crne?.metros||0),0);
+  const tm=rg.reduce((s,r)=>s+(r.brenda?.metros||0)+(r.crne?.metros||0),0);
+  const dias=new Set(rg.map(r=>r.fecha)).size;
+  const pr=dias>0?(tm/dias).toFixed(1):0;
+  document.getElementById('op-metros-hoy').textContent=(f1h+f2h).toFixed(1)+' m';
+  document.getElementById('op-f1-hoy').textContent=f1h.toFixed(1)+' m';document.getElementById('op-f2-hoy').textContent=f2h.toFixed(1)+' m';
+  document.getElementById('op-mes').textContent=tm.toFixed(1)+' m';document.getElementById('op-prom').textContent=pr+' m';
+  const wrap=document.getElementById('rg-lista');if(!wrap)return;
+  const lista=[...rg].sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')||(b.creadoEn||0)-(a.creadoEn||0));
+  if(!lista.length){wrap.innerHTML='<div class="card"><div class="empty-state">Sin reportes registrados. Genera el primero con el botón ➕.</div></div>';return;}
+  wrap.innerHTML=lista.map(r=>{
+    const b=r.brenda||{},c=r.crne||{};
+    const mt=((b.metros||0)+(c.metros||0)).toFixed(1);
+    const cell=(lbl,val)=>`<div style="font-size:11px;color:var(--text3)">${lbl}</div><div style="font-size:13px;color:var(--text);font-weight:600">${val}</div>`;
+    return`<div class="card" style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--text)">${fmtF(r.fecha)} · Turno ${r.turno||'—'}</div>
+          <div style="font-size:12px;color:var(--text3)">Jefe de Guardia: <strong style="color:var(--text2)">${r.jefe||'—'}</strong> · Avance total: <strong style="color:#fbbf24">${mt} m</strong></div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-outline" style="font-size:11px;padding:5px 12px" onclick="editarReporteGuardia('${r.id}')">✎ Editar</button>
+          <button class="btn btn-outline" style="font-size:11px;padding:5px 12px;color:#f87171;border-color:#f87171" onclick="eliminarReporteGuardia('${r.id}')">🗑</button>
+        </div>
+      </div>
+      <div class="two-col">
+        <div style="border-left:3px solid #60a5fa;padding-left:10px">
+          <div style="font-size:12px;font-weight:700;color:#60a5fa;margin-bottom:6px">🟦 RA Brenda</div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:8px;white-space:pre-wrap">${b.trabajos||'<span style="color:var(--text3)">Sin detalle de trabajos</span>'}</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
+            ${cell('Metros',(b.metros||0)+' m')}${cell('Cimbra',b.cimbra||0)}${cell('Tal. perf.',b.tperf||0)}${cell('Tal. carg.',b.tcarg||0)}
+          </div>
+        </div>
+        <div style="border-left:3px solid #34d399;padding-left:10px">
+          <div style="font-size:12px;font-weight:700;color:#34d399;margin-bottom:6px">🟩 CRNE</div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:8px;white-space:pre-wrap">${c.trabajos||'<span style="color:var(--text3)">Sin detalle de trabajos</span>'}</div>
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
+            ${cell('Metros',(c.metros||0)+' m')}${cell('Perno',c.perno||0)}${cell('Malla',c.malla||0)}${cell('Tal. perf.',c.tperf||0)}${cell('Tal. carg.',c.tcarg||0)}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
 }
-async function registrarPerforacion(){
-  const metros=parseFloat(document.getElementById('per-metros').value);
-  if(!metros||metros<=0){showNotif('⚠ Metros inválidos','error');return;}
-  const nv={fecha:document.getElementById('per-fecha').value,frente:parseInt(document.getElementById('per-frente').value),metros,personas:parseInt(document.getElementById('per-personas').value)||1,roca:document.getElementById('per-roca').value,obs:document.getElementById('per-obs').value};
-  try{await sb.from('perforacion').insert([{...nv, mes_id: getMesId()}]);}catch(e){}
-  state.perforacion.push(nv);renderAvance();showNotif('✓ Avance registrado');
+
+function abrirModalReporteGuardia(){
+  const g=id=>document.getElementById(id);
+  g('rg-id').value='';
+  g('rg-jefe').value='';g('rg-turno').value='Día';g('rg-fecha').value=hoy();
+  ['rg-br-trabajos','rg-br-metros','rg-br-cimbra','rg-br-tperf','rg-br-tcarg',
+   'rg-cr-trabajos','rg-cr-metros','rg-cr-perno','rg-cr-malla','rg-cr-tperf','rg-cr-tcarg'].forEach(i=>g(i).value='');
+  abrirModal('modal-reporte-guardia');
+}
+
+function editarReporteGuardia(id){
+  const r=(state.reportesGuardia||[]).find(x=>x.id===id);if(!r)return;
+  const g=i=>document.getElementById(i);const b=r.brenda||{},c=r.crne||{};
+  g('rg-id').value=r.id;g('rg-jefe').value=r.jefe||'';g('rg-turno').value=r.turno||'Día';g('rg-fecha').value=r.fecha||hoy();
+  g('rg-br-trabajos').value=b.trabajos||'';g('rg-br-metros').value=b.metros||'';g('rg-br-cimbra').value=b.cimbra||'';g('rg-br-tperf').value=b.tperf||'';g('rg-br-tcarg').value=b.tcarg||'';
+  g('rg-cr-trabajos').value=c.trabajos||'';g('rg-cr-metros').value=c.metros||'';g('rg-cr-perno').value=c.perno||'';g('rg-cr-malla').value=c.malla||'';g('rg-cr-tperf').value=c.tperf||'';g('rg-cr-tcarg').value=c.tcarg||'';
+  abrirModal('modal-reporte-guardia');
+}
+
+function eliminarReporteGuardia(id){
+  if(!confirm('¿Eliminar este reporte de guardia?'))return;
+  state.reportesGuardia=(state.reportesGuardia||[]).filter(r=>r.id!==id);
+  reportesGuardiaSave();renderAvance();showNotif('✓ Reporte eliminado');
+}
+
+function guardarReporteGuardia(){
+  const g=i=>document.getElementById(i);const n=i=>parseFloat(g(i).value)||0;
+  const fecha=g('rg-fecha').value;
+  if(!fecha){showNotif('⚠ Indique la fecha','error');return;}
+  const brMetros=n('rg-br-metros'),crMetros=n('rg-cr-metros');
+  const rep={
+    id:g('rg-id').value||'RG'+Date.now(),
+    fecha, turno:g('rg-turno').value, jefe:g('rg-jefe').value.trim(),
+    brenda:{trabajos:g('rg-br-trabajos').value.trim(),metros:brMetros,cimbra:n('rg-br-cimbra'),tperf:n('rg-br-tperf'),tcarg:n('rg-br-tcarg')},
+    crne:{trabajos:g('rg-cr-trabajos').value.trim(),metros:crMetros,perno:n('rg-cr-perno'),malla:n('rg-cr-malla'),tperf:n('rg-cr-tperf'),tcarg:n('rg-cr-tcarg')},
+    creadoEn:Date.now()
+  };
+  if(!state.reportesGuardia)state.reportesGuardia=[];
+  const idx=state.reportesGuardia.findIndex(r=>r.id===rep.id);
+  if(idx>=0){rep.creadoEn=state.reportesGuardia[idx].creadoEn||rep.creadoEn;state.reportesGuardia[idx]=rep;}
+  else state.reportesGuardia.push(rep);
+  // Sincronizar avance lineal con state.perforacion (analítica vsproyectado / rendimientos)
+  state.perforacion=(state.perforacion||[]).filter(p=>p._rg!==rep.id);
+  if(brMetros>0)state.perforacion.push({_rg:rep.id,fecha,frente:1,metros:brMetros,personas:1,roca:'—',obs:'RA Brenda — '+(rep.jefe||'')});
+  if(crMetros>0)state.perforacion.push({_rg:rep.id,fecha,frente:2,metros:crMetros,personas:1,roca:'—',obs:'CRNE — '+(rep.jefe||'')});
+  reportesGuardiaSave();
+  cerrarModal('modal-reporte-guardia');renderAvance();
+  showNotif('✓ Reporte de guardia guardado');
 }
 function renderVsProyectado(){
   const mf1=parseInt(document.getElementById('meta-f1').value)||state.metas.f1;
