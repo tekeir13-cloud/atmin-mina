@@ -2568,13 +2568,42 @@ select option{background:var(--coal3);}
 <!-- OPERACIONES -->
 <div class="page" id="page-operaciones">
   <div class="mod-tabs">
-    <button class="mod-tab active" onclick="modTab('op','avance',this)">📋 Reporte Jefe de Guardia</button>
-    <button class="mod-tab" onclick="modTab('op','solicitudes',this);renderSolicitudesPendientesOp()">🛒 Solicitudes</button>
+    <button class="mod-tab active" onclick="modTab('op','tablero',this)">🎯 Tablero</button>
+    <button class="mod-tab" onclick="modTab('op','avance',this)">📋 Reporte Jefe de Guardia</button>
     <button class="mod-tab" onclick="modTab('op','vsproyectado',this)">👷 Reporte Ing. Residente</button>
+    <button class="mod-tab" onclick="modTab('op','voladuras',this)">💥 Control de Voladuras</button>
+    <button class="mod-tab" onclick="modTab('op','valorizaciones',this)">💵 Valorizaciones</button>
+    <button class="mod-tab" onclick="modTab('op','solicitudes',this);renderSolicitudesPendientesOp()">🛒 Solicitudes</button>
     <button class="mod-tab" onclick="modTab('op','rendimientos',this)">📈 Rendimientos</button>
     <button class="mod-tab" onclick="modTab('op','ia',this)">🤖 IA</button>
   </div>
-  <div class="mod-pane active" style="display:block" id="op-avance">
+  <div class="mod-pane active" style="display:block" id="op-tablero">
+    <div style="margin-bottom:8px"><div class="section-title" style="margin:0">🎯 Tablero de Operaciones</div><div style="font-size:12px;color:var(--text3);margin-top:4px">Vista consolidada de avance, taladros, personal y voladuras — <span id="tab-mes-label"></span></div></div>
+    <div class="kpi-grid" id="tab-kpis"></div>
+    <div id="tab-frentes" style="margin-top:8px"></div>
+    <div id="tab-alertas" style="margin-top:8px"></div>
+  </div>
+  <div class="mod-pane" style="display:none" id="op-voladuras">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+      <div><div class="section-title" style="margin:0">💥 Control de Voladuras</div><div style="font-size:12px;color:var(--text3);margin-top:4px">Disparos programados vs ejecutados por frente, conectado al consumo de explosivos</div></div>
+      <button class="btn btn-gold" onclick="abrirModalVoladura()">➕ Registrar Disparo</button>
+    </div>
+    <div class="kpi-grid" id="vol-kpis"></div>
+    <div id="vol-lista" style="margin-top:8px"></div>
+  </div>
+  <div class="mod-pane" style="display:none" id="op-valorizaciones">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+      <div><div class="section-title" style="margin:0">💵 Valorizaciones</div><div style="font-size:12px;color:var(--text3);margin-top:4px">Digitaliza la valorización mensual de avance hacia la contrata</div></div>
+    </div>
+    <div class="card">
+      <div class="empty-state" style="padding:30px 20px">
+        <div style="font-size:34px;margin-bottom:10px">📄</div>
+        <div style="font-size:14px;color:var(--text2);font-weight:600;margin-bottom:6px">Pendiente de configurar el formato</div>
+        <div style="font-size:12px;color:var(--text3);max-width:440px;margin:0 auto">Sube o comparte tu formato de valorización (Excel / foto / PDF) y lo replico aquí en digital: partidas, metrados, precios unitarios, totales y firma. Una vez tenga el formato, esta pestaña permitirá generar y exportar la valorización.</div>
+      </div>
+    </div>
+  </div>
+  <div class="mod-pane" style="display:none" id="op-avance">
     <!-- Solicitudes de Compra pendientes de aprobación Operaciones -->
     <div style="margin-bottom:18px">
       <div class="section-title" style="margin-top:0">🛒 Solicitudes de Compra — Pendientes de tu aprobación</div>
@@ -3667,6 +3696,40 @@ select option{background:var(--coal3);}
   </div>
 </div>
 
+<!-- ════ MODAL: REGISTRO DE VOLADURA / DISPARO ════ -->
+<div class="modal-overlay" id="modal-voladura" onclick="if(event.target===this)cerrarModal('modal-voladura')">
+  <div class="modal" style="width:min(680px,96vw);max-height:92vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="modal-title" style="margin-bottom:0;color:#f87171">💥 Registro de Disparo — NV3190</div>
+      <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-voladura')">✕</button>
+    </div>
+    <input type="hidden" id="vol-id">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+      <div class="form-group" style="margin:0"><label>Fecha</label><input type="date" id="vol-fecha"></div>
+      <div class="form-group" style="margin:0"><label>Turno</label><select id="vol-turno" style="width:100%"><option value="Día">Día</option><option value="Noche">Noche</option></select></div>
+      <div class="form-group" style="margin:0"><label>Frente</label><select id="vol-frente" style="width:100%"><option value="1">🟦 RA Brenda</option><option value="2">🟩 CRNE</option></select></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div class="form-group" style="margin:0"><label>Estado</label><select id="vol-estado" style="width:100%"><option value="ejecutado">✅ Ejecutado</option><option value="programado">🕒 Programado</option><option value="fallido">⚠ Tiro fallado / cortado</option></select></div>
+      <div class="form-group" style="margin:0"><label>Avance obtenido (m)</label><input type="number" id="vol-avance" min="0" step="0.1" placeholder="Ej: 3.2"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div class="form-group" style="margin:0"><label>Taladros perforados</label><input type="number" id="vol-tperf" min="0" step="1" placeholder="0"></div>
+      <div class="form-group" style="margin:0"><label>Taladros cargados</label><input type="number" id="vol-tcarg" min="0" step="1" placeholder="0"></div>
+    </div>
+    <div class="card" style="margin-bottom:12px;background:var(--coal3)">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">💣 Explosivos consumidos</div>
+      <div id="vol-explo-rows"></div>
+      <button class="btn btn-outline" style="font-size:11px;padding:5px 12px;margin-top:6px" onclick="volAddExploRow()">+ Agregar explosivo</button>
+    </div>
+    <div class="form-group" style="margin-bottom:12px"><label>Observaciones</label><textarea id="vol-obs" rows="2" placeholder="Tipo de arranque, incidencias, mala fragmentación..." style="width:100%;resize:vertical"></textarea></div>
+    <div class="btn-row">
+      <button class="btn btn-gold" onclick="guardarVoladura()">✓ Guardar Disparo</button>
+      <button class="btn btn-outline" onclick="cerrarModal('modal-voladura')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
@@ -3713,7 +3776,7 @@ const state={
   ordenes:[],valorizaciones:[],
   compresorista:[],
   metas:{f1:20,f2:20,dias:26,mensualF1:520,mensualF2:520},frenteActivo:1,
-  distribucion:{},reuniones:[],
+  distribucion:{},reuniones:[],voladuras:[],
   mesActivo:{ id:null, mes:null, año:null },
   mesesCerrados:[],
   adelantos:{},
@@ -3746,7 +3809,7 @@ function navigate(page){
 const MODULE_PANES = {
   'log': ['almacen','historial','inventario','solicitudcompra','productos','explosivos'],
   'rrhh': ['planilla','tareas','personal','costorrhh'],
-  'op': ['avance','solicitudes','vsproyectado','rendimientos','ia'],
+  'op': ['tablero','avance','solicitudes','vsproyectado','voladuras','valorizaciones','rendimientos','ia'],
   'mant': ['registro','horometros','costosmant'],
   'fin': ['ordenes','solicitudes','valorizaciones','proyeccion','utilidad']
 };
@@ -3958,7 +4021,7 @@ function renderPage(page){
   if(page==='dashboard')renderDashboard();
   else if(page==='logistica'){activarPrimerTab('log','almacen');renderModPane('log','almacen');}
   else if(page==='rrhh'){activarPrimerTab('rrhh','planilla');renderModPane('rrhh','planilla');}
-  else if(page==='operaciones'){activarPrimerTab('op','avance');renderModPane('op','avance');}
+  else if(page==='operaciones'){activarPrimerTab('op','tablero');renderModPane('op','tablero');}
   else if(page==='mantenimiento'){activarPrimerTab('mant','registro');renderModPane('mant','registro');}
   else if(page==='finanzas'){activarPrimerTab('fin','ordenes');renderModPane('fin','ordenes');}
   else if(page==='seguridad')renderSeguridad();
@@ -3979,6 +4042,9 @@ function renderModPane(mod,pane){
   else if(k==='rrhh-tareas')renderTareas();
   else if(k==='rrhh-personal')renderPersonal();
   else if(k==='rrhh-costorrhh')renderCostoRRHH();
+  else if(k==='op-tablero'){renderTableroOp();}
+  else if(k==='op-voladuras'){renderVoladuras();}
+  else if(k==='op-valorizaciones'){}
   else if(k==='op-avance'){renderAvance();}
   else if(k==='op-solicitudes')renderSolicitudesPendientesOp();
   else if(k==='op-vsproyectado')renderResidente();
@@ -7062,6 +7128,184 @@ function guardarReunion(){
   else state.reuniones.push(rep);
   reunionesSave();cerrarModal('modal-reunion');renderReuniones();
   showNotif('✓ Reporte de reunión guardado');
+}
+
+// ════════════════════════════════════════════════════
+//  TABLERO DE OPERACIONES (Jefe de Operaciones)
+// ════════════════════════════════════════════════════
+function renderTableroOp(){
+  if(typeof reportesGuardiaLoad==='function')reportesGuardiaLoad();
+  if(typeof metasLoad==='function')metasLoad();
+  if(typeof distribLoad==='function')distribLoad();
+  if(typeof voladurasLoad==='function')voladurasLoad();
+  const ts=hoy(), mesAct=ts.slice(0,7);
+  const rg=(state.reportesGuardia||[]);
+  const rgMes=rg.filter(r=>(r.fecha||'').slice(0,7)===mesAct);
+  const rgHoy=rg.filter(r=>r.fecha===ts);
+  const sumF=(arr,f,k)=>arr.reduce((s,r)=>s+(r[f]?.[k]||0),0);
+  // Avance
+  const hoyF1=sumF(rgHoy,'brenda','metros'),hoyF2=sumF(rgHoy,'crne','metros');
+  const mesF1=sumF(rgMes,'brenda','metros'),mesF2=sumF(rgMes,'crne','metros');
+  const dias=state.metas.dias||26;
+  const metaMesF1=state.metas.mensualF1||(state.metas.f1*dias)||520;
+  const metaMesF2=state.metas.mensualF2||(state.metas.f2*dias)||520;
+  const pcF1=metaMesF1>0?Math.round((mesF1/metaMesF1)*100):0;
+  const pcF2=metaMesF2>0?Math.round((mesF2/metaMesF2)*100):0;
+  const pcTot=(metaMesF1+metaMesF2)>0?Math.round(((mesF1+mesF2)/(metaMesF1+metaMesF2))*100):0;
+  // Taladros hoy
+  const tperfHoy=sumF(rgHoy,'brenda','tperf')+sumF(rgHoy,'crne','tperf');
+  const tcargHoy=sumF(rgHoy,'brenda','tcarg')+sumF(rgHoy,'crne','tcarg');
+  // Personal distribuido
+  const dist=state.distribucion||{};
+  const persF1=Object.values(dist).filter(f=>f==1).length;
+  const persF2=Object.values(dist).filter(f=>f==2).length;
+  // Voladuras hoy
+  const vols=(state.voladuras||[]);
+  const volHoy=vols.filter(v=>v.fecha===ts);
+  const volEjec=volHoy.filter(v=>v.estado==='ejecutado').length;
+  // Días transcurridos hábiles (aprox por fecha del mes)
+  const diaDelMes=parseInt(ts.slice(8,10),10);
+  const lbl=document.getElementById('tab-mes-label');if(lbl)lbl.textContent=`mes ${mesAct} · día ${diaDelMes}`;
+  // KPIs
+  const kpis=document.getElementById('tab-kpis');
+  if(kpis)kpis.innerHTML=`
+    <div class="kpi-card"><div class="kpi-label">Avance Hoy</div><div class="kpi-value gold">${(hoyF1+hoyF2).toFixed(1)} m</div><div class="kpi-sub">Brenda ${hoyF1.toFixed(1)} · CRNE ${hoyF2.toFixed(1)}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Avance Mes</div><div class="kpi-value blue">${(mesF1+mesF2).toFixed(1)} m</div><div class="kpi-sub">meta ${metaMesF1+metaMesF2} m</div></div>
+    <div class="kpi-card"><div class="kpi-label">Cumplimiento Mes</div><div class="kpi-value ${pcTot>=100?'green':(pcTot>=60?'warn':'red')}">${pcTot}%</div><div class="kpi-sub">del programa</div></div>
+    <div class="kpi-card"><div class="kpi-label">Taladros Hoy</div><div class="kpi-value warn">${tperfHoy} / ${tcargHoy}</div><div class="kpi-sub">perf. / carg.</div></div>
+    <div class="kpi-card"><div class="kpi-label">Personal en Frentes</div><div class="kpi-value blue">${persF1+persF2}</div><div class="kpi-sub">Brenda ${persF1} · CRNE ${persF2}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Disparos Hoy</div><div class="kpi-value gold">${volEjec}/${volHoy.length}</div><div class="kpi-sub">ejec. / total</div></div>`;
+  // Frentes
+  const frenteCard=(nom,color,mes,meta,pc,hoyM,pers,ritmoObj)=>`
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div class="section-title" style="margin:0;font-size:13px;color:${color}">${nom}</div>
+        <span class="vs-pct ${pc>=100?'over':'under'}">${pc}%</span>
+      </div>
+      <div class="progress-row"><div class="progress-bar" style="height:8px"><div class="progress-fill ${pc>=100?'green':'red'}" style="width:${Math.min(100,pc)}%"></div></div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px">
+        <div><div style="font-size:10px;color:var(--text3)">Avance mes</div><div style="font-size:13px;font-weight:700;color:var(--text)">${mes.toFixed(1)} / ${meta} m</div></div>
+        <div><div style="font-size:10px;color:var(--text3)">Hoy</div><div style="font-size:13px;font-weight:700;color:var(--text)">${hoyM.toFixed(1)} m</div></div>
+        <div><div style="font-size:10px;color:var(--text3)">Personal</div><div style="font-size:13px;font-weight:700;color:var(--text)">${pers}</div></div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:8px">Ritmo objetivo: ${ritmoObj} m/día</div>
+    </div>`;
+  const tf=document.getElementById('tab-frentes');
+  if(tf)tf.innerHTML='<div class="two-col">'+
+    frenteCard('🟦 RA Brenda','#60a5fa',mesF1,metaMesF1,pcF1,hoyF1,persF1,(metaMesF1/dias).toFixed(1))+
+    frenteCard('🟩 CRNE','#34d399',mesF2,metaMesF2,pcF2,hoyF2,persF2,(metaMesF2/dias).toFixed(1))+
+    '</div>';
+  // Alertas
+  const alertas=[];
+  const avanceEsperado=diaDelMes/dias; // proporción ideal del mes
+  if(metaMesF1>0 && (mesF1/metaMesF1) < avanceEsperado-0.1) alertas.push(`🟦 RA Brenda atrasada: ${pcF1}% avanzado vs ${Math.round(avanceEsperado*100)}% esperado a la fecha.`);
+  if(metaMesF2>0 && (mesF2/metaMesF2) < avanceEsperado-0.1) alertas.push(`🟩 CRNE atrasada: ${pcF2}% avanzado vs ${Math.round(avanceEsperado*100)}% esperado a la fecha.`);
+  if(!rgHoy.length) alertas.push('📋 Aún no se registra el Reporte de Jefe de Guardia de hoy.');
+  if(!Object.keys(dist).length) alertas.push('👥 No hay distribución de personal definida por el Ing. Residente.');
+  const ta=document.getElementById('tab-alertas');
+  if(ta)ta.innerHTML=alertas.length?
+    `<div class="card" style="border-left:3px solid #fbbf24"><div class="section-title" style="margin-top:0;font-size:13px;color:#fbbf24">⚠ Alertas Operativas</div>${alertas.map(a=>`<div style="font-size:12px;color:var(--text2);padding:5px 0;border-bottom:1px solid var(--border)">${a}</div>`).join('')}</div>`:
+    `<div class="card" style="border-left:3px solid #34d399"><div style="font-size:12px;color:#34d399;font-weight:600">✅ Sin alertas — operación dentro de programa.</div></div>`;
+}
+
+// ════════════════════════════════════════════════════
+//  CONTROL DE VOLADURAS
+// ════════════════════════════════════════════════════
+const VOL_KEY='atmin_voladuras';
+function voladurasLoad(){try{const d=localStorage.getItem(VOL_KEY);if(d)state.voladuras=JSON.parse(d)||[];}catch(e){}}
+function voladurasSave(){try{localStorage.setItem(VOL_KEY,JSON.stringify(state.voladuras||[]));}catch(e){}}
+const VOL_FL={1:'🟦 RA Brenda',2:'🟩 CRNE'};
+const VOL_ESTADO={ejecutado:{t:'✅ Ejecutado',c:'#34d399'},programado:{t:'🕒 Programado',c:'#fbbf24'},fallido:{t:'⚠ Fallado',c:'#f87171'}};
+function volExploOptions(sel){
+  return (typeof EXPLO_CATALOGO!=='undefined'?EXPLO_CATALOGO:[]).map(c=>`<option value="${c.id}" ${sel===c.id?'selected':''}>${c.nombre}</option>`).join('');
+}
+function volAddExploRow(id,cant){
+  const wrap=document.getElementById('vol-explo-rows');
+  const div=document.createElement('div');
+  div.className='vol-explo-row';
+  div.style.cssText='display:grid;grid-template-columns:2fr 1fr auto;gap:8px;margin-bottom:6px';
+  div.innerHTML=`<select class="vol-explo-id" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px"><option value="">— Explosivo —</option>${volExploOptions(id)}</select>
+    <input type="number" class="vol-explo-cant" min="0" step="1" placeholder="Cant." value="${cant||''}" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
+    <button class="btn btn-outline" style="font-size:11px;padding:4px 10px;color:#f87171;border-color:#f87171" onclick="this.parentElement.remove()">✕</button>`;
+  wrap.appendChild(div);
+}
+function abrirModalVoladura(){
+  const g=id=>document.getElementById(id);
+  g('vol-id').value='';g('vol-fecha').value=hoy();g('vol-turno').value='Día';g('vol-frente').value='1';
+  g('vol-estado').value='ejecutado';g('vol-avance').value='';g('vol-tperf').value='';g('vol-tcarg').value='';g('vol-obs').value='';
+  g('vol-explo-rows').innerHTML='';volAddExploRow();
+  abrirModal('modal-voladura');
+}
+function editarVoladura(id){
+  const v=(state.voladuras||[]).find(x=>x.id===id);if(!v)return;
+  const g=i=>document.getElementById(i);
+  g('vol-id').value=v.id;g('vol-fecha').value=v.fecha||hoy();g('vol-turno').value=v.turno||'Día';g('vol-frente').value=v.frente||1;
+  g('vol-estado').value=v.estado||'ejecutado';g('vol-avance').value=v.avance||'';g('vol-tperf').value=v.tperf||'';g('vol-tcarg').value=v.tcarg||'';g('vol-obs').value=v.obs||'';
+  g('vol-explo-rows').innerHTML='';
+  (v.explosivos&&v.explosivos.length?v.explosivos:[{}]).forEach(e=>volAddExploRow(e.id,e.cant));
+  abrirModal('modal-voladura');
+}
+function eliminarVoladura(id){
+  if(!confirm('¿Eliminar este disparo?'))return;
+  state.voladuras=(state.voladuras||[]).filter(v=>v.id!==id);
+  voladurasSave();renderVoladuras();showNotif('✓ Disparo eliminado');
+}
+function guardarVoladura(){
+  const g=i=>document.getElementById(i);const n=i=>parseFloat(g(i).value)||0;
+  const fecha=g('vol-fecha').value;
+  if(!fecha){showNotif('⚠ Indique la fecha','error');return;}
+  const explosivos=[];
+  document.querySelectorAll('#vol-explo-rows .vol-explo-row').forEach(row=>{
+    const eid=row.querySelector('.vol-explo-id')?.value;
+    const cant=parseFloat(row.querySelector('.vol-explo-cant')?.value)||0;
+    if(eid&&cant>0)explosivos.push({id:eid,cant});
+  });
+  const v={id:g('vol-id').value||'VL'+Date.now(),fecha,turno:g('vol-turno').value,frente:parseInt(g('vol-frente').value,10),
+    estado:g('vol-estado').value,avance:n('vol-avance'),tperf:n('vol-tperf'),tcarg:n('vol-tcarg'),
+    explosivos,obs:g('vol-obs').value.trim(),creadoEn:Date.now()};
+  if(!state.voladuras)state.voladuras=[];
+  const idx=state.voladuras.findIndex(x=>x.id===v.id);
+  if(idx>=0){v.creadoEn=state.voladuras[idx].creadoEn||v.creadoEn;state.voladuras[idx]=v;}
+  else state.voladuras.push(v);
+  voladurasSave();cerrarModal('modal-voladura');renderVoladuras();
+  showNotif('✓ Disparo registrado');
+}
+function exploNombre(id){const c=(typeof EXPLO_CATALOGO!=='undefined'?EXPLO_CATALOGO:[]).find(x=>x.id===id);return c?c.nombre:id;}
+function renderVoladuras(){
+  voladurasLoad();
+  const ts=hoy();
+  const vols=[...(state.voladuras||[])].sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')||(b.creadoEn||0)-(a.creadoEn||0));
+  const hoyV=vols.filter(v=>v.fecha===ts);
+  const ejecHoy=hoyV.filter(v=>v.estado==='ejecutado').length;
+  const avanceHoy=hoyV.reduce((s,v)=>s+(v.avance||0),0);
+  // Explosivos consumidos hoy (total unidades)
+  const exploHoy=hoyV.reduce((s,v)=>s+(v.explosivos||[]).reduce((ss,e)=>ss+(e.cant||0),0),0);
+  const k=document.getElementById('vol-kpis');
+  if(k)k.innerHTML=`
+    <div class="kpi-card"><div class="kpi-label">Disparos Hoy</div><div class="kpi-value gold">${hoyV.length}</div><div class="kpi-sub">${ejecHoy} ejecutados</div></div>
+    <div class="kpi-card"><div class="kpi-label">Avance por Voladura Hoy</div><div class="kpi-value blue">${avanceHoy.toFixed(1)} m</div></div>
+    <div class="kpi-card"><div class="kpi-label">Explosivos Hoy</div><div class="kpi-value warn">${exploHoy}</div><div class="kpi-sub">unidades consumidas</div></div>
+    <div class="kpi-card"><div class="kpi-label">Disparos Registrados</div><div class="kpi-value gold">${vols.length}</div></div>`;
+  const wrap=document.getElementById('vol-lista');if(!wrap)return;
+  if(!vols.length){wrap.innerHTML='<div class="card"><div class="empty-state">Sin disparos registrados. Registra el primero con ➕.</div></div>';return;}
+  wrap.innerHTML=vols.map(v=>{
+    const est=VOL_ESTADO[v.estado]||VOL_ESTADO.ejecutado;
+    const explo=(v.explosivos||[]).map(e=>`${exploNombre(e.id)}: ${e.cant}`).join(' · ')||'—';
+    return `<div class="card" style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--text)">${fmtF(v.fecha)} · ${v.turno} · ${VOL_FL[v.frente]||'Frente'}</div>
+          <div style="font-size:12px;color:var(--text3)"><span style="color:${est.c};font-weight:600">${est.t}</span> · Avance: <strong style="color:var(--text2)">${(v.avance||0).toFixed(1)} m</strong> · Taladros: ${v.tperf||0}/${v.tcarg||0}</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-outline" style="font-size:11px;padding:5px 12px" onclick="editarVoladura('${v.id}')">✎</button>
+          <button class="btn btn-outline" style="font-size:11px;padding:5px 12px;color:#f87171;border-color:#f87171" onclick="eliminarVoladura('${v.id}')">🗑</button>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--text2)"><strong style="color:var(--text3)">💣 Explosivos:</strong> ${explo}</div>
+      ${v.obs?`<div style="font-size:12px;color:var(--text3);margin-top:4px">📝 ${v.obs}</div>`:''}
+    </div>`;
+  }).join('');
 }
 function renderDistribucion(){
   [1,2].forEach(f=>{
