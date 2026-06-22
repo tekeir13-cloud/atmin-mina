@@ -2585,13 +2585,14 @@ select option{background:var(--coal3);}
       <div class="section-title" style="margin-top:0">🛒 Solicitudes de Compra — Pendientes de tu aprobación</div>
       <div id="op-sc-wrap"></div>
     </div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:8px">📅 Métricas del día <strong id="op-fecha-hoy" style="color:var(--text2)"></strong> — suma de ambos turnos (Día + Noche). Se reinician cada día.</div>
     <div class="kpi-grid">
-      <div class="kpi-card"><div class="kpi-label">Metros Hoy (Total)</div><div class="kpi-value gold" id="op-metros-hoy">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Metros Hoy RA Brenda</div><div class="kpi-value blue" id="op-f1-hoy">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Metros Hoy CRNE</div><div class="kpi-value green" id="op-f2-hoy">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Meta Diaria</div><div class="kpi-value warn" id="op-meta">20 m</div><div class="kpi-sub">por frente</div></div>
-      <div class="kpi-card"><div class="kpi-label">Total Mes</div><div class="kpi-value gold" id="op-mes">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Prom. Diario</div><div class="kpi-value blue" id="op-prom">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Avance Hoy (Total)</div><div class="kpi-value gold" id="op-metros-hoy">—</div><div class="kpi-sub">RA Brenda + CRNE</div></div>
+      <div class="kpi-card"><div class="kpi-label">Avance RA Brenda</div><div class="kpi-value blue" id="op-f1-hoy">—</div><div class="kpi-sub" id="op-f1-sost">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Avance CRNE</div><div class="kpi-value green" id="op-f2-hoy">—</div><div class="kpi-sub" id="op-f2-sost">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Taladros Perforados Hoy</div><div class="kpi-value warn" id="op-tperf-hoy">—</div><div class="kpi-sub">ambos frentes</div></div>
+      <div class="kpi-card"><div class="kpi-label">Taladros Cargados Hoy</div><div class="kpi-value gold" id="op-tcarg-hoy">—</div><div class="kpi-sub">ambos frentes</div></div>
+      <div class="kpi-card"><div class="kpi-label">Reportes Hoy</div><div class="kpi-value blue" id="op-rep-hoy">—</div><div class="kpi-sub">turnos cargados</div></div>
     </div>
     <div class="card" style="margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
       <div>
@@ -6958,14 +6959,22 @@ function renderAvance(){
   reportesGuardiaLoad();
   const ts=hoy();
   const rg=state.reportesGuardia||[];
-  const f1h=rg.filter(r=>r.fecha===ts).reduce((s,r)=>s+(r.brenda?.metros||0),0);
-  const f2h=rg.filter(r=>r.fecha===ts).reduce((s,r)=>s+(r.crne?.metros||0),0);
-  const tm=rg.reduce((s,r)=>s+(r.brenda?.metros||0)+(r.crne?.metros||0),0);
-  const dias=new Set(rg.map(r=>r.fecha)).size;
-  const pr=dias>0?(tm/dias).toFixed(1):0;
-  document.getElementById('op-metros-hoy').textContent=(f1h+f2h).toFixed(1)+' m';
-  document.getElementById('op-f1-hoy').textContent=f1h.toFixed(1)+' m';document.getElementById('op-f2-hoy').textContent=f2h.toFixed(1)+' m';
-  document.getElementById('op-mes').textContent=tm.toFixed(1)+' m';document.getElementById('op-prom').textContent=pr+' m';
+  // Solo reportes del día actual → suma ambos turnos. Cambia de día = se reinicia.
+  const hoyRep=rg.filter(r=>r.fecha===ts);
+  const sum=(f,k)=>hoyRep.reduce((s,r)=>s+(r[f]?.[k]||0),0);
+  const f1h=sum('brenda','metros'),f2h=sum('crne','metros');
+  const brCimbra=sum('brenda','cimbra');
+  const crPerno=sum('crne','perno'),crMalla=sum('crne','malla');
+  const tperf=sum('brenda','tperf')+sum('crne','tperf');
+  const tcarg=sum('brenda','tcarg')+sum('crne','tcarg');
+  const g=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+  g('op-fecha-hoy',fmtF(ts));
+  g('op-metros-hoy',(f1h+f2h).toFixed(1)+' m');
+  g('op-f1-hoy',f1h.toFixed(1)+' m');g('op-f2-hoy',f2h.toFixed(1)+' m');
+  g('op-f1-sost',brCimbra>0?brCimbra+' cimbra':'sin cimbra');
+  g('op-f2-sost',(crPerno||crMalla)?`${crPerno} perno · ${crMalla} malla`:'sin sost.');
+  g('op-tperf-hoy',tperf);g('op-tcarg-hoy',tcarg);
+  g('op-rep-hoy',hoyRep.length);
   const wrap=document.getElementById('rg-lista');if(!wrap)return;
   const lista=[...rg].sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')||(b.creadoEn||0)-(a.creadoEn||0));
   if(!lista.length){wrap.innerHTML='<div class="card"><div class="empty-state">Sin reportes registrados. Genera el primero con el botón ➕.</div></div>';return;}
