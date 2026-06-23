@@ -2590,9 +2590,17 @@ select option{background:var(--coal3);}
         <button class="btn btn-outline" id="val-btn-del" onclick="eliminarValorizacion()" style="display:none;color:#f87171;border-color:#f87171">🗑 Eliminar</button>
       </div>
     </div>
+    <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap" id="val-viewtoggle">
+      <button class="btn btn-outline" id="val-tab-detalle" onclick="setValView('detalle')" style="font-size:12px;padding:7px 16px">📋 Detalle del Mes</button>
+      <button class="btn btn-outline" id="val-tab-anual" onclick="setValView('anual')" style="font-size:12px;padding:7px 16px">📈 Comparativo Anual</button>
+    </div>
     <div id="val-selector" style="margin-bottom:14px;display:none">
       <label style="font-size:12px;color:var(--text3);margin-right:8px">Periodo:</label>
       <select id="val-periodo" onchange="renderValorizacionOp()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:13px"></select>
+    </div>
+    <div id="val-anio-selector" style="margin-bottom:14px;display:none">
+      <label style="font-size:12px;color:var(--text3);margin-right:8px">Año:</label>
+      <select id="val-anio" onchange="renderValorizacionAnual()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:13px"></select>
     </div>
     <div id="val-contenido"></div>
   </div>
@@ -7179,6 +7187,25 @@ function valRubro(sact){
   return 'Complementarios';
 }
 const VAL_RUBRO_COLOR={'Avance':'#fbbf24','Sostenimiento':'#60a5fa','Acarreo / Limpieza':'#a78bfa','Operación de Equipos':'#f87171','Complementarios':'#34d399'};
+const VAL_MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const VAL_MESES_ABR=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+function valParsePeriodo(titulo){
+  const up=(titulo||'').toUpperCase();
+  let mesNum=0,anio=0;
+  const claves=['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+  claves.forEach((m,i)=>{if(up.includes(m))mesNum=i+1;});
+  if(!mesNum&&up.includes('SETIEMBRE'))mesNum=9; // variante peruana
+  const ym=up.match(/(20\d{2})/);if(ym)anio=parseInt(ym[1],10);
+  return {mesNum,anio};
+}
+let _valView='detalle';
+function setValView(v){
+  _valView=v;
+  const td=document.getElementById('val-tab-detalle'),ta=document.getElementById('val-tab-anual');
+  if(td)td.className='btn '+(v==='detalle'?'btn-gold':'btn-outline');
+  if(ta)ta.className='btn '+(v==='anual'?'btn-gold':'btn-outline');
+  if(v==='detalle')renderValorizacionOp();else renderValorizacionAnual();
+}
 
 async function importarValorizacion(input){
   const file=input.files&&input.files[0];if(!file)return;
@@ -7253,9 +7280,12 @@ async function importarValorizacion(input){
     if(!total)total=subtotal+descuento;
     valLaborLoad();
     const id='VL'+Date.now();
-    const periodo=titulo.replace(/VALORIZACIÓN.*?-/i,'').trim()||titulo;
-    state.valorizacionesLabor=(state.valorizacionesLabor||[]).filter(v=>v.titulo!==titulo);
-    state.valorizacionesLabor.push({id,titulo,periodo,rows,subtotal,descuento,total,importadoEn:Date.now()});
+    const {mesNum,anio}=valParsePeriodo(titulo);
+    const periodo=(mesNum?VAL_MESES[mesNum-1]+' ':'')+(anio||'')||titulo.replace(/VALORIZACIÓN.*?-/i,'').trim()||titulo;
+    // Reemplaza si ya existe el mismo mes/año (o mismo título si no se pudo parsear)
+    state.valorizacionesLabor=(state.valorizacionesLabor||[]).filter(v=>
+      (mesNum&&anio)?!(v.mesNum===mesNum&&v.anio===anio):(v.titulo!==titulo));
+    state.valorizacionesLabor.push({id,titulo,periodo,mesNum,anio,rows,subtotal,descuento,total,importadoEn:Date.now()});
     valLaborSave();
     input.value='';
     renderValorizacionOp(id);
@@ -7288,13 +7318,18 @@ function exportarValorizacion(){
 }
 
 function renderValorizacionOp(forceId){
+  if(_valView==='anual')return renderValorizacionAnual();
   valLaborLoad();
   const cont=document.getElementById('val-contenido');if(!cont)return;
   const lista=state.valorizacionesLabor||[];
   const selWrap=document.getElementById('val-selector');
+  const anioWrap=document.getElementById('val-anio-selector');
+  const toggle=document.getElementById('val-viewtoggle');
   const btnExp=document.getElementById('val-btn-export'),btnDel=document.getElementById('val-btn-del');
+  if(anioWrap)anioWrap.style.display='none';
   if(!lista.length){
     if(selWrap)selWrap.style.display='none';
+    if(toggle)toggle.style.display='none';
     if(btnExp)btnExp.style.display='none';if(btnDel)btnDel.style.display='none';
     cont.innerHTML=`<div class="card"><div class="empty-state" style="padding:30px 20px">
       <div style="font-size:34px;margin-bottom:10px">📄</div>
@@ -7302,6 +7337,11 @@ function renderValorizacionOp(forceId){
       <div style="font-size:12px;color:var(--text3);max-width:440px;margin:0 auto">Haz clic en <strong>📥 Importar Excel</strong> y sube tu archivo de valorización (formato "Compra de Labor"). La app extraerá las partidas, calculará el resumen por rubro y frente, y el costo por metro avanzado para tu toma de decisiones.</div>
     </div></div>`;
     return;
+  }
+  if(toggle)toggle.style.display='flex';
+  if(document.getElementById('val-tab-detalle')&&document.getElementById('val-tab-detalle').className.indexOf('btn-gold')<0&&_valView==='detalle'){
+    document.getElementById('val-tab-detalle').className='btn btn-gold';
+    document.getElementById('val-tab-anual').className='btn btn-outline';
   }
   if(selWrap)selWrap.style.display='block';
   if(btnExp)btnExp.style.display='inline-block';if(btnDel)btnDel.style.display='inline-block';
@@ -7397,6 +7437,107 @@ function renderValorizacionOp(forceId){
   </table></div></div>`;
 
   cont.innerHTML=kpis+alHtml+`<div class="two-col">${rubroHtml}${laborHtml}</div>`+tabla;
+}
+
+let _valChartTotal=null,_valChartRubro=null;
+function renderValorizacionAnual(){
+  valLaborLoad();
+  const cont=document.getElementById('val-contenido');if(!cont)return;
+  const lista=(state.valorizacionesLabor||[]).filter(v=>v.mesNum&&v.anio);
+  const selWrap=document.getElementById('val-selector');
+  const anioWrap=document.getElementById('val-anio-selector');
+  const toggle=document.getElementById('val-viewtoggle');
+  const btnExp=document.getElementById('val-btn-export'),btnDel=document.getElementById('val-btn-del');
+  if(selWrap)selWrap.style.display='none';
+  if(btnExp)btnExp.style.display='none';if(btnDel)btnDel.style.display='none';
+  if(toggle)toggle.style.display='flex';
+  if(_valChartTotal){_valChartTotal.destroy();_valChartTotal=null;}
+  if(_valChartRubro){_valChartRubro.destroy();_valChartRubro=null;}
+  if(!lista.length){
+    if(anioWrap)anioWrap.style.display='none';
+    cont.innerHTML=`<div class="card"><div class="empty-state" style="padding:30px 20px">
+      <div style="font-size:34px;margin-bottom:10px">📅</div>
+      <div style="font-size:14px;color:var(--text2);font-weight:600;margin-bottom:6px">Sin datos para el comparativo anual</div>
+      <div style="font-size:12px;color:var(--text3);max-width:440px;margin:0 auto">Importa valorizaciones con mes y año en el título (ej. "...TEMUAL - MAYO 2026") para ver la evolución mes a mes del año.</div>
+    </div></div>`;
+    return;
+  }
+  // Selector de año
+  const anios=[...new Set(lista.map(v=>v.anio))].sort((a,b)=>b-a);
+  if(anioWrap)anioWrap.style.display='block';
+  const selA=document.getElementById('val-anio');
+  const anioCur=parseInt(selA&&selA.value)||anios[0];
+  if(selA)selA.innerHTML=anios.map(a=>`<option value="${a}" ${a===anioCur?'selected':''}>${a}</option>`).join('');
+  const delAnio=lista.filter(v=>v.anio===anioCur);
+
+  // Datos por mes (1-12)
+  const porMes={};delAnio.forEach(v=>{porMes[v.mesNum]=v;});
+  const meses=Object.keys(porMes).map(Number).sort((a,b)=>a-b);
+  // Rubros acumulados por mes
+  const rubrosMes={};meses.forEach(m=>{
+    const v=porMes[m];const acc={};
+    (v.rows||[]).forEach(r=>{const ru=valRubro(r.sact);acc[ru]=(acc[ru]||0)+r.importe;});
+    rubrosMes[m]=acc;
+  });
+  const RUBROS=['Avance','Sostenimiento','Acarreo / Limpieza','Operación de Equipos','Complementarios'];
+
+  // Totales del año
+  const totAnio=meses.reduce((s,m)=>s+(porMes[m].total||0),0);
+  const subAnio=meses.reduce((s,m)=>s+(porMes[m].subtotal||0),0);
+  const descAnio=meses.reduce((s,m)=>s+(porMes[m].descuento||0),0);
+  const metrosAnio=meses.reduce((s,m)=>s+(rubrosMes[m]['Avance']?
+    (porMes[m].rows||[]).filter(r=>valRubro(r.sact)==='Avance'&&/^M\b/i.test(r.und||'')).reduce((ss,r)=>ss+r.cant,0):0),0);
+  const promMes=meses.length?totAnio/meses.length:0;
+
+  const fmtBig=(n,color,prefix='S/')=>{const abs=Math.abs(n),neg=n<0;
+    return `<div style="display:flex;align-items:baseline;gap:4px;flex-wrap:nowrap"><span style="font-size:13px;font-weight:600;color:${color};opacity:0.7">${prefix}</span><span style="font-size:22px;font-weight:800;color:${color};white-space:nowrap">${neg?'−':''}${abs.toLocaleString('es-PE',{maximumFractionDigits:0})}</span></div>`;};
+
+  const kpis=`<div class="kpi-grid">
+    <div class="kpi-card"><div class="kpi-label">Total Año ${anioCur}</div>${fmtBig(totAnio,'#fbbf24')}<div class="kpi-sub">${meses.length} meses</div></div>
+    <div class="kpi-card"><div class="kpi-label">Sub Total Año</div>${fmtBig(subAnio,'#60a5fa')}</div>
+    <div class="kpi-card"><div class="kpi-label">Descuento Año</div>${fmtBig(Math.abs(descAnio),'#f87171','−S/')}</div>
+    <div class="kpi-card"><div class="kpi-label">Promedio Mensual</div>${fmtBig(promMes,'#34d399')}</div>
+    <div class="kpi-card"><div class="kpi-label">Metros Año</div><div style="display:flex;align-items:baseline;gap:4px"><span style="font-size:22px;font-weight:800;color:#a78bfa">${metrosAnio.toFixed(0)}</span><span style="font-size:13px;color:#a78bfa;opacity:0.7">m</span></div></div>
+  </div>`;
+
+  cont.innerHTML=kpis+
+    `<div class="card"><div class="section-title" style="margin-top:0">📈 Total Liquidación Mes a Mes — ${anioCur}</div><div style="height:280px"><canvas id="val-chart-total"></canvas></div></div>`+
+    `<div class="card"><div class="section-title" style="margin-top:0">📊 Costo por Rubro Mes a Mes — ${anioCur}</div><div style="height:300px"><canvas id="val-chart-rubro"></canvas></div></div>`+
+    `<div class="card"><div class="section-title" style="margin-top:0">📋 Resumen Anual</div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap">
+      <thead><tr style="color:var(--text3);text-align:right;border-bottom:1px solid var(--border)"><th style="padding:6px 8px;text-align:left">Mes</th><th style="padding:6px 8px">Sub Total</th><th style="padding:6px 8px">Descuento</th><th style="padding:6px 8px">Total</th><th style="padding:6px 8px">Metros</th><th style="padding:6px 8px">S//m</th></tr></thead>
+      <tbody>${meses.map(m=>{const v=porMes[m];
+        const met=(v.rows||[]).filter(r=>valRubro(r.sact)==='Avance'&&/^M\b/i.test(r.und||'')).reduce((ss,r)=>ss+r.cant,0);
+        const cm=met>0?(rubrosMes[m]['Avance']||0)/met:0;
+        return `<tr style="border-bottom:1px solid var(--border);text-align:right"><td style="padding:5px 8px;text-align:left;color:var(--text)">${VAL_MESES[m-1]}</td><td style="padding:5px 8px;color:var(--text2)">${fmtS(v.subtotal)}</td><td style="padding:5px 8px;color:#f87171">${fmtS(v.descuento)}</td><td style="padding:5px 8px;color:var(--text);font-weight:600">${fmtS(v.total)}</td><td style="padding:5px 8px;color:var(--text2)">${met.toFixed(1)}</td><td style="padding:5px 8px;color:var(--text3)">${fmtS(cm)}</td></tr>`;}).join('')}</tbody>
+      <tfoot><tr style="border-top:2px solid var(--border);text-align:right;font-weight:700"><td style="padding:6px 8px;text-align:left;color:#fbbf24">TOTAL ${anioCur}</td><td style="padding:6px 8px;color:var(--text2)">${fmtS(subAnio)}</td><td style="padding:6px 8px;color:#f87171">${fmtS(descAnio)}</td><td style="padding:6px 8px;color:#fbbf24">${fmtS(totAnio)}</td><td style="padding:6px 8px;color:var(--text2)">${metrosAnio.toFixed(1)}</td><td></td></tr></tfoot>
+    </table></div></div>`;
+
+  // ── Gráficos ──
+  const labels=meses.map(m=>VAL_MESES_ABR[m-1]);
+  const gridColor='rgba(255,255,255,0.06)',tickColor='#9ca3af';
+  const ctxT=document.getElementById('val-chart-total');
+  if(ctxT&&typeof Chart!=='undefined'){
+    _valChartTotal=new Chart(ctxT,{
+      type:'bar',
+      data:{labels,datasets:[
+        {label:'Total Liquidación',data:meses.map(m=>porMes[m].total||0),backgroundColor:'#fbbf24',borderRadius:5,order:2},
+        {label:'Sub Total',type:'line',data:meses.map(m=>porMes[m].subtotal||0),borderColor:'#60a5fa',backgroundColor:'#60a5fa',tension:0.3,pointRadius:4,order:1}
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{labels:{color:tickColor,font:{size:11}}},tooltip:{callbacks:{label:c=>c.dataset.label+': S/ '+Math.round(c.raw).toLocaleString('es-PE')}}},
+        scales:{x:{grid:{color:gridColor},ticks:{color:tickColor}},y:{grid:{color:gridColor},ticks:{color:tickColor,callback:v=>'S/ '+(v/1000).toFixed(0)+'k'}}}}
+    });
+  }
+  const ctxR=document.getElementById('val-chart-rubro');
+  if(ctxR&&typeof Chart!=='undefined'){
+    _valChartRubro=new Chart(ctxR,{
+      type:'bar',
+      data:{labels,datasets:RUBROS.map(ru=>({label:ru,data:meses.map(m=>rubrosMes[m][ru]||0),backgroundColor:VAL_RUBRO_COLOR[ru],borderRadius:3}))},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{labels:{color:tickColor,font:{size:10},boxWidth:12}},tooltip:{callbacks:{label:c=>c.dataset.label+': S/ '+Math.round(c.raw).toLocaleString('es-PE')}}},
+        scales:{x:{stacked:true,grid:{color:gridColor},ticks:{color:tickColor}},y:{stacked:true,grid:{color:gridColor},ticks:{color:tickColor,callback:v=>'S/ '+(v/1000).toFixed(0)+'k'}}}}
+    });
+  }
 }
 
 function exploNombre(id){const c=(typeof EXPLO_CATALOGO!=='undefined'?EXPLO_CATALOGO:[]).find(x=>x.id===id);return c?c.nombre:id;}
