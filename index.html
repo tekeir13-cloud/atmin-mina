@@ -2593,6 +2593,7 @@ select option{background:var(--coal3);}
     <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap" id="val-viewtoggle">
       <button class="btn btn-outline" id="val-tab-detalle" onclick="setValView('detalle')" style="font-size:12px;padding:7px 16px">📋 Detalle del Mes</button>
       <button class="btn btn-outline" id="val-tab-anual" onclick="setValView('anual')" style="font-size:12px;padding:7px 16px">📈 Comparativo Anual</button>
+      <button class="btn btn-outline" id="val-tab-historial" onclick="setValView('historial')" style="font-size:12px;padding:7px 16px">🗂 Historial de Informes</button>
     </div>
     <div id="val-selector" style="margin-bottom:14px;display:none">
       <label style="font-size:12px;color:var(--text3);margin-right:8px">Periodo:</label>
@@ -7201,10 +7202,13 @@ function valParsePeriodo(titulo){
 let _valView='detalle';
 function setValView(v){
   _valView=v;
-  const td=document.getElementById('val-tab-detalle'),ta=document.getElementById('val-tab-anual');
+  const td=document.getElementById('val-tab-detalle'),ta=document.getElementById('val-tab-anual'),th=document.getElementById('val-tab-historial');
   if(td)td.className='btn '+(v==='detalle'?'btn-gold':'btn-outline');
   if(ta)ta.className='btn '+(v==='anual'?'btn-gold':'btn-outline');
-  if(v==='detalle')renderValorizacionOp();else renderValorizacionAnual();
+  if(th)th.className='btn '+(v==='historial'?'btn-gold':'btn-outline');
+  if(v==='detalle')renderValorizacionOp();
+  else if(v==='anual')renderValorizacionAnual();
+  else renderValorizacionHistorial();
 }
 
 async function importarValorizacion(input){
@@ -7538,6 +7542,76 @@ function renderValorizacionAnual(){
         scales:{x:{stacked:true,grid:{color:gridColor},ticks:{color:tickColor}},y:{stacked:true,grid:{color:gridColor},ticks:{color:tickColor,callback:v=>'S/ '+(v/1000).toFixed(0)+'k'}}}}
     });
   }
+}
+
+function renderValorizacionHistorial(){
+  valLaborLoad();
+  const cont=document.getElementById('val-contenido');if(!cont)return;
+  const selWrap=document.getElementById('val-selector'),anioWrap=document.getElementById('val-anio-selector');
+  const toggle=document.getElementById('val-viewtoggle');
+  const btnExp=document.getElementById('val-btn-export'),btnDel=document.getElementById('val-btn-del');
+  if(selWrap)selWrap.style.display='none';
+  if(anioWrap)anioWrap.style.display='none';
+  if(btnExp)btnExp.style.display='none';if(btnDel)btnDel.style.display='none';
+  if(toggle)toggle.style.display='flex';
+  if(_valChartTotal){_valChartTotal.destroy();_valChartTotal=null;}
+  if(_valChartRubro){_valChartRubro.destroy();_valChartRubro=null;}
+  const lista=(state.valorizacionesLabor||[]).slice().sort((a,b)=>{
+    if(a.anio!==b.anio)return (b.anio||0)-(a.anio||0);
+    return (b.mesNum||0)-(a.mesNum||0);
+  });
+  if(!lista.length){
+    cont.innerHTML=`<div class="card"><div class="empty-state" style="padding:30px 20px">
+      <div style="font-size:34px;margin-bottom:10px">🗂</div>
+      <div style="font-size:14px;color:var(--text2);font-weight:600;margin-bottom:6px">Sin informes guardados</div>
+      <div style="font-size:12px;color:var(--text3)">Importa tu primer Excel de valorización con el botón 📥 Importar Excel.</div>
+    </div></div>`;return;
+  }
+  // KPI resumen global
+  const nMeses=lista.length;
+  const totGlobal=lista.reduce((s,v)=>s+(v.total||0),0);
+  const descGlobal=lista.reduce((s,v)=>s+(v.descuento||0),0);
+  const anios=[...new Set(lista.filter(v=>v.anio).map(v=>v.anio))];
+  cont.innerHTML=`<div class="kpi-grid" style="margin-bottom:16px">
+    <div class="kpi-card"><div class="kpi-label">Informes Guardados</div><div style="font-size:28px;font-weight:800;color:#fbbf24">${nMeses}</div><div class="kpi-sub">${anios.join(', ')||'—'}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Total Acumulado</div><div style="display:flex;align-items:baseline;gap:4px"><span style="font-size:13px;font-weight:600;color:#fbbf24;opacity:.7">S/</span><span style="font-size:22px;font-weight:800;color:#fbbf24;white-space:nowrap">${Math.round(totGlobal).toLocaleString('es-PE')}</span></div></div>
+    <div class="kpi-card"><div class="kpi-label">Descuento Acumulado</div><div style="display:flex;align-items:baseline;gap:4px"><span style="font-size:13px;font-weight:600;color:#f87171;opacity:.7">−S/</span><span style="font-size:22px;font-weight:800;color:#f87171;white-space:nowrap">${Math.round(Math.abs(descGlobal)).toLocaleString('es-PE')}</span></div></div>
+  </div>
+  <div class="card">
+    <div class="section-title" style="margin-top:0">🗂 Todos los Informes Importados</div>
+    ${lista.map(v=>{
+      const rubros={};(v.rows||[]).forEach(r=>{const ru=valRubro(r.sact);rubros[ru]=(rubros[ru]||0)+r.importe;});
+      const topRubro=Object.entries(rubros).sort((a,b)=>b[1]-a[1])[0];
+      const metros=(v.rows||[]).filter(r=>valRubro(r.sact)==='Avance'&&/^M\b/i.test(r.und||'')).reduce((s,r)=>s+r.cant,0);
+      const costoM=metros>0?(rubros['Avance']||0)/metros:0;
+      const fechaImp=v.importadoEn?new Date(v.importadoEn).toLocaleDateString('es-PE',{day:'2-digit',month:'short',year:'numeric'}):'—';
+      return `<div class="card" style="margin-bottom:10px;border-left:3px solid #fbbf24;background:var(--coal3)">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--text)">${v.mesNum?VAL_MESES[v.mesNum-1]+' ':''} ${v.anio||''} <span style="font-size:11px;font-weight:400;color:var(--text3)">· ${v.rows?.length||0} partidas</span></div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">Importado: ${fechaImp}</div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn btn-outline" style="font-size:11px;padding:5px 12px" onclick="setValView('detalle');setTimeout(()=>{const s=document.getElementById('val-periodo');if(s){s.value='${v.id}';renderValorizacionOp('${v.id}');}},50)">👁 Ver</button>
+            <button class="btn btn-outline" style="font-size:11px;padding:5px 12px;color:#f87171;border-color:#f87171" onclick="valEliminarId('${v.id}')">🗑</button>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:10px">
+          <div><div style="font-size:10px;color:var(--text3)">TOTAL LIQUIDACIÓN</div><div style="font-size:15px;font-weight:700;color:#fbbf24">${fmtS(v.total)}</div></div>
+          <div><div style="font-size:10px;color:var(--text3)">SUB TOTAL</div><div style="font-size:14px;font-weight:600;color:var(--text2)">${fmtS(v.subtotal)}</div></div>
+          <div><div style="font-size:10px;color:var(--text3)">DESCUENTO ALMACÉN</div><div style="font-size:14px;font-weight:600;color:#f87171">${fmtS(v.descuento)}</div></div>
+          <div><div style="font-size:10px;color:var(--text3)">METROS AVANZADOS</div><div style="font-size:14px;font-weight:600;color:#34d399">${metros.toFixed(1)} m</div></div>
+          <div><div style="font-size:10px;color:var(--text3)">COSTO / METRO</div><div style="font-size:14px;font-weight:600;color:var(--text2)">${costoM>0?fmtS(costoM):'—'}</div></div>
+          ${topRubro?`<div><div style="font-size:10px;color:var(--text3)">MAYOR RUBRO</div><div style="font-size:12px;font-weight:600;color:${VAL_RUBRO_COLOR[topRubro[0]]||'var(--text2)'}">${topRubro[0]}</div></div>`:''}
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+function valEliminarId(id){
+  if(!confirm('¿Eliminar este informe?'))return;
+  state.valorizacionesLabor=(state.valorizacionesLabor||[]).filter(v=>v.id!==id);
+  valLaborSave();renderValorizacionHistorial();showNotif('✓ Informe eliminado');
 }
 
 function exploNombre(id){const c=(typeof EXPLO_CATALOGO!=='undefined'?EXPLO_CATALOGO:[]).find(x=>x.id===id);return c?c.nombre:id;}
