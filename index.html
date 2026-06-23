@@ -6685,14 +6685,19 @@ function renderServiciosTerceros(){
   const rows=registros.slice().reverse().map((r,ri)=>{
     const idx=registros.length-1-ri;
     const t=SERV_TIPOS.find(x=>x.id===r.tipo)||{label:r.tipo};
-    const foto=r.foto?`<a href="${r.foto}" target="_blank" style="color:#c9a84c;font-size:11px">📷 Ver vale</a>`:'<span style="color:var(--text3);font-size:11px">Sin foto</span>';
+    const foto=r.foto?`<a href="${r.foto}" target="_blank" style="color:#c9a84c;font-size:11px">📷 Vale</a>`:'<span style="color:var(--text3);font-size:11px">—</span>';
+    const fotoImp=r.fotoImpreso?`<a href="${r.fotoImpreso}" target="_blank" style="color:#22d3a5;font-size:11px">📸 Impreso</a>`:`<label style="cursor:pointer;font-size:11px;color:#60a5fa">📸 Subir<input type="file" accept="image/*" style="display:none" onchange="servFotoImpreso(${idx},this)"></label>`;
     return`<tr>
       <td style="padding:10px 8px;font-size:12px;color:var(--text2)">${r.fecha||''}</td>
       <td style="padding:10px 8px;font-size:12px">${t.label}${r.placa?` <span style="background:#1e293b;padding:2px 6px;border-radius:4px;font-size:11px;color:#c9a84c">${r.placa}</span>`:''}</td>
       <td style="padding:10px 8px;font-size:13px;font-weight:700;color:#22d3a5;text-align:right">S/ ${(parseFloat(r.monto)||0).toLocaleString('es-PE',{minimumFractionDigits:2})}</td>
       <td style="padding:10px 8px;font-size:12px;color:var(--text2)">${r.obs||'—'}</td>
       <td style="padding:10px 8px;text-align:center">${foto}</td>
-      <td style="padding:10px 8px;text-align:center"><button class="btn btn-outline" style="padding:4px 10px;font-size:11px;color:#f87171;border-color:#f87171" onclick="servEliminar(${idx})">🗑</button></td>
+      <td style="padding:10px 8px;text-align:center">${fotoImp}</td>
+      <td style="padding:10px 8px;text-align:center;white-space:nowrap">
+        <button class="btn btn-outline" style="padding:4px 9px;font-size:11px;color:#a3e635;border-color:#a3e635;margin-right:4px" onclick="servExcelLiquidacion(${idx})" title="Generar liquidación Excel">📄 Liquidación</button>
+        <button class="btn btn-outline" style="padding:4px 9px;font-size:11px;color:#f87171;border-color:#f87171" onclick="servEliminar(${idx})">🗑</button>
+      </td>
     </tr>`;
   }).join('');
   el.innerHTML=`
@@ -6745,7 +6750,10 @@ function renderServiciosTerceros(){
     <button class="btn btn-gold" style="margin-top:14px;width:100%;padding:12px" onclick="servRegistrar()">💾 Guardar Liquidación</button>
   </div>
   <div class="card">
-    <div class="section-title" style="margin-top:0">📋 Historial de Liquidaciones</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <div class="section-title" style="margin:0">📋 Historial de Liquidaciones</div>
+      <button class="btn btn-outline" style="font-size:12px;padding:6px 14px;color:#60a5fa;border-color:#60a5fa" onclick="servReporteMensual()">📊 Reporte Mensual</button>
+    </div>
     ${registros.length===0?'<div style="text-align:center;color:var(--text3);padding:24px">No hay liquidaciones registradas</div>':`
     <div style="overflow-x:auto">
     <table style="width:100%;border-collapse:collapse">
@@ -6755,7 +6763,8 @@ function renderServiciosTerceros(){
         <th style="padding:10px 8px;text-align:right;font-size:12px;color:var(--text3)">Monto</th>
         <th style="padding:10px 8px;text-align:left;font-size:12px;color:var(--text3)">Obs.</th>
         <th style="padding:10px 8px;text-align:center;font-size:12px;color:var(--text3)">Vale</th>
-        <th style="padding:10px 8px;text-align:center;font-size:12px;color:var(--text3)"></th>
+        <th style="padding:10px 8px;text-align:center;font-size:12px;color:var(--text3)">Liq. impresa</th>
+        <th style="padding:10px 8px;text-align:center;font-size:12px;color:var(--text3)">Acciones</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
@@ -6806,6 +6815,266 @@ function servEliminar(idx){
   servGuardar(arr);
   showNotif('Liquidación eliminada','warn');
   renderServiciosTerceros();
+}
+
+// Subir foto del documento impreso y firmado
+function servFotoImpreso(idx,inp){
+  const file=inp.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const arr=servCargar();
+    if(arr[idx]){arr[idx].fotoImpreso=e.target.result;servGuardar(arr);showNotif('Foto de liquidación impresa guardada','ok');renderServiciosTerceros();}
+  };
+  reader.readAsDataURL(file);
+}
+
+// Generar Excel de liquidación formal para imprimir
+async function servExcelLiquidacion(idx){
+  if(typeof ExcelJS==='undefined'){showNotif('Librería Excel no disponible','error');return;}
+  const arr=servCargar();
+  const r=arr[idx];if(!r){showNotif('Liquidación no encontrada','error');return;}
+  const t=SERV_TIPOS.find(x=>x.id===r.tipo)||{label:r.tipo||r.tipo};
+  const monto=parseFloat(r.monto)||0;
+  const proyecto=localStorage.getItem('atmin_fin_proyecto')||'Proyecto Minero';
+
+  const wb=new ExcelJS.Workbook();
+  wb.creator='ATMIN';
+  const ws=wb.addWorksheet('Liquidación',{pageSetup:{paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:1}});
+  ws.columns=[{width:6},{width:18},{width:20},{width:18},{width:20},{width:6}];
+
+  // ── Paleta de estilos ──
+  const azul='1E3A5F', dorado='B8860B', gris='4A4A4A', blanco='FFFFFF', fondoAzul='1E3A5F', fondoClaro='F0F4F8', fondoMedio='D9E2EC';
+  const borde={style:'thin',color:{argb:'AAAAAA'}};
+  const bordeAll={top:borde,left:borde,bottom:borde,right:borde};
+
+  const setStyle=(cell,opts)=>Object.assign(cell,'style' in cell?cell.style:{},{...opts});
+  const merge=(r1,c1,r2,c2)=>ws.mergeCells(r1,c1,r2,c2);
+  const cell=(row,col)=>ws.getCell(row,col);
+  const fill=(argb)=>({type:'pattern',pattern:'solid',fgColor:{argb}});
+  const font=(opts)=>({name:'Calibri',...opts});
+
+  let row=1;
+
+  // ══ ENCABEZADO ══
+  merge(row,1,row,6);
+  cell(row,1).value=proyecto.toUpperCase();
+  cell(row,1).style={font:font({bold:true,size:16,color:{argb:blanco}}),fill:fill(fondoAzul),alignment:{horizontal:'center',vertical:'middle'}};
+  ws.getRow(row).height=32; row++;
+
+  merge(row,1,row,6);
+  cell(row,1).value='LIQUIDACIÓN DE SERVICIO A TERCERO';
+  cell(row,1).style={font:font({bold:true,size:13,color:{argb:dorado}}),fill:fill(fondoAzul),alignment:{horizontal:'center',vertical:'middle'}};
+  ws.getRow(row).height=24; row++;
+
+  merge(row,1,row,6);
+  cell(row,1).value=''; ws.getRow(row).height=8; row++;
+
+  // ══ NÚMERO Y FECHA ══
+  const numLiq=String(idx+1).padStart(4,'0');
+  const fechaFmt=r.fecha?r.fecha.split('-').reverse().join('/'):'';
+
+  merge(row,1,row,3);
+  cell(row,1).value=`N° Liquidación: ${numLiq}`;
+  cell(row,1).style={font:font({bold:true,size:11,color:{argb:azul}}),fill:fill(fondoMedio),border:bordeAll,alignment:{horizontal:'left',indent:1}};
+  merge(row,4,row,6);
+  cell(row,4).value=`Fecha: ${fechaFmt}`;
+  cell(row,4).style={font:font({bold:true,size:11,color:{argb:azul}}),fill:fill(fondoMedio),border:bordeAll,alignment:{horizontal:'right',indent:1}};
+  ws.getRow(row).height=22; row++;
+
+  ws.getRow(row).height=8; row++;
+
+  // ══ DATOS DEL SERVICIO ══
+  const secHeader=(label)=>{
+    merge(row,1,row,6);
+    cell(row,1).value=label;
+    cell(row,1).style={font:font({bold:true,size:10,color:{argb:blanco}}),fill:fill(azul),alignment:{horizontal:'left',indent:1}};
+    ws.getRow(row).height=18; row++;
+  };
+  const fila2=(lbl,val)=>{
+    merge(row,1,row,2); cell(row,1).value=lbl;
+    cell(row,1).style={font:font({bold:true,size:10,color:{argb:gris}}),fill:fill(fondoClaro),border:bordeAll,alignment:{horizontal:'left',indent:1}};
+    merge(row,3,row,6); cell(row,3).value=val;
+    cell(row,3).style={font:font({size:10}),border:bordeAll,alignment:{horizontal:'left',indent:1}};
+    ws.getRow(row).height=18; row++;
+  };
+
+  secHeader('DATOS DEL SERVICIO');
+  fila2('Tipo de Servicio',t.label);
+  if(r.placa) fila2('Placa del Vehículo',r.placa);
+  fila2('Período / Fecha',fechaFmt);
+  fila2('Descripción / Detalle',r.obs||'—');
+  ws.getRow(row).height=8; row++;
+
+  // ══ MONTOS ══
+  secHeader('DETALLE DEL MONTO A PAGAR');
+
+  // Sub-encabezados
+  [1,2,3,4,5,6].forEach(c=>{
+    cell(row,c).style={font:font({bold:true,size:9,color:{argb:gris}}),fill:fill(fondoMedio),border:bordeAll,alignment:{horizontal:'center'}};
+  });
+  cell(row,1).value='Item';
+  merge(row,2,row,4); cell(row,2).value='Descripción';
+  merge(row,5,row,6); cell(row,5).value='Monto S/';
+  ws.getRow(row).height=18; row++;
+
+  // Fila del servicio
+  cell(row,1).value='1';
+  cell(row,1).style={border:bordeAll,alignment:{horizontal:'center'}};
+  merge(row,2,row,4); cell(row,2).value=t.label;
+  cell(row,2).style={font:font({size:10}),border:bordeAll,alignment:{horizontal:'left',indent:1}};
+  merge(row,5,row,6); cell(row,5).value=monto;
+  cell(row,5).style={font:font({size:10}),border:bordeAll,alignment:{horizontal:'right'},numFmt:'"S/ "#,##0.00'};
+  ws.getRow(row).height=18; row++;
+
+  // Total
+  merge(row,1,row,4); cell(row,1).value='TOTAL A PAGAR';
+  cell(row,1).style={font:font({bold:true,size:11,color:{argb:blanco}}),fill:fill(fondoAzul),border:bordeAll,alignment:{horizontal:'right',indent:1}};
+  merge(row,5,row,6); cell(row,5).value=monto;
+  cell(row,5).style={font:font({bold:true,size:12,color:{argb:'27AE60'}}),fill:fill('E8F8F0'),border:bordeAll,alignment:{horizontal:'right'},numFmt:'"S/ "#,##0.00'};
+  ws.getRow(row).height=24; row++;
+
+  ws.getRow(row).height=8; row++;
+
+  // ══ MONTO EN LETRAS ══
+  const enLetras=n=>{
+    const u=['','UN','DOS','TRES','CUATRO','CINCO','SEIS','SIETE','OCHO','NUEVE','DIEZ','ONCE','DOCE','TRECE','CATORCE','QUINCE','DIECISÉIS','DIECISIETE','DIECIOCHO','DIECINUEVE'];
+    const d=['','','VEINTE','TREINTA','CUARENTA','CINCUENTA','SESENTA','SETENTA','OCHENTA','NOVENTA'];
+    if(n===0)return'CERO';if(n<20)return u[n];if(n<100)return d[Math.floor(n/10)]+(n%10?(' Y '+u[n%10]):'');
+    if(n<1000){const c=Math.floor(n/100);return(c===1?'CIEN':((['','','DOSCIENTOS','TRESCIENTOS','CUATROCIENTOS','QUINIENTOS','SEISCIENTOS','SETECIENTOS','OCHOCIENTOS','NOVECIENTOS'][c])))+(n%100?' '+enLetras(n%100):'');}
+    if(n<1000000){const m=Math.floor(n/1000);return(m===1?'MIL':(enLetras(m)+' MIL'))+(n%1000?' '+enLetras(n%1000):'');}
+    return n.toString();
+  };
+  const entero=Math.floor(monto);
+  const cents=Math.round((monto-entero)*100);
+  const letras=`${enLetras(entero)} CON ${String(cents).padStart(2,'0')}/100 NUEVOS SOLES`;
+
+  merge(row,1,row,6); cell(row,1).value=`Son: ${letras}`;
+  cell(row,1).style={font:font({italic:true,size:10,color:{argb:gris}}),fill:fill(fondoClaro),border:bordeAll,alignment:{horizontal:'left',indent:1,wrapText:true}};
+  ws.getRow(row).height=24; row++;
+
+  ws.getRow(row).height=12; row++;
+
+  // ══ FIRMAS ══
+  secHeader('CONFORMIDAD Y FIRMAS');
+  ws.getRow(row).height=8; row++;
+
+  const firmaRow=row;
+  const firmas=[['Responsable del Servicio','Firma / Huella'],['Jefe de Área / Supervisor','Firma'],['Aprobado por Gerencia','V°B°']];
+  firmas.forEach(([cargo,tipo],fi)=>{
+    const c1=fi*2+1;
+    // Línea firma
+    merge(firmaRow,c1,firmaRow,c1+1);
+    cell(firmaRow,c1).style={border:{bottom:{style:'medium',color:{argb:azul}}},alignment:{horizontal:'center'}};
+    ws.getRow(firmaRow).height=44;
+  });
+  row++;
+  firmas.forEach(([cargo,tipo],fi)=>{
+    const c1=fi*2+1;
+    merge(row,c1,row,c1+1);
+    cell(row,c1).value=cargo;
+    cell(row,c1).style={font:font({bold:true,size:9,color:{argb:azul}}),alignment:{horizontal:'center'}};
+  });
+  ws.getRow(row).height=16; row++;
+  firmas.forEach(([cargo,tipo],fi)=>{
+    const c1=fi*2+1;
+    merge(row,c1,row,c1+1);
+    cell(row,c1).value=tipo;
+    cell(row,c1).style={font:font({italic:true,size:8,color:{argb:'888888'}}),alignment:{horizontal:'center'}};
+  });
+  ws.getRow(row).height=14; row++;
+
+  ws.getRow(row).height=12; row++;
+
+  // ══ PIE ══
+  merge(row,1,row,6);
+  cell(row,1).value=`Generado por ATMIN · ${fmtF(hoy())} · Documento interno — sujeto a verificación contable`;
+  cell(row,1).style={font:font({italic:true,size:8,color:{argb:'888888'}}),alignment:{horizontal:'center'}};
+
+  // Generar y descargar
+  const buf=await wb.xlsx.writeBuffer();
+  const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`liquidacion_${String(idx+1).padStart(4,'0')}_${r.fecha||hoy()}.xlsx`;
+  a.click();
+  showNotif('📄 Liquidación generada — imprima, firme y tome foto para guardar en el sistema','ok');
+}
+
+// Generar reporte mensual de pagos a terceros en Excel
+async function servReporteMensual(){
+  if(typeof ExcelJS==='undefined'){showNotif('Librería Excel no disponible','error');return;}
+  const arr=servCargar();
+  if(!arr.length){showNotif('No hay liquidaciones para reportar','warn');return;}
+
+  // Pedir mes al usuario via prompt simple
+  const mesSelec=prompt('Mes a reportar (YYYY-MM) — deja en blanco para todos los registros:', hoy().slice(0,7));
+  const filtrados=mesSelec?arr.filter(r=>(r.fecha||'').startsWith(mesSelec)):arr;
+  if(!filtrados.length){showNotif('No hay liquidaciones para ese período','warn');return;}
+
+  const proyecto=localStorage.getItem('atmin_fin_proyecto')||'Proyecto Minero';
+  const wb=new ExcelJS.Workbook();
+  wb.creator='ATMIN';
+  const ws=wb.addWorksheet('Reporte Terceros',{pageSetup:{paperSize:9,orientation:'landscape',fitToPage:true,fitToWidth:1}});
+  ws.columns=[{width:5},{width:14},{width:38},{width:10},{width:16},{width:12},{width:12},{width:12}];
+
+  const azul='1E3A5F', blanco='FFFFFF', fondoMedio='D9E2EC', fondoClaro='F0F4F8';
+  const borde={style:'thin',color:{argb:'BBBBBB'}};
+  const bordeAll={top:borde,left:borde,bottom:borde,right:borde};
+  const f=(opts)=>({name:'Calibri',...opts});
+  const fill=argb=>({type:'pattern',pattern:'solid',fgColor:{argb}});
+
+  let r=1;
+  ws.mergeCells(r,1,r,8);
+  ws.getCell(r,1).value=`${proyecto} — REPORTE DE PAGOS A TERCEROS${mesSelec?' — '+mesSelec:''}`;
+  ws.getCell(r,1).style={font:f({bold:true,size:14,color:{argb:blanco}}),fill:fill(azul),alignment:{horizontal:'center',vertical:'middle'}};
+  ws.getRow(r).height=28; r++;
+  ws.mergeCells(r,1,r,8);
+  ws.getCell(r,1).value=`Generado: ${fmtF(hoy())} · Total registros: ${filtrados.length}`;
+  ws.getCell(r,1).style={font:f({size:10,italic:true,color:{argb:'666666'}}),alignment:{horizontal:'center'}};
+  ws.getRow(r).height=18; r++;
+  ws.getRow(r).height=8; r++;
+
+  // Encabezados
+  const hdrs=['#','Fecha','Servicio','Placa','Monto S/','Vale','Liq. Impresa','Obs.'];
+  hdrs.forEach((h,ci)=>{
+    ws.getCell(r,ci+1).value=h;
+    ws.getCell(r,ci+1).style={font:f({bold:true,size:10,color:{argb:blanco}}),fill:fill(azul),border:bordeAll,alignment:{horizontal:'center'}};
+  });
+  ws.getRow(r).height=20; r++;
+
+  let total=0;
+  filtrados.forEach((reg,i)=>{
+    const tp=SERV_TIPOS.find(x=>x.id===reg.tipo)||{label:reg.tipo||''};
+    const m=parseFloat(reg.monto)||0;total+=m;
+    const isAlt=i%2===0;
+    const rowFill=fill(isAlt?fondoClaro:'FFFFFF');
+    const vals=[i+1,reg.fecha||'',tp.label,reg.placa||'—',m,reg.foto?'✔ Sí':'—',reg.fotoImpreso?'✔ Sí':'Pendiente',reg.obs||''];
+    vals.forEach((v,ci)=>{
+      const c=ws.getCell(r,ci+1);
+      c.value=v;
+      c.style={font:f({size:10}),fill:rowFill,border:bordeAll,
+        alignment:{horizontal:ci===4?'right':ci===0?'center':'left',indent:ci>0&&ci<4?1:0},
+        numFmt:ci===4?'"S/ "#,##0.00':''};
+    });
+    ws.getRow(r).height=18; r++;
+  });
+
+  // Fila total
+  ws.mergeCells(r,1,r,4);
+  ws.getCell(r,1).value='TOTAL PAGADO A TERCEROS';
+  ws.getCell(r,1).style={font:f({bold:true,size:11,color:{argb:blanco}}),fill:fill(azul),border:bordeAll,alignment:{horizontal:'right',indent:1}};
+  ws.getCell(r,5).value=total;
+  ws.getCell(r,5).style={font:f({bold:true,size:12,color:{argb:'27AE60'}}),fill:fill('E8F8F0'),border:bordeAll,alignment:{horizontal:'right'},numFmt:'"S/ "#,##0.00'};
+  [6,7,8].forEach(c=>{ws.getCell(r,c).style={fill:fill(fondoMedio),border:bordeAll};});
+  ws.getRow(r).height=24;
+
+  const buf=await wb.xlsx.writeBuffer();
+  const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`reporte_terceros${mesSelec?'_'+mesSelec:''}.xlsx`;
+  a.click();
+  showNotif(`📊 Reporte generado — ${filtrados.length} liquidaciones · S/ ${total.toLocaleString('es-PE',{minimumFractionDigits:2})} total`,'ok');
 }
 
 function setAdelanto(pid,mes,tipo,val){
