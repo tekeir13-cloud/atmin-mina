@@ -7187,11 +7187,22 @@ async function importarValorizacion(input){
     const buf=await file.arrayBuffer();
     const wb=new ExcelJS.Workbook();await wb.xlsx.load(buf);
     const ws=wb.worksheets[0];
+    // Normaliza valores de celda de ExcelJS (fórmulas {result}, richText, hyperlinks)
+    const xlVal=v=>{
+      if(v==null)return v;
+      if(typeof v==='object'){
+        if('result' in v)return v.result;
+        if('richText' in v)return (v.richText||[]).map(t=>t.text).join('');
+        if('text' in v)return v.text;
+      }
+      return v;
+    };
+    const rowVals=row=>row.values.map(xlVal);
     // Localizar fila de encabezado (contiene "ITEM" y "IMPORTE")
     let headerRow=-1,colMap={};
     ws.eachRow((row,rn)=>{
       if(headerRow>0)return;
-      const vals=row.values.map(v=>(v==null?'':String(v).trim().toUpperCase()));
+      const vals=rowVals(row).map(v=>(v==null?'':String(v).trim().toUpperCase()));
       if(vals.includes('ITEM')&&vals.some(v=>v.includes('IMPORTE'))){
         headerRow=rn;
         vals.forEach((v,ci)=>{
@@ -7207,31 +7218,33 @@ async function importarValorizacion(input){
       }
     });
     if(headerRow<0){showNotif('No se encontró el encabezado (ITEM / IMPORTE) en el Excel','error');input.value='';return;}
-    const titulo=String(ws.getCell('A1').value||file.name).trim();
+    const titulo=String(xlVal(ws.getCell('A1').value)||file.name).trim();
     const rows=[];let subtotal=0,descuento=0,total=0;
-    const gc=(row,ci)=>ci?row.values[ci]:undefined;
     const num=v=>{const n=parseFloat(v);return isNaN(n)?0:n;};
     ws.eachRow((row,rn)=>{
       if(rn<=headerRow)return;
-      const itm=gc(row,colMap.item);
-      const sact=gc(row,colMap.sact);
-      // Filas de totales: detectar por texto en S.TAREA / S.ACT
-      const rowTxt=row.values.map(v=>(v==null?'':String(v).toUpperCase())).join(' ');
-      if(rowTxt.includes('SUB TOTAL')){subtotal=num((row.values.find(v=>typeof v==='number'&&v>1000)));return;}
-      if(rowTxt.includes('DESCUENTO')){const negs=row.values.filter(v=>typeof v==='number');descuento=negs.length?num(negs[negs.length-1]):0;return;}
-      if(rowTxt.includes('TOTAL LIQUID')){const nums=row.values.filter(v=>typeof v==='number');total=nums.length?num(nums[nums.length-1]):0;return;}
+      const rv=rowVals(row);
+      const gc=ci=>ci?rv[ci]:undefined;
+      const itm=gc(colMap.item);
+      const sact=gc(colMap.sact);
+      // Filas de totales: detectar por texto y tomar el último número de la fila
+      const rowTxt=rv.map(v=>(v==null?'':String(v).toUpperCase())).join(' ');
+      const lastNum=()=>{const ns=rv.filter(v=>typeof v==='number');return ns.length?num(ns[ns.length-1]):0;};
+      if(rowTxt.includes('SUB TOTAL')){subtotal=lastNum();return;}
+      if(rowTxt.includes('DESCUENTO')){descuento=lastNum();return;}
+      if(rowTxt.includes('TOTAL LIQUID')){total=lastNum();return;}
       if(itm==null||itm==='')return;
-      const importe=num(gc(row,colMap.importe));
-      if(!importe&&!gc(row,colMap.sact))return;
+      const importe=num(gc(colMap.importe));
+      if(!importe&&!sact)return;
       rows.push({
-        item:itm, concesion:String(gc(row,colMap.concesion)||'').trim(),
-        veta:String(gc(row,colMap.veta)||'').trim(), labor:String(gc(row,colMap.labor)||'').trim(),
-        etapa:String(gc(row,colMap.etapa)||'').trim(), actividad:String(gc(row,colMap.actividad)||'').trim(),
-        sact:String(sact||'').trim(), und:String(gc(row,colMap.und)||'').trim(),
-        starea:String(gc(row,colMap.starea)||'').trim(), cant:num(gc(row,colMap.cant)),
-        precio:num(gc(row,colMap.precio)), importe,
-        roca:String(gc(row,colMap.roca)||'').trim(), cumpl:num(gc(row,colMap.cumpl)),
-        explo:String(gc(row,colMap.explo)||'').trim(), obs:String(gc(row,colMap.obs)||'').trim()
+        item:itm, concesion:String(gc(colMap.concesion)||'').trim(),
+        veta:String(gc(colMap.veta)||'').trim(), labor:String(gc(colMap.labor)||'').trim(),
+        etapa:String(gc(colMap.etapa)||'').trim(), actividad:String(gc(colMap.actividad)||'').trim(),
+        sact:String(sact||'').trim(), und:String(gc(colMap.und)||'').trim(),
+        starea:String(gc(colMap.starea)||'').trim(), cant:num(gc(colMap.cant)),
+        precio:num(gc(colMap.precio)), importe,
+        roca:String(gc(colMap.roca)||'').trim(), cumpl:num(gc(colMap.cumpl)),
+        explo:String(gc(colMap.explo)||'').trim(), obs:String(gc(colMap.obs)||'').trim()
       });
     });
     if(!rows.length){showNotif('No se encontraron partidas en el Excel','error');input.value='';return;}
