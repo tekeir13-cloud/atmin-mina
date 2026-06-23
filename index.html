@@ -6666,12 +6666,15 @@ const SERV_TIPOS=[
   {id:'scoop',  label:'Liquidación Alquiler de Scoop',                placa:false},
   {id:'limpieza',label:'Liquidación Servicios Limpieza y Lavandería', placa:false},
   {id:'ferreteria',label:'Liquidación Ferretería',                    placa:false},
+  {id:'transporte',label:'Liquidación Servicio de Transporte de Personal', placa:false},
   {id:'generales',label:'Liquidación Pagos Generales (Internet, Tienda Almendra, Botica, Adicionales)', placa:false}
 ];
 function servCargar(){try{return JSON.parse(localStorage.getItem(SERV_KEY)||'[]');}catch{return[];}}
 function servGuardar(arr){localStorage.setItem(SERV_KEY,JSON.stringify(arr));}
 function finCostoServicios(ym){
-  return servCargar().filter(r=>r.fecha&&r.fecha.startsWith(ym)).reduce((s,r)=>s+(parseFloat(r.monto)||0),0);
+  const b=servCargar().filter(r=>r.fecha&&r.fecha.startsWith(ym)).reduce((s,r)=>s+(parseFloat(r.monto)||0),0);
+  const d=(typeof finDemoMes==='function')?finDemoMes(ym):null;
+  return b+(d&&d.terc?d.terc:0);
 }
 function renderServiciosTerceros(){
   const el=document.getElementById('rrhh-servicios');
@@ -8175,6 +8178,8 @@ function combFormHtml(tipo){
         <input type="text" id="comb-${tipo}-chofer" placeholder="Nombre completo" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:13px"></div>
       <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Cantidad (gln) — máx ${maxGln}</label>
         <input type="number" id="comb-${tipo}-cant" placeholder="0" min="0.5" max="${maxGln}" step="0.5" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:14px;font-weight:700"></div>
+      <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Precio S/ por galón</label>
+        <input type="number" id="comb-${tipo}-precio" placeholder="0.00" min="0" step="any" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:13px"></div>
       <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Observaciones</label>
         <input type="text" id="comb-${tipo}-obs" placeholder="Opcional" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:13px"></div>
     </div>
@@ -8309,10 +8314,11 @@ function combRegistrar(tipo){
   const placa=(document.getElementById(`comb-${tipo}-placa`)?.value||'').trim().toUpperCase();
   const chofer=(document.getElementById(`comb-${tipo}-chofer`)?.value||'').trim();
   const cantidad=parseFloat(document.getElementById(`comb-${tipo}-cant`)?.value||'0');
+  const precio=parseFloat(document.getElementById(`comb-${tipo}-precio`)?.value||'0');
   const obs=(document.getElementById(`comb-${tipo}-obs`)?.value||'').trim();
   if(!fecha||!placa||!chofer||cantidad<=0){showNotif('Completa todos los campos requeridos','warn');return;}
   const arr=combCargar(tipo);
-  arr.push({fecha,hora,placa,chofer,cantidad,obs});
+  arr.push({fecha,hora,placa,chofer,cantidad,precio,obs});
   combGuardar(tipo,arr);
   const stock=combStockTipo(tipo);
   const alerta=tipo==='pet'?COMB_ALERTA_PET:COMB_ALERTA_GAS;
@@ -11483,12 +11489,12 @@ function finDemoOn(){ return localStorage.getItem(FIN_DEMO_KEY)!=='0'; }
 function finDemoData(){
   const meses=finUltimos6Meses();
   const seed=[
-    {val:285000,desc:18000,kit:42000,oc:78000,alm:31000,avance:142},
-    {val:310000,desc:21000,kit:38000,oc:85000,alm:29000,avance:156},
-    {val:298000,desc:19500,kit:45000,oc:72000,alm:33000,avance:148},
-    {val:342000,desc:23000,kit:41000,oc:91000,alm:35000,avance:171},
-    {val:325000,desc:20000,kit:39000,oc:88000,alm:30000,avance:163},
-    {val:358000,desc:22000,kit:44000,oc:95000,alm:34000,avance:179}
+    {val:285000,desc:18000,kit:42000,oc:78000,alm:31000,comb:34000,plan:58000,terc:21000,explo:14000,avance:142},
+    {val:310000,desc:21000,kit:38000,oc:85000,alm:29000,comb:37000,plan:61000,terc:23000,explo:15500,avance:156},
+    {val:298000,desc:19500,kit:45000,oc:72000,alm:33000,comb:35500,plan:59000,terc:22000,explo:13800,avance:148},
+    {val:342000,desc:23000,kit:41000,oc:91000,alm:35000,comb:39000,plan:64000,terc:25000,explo:16200,avance:171},
+    {val:325000,desc:20000,kit:39000,oc:88000,alm:30000,comb:38000,plan:62000,terc:24000,explo:15000,avance:163},
+    {val:358000,desc:22000,kit:44000,oc:95000,alm:34000,comb:41000,plan:66000,terc:26000,explo:17000,avance:179}
   ];
   const out={};
   meses.forEach((m,i)=>{ if(seed[i]) out[m]=seed[i]; });
@@ -11500,7 +11506,30 @@ function finToggleDemo(){ localStorage.setItem(FIN_DEMO_KEY, finDemoOn()?'0':'1'
 function finMesActual(){ return hoy().slice(0,7); }
 function finFiltrarMes(arr,mesYM){ return (arr||[]).filter(r=>(r.fecha||'').startsWith(mesYM)); }
 function finCostoKits(mesYM){ const b=finFiltrarMes(state.mantenimiento||[],mesYM).filter(k=>k.aprobLog&&k.aprobLog.ok).reduce((s,k)=>s+(k.costo||0),0); const d=finDemoMes(mesYM); return b+(d?d.kit:0); }
-function finCostoOrdenes(mesYM){ const b=finFiltrarMes(state.ordenes||[],mesYM).filter(o=>o.estado==='aprobado'||o.estado==='recibido'||o.estado==='completado').reduce((s,o)=>s+(o.total||0),0); const d=finDemoMes(mesYM); return b+(d?d.oc:0); }
+function finCostoMantenimiento(mesYM){ return finCostoKits(mesYM); }
+// Órdenes de compra aprobadas/recibidas — EXCLUYE explosivos (se contabilizan aparte)
+function finCostoOrdenes(mesYM){ const b=finFiltrarMes(state.ordenes||[],mesYM).filter(o=>(o.estado==='aprobado'||o.estado==='recibido'||o.estado==='completado')&&!/explosiv/i.test(o.categoria||'')).reduce((s,o)=>s+(o.total||o.monto||0),0); const d=finDemoMes(mesYM); return b+(d?d.oc:0); }
+// Combustible: petróleo + gasolina ingresados en el mes × precio S/ por galón
+function finCostoCombustible(mesYM){
+  let b=0;
+  try{ ['pet','gas'].forEach(t=>{ (combCargar(t)||[]).filter(r=>(r.fecha||'').startsWith(mesYM)).forEach(r=>{ b+=(r.cantidad||0)*(r.precio||0); }); }); }catch(e){}
+  const d=finDemoMes(mesYM); return b+(d&&d.comb?d.comb:0);
+}
+// Planillas: tareo del mes (jornal × multiplicador)
+function finCostoPlanilla(mesYM){
+  const b=(state.tareas||[]).filter(t=>(t.fecha||'').startsWith(mesYM)).reduce((s,t)=>{
+    const p=(state.personal||[]).find(pp=>String(pp.id)===String(t.trabajadorId));
+    const j=(t.jornal!=null?t.jornal:(p?p.jornal:0))||0;
+    return s+j*(t.mult||1);
+  },0);
+  const d=finDemoMes(mesYM); return b+(d&&d.plan?d.plan:0);
+}
+// Explosivos: gasto SEPARADO — NO se suma al costo operativo total
+function finCostoExplosivos(mesYM){
+  let b=0;
+  try{ b=((state.explosivos&&state.explosivos.historial)||[]).filter(e=>(e.fecha||'').startsWith(mesYM)).reduce((s,e)=>s+((e.cantidad||0)*(e.precio||0)),0); }catch(e){}
+  const d=finDemoMes(mesYM); return b+(d&&d.explo?d.explo:0);
+}
 function finValorizacionMes(mesYM){
   const v=(state.valorizacionesLabor||[]).find(v=>{
     const my=(v.anio&&v.mesNum)?`${v.anio}-${String(v.mesNum).padStart(2,'0')}`:null;
@@ -11512,8 +11541,22 @@ function finValorizacionMes(mesYM){
   return {total:0,descuento:0,rubros:[]};
 }
 function finAvanceMes(mesYM){ const b=finFiltrarMes(state.perforacion||[],mesYM).reduce((s,r)=>s+(r.avance||0),0); const d=finDemoMes(mesYM); return b+(d?d.avance:0); }
+// Gasto logístico = salidas de almacén general (aceros, EPP, repuestos…). Explosivos van aparte.
 function finCostoAlmacen(mesYM){ const b=finFiltrarMes((state.almacen&&state.almacen.salidas)||[],mesYM).reduce((s,r)=>s+(r.monto||r.costo||0),0); const d=finDemoMes(mesYM); return b+(d?d.alm:0); }
-function finCostoTotal(mesYM){ return finCostoKits(mesYM)+finCostoOrdenes(mesYM)+finCostoAlmacen(mesYM)+(typeof finCostoServicios==='function'?finCostoServicios(mesYM):0); }
+function finCostoLogistica(mesYM){ return finCostoAlmacen(mesYM); }
+// Desglose de egresos operativos del mes (NO incluye explosivos, que se reportan aparte)
+function finDesgloseGastos(mesYM){
+  return [
+    {key:'planilla',   label:'Planillas',                icon:'👷', color:'#3498db', monto:finCostoPlanilla(mesYM)},
+    {key:'combustible',label:'Combustible',              icon:'🛢️', color:'#f59e0b', monto:finCostoCombustible(mesYM)},
+    {key:'logistica',  label:'Gasto Logístico (Almacén)',icon:'📦', color:'#9b59b6', monto:finCostoLogistica(mesYM)},
+    {key:'ordenes',    label:'Órdenes de Compra',        icon:'🛒', color:'#5dade2', monto:finCostoOrdenes(mesYM)},
+    {key:'mantenimiento',label:'Mantenimiento',          icon:'🔧', color:'#e67e22', monto:finCostoKits(mesYM)},
+    {key:'terceros',   label:'Pagos a Terceros',         icon:'🤝', color:'#fb923c', monto:(typeof finCostoServicios==='function'?finCostoServicios(mesYM):0)}
+  ];
+}
+// Costo operativo total = suma de todas las categorías (explosivos NO se incluyen)
+function finCostoTotal(mesYM){ return finDesgloseGastos(mesYM).reduce((s,c)=>s+c.monto,0); }
 function finMargen(mesYM){ const v=finValorizacionMes(mesYM); return v.total-finCostoTotal(mesYM); }
 function finUltimos6Meses(){
   const meses=[];
@@ -11533,10 +11576,9 @@ function finNombreMes(ym){
 function renderFinDashboard(){
   const mes=finMesActual();
   const val=finValorizacionMes(mes);
-  const costoKit=finCostoKits(mes);
-  const costoOC=finCostoOrdenes(mes);
-  const costoAlm=finCostoAlmacen(mes);
-  const costoTot=costoKit+costoOC+costoAlm;
+  const desglose=finDesgloseGastos(mes);
+  const costoTot=desglose.reduce((s,c)=>s+c.monto,0);
+  const costoExplo=finCostoExplosivos(mes);
   const margen=val.total-costoTot;
   const avance=finAvanceMes(mes);
   const cpMetro=avance>0?costoTot/avance:null;
@@ -11549,21 +11591,16 @@ function renderFinDashboard(){
   // Barra de progreso reutilizable
   const bar=(pct,col)=>`<div style="background:rgba(255,255,255,.07);border-radius:99px;height:8px;overflow:hidden;margin-top:8px"><div style="width:${Math.min(100,Math.max(0,pct))}%;height:100%;background:${col};border-radius:99px;transition:width .4s"></div></div>`;
 
-  // Composición de costos (3 módulos)
-  const modulos=[
-    ['🔧 Mantenimiento (kits)',costoKit,'#e67e22'],
-    ['🛒 Compras / OC',costoOC,'#3498db'],
-    ['📦 Almacén',costoAlm,'#9b59b6']
-  ];
-  const compHtml=modulos.map(([lbl,v,col])=>{
-    const pct=costoTot>0?Math.round(v/costoTot*100):0;
+  // Composición de costos (todas las categorías de gasto de mina)
+  const compHtml=desglose.map(c=>{
+    const pct=costoTot>0?Math.round(c.monto/costoTot*100):0;
     return `<div style="background:var(--coal3);border-radius:12px;padding:16px 18px">
       <div style="display:flex;justify-content:space-between;align-items:baseline">
-        <span style="font-size:13px;color:var(--text2);font-weight:600">${lbl}</span>
+        <span style="font-size:13px;color:var(--text2);font-weight:600">${c.icon} ${c.label}</span>
         <span style="font-size:12px;color:var(--text3)">${pct}%</span>
       </div>
-      <div style="font-size:24px;font-weight:800;color:${col};margin-top:6px;letter-spacing:-.5px">${S(v)}</div>
-      ${bar(pct,col)}
+      <div style="font-size:24px;font-weight:800;color:${c.color};margin-top:6px;letter-spacing:-.5px">${S(c.monto)}</div>
+      ${bar(pct,c.color)}
     </div>`;
   }).join('');
 
@@ -11642,8 +11679,15 @@ function renderFinDashboard(){
 
   <!-- COMPOSICIÓN DE COSTOS -->
   <div style="margin-bottom:14px">
-    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px">Composición de Costos del Mes</div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:700;color:var(--text)">Egresos de Mina — Composición del Mes</div>
+      <div style="font-size:11px;color:var(--text3)">Total operativo: <strong style="color:#e67e22">${S(costoTot)}</strong></div>
+    </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">${compHtml}</div>
+    <div style="margin-top:12px;background:rgba(231,76,60,.08);border:1px dashed rgba(231,76,60,.4);border-radius:12px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
+      <div><span style="font-size:13px;color:var(--text2);font-weight:600">💥 Explosivos (NV3190)</span><div style="font-size:11px;color:var(--text3);margin-top:2px">Se contabiliza por separado — no entra en el costo operativo</div></div>
+      <div style="font-size:22px;font-weight:800;color:#e74c3c">${S(costoExplo)}</div>
+    </div>
   </div>
 
   <!-- HISTORIAL VISUAL 6 MESES -->
@@ -11736,25 +11780,34 @@ function renderFinProyeccion(){
   const nextD=new Date(hoyD.getFullYear(),hoyD.getMonth()+1,1);
   const nextMes=`${nextD.getFullYear()}-${String(nextD.getMonth()+1).padStart(2,'0')}`;
 
-  const avg=(fn)=>Math.round(meses3.reduce((s,m)=>s+fn(m),0)/3);
-  const avgKit=avg(finCostoKits);
-  const avgOC=avg(finCostoOrdenes);
-  const avgAlm=avg(finCostoAlmacen);
-
-  const stored=JSON.parse(localStorage.getItem('atmin_fin_proyeccion')||'{}');
-  const ovKit=stored.kit!==undefined?stored.kit:avgKit;
-  const ovOC=stored.oc!==undefined?stored.oc:avgOC;
-  const ovAlm=stored.alm!==undefined?stored.alm:avgAlm;
-  const ovVal=stored.val!==undefined?stored.val:0;
   const presup=parseFloat(localStorage.getItem('atmin_fin_presupuesto')||'500000');
   const mesPrev=meses3[2];
-  const prevKit=finCostoKits(mesPrev),prevOC=finCostoOrdenes(mesPrev),prevAlm=finCostoAlmacen(mesPrev);
+  const stored=JSON.parse(localStorage.getItem('atmin_fin_proyeccion')||'{}');
+  // Categorías dinámicas a partir del desglose (mismo orden que el resto del módulo)
+  const cats=finDesgloseGastos(nextMes).map(c=>{
+    const avg=Math.round(meses3.reduce((s,m)=>{
+      const dm=finDesgloseGastos(m).find(x=>x.key===c.key);
+      return s+(dm?dm.monto:0);
+    },0)/3);
+    const prevC=finDesgloseGastos(mesPrev).find(x=>x.key===c.key);
+    const ov=stored[c.key]!==undefined?stored[c.key]:avg;
+    return {key:c.key,label:c.label,icon:c.icon,avg,prev:prevC?prevC.monto:0,ov};
+  });
+  const ovVal=stored.val!==undefined?stored.val:0;
+
+  const filas=cats.map(c=>`
+        <tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:8px;color:var(--text)">${c.icon} ${c.label}</td>
+          <td style="padding:8px;text-align:right;color:var(--text2)">${fmtS(c.prev)}</td>
+          <td style="padding:8px;text-align:right;color:var(--text2)">${fmtS(c.avg)}</td>
+          <td style="padding:8px;text-align:right"><input id="fp-${c.key}" data-fp="1" type="number" value="${c.ov}" style="width:110px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--coal3);color:var(--text);text-align:right"></td>
+        </tr>`).join('');
 
   const el=document.getElementById('fin-proyeccion');
   el.innerHTML=`
 <div style="padding:16px">
   <h3 style="margin:0 0 16px;color:var(--text)">Proyección — ${finNombreMes(nextMes)}</h3>
-  <p style="font-size:12px;color:var(--text3);margin-bottom:16px">Base: promedio últimos 3 meses. Edita para ajustar.</p>
+  <p style="font-size:12px;color:var(--text3);margin-bottom:16px">Base: promedio últimos 3 meses de todos los gastos de mina. Edita para ajustar.</p>
 
   <div style="background:var(--coal4);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px">
     <table style="width:100%;border-collapse:collapse;font-size:13px">
@@ -11765,29 +11818,12 @@ function renderFinProyeccion(){
         <th style="padding:8px;text-align:right">Proyección ajustada</th>
       </tr></thead>
       <tbody>
-        <tr style="border-bottom:1px solid var(--border)">
-          <td style="padding:8px;color:var(--text)">Mantenimiento (kits)</td>
-          <td style="padding:8px;text-align:right;color:var(--text2)">${fmtS(prevKit)}</td>
-          <td style="padding:8px;text-align:right;color:var(--text2)">${fmtS(avgKit)}</td>
-          <td style="padding:8px;text-align:right"><input id="fp-kit" type="number" value="${ovKit}" style="width:110px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--coal3);color:var(--text);text-align:right"></td>
-        </tr>
-        <tr style="border-bottom:1px solid var(--border)">
-          <td style="padding:8px;color:var(--text)">Compras / OC</td>
-          <td style="padding:8px;text-align:right;color:var(--text2)">${fmtS(prevOC)}</td>
-          <td style="padding:8px;text-align:right;color:var(--text2)">${fmtS(avgOC)}</td>
-          <td style="padding:8px;text-align:right"><input id="fp-oc" type="number" value="${ovOC}" style="width:110px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--coal3);color:var(--text);text-align:right"></td>
-        </tr>
-        <tr style="border-bottom:1px solid var(--border)">
-          <td style="padding:8px;color:var(--text)">Almacén (salidas)</td>
-          <td style="padding:8px;text-align:right;color:var(--text2)">${fmtS(prevAlm)}</td>
-          <td style="padding:8px;text-align:right;color:var(--text2)">${fmtS(avgAlm)}</td>
-          <td style="padding:8px;text-align:right"><input id="fp-alm" type="number" value="${ovAlm}" style="width:110px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--coal3);color:var(--text);text-align:right"></td>
-        </tr>
+        ${filas}
         <tr>
-          <td style="padding:8px;color:var(--text)">Valorización estimada</td>
+          <td style="padding:8px;color:var(--text);font-weight:600">📥 Valorización estimada</td>
           <td style="padding:8px;text-align:right;color:var(--text2)">${fmtS(finValorizacionMes(mesPrev).total)}</td>
           <td style="padding:8px;text-align:right;color:var(--text2)">—</td>
-          <td style="padding:8px;text-align:right"><input id="fp-val" type="number" value="${ovVal}" style="width:110px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--coal3);color:var(--text);text-align:right"></td>
+          <td style="padding:8px;text-align:right"><input id="fp-val" data-fp="1" type="number" value="${ovVal}" style="width:110px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--coal3);color:var(--text);text-align:right"></td>
         </tr>
       </tbody>
     </table>
@@ -11800,17 +11836,23 @@ function renderFinProyeccion(){
     <button onclick="finExportarProyeccion()" style="padding:8px 18px;background:var(--coal3);color:var(--text);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px">📥 Exportar Excel</button>
   </div>
 </div>`;
+  window._finProyCats=cats.map(c=>({key:c.key,label:c.label}));
   finActualizarResumenProy(presup);
-  ['fp-kit','fp-oc','fp-alm','fp-val'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(el) el.addEventListener('input',()=>finActualizarResumenProy(presup));
+  document.querySelectorAll('#fin-proyeccion input[data-fp]').forEach(inp=>{
+    inp.addEventListener('input',()=>finActualizarResumenProy(presup));
   });
 }
 
-function finActualizarResumenProy(presup){
+function finProyValores(){
   const g=id=>{const e=document.getElementById(id);return e?parseFloat(e.value)||0:0;};
-  const kit=g('fp-kit'),oc=g('fp-oc'),alm=g('fp-alm'),val=g('fp-val');
-  const tot=kit+oc+alm;
+  const cats=window._finProyCats||[];
+  let tot=0; const obj={};
+  cats.forEach(c=>{ const v=g('fp-'+c.key); obj[c.key]=v; tot+=v; });
+  return {obj,tot,val:g('fp-val'),cats};
+}
+
+function finActualizarResumenProy(presup){
+  const {tot,val}=finProyValores();
   const margen=val-tot;
   const pct=presup>0?Math.round(tot/presup*100):0;
   const el=document.getElementById('fin-proy-resumen');
@@ -11824,29 +11866,26 @@ function finActualizarResumenProy(presup){
 }
 
 function finGuardarProyeccion(){
-  const g=id=>{const e=document.getElementById(id);return e?parseFloat(e.value)||0:0;};
-  localStorage.setItem('atmin_fin_proyeccion',JSON.stringify({kit:g('fp-kit'),oc:g('fp-oc'),alm:g('fp-alm'),val:g('fp-val')}));
+  const {obj,val}=finProyValores();
+  localStorage.setItem('atmin_fin_proyeccion',JSON.stringify({...obj,val}));
   showNotif('Proyección guardada','ok');
 }
 
 async function finExportarProyeccion(){
-  const g=id=>{const e=document.getElementById(id);return e?parseFloat(e.value)||0:0;};
-  const kit=g('fp-kit'),oc=g('fp-oc'),alm=g('fp-alm'),val=g('fp-val');
+  const {obj,tot,val,cats}=finProyValores();
   const hoyD=new Date(hoy());
   const nextD=new Date(hoyD.getFullYear(),hoyD.getMonth()+1,1);
   const nextMes=`${nextD.getFullYear()}-${String(nextD.getMonth()+1).padStart(2,'0')}`;
   const wb=new ExcelJS.Workbook();
   const ws=wb.addWorksheet('Proyección');
-  ws.columns=[{width:30},{width:18}];
+  ws.columns=[{width:34},{width:18}];
   ws.addRow(['PROYECCIÓN FINANCIERA — '+finNombreMes(nextMes)]);
   ws.addRow([]);
   ws.addRow(['Categoría','Monto S/']);
-  ws.addRow(['Mantenimiento (kits)',kit]);
-  ws.addRow(['Compras / OC',oc]);
-  ws.addRow(['Almacén (salidas)',alm]);
-  ws.addRow(['TOTAL COSTOS',kit+oc+alm]);
+  cats.forEach(c=>ws.addRow([c.label,obj[c.key]||0]));
+  ws.addRow(['TOTAL COSTOS OPERATIVOS',tot]);
   ws.addRow(['Valorización estimada',val]);
-  ws.addRow(['MARGEN ESTIMADO',val-(kit+oc+alm)]);
+  ws.addRow(['MARGEN ESTIMADO',val-tot]);
   const buf=await wb.xlsx.writeBuffer();
   const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='proyeccion_'+nextMes+'.xlsx';a.click();
@@ -11887,10 +11926,9 @@ function finGenerarInforme(){
   localStorage.setItem('atmin_fin_proyecto',proyecto);
   const val=finValorizacionMes(mes);
   const valBruta=val.total+(val.descuento||0);
-  const costoKit=finCostoKits(mes);
-  const costoOC=finCostoOrdenes(mes);
-  const costoAlm=finCostoAlmacen(mes);
-  const costoTot=costoKit+costoOC+costoAlm;
+  const desg=finDesgloseGastos(mes);
+  const costoTot=desg.reduce((s,c)=>s+c.monto,0);
+  const costoExplo=finCostoExplosivos(mes);
   const utilidad=val.total-costoTot;
   const avance=finAvanceMes(mes);
   const cpMetro=avance>0?(costoTot/avance):null;
@@ -11900,11 +11938,10 @@ function finGenerarInforme(){
   const prevMes=`${prevD.getFullYear()}-${String(prevD.getMonth()+1).padStart(2,'0')}`;
   const valP=finValorizacionMes(prevMes);
   const valBrutaP=valP.total+(valP.descuento||0);
-  const costoKitP=finCostoKits(prevMes);
-  const costoOCP=finCostoOrdenes(prevMes);
-  const costoAlmP=finCostoAlmacen(prevMes);
-  const costoTotP=costoKitP+costoOCP+costoAlmP;
+  const desgP=finDesgloseGastos(prevMes);
+  const costoTotP=desgP.reduce((s,c)=>s+c.monto,0);
   const utilP=valP.total-costoTotP;
+  const prevByKey=k=>{const c=desgP.find(x=>x.key===k);return c?c.monto:0;};
 
   const rubrosHtml=(val.rubros||[]).map(r=>`<tr><td style="padding:5px 8px;border-bottom:1px solid #eee">${r.rubro||'—'}</td><td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right">${fmtS(r.monto||0)}</td></tr>`).join('');
 
@@ -11939,11 +11976,10 @@ function finGenerarInforme(){
           ['Valorización bruta',valBruta,valBrutaP,false],
           ['Descuento almacén',-(val.descuento||0),-(valP.descuento||0),true],
           ['Valorización neta',val.total,valP.total,false,'font-weight:600'],
-          ['Costos mantenimiento',-costoKit,-costoKitP,true],
-          ['Costos compras',-costoOC,-costoOCP,true],
-          ['Costos almacén',-costoAlm,-costoAlmP,true],
-          ['TOTAL COSTOS',-costoTot,-costoTotP,true,'font-weight:600'],
-          ['UTILIDAD ESTIMADA',utilidad,utilP,false,'font-weight:700;background:#f8f9fa']
+          ...desg.map(c=>['Egreso: '+c.label,-c.monto,-prevByKey(c.key),true]),
+          ['TOTAL COSTOS OPERATIVOS',-costoTot,-costoTotP,true,'font-weight:600'],
+          ['UTILIDAD ESTIMADA',utilidad,utilP,false,'font-weight:700;background:#f8f9fa'],
+          ['Explosivos (aparte, no en total)',-costoExplo,-finCostoExplosivos(prevMes),true,'color:#999;font-style:italic']
         ].map(([lbl,cur,prev,isNeg,st=''])=>`<tr style="border-bottom:1px solid #eee;${st}">
           <td style="padding:7px 8px">${lbl}</td>
           <td style="padding:7px 8px;text-align:right;color:${isNeg&&cur<0?'#e74c3c':cur<0?'#e74c3c':'inherit'}">${fmtS(Math.round(Math.abs(cur)))}</td>
@@ -11980,10 +12016,9 @@ async function finExportarInforme(){
   const proyecto=document.getElementById('fin-inf-proyecto')?.value||localStorage.getItem('atmin_fin_proyecto')||'Proyecto Minero';
   const val=finValorizacionMes(mes);
   const valBruta=val.total+(val.descuento||0);
-  const costoKit=finCostoKits(mes);
-  const costoOC=finCostoOrdenes(mes);
-  const costoAlm=finCostoAlmacen(mes);
-  const costoTot=costoKit+costoOC+costoAlm;
+  const desg=finDesgloseGastos(mes);
+  const costoTot=desg.reduce((s,c)=>s+c.monto,0);
+  const costoExplo=finCostoExplosivos(mes);
   const utilidad=val.total-costoTot;
   const avance=finAvanceMes(mes);
   const cpMetro=avance>0?costoTot/avance:0;
@@ -12001,11 +12036,10 @@ async function finExportarInforme(){
     ['Valorización bruta',valBruta],
     ['Descuento almacén',-(val.descuento||0)],
     ['Valorización neta',val.total],
-    ['Costos mantenimiento',-costoKit],
-    ['Costos compras',-costoOC],
-    ['Costos almacén',-costoAlm],
-    ['TOTAL COSTOS',-costoTot],
+    ...desg.map(c=>['Egreso: '+c.label,-c.monto]),
+    ['TOTAL COSTOS OPERATIVOS',-costoTot],
     ['UTILIDAD ESTIMADA',utilidad],
+    ['Explosivos (aparte, no en total)',-costoExplo],
     [],
     ['Metros avanzados',avance],
     ['Costo por metro',cpMetro]
@@ -12022,11 +12056,8 @@ async function finExportarInforme(){
 
 function renderFinCostoCentro(){
   const mes=finMesActual();
-  const costoKit=finCostoKits(mes);
-  const costoOC=finCostoOrdenes(mes);
-  const costoAlm=finCostoAlmacen(mes);
-  const costoRRHH=(state.planilla||[]).filter(r=>(r.fecha||'').startsWith(mes)).reduce((s,r)=>s+(r.total||r.monto||0),0);
-  const total=costoKit+costoOC+costoAlm+costoRRHH||1;
+  const desgCC=finDesgloseGastos(mes);
+  const total=desgCC.reduce((s,c)=>s+c.monto,0)||1;
 
   const stored=JSON.parse(localStorage.getItem('atmin_fin_split')||'{"brenda":60,"crne":40}');
   const splitB=stored.brenda||60;
@@ -12044,23 +12075,16 @@ function renderFinCostoCentro(){
     return `<div style="flex:1;height:8px;background:var(--coal3);border-radius:4px;overflow:hidden"><div style="width:${pct}%;height:100%;background:var(--accent);border-radius:4px"></div></div>`;
   };
 
-  const areas=[
-    ['Operaciones (OC)',costoOC,'#3498db'],
-    ['Logística (Almacén)',costoAlm,'#9b59b6'],
-    ['Mantenimiento (Kits)',costoKit,'#e67e22'],
-    ['RRHH (Planilla)',costoRRHH,'#27ae60']
-  ];
+  const areas=desgCC.map(c=>[c.icon+' '+c.label,c.monto,c.color]);
 
   const compRows=meses3.map(m=>{
-    const kit=finCostoKits(m),oc=finCostoOrdenes(m),alm=finCostoAlmacen(m);
-    const rrhh=(state.planilla||[]).filter(r=>(r.fecha||'').startsWith(m)).reduce((s,r)=>s+(r.total||r.monto||0),0);
+    const dm=finDesgloseGastos(m);
+    const tot=dm.reduce((s,c)=>s+c.monto,0);
+    const cells=dm.map(c=>`<td style="padding:7px 8px;text-align:right">${fmtS(c.monto)}</td>`).join('');
     return `<tr style="border-bottom:1px solid var(--border)">
       <td style="padding:7px 8px;color:var(--text)">${finNombreMes(m)}</td>
-      <td style="padding:7px 8px;text-align:right">${fmtS(oc)}</td>
-      <td style="padding:7px 8px;text-align:right">${fmtS(alm)}</td>
-      <td style="padding:7px 8px;text-align:right">${fmtS(kit)}</td>
-      <td style="padding:7px 8px;text-align:right">${fmtS(rrhh)}</td>
-      <td style="padding:7px 8px;text-align:right;font-weight:600">${fmtS(oc+alm+kit+rrhh)}</td>
+      ${cells}
+      <td style="padding:7px 8px;text-align:right;font-weight:600">${fmtS(tot)}</td>
     </tr>`;
   }).join('');
 
@@ -12091,9 +12115,14 @@ function renderFinCostoCentro(){
           </tr>`;
         }).join('')}
         <tr style="font-weight:700;background:var(--coal3)">
-          <td style="padding:8px;color:var(--text)">TOTAL</td>
-          <td style="padding:8px;text-align:right;color:var(--text)">${fmtS(Math.round(costoKit+costoOC+costoAlm+costoRRHH))}</td>
+          <td style="padding:8px;color:var(--text)">TOTAL OPERATIVO</td>
+          <td style="padding:8px;text-align:right;color:var(--text)">${fmtS(Math.round(total))}</td>
           <td colspan="2"></td>
+        </tr>
+        <tr style="color:var(--text3);font-style:italic">
+          <td style="padding:8px">💥 Explosivos (aparte)</td>
+          <td style="padding:8px;text-align:right">${fmtS(Math.round(finCostoExplosivos(mes)))}</td>
+          <td colspan="2" style="padding:8px;font-size:11px">No incluido en el total operativo</td>
         </tr>
       </tbody>
     </table>
@@ -12109,7 +12138,7 @@ function renderFinCostoCentro(){
       <button onclick="finGuardarSplit()" style="padding:6px 14px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">Aplicar</button>
     </div>
     <div id="fin-split-result">
-      ${finRenderSplit(costoKit+costoOC+costoAlm+costoRRHH,splitB,splitC)}
+      ${finRenderSplit(total,splitB,splitC)}
     </div>
   </div>
 
@@ -12118,10 +12147,7 @@ function renderFinCostoCentro(){
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="color:var(--text3);font-size:11px;text-transform:uppercase;border-bottom:1px solid var(--border)">
         <th style="padding:8px;text-align:left">Mes</th>
-        <th style="padding:8px;text-align:right">OC</th>
-        <th style="padding:8px;text-align:right">Almacén</th>
-        <th style="padding:8px;text-align:right">Mant.</th>
-        <th style="padding:8px;text-align:right">RRHH</th>
+        ${desgCC.map(c=>`<th style="padding:8px;text-align:right">${c.label.replace(/\s*\(.*\)/,'')}</th>`).join('')}
         <th style="padding:8px;text-align:right">Total</th>
       </tr></thead>
       <tbody>${compRows}</tbody>
@@ -12132,16 +12158,14 @@ function renderFinCostoCentro(){
   document.getElementById('fin-split-b')?.addEventListener('input',()=>{
     const b=parseFloat(document.getElementById('fin-split-b')?.value)||0;
     const c=parseFloat(document.getElementById('fin-split-c')?.value)||0;
-    const tot=costoKit+costoOC+costoAlm+costoRRHH;
     const r=document.getElementById('fin-split-result');
-    if(r) r.innerHTML=finRenderSplit(tot,b,c);
+    if(r) r.innerHTML=finRenderSplit(total,b,c);
   });
   document.getElementById('fin-split-c')?.addEventListener('input',()=>{
     const b=parseFloat(document.getElementById('fin-split-b')?.value)||0;
     const c=parseFloat(document.getElementById('fin-split-c')?.value)||0;
-    const tot=costoKit+costoOC+costoAlm+costoRRHH;
     const r=document.getElementById('fin-split-result');
-    if(r) r.innerHTML=finRenderSplit(tot,b,c);
+    if(r) r.innerHTML=finRenderSplit(total,b,c);
   });
 }
 
