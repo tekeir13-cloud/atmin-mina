@@ -2664,31 +2664,47 @@ select option{background:var(--coal3);}
 <!-- MANTENIMIENTO -->
 <div class="page" id="page-mantenimiento">
   <div class="mod-tabs">
-    <button class="mod-tab active" onclick="modTab('mant','registro',this)">🔧 Registro Diario</button>
+    <button class="mod-tab active" onclick="modTab('mant','registro',this)">🧰 Solicitud de Kit</button>
+    <button class="mod-tab" onclick="modTab('mant','almacenmant',this)">📦 Almacén Mant.</button>
     <button class="mod-tab" onclick="modTab('mant','horometros',this)">⏱ Horómetros</button>
     <button class="mod-tab" onclick="modTab('mant','costosmant',this)">💲 Costos por Máquina</button>
   </div>
   <div class="mod-pane active" style="display:block" id="mant-registro">
     <div class="kpi-grid">
-      <div class="kpi-card"><div class="kpi-label">Costo Mant. Hoy</div><div class="kpi-value red" id="mant-costo-hoy">S/ 0</div></div>
-      <div class="kpi-card"><div class="kpi-label">Costo Mant. Mes</div><div class="kpi-value warn" id="mant-costo-mes">S/ 0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Costo Kits Hoy</div><div class="kpi-value red" id="mant-costo-hoy">S/ 0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Costo Kits Mes</div><div class="kpi-value warn" id="mant-costo-mes">S/ 0</div></div>
       <div class="kpi-card"><div class="kpi-label">Pendientes</div><div class="kpi-value red" id="mant-pendientes">0</div></div>
       <div class="kpi-card"><div class="kpi-label">Completados Mes</div><div class="kpi-value green" id="mant-completados">0</div></div>
     </div>
-    <div class="card" style="margin-bottom:18px">
-      <div class="section-title">Registrar Mantenimiento</div>
-      <div class="form-grid">
-        <div class="form-group"><label>Fecha</label><input type="date" id="mant-fecha"></div>
-        <div class="form-group"><label>Equipo</label><select id="mant-equipo"><option>Compresora</option><option>Perforadora Jack Leg</option><option>Perforadora Stopper</option><option>Generador Eléctrico</option><option>Bomba de Agua</option><option>Winche</option><option>Camioneta</option><option>Instalaciones eléctricas</option></select></div>
-        <div class="form-group"><label>Tipo</label><select id="mant-tipo"><option>Preventivo</option><option>Correctivo</option><option>Emergencia</option></select></div>
-        <div class="form-group"><label>Responsable</label><input type="text" id="mant-resp" placeholder="Nombre del mecánico"></div>
-        <div class="form-group"><label>Costo (S/)</label><input type="number" id="mant-costo" placeholder="Ej: 250" min="0"></div>
-        <div class="form-group"><label>Descripción</label><input type="text" id="mant-desc" placeholder="Ej: Cambio de aceite y filtros"></div>
-        <div class="form-group"><label>Estado</label><select id="mant-estado"><option value="ok">Completado</option><option value="pendiente">Pendiente</option><option value="parcial">Parcial</option></select></div>
+    <div class="card" style="margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <div class="section-title" style="margin:0">🧰 Solicitudes de Kit de Mantenimiento</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:4px">El mecánico elige las piezas del almacén, la máquina y el tipo de mantenimiento</div>
       </div>
-      <div class="btn-row"><button class="btn btn-gold" onclick="registrarMantenimiento()">Registrar</button></div>
+      <button class="btn btn-gold" onclick="abrirModalKitMant()">➕ Nueva Solicitud de Kit</button>
     </div>
     <div id="mant-lista"></div>
+  </div>
+  <div class="mod-pane" style="display:none" id="mant-almacenmant">
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">Repuestos en Catálogo</div><div class="kpi-value blue" id="amant-total">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Valor de Stock</div><div class="kpi-value gold" id="amant-valor">S/ 0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Bajo Stock</div><div class="kpi-value red" id="amant-bajo">0</div></div>
+    </div>
+    <div class="card" style="margin-bottom:18px">
+      <div class="section-title">Agregar / Reabastecer Repuesto</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Nombre del repuesto</label><input type="text" id="amant-nombre" placeholder="Ej: Filtro de aceite"></div>
+        <div class="form-group"><label>Código</label><input type="text" id="amant-codigo" placeholder="Ej: FIL-001"></div>
+        <div class="form-group"><label>Unidad</label><select id="amant-unidad"><option>Unidad</option><option>Litro</option><option>Galón</option><option>Metro</option><option>Juego</option><option>Kit</option></select></div>
+        <div class="form-group"><label>Stock</label><input type="number" id="amant-stock" placeholder="0" min="0"></div>
+        <div class="form-group"><label>Costo unitario (S/)</label><input type="number" id="amant-costo" placeholder="0" min="0" step="0.01"></div>
+        <div class="form-group"><label>Stock mínimo</label><input type="number" id="amant-min" placeholder="Ej: 2" min="0"></div>
+      </div>
+      <div class="btn-row"><button class="btn btn-gold" onclick="guardarRepuestoMant()">Guardar Repuesto</button><button class="btn btn-outline" onclick="limpiarFormRepuesto()">Limpiar</button></div>
+    </div>
+    <div class="section-title">Inventario de Repuestos</div>
+    <div class="table-wrap"><table><thead><tr><th>Código</th><th>Repuesto</th><th>Unidad</th><th>Stock</th><th>Costo Unit.</th><th>Valor</th><th></th></tr></thead><tbody id="amant-tbody"></tbody></table></div>
   </div>
   <div class="mod-pane" style="display:none" id="mant-horometros">
     <div class="card" style="margin-bottom:18px">
@@ -3588,6 +3604,42 @@ select option{background:var(--coal3);}
   </div>
 </div>
 
+<!-- ════ MODAL: SOLICITUD DE KIT DE MANTENIMIENTO ════ -->
+<div class="modal-overlay" id="modal-kit-mant" onclick="if(event.target===this)cerrarModal('modal-kit-mant')">
+  <div class="modal" style="width:min(680px,96vw);max-height:92vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="modal-title" style="margin-bottom:0;color:#fbbf24">🧰 Solicitud de Kit de Mantenimiento</div>
+      <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-kit-mant')">✕</button>
+    </div>
+    <input type="hidden" id="kit-id">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div class="form-group" style="margin:0"><label>Fecha</label><input type="date" id="kit-fecha"></div>
+      <div class="form-group" style="margin:0"><label>Máquina / Equipo</label><select id="kit-equipo" style="width:100%"><option>Compresora</option><option>Perforadora Jack Leg</option><option>Perforadora Stopper</option><option>Generador Eléctrico</option><option>Bomba de Agua</option><option>Winche</option><option>Camioneta</option><option>Instalaciones eléctricas</option></select></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div class="form-group" style="margin:0"><label>Tipo de mantenimiento</label><select id="kit-tipo" style="width:100%"><option>Preventivo</option><option>Correctivo</option><option>Emergencia</option></select></div>
+      <div class="form-group" style="margin:0"><label>Responsable / Mecánico</label><input type="text" id="kit-resp" placeholder="Nombre"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px"><label>Descripción del trabajo</label><textarea id="kit-desc" rows="2" placeholder="Ej: Cambio de aceite, filtros y revisión de fajas..." style="width:100%;resize:vertical"></textarea></div>
+    <div class="card" style="margin-bottom:12px;background:var(--coal3)">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">🔩 Piezas del almacén de mantenimiento</div>
+      <div id="kit-piezas-rows"></div>
+      <button class="btn btn-outline" style="font-size:11px;padding:5px 12px;margin-top:6px" onclick="kitAddPiezaRow()">+ Agregar pieza</button>
+      <div style="font-size:12px;color:var(--text3);margin-top:10px;text-align:right">Costo de piezas: <strong id="kit-costo-piezas" style="color:var(--text)">S/ 0.00</strong></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div class="form-group" style="margin:0"><label>Mano de obra / otros (S/)</label><input type="number" id="kit-manoobra" placeholder="0" min="0" step="0.01" oninput="kitRecalcCosto()"></div>
+      <div class="form-group" style="margin:0"><label>Estado</label><select id="kit-estado" style="width:100%"><option value="ok">Completado</option><option value="pendiente">Pendiente</option><option value="parcial">Parcial</option></select></div>
+    </div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px;text-align:right">Costo total estimado: <strong id="kit-costo-total" style="color:#fbbf24;font-size:15px">S/ 0.00</strong></div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:12px">⚠ Al guardar como <strong>Completado</strong>, las piezas se descuentan del stock del almacén de mantenimiento.</div>
+    <div class="btn-row">
+      <button class="btn btn-gold" onclick="guardarKitMant()">✓ Guardar Solicitud</button>
+      <button class="btn btn-outline" onclick="cerrarModal('modal-kit-mant')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ════ MODAL: REPORTE JEFE DE GUARDIA ════ -->
 <div class="modal-overlay" id="modal-reporte-guardia" onclick="if(event.target===this)cerrarModal('modal-reporte-guardia')">
   <div class="modal" style="width:min(760px,96vw);max-height:92vh;overflow-y:auto">
@@ -3734,7 +3786,7 @@ const state={
   epp:{historial:[]},
   petroleo:{stock:200,historial:[]},
   almacen:{ingresos:[],salidas:[],inventarioInicial:[],historialMeses:[],productos:[],solicitudesCompra:[],explosivos:{ingresos:[],salidas:[]}},
-  perforacion:[],reportesGuardia:[],mantenimiento:[],horometros:[],tareas:[],
+  perforacion:[],reportesGuardia:[],mantenimiento:[],mantRepuestos:[],horometros:[],tareas:[],
   ordenes:[],valorizaciones:[],valorizacionesLabor:[],
   compresorista:[],
   metas:{f1:20,f2:20,dias:26,mensualF1:520,mensualF2:520},frenteActivo:1,
@@ -3772,7 +3824,7 @@ const MODULE_PANES = {
   'log': ['almacen','historial','inventario','solicitudcompra','productos','explosivos'],
   'rrhh': ['planilla','tareas','personal','costorrhh'],
   'op': ['tablero','avance','solicitudes','vsproyectado','valorizaciones'],
-  'mant': ['registro','horometros','costosmant'],
+  'mant': ['registro','almacenmant','horometros','costosmant'],
   'fin': ['ordenes','solicitudes','valorizaciones','proyeccion','utilidad']
 };
 
@@ -3811,6 +3863,8 @@ function abrirModal(id){const m=document.getElementById(id);if(!m)return;m.class
 async function init(){
   // Cargar inventario de almacén desde localStorage
   almacenLoad();
+  // Almacén de mantenimiento (repuestos)
+  if(typeof mantRepLoad==='function'){mantRepLoad();if(typeof mantRepSeed==='function')mantRepSeed();}
   // Mostrar login inmediatamente — no esperar a Supabase
   mostrarLogin();
 
@@ -4010,6 +4064,7 @@ function renderModPane(mod,pane){
   else if(k==='op-solicitudes')renderSolicitudesPendientesOp();
   else if(k==='op-vsproyectado')renderResidente();
   else if(k==='mant-registro')renderMantenimiento();
+  else if(k==='mant-almacenmant')renderAlmacenMant();
   else if(k==='mant-horometros')renderHorometros();
   else if(k==='mant-costosmant')renderCostosMant();
   else if(k==='fin-ordenes')renderOrdenes();
@@ -7661,28 +7716,199 @@ function renderRendimiento(){
 }
 
 // ── MANTENIMIENTO ──
+// ── ALMACÉN DE MANTENIMIENTO (repuestos) ──
+const MANTREP_KEY='atmin_mant_repuestos';
+function mantRepLoad(){try{const d=localStorage.getItem(MANTREP_KEY);if(d)state.mantRepuestos=JSON.parse(d)||[];}catch(e){}}
+function mantRepSave(){try{localStorage.setItem(MANTREP_KEY,JSON.stringify(state.mantRepuestos||[]));}catch(e){}}
+function mantRepSeed(){
+  if(state.mantRepuestos&&state.mantRepuestos.length)return;
+  state.mantRepuestos=[
+    {id:'R1',codigo:'FIL-001',nombre:'Filtro de aceite',unidad:'Unidad',stock:12,costo:35,min:3},
+    {id:'R2',codigo:'FIL-002',nombre:'Filtro de aire',unidad:'Unidad',stock:8,costo:48,min:2},
+    {id:'R3',codigo:'ACE-001',nombre:'Aceite hidráulico 68',unidad:'Galón',stock:20,costo:42,min:5},
+    {id:'R4',codigo:'ACE-002',nombre:'Aceite motor 15W40',unidad:'Galón',stock:15,costo:55,min:5},
+    {id:'R5',codigo:'FAJ-001',nombre:'Faja en V B-52',unidad:'Unidad',stock:6,costo:28,min:2},
+    {id:'R6',codigo:'ROD-001',nombre:'Rodaje 6204',unidad:'Unidad',stock:10,costo:22,min:3},
+    {id:'R7',codigo:'MAN-001',nombre:'Manguera hidráulica 1/2"',unidad:'Metro',stock:25,costo:18,min:5},
+    {id:'R8',codigo:'GRA-001',nombre:'Grasa multipropósito',unidad:'Kit',stock:5,costo:65,min:2}
+  ];
+  mantRepSave();
+}
+
 function renderMantenimiento(){
-  const ch=state.mantenimiento.filter(m=>m.fecha===hoy()).reduce((s,m)=>s+m.costo,0);
-  const cm=state.mantenimiento.reduce((s,m)=>s+m.costo,0);
+  mantRepLoad();
+  const ch=state.mantenimiento.filter(m=>m.fecha===hoy()).reduce((s,m)=>s+(m.costo||0),0);
+  const cm=state.mantenimiento.reduce((s,m)=>s+(m.costo||0),0);
   document.getElementById('mant-costo-hoy').textContent=fmtS(ch);document.getElementById('mant-costo-mes').textContent=fmtS(cm);
   document.getElementById('mant-pendientes').textContent=state.mantenimiento.filter(m=>m.estado==='pendiente').length;
   document.getElementById('mant-completados').textContent=state.mantenimiento.filter(m=>m.estado==='ok').length;
   const lst=document.getElementById('mant-lista');
-  if(!state.mantenimiento.length){lst.innerHTML='<div class="empty-state">Sin registros</div>';return;}
+  if(!state.mantenimiento.length){lst.innerHTML='<div class="card"><div class="empty-state">Sin solicitudes de kit. Crea la primera con ➕.</div></div>';return;}
   lst.innerHTML=sortRegistros(state.mantenimiento).map(m=>{
     const cls=m.estado==='ok'?'badge-ok':m.estado==='pendiente'?'badge-danger':'badge-warn';
     const lbl=m.estado==='ok'?'Completado':m.estado==='pendiente'?'Pendiente':'Parcial';
-    return`<div class="mant-item"><div class="mant-icon">${EI[m.equipo]||'🔧'}</div><div class="mant-info"><div class="mant-name">${m.equipo} <span class="badge ${cls}" style="margin-left:6px">${lbl}</span></div><div class="mant-detail">${m.tipo} · ${m.desc} · ${fmtF(m.fecha)} · ${m.resp}</div></div><div class="mant-cost">${fmtS(m.costo)}</div></div>`;
+    const piezas=(m.repuestos&&m.repuestos.length)?m.repuestos.map(p=>`${p.nombre} ×${p.cant}`).join(' · '):'Sin piezas';
+    return`<div class="card" style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <div style="font-size:22px">${EI[m.equipo]||'🔧'}</div>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--text)">${m.equipo} <span class="badge ${cls}" style="margin-left:6px">${lbl}</span> <span style="font-size:11px;color:var(--text3);font-weight:400">${m.tipo}</span></div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px">${fmtF(m.fecha)} · ${m.resp||'—'}</div>
+            <div style="font-size:12px;color:var(--text2);margin-top:4px">${m.desc||''}</div>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:15px;font-weight:700;color:#fbbf24">${fmtS(m.costo)}</div>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <button class="btn btn-outline" style="font-size:11px;padding:4px 10px" onclick="editarKitMant('${m.id}')">✎</button>
+            <button class="btn btn-outline" style="font-size:11px;padding:4px 10px;color:#f87171;border-color:#f87171" onclick="eliminarKitMant('${m.id}')">🗑</button>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--text2);border-top:1px solid var(--border);padding-top:8px"><strong style="color:var(--text3)">🔩 Kit:</strong> ${piezas}</div>
+    </div>`;
   }).join('');
 }
-async function registrarMantenimiento(){
-  const resp=document.getElementById('mant-resp').value.trim();
-  const desc=document.getElementById('mant-desc').value.trim();
-  if(!resp||!desc){showNotif('⚠ Completa responsable y descripción','error');return;}
-  const nv={fecha:document.getElementById('mant-fecha').value,equipo:document.getElementById('mant-equipo').value,tipo:document.getElementById('mant-tipo').value,responsable:resp,costo:parseFloat(document.getElementById('mant-costo').value)||0,descripcion:desc,estado:document.getElementById('mant-estado').value};
-  try{await sb.from('mantenimiento').insert([{...nv, mes_id: getMesId()}]);}catch(e){}
-  state.mantenimiento.push({...nv,resp:nv.responsable,desc:nv.descripcion});
-  renderMantenimiento();showNotif('✓ Mantenimiento registrado');
+
+// ── Repuestos: catálogo / almacén ──
+function renderAlmacenMant(){
+  mantRepLoad();
+  const reps=state.mantRepuestos||[];
+  const valor=reps.reduce((s,r)=>s+(r.stock||0)*(r.costo||0),0);
+  const bajo=reps.filter(r=>(r.stock||0)<=(r.min||0)).length;
+  document.getElementById('amant-total').textContent=reps.length;
+  document.getElementById('amant-valor').textContent=fmtS(valor);
+  document.getElementById('amant-bajo').textContent=bajo;
+  const tb=document.getElementById('amant-tbody');
+  tb.innerHTML=reps.length?reps.map(r=>{
+    const low=(r.stock||0)<=(r.min||0);
+    return`<tr>
+      <td>${r.codigo||'—'}</td>
+      <td><strong style="color:var(--text)">${r.nombre}</strong></td>
+      <td>${r.unidad||'Unidad'}</td>
+      <td style="color:${low?'#f87171':'var(--text)'};font-weight:700">${r.stock||0}${low?' ⚠':''}</td>
+      <td>${fmtS(r.costo||0)}</td>
+      <td>${fmtS((r.stock||0)*(r.costo||0))}</td>
+      <td><button class="btn btn-outline" style="font-size:11px;padding:3px 9px" onclick="editarRepuestoMant('${r.id}')">✎</button> <button class="btn btn-outline" style="font-size:11px;padding:3px 9px;color:#f87171;border-color:#f87171" onclick="eliminarRepuestoMant('${r.id}')">🗑</button></td>
+    </tr>`;
+  }).join(''):'<tr><td colspan="7" class="empty-state">Sin repuestos. Agrega el primero arriba.</td></tr>';
+}
+function limpiarFormRepuesto(){
+  ['amant-nombre','amant-codigo','amant-stock','amant-costo','amant-min'].forEach(i=>{const e=document.getElementById(i);if(e)e.value='';});
+  document.getElementById('amant-nombre').dataset.editId='';
+}
+function editarRepuestoMant(id){
+  const r=(state.mantRepuestos||[]).find(x=>x.id===id);if(!r)return;
+  document.getElementById('amant-nombre').value=r.nombre;document.getElementById('amant-nombre').dataset.editId=id;
+  document.getElementById('amant-codigo').value=r.codigo||'';document.getElementById('amant-unidad').value=r.unidad||'Unidad';
+  document.getElementById('amant-stock').value=r.stock||0;document.getElementById('amant-costo').value=r.costo||0;document.getElementById('amant-min').value=r.min||0;
+  showNotif('Editando '+r.nombre);
+}
+function eliminarRepuestoMant(id){
+  if(!confirm('¿Eliminar este repuesto del almacén?'))return;
+  state.mantRepuestos=(state.mantRepuestos||[]).filter(r=>r.id!==id);
+  mantRepSave();renderAlmacenMant();showNotif('✓ Repuesto eliminado');
+}
+function guardarRepuestoMant(){
+  const g=i=>document.getElementById(i);
+  const nombre=g('amant-nombre').value.trim();
+  if(!nombre){showNotif('⚠ Indica el nombre del repuesto','error');return;}
+  const editId=g('amant-nombre').dataset.editId;
+  const data={codigo:g('amant-codigo').value.trim(),nombre,unidad:g('amant-unidad').value,stock:parseFloat(g('amant-stock').value)||0,costo:parseFloat(g('amant-costo').value)||0,min:parseFloat(g('amant-min').value)||0};
+  if(!state.mantRepuestos)state.mantRepuestos=[];
+  if(editId){const r=state.mantRepuestos.find(x=>x.id===editId);if(r)Object.assign(r,data);}
+  else state.mantRepuestos.push({id:'R'+Date.now(),...data});
+  mantRepSave();limpiarFormRepuesto();renderAlmacenMant();showNotif('✓ Repuesto guardado');
+}
+
+// ── Solicitud de Kit de Mantenimiento ──
+function kitRepOptions(sel){
+  return (state.mantRepuestos||[]).map(r=>`<option value="${r.id}" ${sel===r.id?'selected':''}>${r.nombre} (stock ${r.stock||0})</option>`).join('');
+}
+function kitAddPiezaRow(id,cant){
+  const wrap=document.getElementById('kit-piezas-rows');if(!wrap)return;
+  const div=document.createElement('div');
+  div.className='kit-pieza-row';
+  div.style.cssText='display:grid;grid-template-columns:2fr 1fr auto;gap:8px;margin-bottom:6px';
+  div.innerHTML=`<select class="kit-pieza-id" onchange="kitRecalcCosto()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px"><option value="">— Pieza —</option>${kitRepOptions(id)}</select>
+    <input type="number" class="kit-pieza-cant" min="0" step="1" placeholder="Cant." value="${cant||''}" oninput="kitRecalcCosto()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
+    <button class="btn btn-outline" style="font-size:11px;padding:4px 10px;color:#f87171;border-color:#f87171" onclick="this.parentElement.remove();kitRecalcCosto()">✕</button>`;
+  wrap.appendChild(div);
+}
+function kitRecalcCosto(){
+  let piezas=0;
+  document.querySelectorAll('#kit-piezas-rows .kit-pieza-row').forEach(row=>{
+    const id=row.querySelector('.kit-pieza-id')?.value;
+    const cant=parseFloat(row.querySelector('.kit-pieza-cant')?.value)||0;
+    const r=(state.mantRepuestos||[]).find(x=>x.id===id);
+    if(r&&cant>0)piezas+=cant*(r.costo||0);
+  });
+  const mo=parseFloat(document.getElementById('kit-manoobra')?.value)||0;
+  const cp=document.getElementById('kit-costo-piezas');if(cp)cp.textContent=fmtS(piezas);
+  const ct=document.getElementById('kit-costo-total');if(ct)ct.textContent=fmtS(piezas+mo);
+}
+function abrirModalKitMant(){
+  mantRepLoad();
+  const g=i=>document.getElementById(i);
+  g('kit-id').value='';g('kit-fecha').value=hoy();g('kit-equipo').value='Compresora';g('kit-tipo').value='Preventivo';
+  g('kit-resp').value='';g('kit-desc').value='';g('kit-manoobra').value='';g('kit-estado').value='ok';
+  g('kit-piezas-rows').innerHTML='';kitAddPiezaRow();kitRecalcCosto();
+  abrirModal('modal-kit-mant');
+}
+function editarKitMant(id){
+  mantRepLoad();
+  const m=(state.mantenimiento||[]).find(x=>x.id===id);if(!m)return;
+  const g=i=>document.getElementById(i);
+  g('kit-id').value=m.id;g('kit-fecha').value=m.fecha||hoy();g('kit-equipo').value=m.equipo||'Compresora';g('kit-tipo').value=m.tipo||'Preventivo';
+  g('kit-resp').value=m.resp||'';g('kit-desc').value=m.desc||'';g('kit-manoobra').value=m.manoobra||'';g('kit-estado').value=m.estado||'ok';
+  g('kit-piezas-rows').innerHTML='';
+  (m.repuestos&&m.repuestos.length?m.repuestos:[{}]).forEach(p=>kitAddPiezaRow(p.id,p.cant));
+  kitRecalcCosto();
+  abrirModal('modal-kit-mant');
+}
+function eliminarKitMant(id){
+  if(!confirm('¿Eliminar esta solicitud de kit?'))return;
+  const m=(state.mantenimiento||[]).find(x=>x.id===id);
+  // Reponer stock si estaba completado
+  if(m&&m.estado==='ok'&&m.repuestos){m.repuestos.forEach(p=>{const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);if(r)r.stock=(r.stock||0)+p.cant;});mantRepSave();}
+  state.mantenimiento=(state.mantenimiento||[]).filter(x=>x.id!==id);
+  renderMantenimiento();showNotif('✓ Solicitud eliminada');
+}
+function guardarKitMant(){
+  mantRepLoad();
+  const g=i=>document.getElementById(i);
+  const resp=g('kit-resp').value.trim(),desc=g('kit-desc').value.trim();
+  if(!desc){showNotif('⚠ Describe el trabajo a realizar','error');return;}
+  const piezas=[];
+  document.querySelectorAll('#kit-piezas-rows .kit-pieza-row').forEach(row=>{
+    const id=row.querySelector('.kit-pieza-id')?.value;
+    const cant=parseFloat(row.querySelector('.kit-pieza-cant')?.value)||0;
+    const r=(state.mantRepuestos||[]).find(x=>x.id===id);
+    if(r&&cant>0)piezas.push({id,nombre:r.nombre,cant,costo:r.costo||0});
+  });
+  const mo=parseFloat(g('kit-manoobra').value)||0;
+  const costo=piezas.reduce((s,p)=>s+p.cant*p.costo,0)+mo;
+  const estado=g('kit-estado').value;
+  const editId=g('kit-id').value;
+  if(!state.mantenimiento)state.mantenimiento=[];
+  const prev=editId?state.mantenimiento.find(x=>x.id===editId):null;
+  // Reponer stock del registro previo si estaba completado (para recalcular)
+  if(prev&&prev.estado==='ok'&&prev.repuestos){prev.repuestos.forEach(p=>{const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);if(r)r.stock=(r.stock||0)+p.cant;});}
+  // Verificar stock si se completa
+  if(estado==='ok'){
+    for(const p of piezas){const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);if(r&&p.cant>(r.stock||0)){showNotif(`⚠ Stock insuficiente de ${r.nombre} (disp. ${r.stock||0})`,'error');
+      // revertir reposición previa
+      if(prev&&prev.estado==='ok'&&prev.repuestos){prev.repuestos.forEach(pp=>{const rr=(state.mantRepuestos||[]).find(x=>x.id===pp.id);if(rr)rr.stock=(rr.stock||0)-pp.cant;});}
+      return;}}
+    piezas.forEach(p=>{const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);if(r)r.stock=(r.stock||0)-p.cant;});
+  }
+  const rec={id:editId||'KM'+Date.now(),fecha:g('kit-fecha').value,equipo:g('kit-equipo').value,tipo:g('kit-tipo').value,
+    resp,responsable:resp,desc,descripcion:desc,repuestos:piezas,manoobra:mo,costo,estado};
+  if(prev){Object.assign(prev,rec);}else{state.mantenimiento.push(rec);}
+  mantRepSave();
+  cerrarModal('modal-kit-mant');renderMantenimiento();
+  showNotif('✓ Solicitud de kit guardada');
 }
 function renderHorometros(){
   const equipos=['Compresora','Perforadora Jack Leg','Perforadora Stopper','Generador Eléctrico','Bomba de Agua','Winche','Camioneta'];
