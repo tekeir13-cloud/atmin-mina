@@ -5405,6 +5405,76 @@ function renderSolicitudesPendientesOp(){
   const wHist=document.getElementById('op-sc-historial');
   _renderSolicitudesPendientes(wPend,'op');
   _renderSolicitudesHistorial(wHist,'op');
+  renderMantSolicitudesOp();
+}
+function renderMantSolicitudesOp(){
+  mantKitLoad();
+  const kits=state.mantenimiento||[];
+  const pendientes=kits.filter(m=>!(m.aprobOps&&m.aprobOps.ok)&&!(m.aprobOps&&m.aprobOps.rechazado));
+  const historial=kits.filter(m=>(m.aprobOps&&(m.aprobOps.ok||m.aprobOps.rechazado)));
+  const wPend=document.getElementById('op-mant-pendientes');
+  const wHist=document.getElementById('op-mant-historial');
+  if(!wPend||!wHist)return;
+  if(!pendientes.length){wPend.innerHTML='<div class="card"><div class="empty-state" style="padding:16px;color:var(--text3)">Sin solicitudes pendientes de aprobación Operaciones.</div></div>';}
+  else{
+    wPend.innerHTML=pendientes.map(m=>{
+      const piezas=(m.repuestos&&m.repuestos.length)?m.repuestos.map(p=>`${p.nombre} ×${p.cant}`).join(' · '):'Sin piezas';
+      return`<div class="card" style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+          <div style="display:flex;gap:10px;align-items:flex-start">
+            <div style="font-size:22px">${EI[m.equipo]||'🔧'}</div>
+            <div>
+              <div style="font-size:14px;font-weight:700;color:var(--text)">${m.equipo} <span style="font-size:11px;color:var(--text3);font-weight:400">${m.tipo}</span></div>
+              <div style="font-size:12px;color:var(--text3);margin-top:2px">${fmtF(m.fecha)} · ${m.resp||'—'}</div>
+              <div style="font-size:12px;color:var(--text2);margin-top:4px">${m.desc||''}</div>
+              <div style="font-size:12px;color:var(--text2);margin-top:4px"><strong style="color:var(--text3)">🔩 Kit:</strong> ${piezas}</div>
+            </div>
+          </div>
+          <div style="text-align:right"><div style="font-size:15px;font-weight:700;color:#fbbf24">${fmtS(m.costo)}</div></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;border-top:1px solid var(--border);padding-top:8px">
+          <button class="btn" style="font-size:12px;padding:5px 12px;background:#15803d;color:#fff;border:1px solid #15803d" onclick="aprobarOpsKitOp('${m.id}')">✅ Aprobar</button>
+          <button class="btn btn-outline" style="font-size:12px;padding:5px 12px;color:#f87171;border-color:#f87171" onclick="rechazarOpsKitOp('${m.id}')">❌ Rechazar</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  if(!historial.length){wHist.innerHTML='<div class="card"><div class="empty-state" style="padding:16px;color:var(--text3)">Sin historial de decisiones de Operaciones.</div></div>';}
+  else{
+    wHist.innerHTML=historial.map(m=>{
+      const ops=m.aprobOps||{};
+      const badge=ops.ok
+        ?`<span class="badge badge-ok">✅ Aprobado</span>`
+        :`<span class="badge badge-danger">❌ Rechazado${ops.motivo?' — '+ops.motivo:''}</span>`;
+      return`<div class="card" style="margin-bottom:8px;opacity:0.85">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <div>
+            <div style="font-size:13px;font-weight:600">${EI[m.equipo]||'🔧'} ${m.equipo} <span style="font-size:11px;color:var(--text3)">${m.tipo}</span> ${badge}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">${fmtF(m.fecha)} · Resp: ${m.resp||'—'} · Ops: ${ops.resp||'—'} ${ops.fecha?'· '+fmtF(ops.fecha):''}</div>
+          </div>
+          <div style="font-size:14px;font-weight:700;color:#fbbf24">${fmtS(m.costo)}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+}
+function aprobarOpsKitOp(id){
+  mantKitLoad();
+  const m=(state.mantenimiento||[]).find(x=>x.id===id);if(!m)return;
+  const def=(typeof usuarioActivo!=='undefined'&&usuarioActivo&&usuarioActivo.nombre)?usuarioActivo.nombre:'';
+  const resp=(prompt('Responsable que aprueba (Operaciones):',def)||'').trim();
+  if(!resp){showNotif('Cancelado — se requiere nombre','error');return;}
+  m.aprobOps={ok:true,resp,fecha:hoy()};
+  mantKitSave();renderSolicitudesPendientesOp();showNotif('✓ Aprobado por Operaciones');
+}
+function rechazarOpsKitOp(id){
+  mantKitLoad();
+  const m=(state.mantenimiento||[]).find(x=>x.id===id);if(!m)return;
+  const motivo=(prompt('Motivo del rechazo:')||'').trim();
+  const resp=(prompt('Responsable (Operaciones):')||'').trim();
+  if(!resp){showNotif('Cancelado — se requiere nombre','error');return;}
+  m.aprobOps={ok:false,rechazado:true,resp,fecha:hoy(),motivo};
+  mantKitSave();renderSolicitudesPendientesOp();showNotif('Solicitud rechazada por Operaciones');
 }
 function _renderSolicitudesPendientes(wrap,area){
   if(!wrap)return;
@@ -7725,12 +7795,27 @@ function renderMantenimiento(){
     else if(log.ok){estLbl='Aprobado Log';estCls='badge-warn';}
     else{estLbl='Pendiente';estCls='badge-danger';}
     const piezas=(m.repuestos&&m.repuestos.length)?m.repuestos.map(p=>`${p.nombre} ×${p.cant}`).join(' · '):'Sin piezas';
-    const opsBtn=ops.ok
-      ? `<button class="btn" style="font-size:11px;padding:4px 10px;background:#15803d;color:#fff;border:1px solid #15803d" onclick="aprobarOpsKit('${m.id}')">✔ Operaciones · ${ops.resp||'—'}${ops.fecha?' · '+fmtF(ops.fecha):''}</button>`
-      : `<button class="btn btn-outline" style="font-size:11px;padding:4px 10px" onclick="aprobarOpsKit('${m.id}')">Aprobar Operaciones</button>`;
-    const logBtn=log.ok
-      ? `<button class="btn" style="font-size:11px;padding:4px 10px;background:#15803d;color:#fff;border:1px solid #15803d" onclick="aprobarLogKit('${m.id}')">✔ Logística (despacho) · ${log.resp||'—'}${log.fecha?' · '+fmtF(log.fecha):''}</button>`
-      : `<button class="btn btn-outline" style="font-size:11px;padding:4px 10px" onclick="aprobarLogKit('${m.id}')">Aprobar Logística (despacho)</button>`;
+    // Read-only approval status badge
+    let approvalBadge;
+    if((ops.ok===false&&ops.resp&&!ops.ok)||(log.ok===false&&log.resp&&!log.ok)){
+      // Check if explicitly disapproved (rechazado flag)
+      const opsRej=ops.rechazado||false;const logRej=log.rechazado||false;
+      if(opsRej||logRej){approvalBadge=`<span style="font-size:11px;color:#f87171">❌ Desaprobado${opsRej?' (Ops)':''}${logRej?' (Log)':''}</span>`;}
+      else if(ops.ok&&log.ok){approvalBadge=`<span style="font-size:11px;color:#22d3a5">✅ Ops ✅ Log — Listo para despacho</span>`;}
+      else if(ops.ok){approvalBadge=`<span style="font-size:11px;color:#fb923c">✅ Ops ⏳ Log pendiente</span>`;}
+      else if(log.ok){approvalBadge=`<span style="font-size:11px;color:#fb923c">⏳ Ops pendiente ✅ Log</span>`;}
+      else{approvalBadge=`<span style="font-size:11px;color:var(--text3)">⏳ Pendiente</span>`;}
+    } else if(ops.ok&&log.ok){
+      approvalBadge=`<span style="font-size:11px;color:#22d3a5">✅ Ops ✅ Log — Listo para despacho</span>`;
+    } else if(ops.rechazado||log.rechazado){
+      approvalBadge=`<span style="font-size:11px;color:#f87171">❌ Desaprobado${ops.rechazado?' (Ops)':''}${log.rechazado?' (Log)':''}</span>`;
+    } else if(ops.ok){
+      approvalBadge=`<span style="font-size:11px;color:#fb923c">✅ Ops ⏳ Log pendiente</span>`;
+    } else if(log.ok){
+      approvalBadge=`<span style="font-size:11px;color:#fb923c">⏳ Ops pendiente ✅ Log</span>`;
+    } else {
+      approvalBadge=`<span style="font-size:11px;color:var(--text3)">⏳ Pendiente</span>`;
+    }
     const valeBtn=(ops.ok&&log.ok)
       ? `<button class="btn btn-gold" style="font-size:11px;padding:4px 10px" onclick="generarValeDespacho('${m.id}')">📄 Generar Vale de Costeo y Despacho</button>`
       : '';
@@ -7742,6 +7827,7 @@ function renderMantenimiento(){
             <div style="font-size:14px;font-weight:700;color:var(--text)">${m.equipo} <span class="badge ${estCls}" style="margin-left:6px">${estLbl}</span> <span style="font-size:11px;color:var(--text3);font-weight:400">${m.tipo}</span></div>
             <div style="font-size:12px;color:var(--text3);margin-top:2px">${fmtF(m.fecha)} · ${m.resp||'—'}</div>
             <div style="font-size:12px;color:var(--text2);margin-top:4px">${m.desc||''}</div>
+            <div style="margin-top:6px">${approvalBadge}</div>
           </div>
         </div>
         <div style="text-align:right">
@@ -7753,7 +7839,7 @@ function renderMantenimiento(){
         </div>
       </div>
       <div style="font-size:12px;color:var(--text2);border-top:1px solid var(--border);padding-top:8px"><strong style="color:var(--text3)">🔩 Kit:</strong> ${piezas}</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;border-top:1px solid var(--border);padding-top:8px">${opsBtn}${logBtn}${valeBtn}</div>
+      ${valeBtn?`<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px">${valeBtn}</div>`:''}
     </div>`;
   }).join('');
 }
@@ -7888,6 +7974,93 @@ function aprobarLogKit(id){
   (m.repuestos||[]).forEach(p=>{const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);if(r)r.stock=(r.stock||0)-p.cant;});
   m.aprobLog={ok:true,resp:resp||'—',fecha:hoy()};
   mantRepSave();mantKitSave();renderMantenimiento();showNotif('✓ Aprobado por Logística · stock despachado');
+}
+// ── Logística: Solicitudes de Mantenimiento ──
+function renderSolicitudMantLog(){
+  mantKitLoad();
+  const kits=state.mantenimiento||[];
+  const pendientes=kits.filter(m=>!(m.aprobLog&&m.aprobLog.ok)&&!(m.aprobLog&&m.aprobLog.rechazado));
+  const historial=kits.filter(m=>(m.aprobLog&&(m.aprobLog.ok||m.aprobLog.rechazado)));
+  const wrap=document.getElementById('log-solicitudmantlog');if(!wrap)return;
+  const pendHTML=pendientes.length?pendientes.map(m=>{
+    const ops=m.aprobOps||{};
+    const opsStatus=ops.ok
+      ?`<span class="badge badge-ok">✅ Ops: ${ops.resp||'—'} ${ops.fecha?fmtF(ops.fecha):''}</span>`
+      :(ops.rechazado
+        ?`<span class="badge badge-danger">❌ Ops rechazado</span>`
+        :`<span class="badge badge-danger">⏳ Ops pendiente</span>`);
+    const piezas=(m.repuestos&&m.repuestos.length)?m.repuestos.map(p=>`${p.nombre} ×${p.cant}`).join(' · '):'Sin piezas';
+    return`<div class="card" style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <div style="font-size:22px">${EI[m.equipo]||'🔧'}</div>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--text)">${m.equipo} ${opsStatus} <span style="font-size:11px;color:var(--text3);font-weight:400">${m.tipo}</span></div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px">${fmtF(m.fecha)} · ${m.resp||'—'}</div>
+            <div style="font-size:12px;color:var(--text2);margin-top:4px">${m.desc||''}</div>
+            <div style="font-size:12px;color:var(--text2);margin-top:4px"><strong style="color:var(--text3)">🔩 Kit:</strong> ${piezas}</div>
+          </div>
+        </div>
+        <div style="text-align:right"><div style="font-size:15px;font-weight:700;color:#fbbf24">${fmtS(m.costo)}</div></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;border-top:1px solid var(--border);padding-top:8px">
+        <button class="btn" style="font-size:12px;padding:5px 12px;background:#15803d;color:#fff;border:1px solid #15803d" onclick="aprobarLogKitLog('${m.id}')">✅ Aprobar despacho</button>
+        <button class="btn btn-outline" style="font-size:12px;padding:5px 12px;color:#f87171;border-color:#f87171" onclick="rechazarLogKitLog('${m.id}')">❌ Rechazar</button>
+      </div>
+    </div>`;
+  }).join('')
+  :`<div class="card"><div class="empty-state" style="padding:16px;color:var(--text3)">Sin solicitudes pendientes de despacho.</div></div>`;
+  const histHTML=historial.length?historial.map(m=>{
+    const log=m.aprobLog||{};
+    const badge=log.ok
+      ?`<span class="badge badge-ok">✅ Aprobado despacho</span>`
+      :`<span class="badge badge-danger">❌ Rechazado${log.motivo?' — '+log.motivo:''}</span>`;
+    return`<div class="card" style="margin-bottom:8px;opacity:0.85">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-size:13px;font-weight:600">${EI[m.equipo]||'🔧'} ${m.equipo} <span style="font-size:11px;color:var(--text3)">${m.tipo}</span> ${badge}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">${fmtF(m.fecha)} · Resp: ${m.resp||'—'} · Log: ${log.resp||'—'} ${log.fecha?'· '+fmtF(log.fecha):''}</div>
+        </div>
+        <div style="font-size:14px;font-weight:700;color:#fbbf24">${fmtS(m.costo)}</div>
+      </div>
+    </div>`;
+  }).join('')
+  :`<div class="card"><div class="empty-state" style="padding:16px;color:var(--text3)">Sin historial de despachos.</div></div>`;
+  wrap.innerHTML=`
+    <div class="section-title" style="margin-top:0">🧰 Pendientes de mi aprobación (Logística)</div>
+    ${pendHTML}
+    <div class="section-title" style="margin-top:24px">📋 Historial de despachos</div>
+    ${histHTML}`;
+}
+function aprobarLogKitLog(id){
+  mantRepLoad();mantKitLoad();
+  const m=(state.mantenimiento||[]).find(x=>x.id===id);if(!m)return;
+  if(!m.aprobLog)m.aprobLog={ok:false,resp:'',fecha:''};
+  // Guarda de stock
+  for(const p of (m.repuestos||[])){
+    const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);
+    if(r&&p.cant>(r.stock||0)){showNotif(`⚠ Stock insuficiente de ${r.nombre} (disp. ${r.stock||0}) — no se puede aprobar el despacho`,'error');return;}
+  }
+  const def=(typeof usuarioActivo!=='undefined'&&usuarioActivo&&usuarioActivo.nombre)?usuarioActivo.nombre:'';
+  const resp=(prompt('Responsable que aprueba el despacho (Logística):',def)||'').trim();
+  if(!resp){showNotif('Cancelado — se requiere nombre','error');return;}
+  (m.repuestos||[]).forEach(p=>{const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);if(r)r.stock=(r.stock||0)-p.cant;});
+  m.aprobLog={ok:true,resp,fecha:hoy()};
+  mantRepSave();mantKitSave();renderSolicitudMantLog();showNotif('✓ Aprobado por Logística · stock despachado');
+}
+function rechazarLogKitLog(id){
+  mantRepLoad();mantKitLoad();
+  const m=(state.mantenimiento||[]).find(x=>x.id===id);if(!m)return;
+  const motivo=(prompt('Motivo del rechazo:')||'').trim();
+  const resp=(prompt('Responsable (Logística):')||'').trim();
+  if(!resp){showNotif('Cancelado — se requiere nombre','error');return;}
+  // Si ya estaba aprobado, reponer stock
+  if(m.aprobLog&&m.aprobLog.ok){
+    (m.repuestos||[]).forEach(p=>{const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);if(r)r.stock=(r.stock||0)+p.cant;});
+    mantRepSave();
+  }
+  m.aprobLog={ok:false,rechazado:true,resp,fecha:hoy(),motivo};
+  mantKitSave();renderSolicitudMantLog();showNotif('Solicitud rechazada por Logística');
 }
 // ── Vale de costeo y despacho (Excel) ──
 function generarValeDespacho(id){
