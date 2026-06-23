@@ -2169,39 +2169,10 @@ select option{background:var(--coal3);}
 <div class="page active" id="page-dashboard">
   <!-- ── PANEL EJECUTIVO (Gerencia General) ── -->
   <div id="d-ejecutivo"></div>
-  <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(155px,1fr))">
-    <div class="kpi-card"><div class="kpi-label">Personal Activo Hoy</div><div class="kpi-value gold" id="d-personal">—</div><div class="kpi-sub" id="d-personal-sub">de — registrados</div></div>
-    <div class="kpi-card"><div class="kpi-label">Metros Avanzados Hoy</div><div class="kpi-value blue" id="d-metros">—</div><div class="kpi-sub">ambos frentes</div></div>
-    <div class="kpi-card"><div class="kpi-label">Costo Operativo Hoy</div><div class="kpi-value red" id="d-costo">S/ 0</div><div class="kpi-sub">planilla + insumos</div></div>
-    <div class="kpi-card"><div class="kpi-label">Costo por Metro</div><div class="kpi-value warn" id="d-costo-metro">—</div><div class="kpi-sub">S/ por metro avanzado</div></div>
-    <div class="kpi-card"><div class="kpi-label">Costo Explosivos</div><div class="kpi-value red" id="d-exp">—</div><div class="kpi-sub">unidades usadas</div></div>
-    <div class="kpi-card"><div class="kpi-label">Petróleo Hoy</div><div class="kpi-value warn" id="d-pet">—</div><div class="kpi-sub">galones consumidos</div></div>
-    <div class="kpi-card"><div class="kpi-label">Utilidad Estimada</div><div class="kpi-value green" id="d-util">S/ 0</div><div class="kpi-sub">proyección mensual</div></div>
-    <div class="kpi-card"><div class="kpi-label">OC Pendientes</div><div class="kpi-value warn" id="d-oc">0</div><div class="kpi-sub">por aprobar</div></div>
-  </div>
-  <div class="two-col">
-    <div class="card"><div class="section-title">Metros últimos 7 días</div><div class="mini-chart" id="chart-metros" style="height:80px"></div></div>
-    <div class="card"><div class="section-title">Stock Explosivos</div><div id="d-exp-stock"></div></div>
-  </div>
-  <div class="two-col">
-    <div class="card"><div class="section-title">Rampa — Rendimiento diario</div><div id="d-f1-rend"></div></div>
-    <div class="card"><div class="section-title">Cortada — Rendimiento diario</div><div id="d-f2-rend"></div></div>
-  </div>
-  <div class="two-col">
-    <div class="card">
-          <div class="section-title">Real vs Proyectado</div>
-          <canvas id="dash-chart-avance" style="max-height:150px;margin-bottom:10px"></canvas>
-          <div id="d-vs-proy"></div>
-        </div>
-    <div class="card">
-          <div class="section-title">Distribución de Costos</div>
-          <div style="display:grid;grid-template-columns:140px 1fr;gap:14px;align-items:center">
-            <canvas id="dash-chart-costos" style="max-height:180px"></canvas>
-            <div id="d-costos-dist"></div>
-          </div>
-        </div>
-  </div>
-  <div class="card"><div class="section-title">Alertas del Sistema</div><div id="d-alertas"></div></div>
+  <!-- ── Resumen del día + avance + alertas (reconstruido, intuitivo) ── -->
+  <div id="d-resumen-hoy"></div>
+  <div id="d-avance-meta"></div>
+  <div id="d-alertas-panel"></div>
 </div>
 
 <!-- LOGÍSTICA -->
@@ -4030,6 +4001,19 @@ function calcIngresos(){
   return valorizaciones + maquinas + frentes;
 }
 
+// Figuras (siluetas SVG) de los equipos reales de mina
+const EQ_FIG={
+  scoop:'<path d="M1 16h6l3-7h2v15H1z"/><rect x="12" y="13" width="24" height="13" rx="2"/><path d="M22 5h11l3 8H22z"/><rect x="36" y="11" width="24" height="15" rx="2"/><circle cx="18" cy="31" r="7"/><circle cx="48" cy="31" r="7"/>',
+  dumper:'<rect x="3" y="12" width="13" height="15" rx="2"/><path d="M18 27 L18 18 L52 10 L58 10 L58 27 Z"/><rect x="3" y="25" width="55" height="4"/><circle cx="14" cy="32" r="6"/><circle cx="42" cy="32" r="6"/><circle cx="52" cy="32" r="6"/>',
+  compresora:'<rect x="8" y="10" width="44" height="18" rx="3"/><rect x="13" y="14" width="11" height="7" rx="1" opacity=".45"/><rect x="28" y="14" width="18" height="3" opacity=".45"/><rect x="28" y="20" width="18" height="3" opacity=".45"/><path d="M52 16h9v3h-9z"/><circle cx="20" cy="31" r="5"/><circle cx="40" cy="31" r="5"/>',
+  excavadora:'<rect x="6" y="30" width="40" height="7" rx="3.5"/><rect x="10" y="15" width="22" height="15" rx="2"/><polygon points="30,19 48,11 52,15 40,23"/><polygon points="49,11 59,22 53,26 47,17"/><polygon points="55,21 63,21 61,30 53,28"/>',
+  cargador:'<polygon points="2,10 12,10 12,13 4,16"/><polygon points="12,11 14,9 26,20 24,22"/><rect x="24" y="14" width="34" height="13" rx="2"/><path d="M34 5h12l3 9h-15z"/><circle cx="32" cy="31" r="7"/><circle cx="50" cy="31" r="7"/>'
+};
+function eqSvg(id,col,size){
+  const s=size||40;
+  return `<svg viewBox="0 0 64 40" width="${s}" height="${Math.round(s*40/64)}" style="color:${col};fill:currentColor;display:block">${EQ_FIG[id]||''}</svg>`;
+}
+
 // ── PANEL EJECUTIVO (Gerencia General) ──
 function renderDashEjecutivo(){
   const cont=document.getElementById('d-ejecutivo');
@@ -4092,11 +4076,11 @@ function renderDashEjecutivo(){
   const tarifaHora=totalHoras>0?val.total/totalHoras:0;
 
   const MAQUINAS=[
-    {label:'Scoop',           icon:'🚜',col:'#3b82f6',tags:['scoop epiroc','scoop monte','scoop'],mt:['scoop'],   op:d=>130*d,opL:'S/130/día'},
-    {label:'Dumper',          icon:'🚚',col:'#f59e0b',tags:['dumper'],                          mt:['dumper'],  op:d=>120*d,opL:'S/120/día'},
-    {label:'Compresora',      icon:'🔴',col:'#8b5cf6',tags:['compresora m135','compresora m122','compresora'],mt:['compresora'],op:()=>3500,opL:'S/3,500/mes'},
-    {label:'Excavadora',      icon:'🏗',col:'#10b981',tags:['excavadora'],                      mt:['excavadora'],op:()=>5000,opL:'S/5,000/mes'},
-    {label:'Cargador Frontal',icon:'🔩',col:'#ef4444',tags:['cargador frontal','cargador'],     mt:['cargador'],op:()=>5000,opL:'S/5,000/mes'},
+    {label:'Scoop',           fig:'scoop',     col:'#3b82f6',tags:['scoop epiroc','scoop monte','scoop'],mt:['scoop'],   op:d=>130*d,opL:'S/130/día'},
+    {label:'Dumper',          fig:'dumper',    col:'#f59e0b',tags:['dumper'],                          mt:['dumper'],  op:d=>120*d,opL:'S/120/día'},
+    {label:'Compresora',      fig:'compresora',col:'#8b5cf6',tags:['compresora m135','compresora m122','compresora'],mt:['compresora'],op:()=>3500,opL:'S/3,500/mes'},
+    {label:'Excavadora',      fig:'excavadora',col:'#10b981',tags:['excavadora'],                      mt:['excavadora'],op:()=>5000,opL:'S/5,000/mes'},
+    {label:'Cargador Frontal',fig:'cargador',  col:'#ef4444',tags:['cargador frontal','cargador'],     mt:['cargador'],op:()=>5000,opL:'S/5,000/mes'},
   ];
   const maqData=MAQUINAS.map(m=>{
     const horas=m.tags.reduce((s,t)=>s+(horasMaq[t]||0),0);
@@ -4114,7 +4098,7 @@ function renderDashEjecutivo(){
     return `<div style="background:var(--coal4);border:1px solid ${ok?'rgba(16,185,129,.25)':'rgba(239,68,68,.25)'};border-radius:16px;padding:16px;position:relative;overflow:hidden">
       <div style="position:absolute;top:0;right:0;width:70px;height:70px;background:${m.col}0f;border-radius:0 16px 0 70px"></div>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
-        <div><div style="font-size:20px">${m.icon}</div>
+        <div><div style="width:52px;height:33px;display:flex;align-items:center;margin-bottom:3px">${eqSvg(m.fig,m.col,52)}</div>
           <div style="font-size:14px;font-weight:800;color:var(--text);margin-top:2px">${m.label}</div>
           <div style="font-size:10px;color:var(--text3);margin-top:1px">${m.horas>0?m.horas.toFixed(1)+' hrs operadas':'sin horómetro'}</div>
         </div>
@@ -4206,130 +4190,121 @@ function renderDashEjecutivo(){
 // ── DASHBOARD ──
 function renderDashboard(){
   renderDashEjecutivo();
-  const activos=state.personal.filter(p=>p.estado==='activo').length;
+  renderDashResumenHoy();
+  renderDashAvanceMeta();
+  renderDashAlertas();
+}
+
+// Resumen del día — tarjetas grandes y claras (no la grilla apretada)
+function renderDashResumenHoy(){
+  const cont=document.getElementById('d-resumen-hoy'); if(!cont)return;
+  const S=n=>'S/ '+Math.round(n||0).toLocaleString('es-PE');
   const ts=hoy();
+  const activos=state.personal.filter(p=>p.estado==='activo').length;
+  const totReg=state.personal.length;
   const mH=state.perforacion.filter(p=>p.fecha===ts).reduce((s,p)=>s+p.metros,0);
-  const eH=state.explosivos.historial.filter(e=>e.fecha===ts).reduce((s,e)=>s+e.cantidad,0);
   const pH=state.petroleo.historial.filter(p=>p.fecha===ts).reduce((s,p)=>s+p.galones,0);
   const cH=state.personal.filter(p=>p.estado==='activo').reduce((s,p)=>s+p.jornal,0);
-  document.getElementById('d-personal').textContent=activos;
-  document.getElementById('d-personal-sub').textContent=`de ${state.personal.length} registrados`;
-  document.getElementById('d-metros').textContent=mH+' m';
-  document.getElementById('d-costo').textContent=fmtS(cH);
-  document.getElementById('d-costo-metro').textContent=mH>0?fmtS(cH/mH):'—';
-  document.getElementById('d-exp').textContent='S/ '+Math.round(state.explosivos.historial.filter(e=>e.fecha===ts).reduce((s,e)=>s+(e.cantidad*(e.precio||0)),0)).toLocaleString('es-PE');
-  document.getElementById('d-pet').textContent=pH+' gl';
-  document.getElementById('d-util').textContent=fmtS(Math.max(0,calcIngresos()-calcCostos()));
-  document.getElementById('d-oc').textContent=state.ordenes.filter(o=>o.estado==='pendiente').length;
-  // Chart
-  const dias=[];for(let d=6;d>=0;d--){const f=new Date();f.setDate(f.getDate()-d);dias.push(f.toISOString().split('T')[0]);}
-  const maxM=Math.max(...dias.map(f=>state.perforacion.filter(p=>p.fecha===f).reduce((s,p)=>s+p.metros,0)),1);
-  document.getElementById('chart-metros').innerHTML=dias.map(f=>{
-    const m=state.perforacion.filter(p=>p.fecha===f).reduce((s,p)=>s+p.metros,0);
-    const h=Math.round((m/maxM)*65);
-    const lbl=new Date(f+'T12:00:00').toLocaleDateString('es-PE',{weekday:'narrow'});
-    return`<div class="bar-col"><div style="flex:1;display:flex;align-items:flex-end"><div class="bar-fill${f===ts?' highlight':''}" style="height:${h}px;width:100%"></div></div><div class="bar-label">${lbl}</div></div>`;
-  }).join('');
-  // Explosivos
-  document.getElementById('d-exp-stock').innerHTML=Object.entries(state.explosivos.stock).map(([tipo,qty])=>{
-    const pct=Math.min(100,Math.round(qty/5));const cls=qty<30?'red':'green';
-    return`<div class="progress-row"><div class="progress-label" style="font-size:11px">${tipo}</div><div class="progress-bar"><div class="progress-fill ${cls}" style="width:${pct}%"></div></div><div class="progress-val">${qty}</div></div>`;
-  }).join('');
-  // Frentes
-  [1,2].forEach(f=>{
-    const el=document.getElementById(`d-f${f}-rend`);
-    const data=state.perforacion.filter(p=>p.frente===f).slice(-5).reverse();
-    if(!data.length){el.innerHTML='<div class="empty-state">Sin datos</div>';return;}
-    el.innerHTML=data.map(d=>{
-      const r=d.personas>0?(d.metros/d.personas).toFixed(1):0;
-      return`<div class="rendimiento-fila"><div class="rend-fecha">${fmtF(d.fecha)}</div><div class="rend-val" style="color:${FC[f]}">${d.metros}m</div><div class="rend-bar"><div class="rend-fill" style="width:${Math.min(100,d.metros*3)}%;background:${FC[f]}"></div></div><div class="rend-frente">${r} m/p</div></div>`;
-    }).join('');
-  });
-  // VS Proyectado
+  const expH=state.explosivos.historial.filter(e=>e.fecha===ts).reduce((s,e)=>s+(e.cantidad*(e.precio||0)),0);
+  const ocP=state.ordenes.filter(o=>o.estado==='pendiente').length;
+
+  const card=(icon,label,valor,sub,col)=>`
+    <div style="flex:1;min-width:150px;background:var(--coal4);border:1px solid var(--border);border-radius:16px;padding:16px 18px;display:flex;align-items:center;gap:14px">
+      <div style="width:46px;height:46px;border-radius:13px;background:${col}1a;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${icon}</div>
+      <div style="min-width:0">
+        <div style="font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;font-weight:600">${label}</div>
+        <div style="font-size:23px;font-weight:900;color:${col};letter-spacing:-.5px;line-height:1.1">${valor}</div>
+        <div style="font-size:10.5px;color:var(--text3)">${sub}</div>
+      </div>
+    </div>`;
+
+  cont.innerHTML=`
+  <div style="margin:4px 0 18px">
+    <div style="font-size:13px;font-weight:800;color:var(--text);margin:0 2px 11px">📅 Actividad de Hoy</div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px">
+      ${card('👷','Personal en mina',activos,`de ${totReg} registrados`,'#fbbf24')}
+      ${card('⛏','Metros hoy',mH+' m',mH>0?'ambos frentes':'sin avance aún','#3b82f6')}
+      ${card('💵','Costo operativo hoy',S(cH),'planilla activa',mH>0?'#ef4444':'#94a3b8')}
+      ${card('🛢️','Petróleo hoy',pH+' gl','consumo del día','#f59e0b')}
+      ${card('💥','Explosivos hoy',S(expH),'valor consumido','#a855f7')}
+      ${card('📄','OC pendientes',ocP,ocP>0?'por aprobar':'todo al día',ocP>0?'#ef4444':'#10b981')}
+    </div>
+  </div>`;
+}
+
+// Avance acumulado vs meta — barra grande tipo termómetro
+function renderDashAvanceMeta(){
+  const cont=document.getElementById('d-avance-meta'); if(!cont)return;
+  const FNOM={1:'Rampa',2:'Cortada'};
+  const FCOL={1:'#3b82f6',2:'#10b981'};
   const tot=state.perforacion.reduce((s,p)=>s+p.metros,0);
   const mp=(state.metas.f1+state.metas.f2)*state.metas.dias;
-  const pct=mp>0?Math.round((tot/mp)*100):0;
-  document.getElementById('d-vs-proy').innerHTML=`<div class="vs-row"><div class="vs-label">Metros reales</div><div class="vs-real">${tot} m</div><div class="vs-proy">meta: ${mp} m</div><span class="vs-pct ${pct>=100?'over':'under'}">${pct}%</span></div><div class="progress-row" style="margin-top:8px"><div class="progress-bar" style="height:8px"><div class="progress-fill ${pct>=100?'green':'red'}" style="width:${Math.min(100,pct)}%"></div></div><div class="progress-val">${pct}%</div></div>`;
-  // Costos dist
-  const j=state.personal.filter(p=>p.estado==='activo').reduce((s,p)=>s+p.jornal*state.metas.dias,0);
-  const pe=state.petroleo.historial.reduce((s,p)=>s+(p.galones*p.precio),0);
-  const ma=state.mantenimiento.reduce((s,m)=>s+m.costo,0);
-  const ex=state.explosivos.historial.reduce((s,e)=>s+(e.cantidad*(e.precio||0)),0);
-  const tc=j+pe+ma+ex||1;
-  document.getElementById('d-costos-dist').innerHTML=[['👷 Jornales',j,'var(--text)'],['💥 Explosivos',ex,'var(--accent-light)'],['🛢 Petróleo',pe,'var(--text3)'],['🔧 Mantenimiento',ma,'var(--text2)']].map(([l,v,c])=>
-    `<div class="progress-row"><div class="progress-label">${l}</div><div class="progress-bar"><div class="progress-fill" style="width:${Math.round((v/tc)*100)}%;background:${c}"></div></div><div class="progress-val" style="font-size:10px">${fmtS(v)}</div></div>`).join('');
-  // Alertas
+  const pct=mp>0?Math.round(tot/mp*100):0;
+  const ok=pct>=100;
+
+  // por frente
+  const filas=[1,2].map(f=>{
+    const real=state.perforacion.filter(p=>p.frente===f).reduce((s,p)=>s+p.metros,0);
+    const meta=(f===1?state.metas.f1:state.metas.f2)*state.metas.dias;
+    const p=meta>0?Math.round(real/meta*100):0;
+    return `<div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+        <span style="font-size:13px;font-weight:700;color:var(--text)">⛏ Frente ${f} · ${FNOM[f]}</span>
+        <span style="font-size:12px;color:var(--text3)"><strong style="color:${FCOL[f]};font-size:18px">${real} m</strong> / ${meta} m meta</span>
+      </div>
+      <div style="background:rgba(255,255,255,.06);border-radius:99px;height:16px;overflow:hidden;position:relative">
+        <div style="width:${Math.min(100,p)}%;height:100%;background:linear-gradient(90deg,${FCOL[f]},${FCOL[f]}bb);border-radius:99px;transition:width .7s"></div>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.5)">${p}%</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  cont.innerHTML=`
+  <div style="background:var(--coal4);border:1px solid var(--border);border-radius:18px;padding:22px;margin-bottom:18px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+      <div style="font-size:14px;font-weight:800;color:var(--text)">🎯 Avance vs Meta del Período</div>
+      <div style="text-align:right">
+        <div style="font-size:30px;font-weight:900;color:${ok?'#10b981':pct>=70?'#f59e0b':'#ef4444'};letter-spacing:-1px;line-height:1">${pct}%</div>
+        <div style="font-size:10px;color:var(--text3)">${tot} de ${mp} m</div>
+      </div>
+    </div>
+    ${filas}
+    <div style="margin-top:6px;padding-top:14px;border-top:1px solid var(--border);font-size:12px;color:${ok?'#10b981':'var(--text3)'}">
+      ${ok?'✅ Meta del período alcanzada':`Faltan <strong style="color:var(--text2)">${Math.max(0,mp-tot)} m</strong> para la meta`}
+    </div>
+  </div>`;
+}
+
+// Alertas — tarjetas de acción claras para el gerente
+function renderDashAlertas(){
+  const cont=document.getElementById('d-alertas-panel'); if(!cont)return;
   const al=[];
-  Object.entries(state.explosivos.stock).forEach(([t,q])=>{if(q<30)al.push({t:'danger',m:`⚠ Stock bajo: ${t} — ${q} unidades`});});
+  Object.entries(state.explosivos.stock).forEach(([t,q])=>{if(q<30)al.push({t:'danger',ic:'⚠️',m:`Stock bajo de ${t}`,d:`Quedan ${q} unidades — reponer`});});
   const op=state.ordenes.filter(o=>o.estado==='pendiente').length;
-  if(op>0)al.push({t:'warn',m:`📄 ${op} Órdenes de Compra pendientes de aprobación`});
+  if(op>0)al.push({t:'warn',ic:'📄',m:`${op} Órdenes de Compra pendientes`,d:'Requieren aprobación'});
   const mp2=state.mantenimiento.filter(m=>m.estado==='pendiente').length;
-  if(mp2>0)al.push({t:'warn',m:`🔧 ${mp2} Mantenimientos pendientes`});
-  if(!al.length)al.push({t:'ok',m:'✓ Sin alertas activas'});
-  document.getElementById('d-alertas').innerHTML=al.map(a=>`<div class="alert alert-${a.t}">${a.m}</div>`).join('');
+  if(mp2>0)al.push({t:'warn',ic:'🔧',m:`${mp2} Mantenimientos pendientes`,d:'Programar atención de equipos'});
 
-  // ── Gráficos del dashboard ──
-  setTimeout(() => {
-    // Pastel de costos
-    const ctxDashCostos = document.getElementById('dash-chart-costos');
-    if(ctxDashCostos && typeof Chart !== 'undefined'){
-      if(window._dashChartCostos){ window._dashChartCostos.destroy(); }
-      const j2  = state.personal.filter(p=>p.estado==='activo').reduce((s,p)=>s+p.jornal*state.metas.dias,0);
-      const pe2 = state.petroleo.historial.reduce((s,p)=>s+(p.galones*p.precio),0);
-      const ma2 = state.mantenimiento.reduce((s,m)=>s+m.costo,0);
-      const ex2 = state.explosivos.historial.reduce((s,e)=>s+(e.cantidad*(e.precio||0)),0);
-      const mq2 = state.maquinas&&state.maquinas.uso?state.maquinas.uso.reduce((s,m)=>s+(m.galones||0)*(m.precioGal||14.5)+(m.alquiler||0),0):0;
-      window._dashChartCostos = new Chart(ctxDashCostos,{
-        type:'doughnut',
-        data:{
-          labels:['Jornales','Explosivos','Petróleo','Mantenimiento','Maquinaria'],
-          datasets:[{
-            data:[j2,ex2,pe2,ma2,mq2],
-            backgroundColor:['#1d6fe5','#334155','#475569','#64748b','#94a3b8'],
-            borderColor:'rgba(255,255,255,0.05)',
-            borderWidth:2,
-          }]
-        },
-        options:{
-          responsive:true,maintainAspectRatio:true,cutout:'65%',
-          plugins:{
-            legend:{
-              position:'bottom',
-              labels:{color:'#7d8590',font:{size:9},boxWidth:8,padding:8}
-            }
-          }
-        }
-      });
-    }
-
-    // Barras de avance últimos 7 días
-    const ctxDashAvance = document.getElementById('dash-chart-avance');
-    if(ctxDashAvance && typeof Chart !== 'undefined'){
-      if(window._dashChartAvance){ window._dashChartAvance.destroy(); }
-      const dias7=[];
-      for(let d=6;d>=0;d--){const f=new Date();f.setDate(f.getDate()-d);dias7.push(f.toISOString().split('T')[0]);}
-      const dataF1=dias7.map(f=>state.perforacion.filter(p=>p.fecha===f&&p.frente===1).reduce((s,p)=>s+p.metros,0));
-      const dataF2=dias7.map(f=>state.perforacion.filter(p=>p.fecha===f&&p.frente===2).reduce((s,p)=>s+p.metros,0));
-      window._dashChartAvance = new Chart(ctxDashAvance,{
-        type:'bar',
-        data:{
-          labels:dias7.map(f=>{const[y,m,d]=f.split('-');return d+'/'+m;}),
-          datasets:[
-            {label:'Rampa',data:dataF1,backgroundColor:'#1d6fe5',borderRadius:2,barPercentage:0.7},
-            {label:'Cortada',data:dataF2,backgroundColor:'#475569',borderRadius:2,barPercentage:0.7},
-          ]
-        },
-        options:{
-          responsive:true,maintainAspectRatio:true,
-          plugins:{legend:{labels:{color:'#7d8590',font:{size:9},boxWidth:8,padding:8}}},
-          scales:{
-            x:{ticks:{color:'#484f58',font:{size:8}},grid:{display:false},stacked:false},
-            y:{ticks:{color:'#484f58',font:{size:8}},grid:{color:'rgba(255,255,255,0.04)'},min:0}
-          }
-        }
-      });
-    }
-  }, 80);
+  const C={danger:{bg:'rgba(239,68,68,.09)',bd:'rgba(239,68,68,.3)',cl:'#ef4444'},
+           warn:{bg:'rgba(245,158,11,.09)',bd:'rgba(245,158,11,.3)',cl:'#f59e0b'},
+           ok:{bg:'rgba(16,185,129,.09)',bd:'rgba(16,185,129,.3)',cl:'#10b981'}};
+  let body;
+  if(!al.length){
+    const c=C.ok;
+    body=`<div style="background:${c.bg};border:1px solid ${c.bd};border-radius:14px;padding:18px;display:flex;align-items:center;gap:14px">
+      <div style="font-size:26px">✅</div>
+      <div><div style="font-size:14px;font-weight:800;color:${c.cl}">Todo en orden</div><div style="font-size:12px;color:var(--text3)">Sin alertas activas en la operación</div></div>
+    </div>`;
+  }else{
+    body=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:11px">`+al.map(a=>{
+      const c=C[a.t];
+      return `<div style="background:${c.bg};border:1px solid ${c.bd};border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px">
+        <div style="font-size:24px">${a.ic}</div>
+        <div style="min-width:0"><div style="font-size:13px;font-weight:800;color:${c.cl}">${a.m}</div><div style="font-size:11px;color:var(--text3)">${a.d}</div></div>
+      </div>`;
+    }).join('')+`</div>`;
+  }
+  cont.innerHTML=`<div style="margin-bottom:8px"><div style="font-size:13px;font-weight:800;color:var(--text);margin:0 2px 11px">🔔 Alertas de la Operación</div>${body}</div>`;
 }
 
 // ════════════════ MÓDULO ALMACÉN / INVENTARIO ════════════════
