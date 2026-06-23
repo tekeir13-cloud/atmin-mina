@@ -2167,6 +2167,8 @@ select option{background:var(--coal3);}
 
 <!-- DASHBOARD -->
 <div class="page active" id="page-dashboard">
+  <!-- ── PANEL EJECUTIVO (Gerencia General) ── -->
+  <div id="d-ejecutivo"></div>
   <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(155px,1fr))">
     <div class="kpi-card"><div class="kpi-label">Personal Activo Hoy</div><div class="kpi-value gold" id="d-personal">—</div><div class="kpi-sub" id="d-personal-sub">de — registrados</div></div>
     <div class="kpi-card"><div class="kpi-label">Metros Avanzados Hoy</div><div class="kpi-value blue" id="d-metros">—</div><div class="kpi-sub">ambos frentes</div></div>
@@ -4028,8 +4030,182 @@ function calcIngresos(){
   return valorizaciones + maquinas + frentes;
 }
 
+// ── PANEL EJECUTIVO (Gerencia General) ──
+function renderDashEjecutivo(){
+  const cont=document.getElementById('d-ejecutivo');
+  if(!cont)return;
+  // Mes en curso (usa helper de Finanzas si existe, si no el mes calendario actual)
+  const mes=(typeof finMesActual==='function')?finMesActual():new Date().toISOString().slice(0,7);
+  const nombreMes=(typeof finNombreMes==='function')?finNombreMes(mes):mes;
+
+  const S=n=>'S/ '+Math.round(n||0).toLocaleString('es-PE');
+  const Sk=n=>{n=n||0;const a=Math.abs(n);return a>=1000000?'S/ '+(n/1000000).toFixed(1)+'M':a>=1000?'S/ '+Math.round(n/1000)+'k':'S/ '+Math.round(n);};
+
+  // ── INGRESOS / GASTO / RESULTADO ──
+  const val=(typeof finValorizacionMes==='function')?finValorizacionMes(mes):{total:0,descuento:0};
+  const desglose=(typeof finDesgloseGastos==='function')?finDesgloseGastos(mes):[];
+  const costoTot=desglose.reduce((s,c)=>s+c.monto,0);
+  const costoExplo=(typeof finCostoExplosivos==='function')?finCostoExplosivos(mes):0;
+  const margen=val.total-costoTot;
+  const pctMargen=val.total>0?Math.round(margen/val.total*100):0;
+
+  // ── METROS POR FRENTE (mes en curso) ──
+  const perfMes=(state.perforacion||[]).filter(p=>(p.fecha||'').startsWith(mes));
+  const frentes=[...new Set(perfMes.map(p=>p.frente))].sort();
+  const metrosTot=perfMes.reduce((s,p)=>s+(p.metros||0),0);
+  const maxFr=Math.max(1,...frentes.map(f=>perfMes.filter(p=>p.frente===f).reduce((s,p)=>s+(p.metros||0),0)));
+  const FCOL=['#3b82f6','#10b981','#8b5cf6','#f59e0b','#ef4444'];
+  const FNOM={1:'Rampa',2:'Cortada'};
+  const frentesHtml=frentes.length?frentes.map((f,i)=>{
+    const mt=perfMes.filter(p=>p.frente===f).reduce((s,p)=>s+(p.metros||0),0);
+    const pct=Math.round(mt/maxFr*100);const col=FCOL[i%FCOL.length];
+    return `<div style="margin-bottom:13px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
+        <span style="font-size:13px;font-weight:700;color:var(--text)">⛏ Frente ${f}${FNOM[f]?' · '+FNOM[f]:''}</span>
+        <span style="font-size:22px;font-weight:900;color:${col};letter-spacing:-1px">${mt} m</span>
+      </div>
+      <div style="background:rgba(255,255,255,.06);border-radius:99px;height:13px;overflow:hidden">
+        <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,${col},${col}cc);border-radius:99px;transition:width .7s"></div>
+      </div>
+    </div>`;
+  }).join(''):`<div style="text-align:center;padding:18px;color:var(--text3);font-size:13px">Sin perforación registrada este mes</div>`;
+  const diasPerf=[...new Set(perfMes.map(p=>p.fecha))].length||1;
+  const rendProm=(metrosTot/diasPerf).toFixed(1);
+
+  // ── P&L POR EQUIPO ──
+  const compMes=(state.compresorista||[]).filter(r=>(r.fecha||'').startsWith(mes));
+  const horasMaq={},galMaq={};
+  compMes.forEach(r=>{
+    (r.horometros||[]).forEach(h=>{horasMaq[h.equipo]=(horasMaq[h.equipo]||0)+(h.HT||0);});
+    (r.petroleo||[]).forEach(p=>{galMaq[p.equipo]=(galMaq[p.equipo]||0)+(p.gln||0);});
+  });
+  const diasMes=compMes.length>0?[...new Set(compMes.map(r=>r.fecha))].length:26;
+  // Precio de galón: promedio del combustible del mes, si no 14
+  let precioComb=14;
+  try{
+    const arr=(typeof combCargar==='function'?combCargar('pet')||[]:[]).filter(r=>(r.fecha||'').startsWith(mes));
+    if(arr.length)precioComb=(arr.reduce((s,r)=>s+(r.precio||0),0)/arr.length)||14;
+  }catch(e){}
+  const mantMes=(state.mantenimiento||[]).filter(m=>(m.fecha||'').startsWith(mes));
+  const mantPorEq=tags=>mantMes.filter(m=>tags.some(t=>(m.equipo||'').toLowerCase().includes(t))).reduce((s,m)=>s+(m.costo||0),0);
+  const totalHoras=Object.values(horasMaq).reduce((s,h)=>s+h,0);
+  const tarifaHora=totalHoras>0?val.total/totalHoras:0;
+
+  const MAQUINAS=[
+    {label:'Scoop',           icon:'🚜',col:'#3b82f6',tags:['scoop epiroc','scoop monte','scoop'],mt:['scoop'],   op:d=>130*d,opL:'S/130/día'},
+    {label:'Dumper',          icon:'🚚',col:'#f59e0b',tags:['dumper'],                          mt:['dumper'],  op:d=>120*d,opL:'S/120/día'},
+    {label:'Compresora',      icon:'🔴',col:'#8b5cf6',tags:['compresora m135','compresora m122','compresora'],mt:['compresora'],op:()=>3500,opL:'S/3,500/mes'},
+    {label:'Excavadora',      icon:'🏗',col:'#10b981',tags:['excavadora'],                      mt:['excavadora'],op:()=>5000,opL:'S/5,000/mes'},
+    {label:'Cargador Frontal',icon:'🔩',col:'#ef4444',tags:['cargador frontal','cargador'],     mt:['cargador'],op:()=>5000,opL:'S/5,000/mes'},
+  ];
+  const maqData=MAQUINAS.map(m=>{
+    const horas=m.tags.reduce((s,t)=>s+(horasMaq[t]||0),0);
+    const gal=m.tags.reduce((s,t)=>s+(galMaq[t]||0),0);
+    const ingresos=horas*tarifaHora;
+    const cMant=mantPorEq(m.mt);
+    const cComb=gal*precioComb;
+    const cOp=m.op(diasMes);
+    return {...m,horas,gal,ingresos,cMant,cComb,cOp,resultado:ingresos-cMant-cComb-cOp};
+  });
+  const maxAbs=Math.max(1,...maqData.map(m=>Math.abs(m.resultado)));
+  const maqCards=maqData.map(m=>{
+    const ok=m.resultado>=0;const pctBar=Math.round(Math.abs(m.resultado)/maxAbs*100);
+    const hasData=m.horas>0||m.cMant>0||m.gal>0;
+    return `<div style="background:var(--coal4);border:1px solid ${ok?'rgba(16,185,129,.25)':'rgba(239,68,68,.25)'};border-radius:16px;padding:16px;position:relative;overflow:hidden">
+      <div style="position:absolute;top:0;right:0;width:70px;height:70px;background:${m.col}0f;border-radius:0 16px 0 70px"></div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+        <div><div style="font-size:20px">${m.icon}</div>
+          <div style="font-size:14px;font-weight:800;color:var(--text);margin-top:2px">${m.label}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:1px">${m.horas>0?m.horas.toFixed(1)+' hrs operadas':'sin horómetro'}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">${ok?'GANANCIA':'PÉRDIDA'}</div>
+          <div style="font-size:24px;font-weight:900;color:${ok?'#10b981':'#ef4444'};letter-spacing:-1px;line-height:1.1">${ok?'+':''}${Sk(m.resultado)}</div>
+        </div>
+      </div>
+      <div style="background:rgba(255,255,255,.06);border-radius:99px;height:5px;overflow:hidden;margin-bottom:11px">
+        <div style="width:${pctBar}%;height:100%;background:${ok?'linear-gradient(90deg,#10b981,#34d399)':'linear-gradient(90deg,#ef4444,#f87171)'};border-radius:99px"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;font-size:10.5px">
+        ${m.horas>0?`<div style="background:rgba(16,185,129,.07);border-radius:7px;padding:6px 9px"><div style="color:var(--text3)">📥 Ingresos</div><div style="font-weight:700;color:#10b981;margin-top:1px">${Sk(m.ingresos)}</div></div>`:''}
+        ${m.cMant>0?`<div style="background:rgba(245,158,11,.07);border-radius:7px;padding:6px 9px"><div style="color:var(--text3)">🔧 Mant.</div><div style="font-weight:700;color:#f59e0b;margin-top:1px">-${Sk(m.cMant)}</div></div>`:''}
+        ${m.gal>0?`<div style="background:rgba(239,68,68,.07);border-radius:7px;padding:6px 9px"><div style="color:var(--text3)">🛢 Combustible</div><div style="font-weight:700;color:#ef4444;margin-top:1px">-${Sk(m.cComb)}</div></div>`:''}
+        <div style="background:rgba(139,92,246,.07);border-radius:7px;padding:6px 9px"><div style="color:var(--text3)">👷 Operador</div><div style="font-weight:700;color:#8b5cf6;margin-top:1px">-${Sk(m.cOp)}</div><div style="color:var(--text3);font-size:9px">${m.opL}</div></div>
+        ${!hasData?`<div style="background:rgba(255,255,255,.04);border-radius:7px;padding:6px 9px;grid-column:1/-1;text-align:center;color:var(--text3)">Solo costo de operador estimado</div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+
+  cont.innerHTML=`
+<div style="background:linear-gradient(180deg,rgba(108,92,231,.05),transparent 280px);border-radius:20px;padding:4px;margin-bottom:18px">
+  <div style="padding:14px 16px 4px">
+    <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;font-weight:700">📊 Reporte Ejecutivo · Gerencia General</div>
+    <div style="font-size:20px;font-weight:900;color:var(--text);letter-spacing:-.5px;margin-top:2px">${nombreMes}</div>
+  </div>
+
+  <!-- 3 KPI HÉROE -->
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:10px 14px">
+    <div style="background:linear-gradient(135deg,#065f46,#047857);border-radius:18px;padding:20px;position:relative;overflow:hidden;box-shadow:0 8px 28px rgba(16,185,129,.18)">
+      <div style="position:absolute;top:-20px;right:-20px;width:90px;height:90px;background:rgba(255,255,255,.06);border-radius:50%"></div>
+      <div style="font-size:10.5px;color:#6ee7b7;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:6px">📥 Ganado en el Período</div>
+      <div style="font-size:33px;font-weight:900;color:#fff;letter-spacing:-1.5px;line-height:1">${S(val.total)}</div>
+      <div style="margin-top:8px;font-size:11px;color:#a7f3d0">Valorización neta del mes</div>
+    </div>
+    <div style="background:linear-gradient(135deg,#7c2d12,#9a3412);border-radius:18px;padding:20px;position:relative;overflow:hidden;box-shadow:0 8px 28px rgba(234,88,12,.18)">
+      <div style="position:absolute;top:-20px;right:-20px;width:90px;height:90px;background:rgba(255,255,255,.06);border-radius:50%"></div>
+      <div style="font-size:10.5px;color:#fdba74;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:6px">📤 Gasto Total</div>
+      <div style="font-size:33px;font-weight:900;color:#fff;letter-spacing:-1.5px;line-height:1">${S(costoTot)}</div>
+      <div style="margin-top:8px;font-size:11px;color:#fed7aa">Explosivos aparte: ${S(costoExplo)}</div>
+    </div>
+    <div style="background:${margen>=0?'linear-gradient(135deg,#1e1b4b,#312e81)':'linear-gradient(135deg,#450a0a,#7f1d1d)'};border-radius:18px;padding:20px;position:relative;overflow:hidden;box-shadow:0 8px 28px ${margen>=0?'rgba(99,102,241,.22)':'rgba(239,68,68,.18)'}">
+      <div style="position:absolute;top:-20px;right:-20px;width:90px;height:90px;background:rgba(255,255,255,.06);border-radius:50%"></div>
+      <div style="font-size:10.5px;color:${margen>=0?'#c7d2fe':'#fca5a5'};text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:6px">${margen>=0?'💰 Resultado':'⚠️ Resultado'}</div>
+      <div style="font-size:33px;font-weight:900;color:#fff;letter-spacing:-1.5px;line-height:1">${margen>=0?'+':''}${S(margen)}</div>
+      <div style="margin-top:8px;font-size:11px;color:${margen>=0?'#c7d2fe':'#fca5a5'}">Rentabilidad: ${pctMargen}% ${margen>=0?'✓':'✗'}</div>
+    </div>
+  </div>
+
+  <!-- METROS POR FRENTE -->
+  <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:12px;padding:6px 14px">
+    <div style="background:var(--coal4);border:1px solid var(--border);border-radius:18px;padding:20px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px">
+        <div style="font-size:14px;font-weight:800;color:var(--text)">⛏ Metros por Frente</div>
+        <div style="text-align:right"><div style="font-size:26px;font-weight:900;color:#3b82f6;letter-spacing:-1px">${metrosTot} m</div><div style="font-size:10px;color:var(--text3)">total del mes</div></div>
+      </div>
+      ${frentesHtml}
+    </div>
+    <div style="background:var(--coal4);border:1px solid var(--border);border-radius:18px;padding:20px">
+      <div style="font-size:14px;font-weight:800;color:var(--text);margin-bottom:14px">📈 Indicadores</div>
+      <div style="display:flex;flex-direction:column;gap:11px">
+        <div style="background:var(--coal3);border-radius:11px;padding:12px 14px">
+          <div style="font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Rendimiento Promedio</div>
+          <div style="font-size:25px;font-weight:900;color:#f59e0b;letter-spacing:-1px;margin-top:2px">${rendProm} m/día</div>
+          <div style="font-size:10px;color:var(--text3)">${diasPerf} días con actividad</div>
+        </div>
+        <div style="background:var(--coal3);border-radius:11px;padding:12px 14px">
+          <div style="font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Costo por Metro</div>
+          <div style="font-size:25px;font-weight:900;color:var(--text);letter-spacing:-1px;margin-top:2px">${metrosTot>0?S(costoTot/metrosTot):'—'}</div>
+          <div style="font-size:10px;color:var(--text3)">gasto total ÷ metros</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- P&L POR EQUIPO -->
+  <div style="padding:10px 14px 16px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:11px">
+      <div><div style="font-size:15px;font-weight:900;color:var(--text)">Ganancia por Equipo</div>
+        <div style="font-size:10.5px;color:var(--text3);margin-top:1px">Ingresos (horas × tarifa) − Mantenimiento − Combustible − Operador</div></div>
+      ${totalHoras>0?`<div style="font-size:10.5px;color:var(--text3)">Tarifa: <strong style="color:var(--text2)">${S(tarifaHora)}/hr</strong></div>`:'<div style="font-size:10.5px;color:#f59e0b">⚠️ Sin horómetros registrados</div>'}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:11px">${maqCards}</div>
+  </div>
+</div>`;
+}
+
 // ── DASHBOARD ──
 function renderDashboard(){
+  renderDashEjecutivo();
   const activos=state.personal.filter(p=>p.estado==='activo').length;
   const ts=hoy();
   const mH=state.perforacion.filter(p=>p.fecha===ts).reduce((s,p)=>s+p.metros,0);
@@ -11944,284 +12120,120 @@ function renderFinDashboard(){
   const costoExplo=finCostoExplosivos(mes);
   const margen=val.total-costoTot;
   const avance=finAvanceMes(mes);
+  const cpMetro=avance>0?costoTot/avance:null;
   const presup=parseFloat(localStorage.getItem('atmin_fin_presupuesto')||'500000');
   const pctEjec=presup>0?Math.round(costoTot/presup*100):0;
   const pctMargen=val.total>0?Math.round(margen/val.total*100):0;
   const demo=finDemoOn();
 
   const S=n=>'S/ '+Math.round(n).toLocaleString('es-PE');
-  const Sk=n=>n>=1000000?'S/ '+(n/1000000).toFixed(1)+'M':n>=1000?'S/ '+Math.round(n/1000)+'k':'S/ '+Math.round(n);
-  const bar=(pct,col,h=8)=>`<div style="background:rgba(255,255,255,.07);border-radius:99px;height:${h}px;overflow:hidden;margin-top:8px"><div style="width:${Math.min(100,Math.max(0,pct))}%;height:100%;background:${col};border-radius:99px;transition:width .6s"></div></div>`;
+  // Barra de progreso reutilizable
+  const bar=(pct,col)=>`<div style="background:rgba(255,255,255,.07);border-radius:99px;height:8px;overflow:hidden;margin-top:8px"><div style="width:${Math.min(100,Math.max(0,pct))}%;height:100%;background:${col};border-radius:99px;transition:width .4s"></div></div>`;
 
-  // ── METROS POR FRENTE ──────────────────────────────────────────────
-  const perfMes=finFiltrarMes(state.perforacion||[],mes);
-  const frentes=[...new Set(perfMes.map(p=>p.frente))].sort();
-  const metrosTot=perfMes.reduce((s,p)=>s+(p.metros||0),0);
-  const maxFrMetros=Math.max(1,...frentes.map(f=>perfMes.filter(p=>p.frente===f).reduce((s,p)=>s+(p.metros||0),0)));
-  const FRENTE_COLORS=['#3498db','#27ae60','#9b59b6','#e67e22','#e74c3c'];
-  const frentesHtml=frentes.length?frentes.map((f,i)=>{
-    const mt=perfMes.filter(p=>p.frente===f).reduce((s,p)=>s+(p.metros||0),0);
-    const pct=Math.round(mt/maxFrMetros*100);
-    const col=FRENTE_COLORS[i%FRENTE_COLORS.length];
-    return `<div style="margin-bottom:14px">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
-        <span style="font-size:13px;font-weight:700;color:var(--text)">⛏ Frente ${f}</span>
-        <span style="font-size:22px;font-weight:900;color:${col};letter-spacing:-1px">${mt} m</span>
+  // Composición de costos (todas las categorías de gasto de mina)
+  const compHtml=desglose.map(c=>{
+    const pct=costoTot>0?Math.round(c.monto/costoTot*100):0;
+    return `<div style="background:var(--coal3);border-radius:12px;padding:16px 18px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <span style="font-size:13px;color:var(--text2);font-weight:600">${c.icon} ${c.label}</span>
+        <span style="font-size:12px;color:var(--text3)">${pct}%</span>
       </div>
-      <div style="background:rgba(255,255,255,.06);border-radius:99px;height:14px;overflow:hidden;position:relative">
-        <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,${col},${col}cc);border-radius:99px;transition:width .7s;position:relative">
-          <div style="position:absolute;right:0;top:0;bottom:0;width:4px;background:rgba(255,255,255,.3);border-radius:99px"></div>
-        </div>
-      </div>
-    </div>`;
-  }).join(''):`<div style="text-align:center;padding:20px;color:var(--text3);font-size:13px">Sin registros de perforación este mes</div>`;
-
-  // ── RENDIMIENTO PROMEDIO ────────────────────────────────────────────
-  const diasPerf=[...new Set(perfMes.map(p=>p.fecha))].length||1;
-  const rendProm=diasPerf>0?(metrosTot/diasPerf).toFixed(1):0;
-
-  // ── P&L POR EQUIPO ─────────────────────────────────────────────────
-  // Horómetros del mes desde compresorista
-  const compMes=(state.compresorista||[]).filter(r=>(r.fecha||'').startsWith(mes));
-  const horasMaq={};
-  const galMaq={};
-  compMes.forEach(r=>{
-    (r.horometros||[]).forEach(h=>{ horasMaq[h.equipo]=(horasMaq[h.equipo]||0)+(h.HT||0); });
-    (r.petroleo||[]).forEach(p=>{ galMaq[p.equipo]=(galMaq[p.equipo]||0)+(p.gln||0); });
-  });
-  const diasMes=compMes.length>0?[...new Set(compMes.map(r=>r.fecha))].length:26;
-  const precioGalon=14; // S/14 por galón de petróleo (default si no está en form)
-  // Intentar obtener precio de combustible registrado del mes
-  const combMesArr=(combCargar?combCargar('pet')||[]:((state.combustible&&state.combustible.pet)||[])).filter(r=>(r.fecha||'').startsWith(mes));
-  const precioCombMes=combMesArr.length>0?(combMesArr.reduce((s,r)=>s+(r.precio||0),0)/combMesArr.length)||precioGalon:precioGalon;
-
-  // Mantenimiento por máquina del mes
-  const mantMes=(state.mantenimiento||[]).filter(m=>(m.fecha||'').startsWith(mes));
-  const matchEq=(nombre,tags)=>tags.some(t=>nombre.toLowerCase().includes(t.toLowerCase()));
-  const mantPorEq=tags=>mantMes.filter(m=>matchEq(m.equipo||'',tags)).reduce((s,m)=>s+(m.costo||0),0);
-
-  // Revenue del mes distribuido por horas (valorización ÷ totalHoras)
-  const totalHorasMes=Object.values(horasMaq).reduce((s,h)=>s+h,0)||0;
-  const tarifaHora=totalHorasMes>0?val.total/totalHorasMes:0;
-
-  const MAQUINAS=[
-    {id:'scoop',    label:'Scoop',            icon:'🚜', color:'#3b82f6',
-     tags:['scoop epiroc','scoop monte','scoop'],
-     mantTags:['scoop'],
-     opCost:d=>130*d, opLabel:'S/130/día'},
-    {id:'dumper',   label:'Dumper',           icon:'🚚', color:'#f59e0b',
-     tags:['dumper'],
-     mantTags:['dumper'],
-     opCost:d=>120*d, opLabel:'S/120/día'},
-    {id:'comp',     label:'Compresora',       icon:'🔴', color:'#8b5cf6',
-     tags:['compresora m135','compresora m122','compresora'],
-     mantTags:['compresora'],
-     opCost:()=>3500, opLabel:'S/3,500/mes'},
-    {id:'excav',    label:'Excavadora',       icon:'🏗', color:'#10b981',
-     tags:['excavadora'],
-     mantTags:['excavadora'],
-     opCost:()=>5000, opLabel:'S/5,000/mes'},
-    {id:'cargador', label:'Cargador Frontal', icon:'🔩', color:'#ef4444',
-     tags:['cargador frontal','cargador'],
-     mantTags:['cargador'],
-     opCost:()=>5000, opLabel:'S/5,000/mes'},
-  ];
-
-  const maqData=MAQUINAS.map(maq=>{
-    const horas=maq.tags.reduce((s,t)=>s+(horasMaq[t]||0),0);
-    const gal=maq.tags.reduce((s,t)=>s+(galMaq[t]||0),0);
-    const ingresos=horas*tarifaHora;
-    const cMant=mantPorEq(maq.mantTags);
-    const cComb=gal*precioCombMes;
-    const cOp=maq.opCost(diasMes);
-    const resultado=ingresos-cMant-cComb-cOp;
-    return {...maq,horas,gal,ingresos,cMant,cComb,cOp,resultado};
-  });
-
-  const maxAbsRes=Math.max(1,...maqData.map(m=>Math.abs(m.resultado)));
-
-  const maqCards=maqData.map(m=>{
-    const pctBar=Math.round(Math.abs(m.resultado)/maxAbsRes*100);
-    const ok=m.resultado>=0;
-    const hasData=m.horas>0||m.cMant>0||m.gal>0;
-    return `<div style="background:var(--coal4);border:1px solid ${ok?'rgba(16,185,129,.25)':'rgba(239,68,68,.25)'};border-radius:16px;padding:18px;position:relative;overflow:hidden">
-      <div style="position:absolute;top:0;right:0;width:80px;height:80px;background:${m.color}08;border-radius:0 16px 0 80px"></div>
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
-        <div>
-          <div style="font-size:22px;margin-bottom:2px">${m.icon}</div>
-          <div style="font-size:14px;font-weight:800;color:var(--text)">${m.label}</div>
-          ${m.horas>0?`<div style="font-size:11px;color:var(--text3);margin-top:1px">${m.horas.toFixed(1)} hrs operadas</div>`:'<div style="font-size:11px;color:var(--text3);margin-top:1px">Sin horómetro registrado</div>'}
-        </div>
-        <div style="text-align:right">
-          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">${ok?'GANANCIA':'PÉRDIDA'}</div>
-          <div style="font-size:26px;font-weight:900;color:${ok?'#10b981':'#ef4444'};letter-spacing:-1px;line-height:1">${ok?'+':''}${Sk(m.resultado)}</div>
-        </div>
-      </div>
-      <div style="background:rgba(255,255,255,.06);border-radius:99px;height:6px;overflow:hidden;margin-bottom:12px">
-        <div style="width:${pctBar}%;height:100%;background:${ok?'linear-gradient(90deg,#10b981,#34d399)':'linear-gradient(90deg,#ef4444,#f87171)'};border-radius:99px;transition:width .7s"></div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px">
-        ${m.horas>0?`<div style="background:rgba(16,185,129,.07);border-radius:8px;padding:7px 10px"><div style="color:var(--text3)">📥 Ingresos (hrs)</div><div style="font-weight:700;color:#10b981;margin-top:2px">${Sk(m.ingresos)}</div></div>`:''}
-        ${m.cMant>0?`<div style="background:rgba(245,158,11,.07);border-radius:8px;padding:7px 10px"><div style="color:var(--text3)">🔧 Mantenimiento</div><div style="font-weight:700;color:#f59e0b;margin-top:2px">-${Sk(m.cMant)}</div></div>`:''}
-        ${m.gal>0?`<div style="background:rgba(239,68,68,.07);border-radius:8px;padding:7px 10px"><div style="color:var(--text3)">🛢 Combustible</div><div style="font-weight:700;color:#ef4444;margin-top:2px">-${Sk(m.cComb)} (${m.gal.toFixed(0)} gl)</div></div>`:''}
-        <div style="background:rgba(139,92,246,.07);border-radius:8px;padding:7px 10px"><div style="color:var(--text3)">👷 Operador</div><div style="font-weight:700;color:#8b5cf6;margin-top:2px">-${Sk(m.cOp)}</div><div style="color:var(--text3);font-size:10px">${m.opLabel}</div></div>
-        ${!hasData?`<div style="background:rgba(255,255,255,.04);border-radius:8px;padding:7px 10px;grid-column:1/-1;text-align:center;color:var(--text3)">Solo costo de operador estimado</div>`:''}
-      </div>
+      <div style="font-size:24px;font-weight:800;color:${c.color};margin-top:6px;letter-spacing:-.5px">${S(c.monto)}</div>
+      ${bar(pct,c.color)}
     </div>`;
   }).join('');
 
-  // ── HISTORIAL 6 MESES ────────────────────────────────────────────────
+  // Historial 6 meses (tarjetas compactas)
   const hist6=finUltimos6Meses();
   const maxVal=Math.max(1,...hist6.map(m=>finValorizacionMes(m).total));
-  const histBars=hist6.map(m=>{
+  const histCards=hist6.map(m=>{
     const v=finValorizacionMes(m).total;
     const c=finCostoTotal(m);
     const mg=v-c;
-    const hV=Math.round(v/maxVal*100);
-    const hC=v>0?Math.round(c/v*100):0;
+    const h=Math.round(v/maxVal*100);
     const esActual=m===mes;
-    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px">
-      <div style="font-size:10px;color:${mg>=0?'#10b981':'#ef4444'};font-weight:700">${v>0?(mg>=0?'+':'')+Math.round(mg/1000)+'k':'—'}</div>
-      <div style="width:100%;max-width:52px;height:100px;background:rgba(255,255,255,.05);border-radius:8px;display:flex;flex-direction:column-reverse;overflow:hidden;position:relative">
-        <div style="height:${hV}%;background:${esActual?'linear-gradient(180deg,#6c5ce7,#a29bfe)':'linear-gradient(180deg,#3498db88,#5dade266)'};border-radius:0 0 8px 8px;transition:height .5s;position:relative">
-          <div style="position:absolute;top:0;left:0;right:0;height:${Math.min(hC,100)}%;background:rgba(239,68,68,.35);border-radius:0"></div>
-        </div>
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px">
+      <div style="font-size:10px;color:${mg>=0?'#27ae60':'#e74c3c'};font-weight:700">${v>0?(mg>=0?'+':'')+Math.round(mg/1000)+'k':'—'}</div>
+      <div style="width:100%;max-width:46px;height:120px;background:rgba(255,255,255,.05);border-radius:8px;display:flex;flex-direction:column-reverse;overflow:hidden">
+        <div style="height:${h}%;background:${esActual?'linear-gradient(180deg,#6c5ce7,#a29bfe)':'linear-gradient(180deg,#3498db,#5dade2)'};border-radius:8px 8px 0 0;transition:height .5s"></div>
       </div>
-      <div style="font-size:11px;font-weight:${esActual?'800':'500'};color:${esActual?'#a29bfe':'var(--text3)'}">${finNombreMes(m).split(' ')[0]}</div>
+      <div style="font-size:11px;font-weight:${esActual?'800':'500'};color:${esActual?'var(--accent-light)':'var(--text3)'}">${finNombreMes(m).split(' ')[0]}</div>
     </div>`;
   }).join('');
 
   const el=document.getElementById('fin-dashboard');
   el.innerHTML=`
-<div style="background:linear-gradient(180deg,rgba(108,92,231,.06) 0%,transparent 300px);min-height:100%">
-<div style="padding:16px 18px">
-
-  <!-- ── HEADER ────────────────────────────────────────────────────── -->
-  <div style="display:flex;gap:10px;align-items:center;margin-bottom:20px;flex-wrap:wrap">
-    <div>
-      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-weight:600">Reporte Ejecutivo</div>
-      <div style="font-size:20px;font-weight:900;color:var(--text);letter-spacing:-.5px">${finNombreMes(mes)}</div>
-    </div>
-    <button onclick="finToggleDemo()" style="padding:5px 14px;background:${demo?'linear-gradient(135deg,#6c5ce7,#a29bfe)':'var(--coal4)'};color:${demo?'#fff':'var(--text3)'};border:1px solid ${demo?'transparent':'var(--border)'};border-radius:99px;cursor:pointer;font-size:11px;font-weight:700">${demo?'● DEMO ON':'○ Demo'}</button>
+<div style="padding:16px">
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap">
+    <h3 style="margin:0;color:var(--text)">Dashboard Financiero — ${finNombreMes(mes)}</h3>
+    <button onclick="finToggleDemo()" title="Mostrar/ocultar datos de ejemplo" style="padding:4px 12px;background:${demo?'#6c5ce7':'var(--coal4)'};color:${demo?'#fff':'var(--text2)'};border:1px solid var(--border);border-radius:99px;cursor:pointer;font-size:11px;font-weight:600">${demo?'● Datos demo ON':'○ Datos demo'}</button>
     <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-      <label style="font-size:12px;color:var(--text2)">Presupuesto</label>
-      <input id="fin-presup-input" type="number" value="${presup}" style="width:110px;padding:5px 9px;border:1px solid var(--border);border-radius:8px;background:var(--coal4);color:var(--text);font-size:13px">
-      <button onclick="finGuardarPresupuesto()" style="padding:5px 14px;background:var(--accent);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600">Guardar</button>
+      <label style="font-size:12px;color:var(--text2)">Presupuesto S/</label>
+      <input id="fin-presup-input" type="number" value="${presup}" style="width:110px;padding:5px 9px;border:1px solid var(--border);border-radius:6px;background:var(--coal4);color:var(--text);font-size:13px">
+      <button onclick="finGuardarPresupuesto()" style="padding:5px 12px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px">Guardar</button>
     </div>
   </div>
 
-  <!-- ── HÉROE: 3 KPI PRINCIPALES ───────────────────────────────────── -->
+  <!-- 3 TARJETAS HÉROE -->
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:14px">
-    <!-- Valorización -->
-    <div style="background:linear-gradient(135deg,#065f46,#047857);border-radius:20px;padding:24px;position:relative;overflow:hidden;box-shadow:0 8px 32px rgba(16,185,129,.2)">
-      <div style="position:absolute;top:-20px;right:-20px;width:100px;height:100px;background:rgba(255,255,255,.06);border-radius:50%"></div>
-      <div style="position:absolute;bottom:-30px;left:20px;width:140px;height:140px;background:rgba(255,255,255,.04);border-radius:50%"></div>
-      <div style="font-size:11px;color:#6ee7b7;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:8px">📥 Ingresos del Período</div>
-      <div style="font-size:38px;font-weight:900;color:#fff;letter-spacing:-2px;line-height:1">${S(val.total)}</div>
-      <div style="margin-top:10px;font-size:12px;color:#a7f3d0">Descuento almacén: ${S(val.descuento)}</div>
-      <div style="margin-top:14px;background:rgba(255,255,255,.12);border-radius:99px;height:4px"><div style="width:100%;height:100%;background:rgba(255,255,255,.5);border-radius:99px"></div></div>
+    <div style="background:linear-gradient(135deg,rgba(39,174,96,.16),rgba(39,174,96,.04));border:1px solid rgba(39,174,96,.3);border-radius:16px;padding:22px">
+      <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:6px">📥 Valorización Neta</div>
+      <div style="font-size:34px;font-weight:800;color:#27ae60;margin-top:8px;letter-spacing:-1px">${S(val.total)}</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">Descuento almacén: ${S(val.descuento)}</div>
     </div>
-    <!-- Gasto Total -->
-    <div style="background:linear-gradient(135deg,#7c2d12,#9a3412);border-radius:20px;padding:24px;position:relative;overflow:hidden;box-shadow:0 8px 32px rgba(234,88,12,.2)">
-      <div style="position:absolute;top:-20px;right:-20px;width:100px;height:100px;background:rgba(255,255,255,.06);border-radius:50%"></div>
-      <div style="position:absolute;bottom:-30px;left:20px;width:140px;height:140px;background:rgba(255,255,255,.04);border-radius:50%"></div>
-      <div style="font-size:11px;color:#fdba74;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:8px">📤 Gasto Total</div>
-      <div style="font-size:38px;font-weight:900;color:#fff;letter-spacing:-2px;line-height:1">${S(costoTot)}</div>
-      <div style="margin-top:10px;font-size:12px;color:#fed7aa">${pctEjec}% del presupuesto (${S(presup)})</div>
-      <div style="margin-top:14px;background:rgba(255,255,255,.12);border-radius:99px;height:4px"><div style="width:${Math.min(100,pctEjec)}%;height:100%;background:${pctEjec>100?'#ef4444':'rgba(255,255,255,.5)'};border-radius:99px;transition:width .6s"></div></div>
+    <div style="background:linear-gradient(135deg,rgba(230,126,34,.16),rgba(230,126,34,.04));border:1px solid rgba(230,126,34,.3);border-radius:16px;padding:22px">
+      <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:6px">📤 Costo Total</div>
+      <div style="font-size:34px;font-weight:800;color:#e67e22;margin-top:8px;letter-spacing:-1px">${S(costoTot)}</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">${pctEjec}% del presupuesto</div>
     </div>
-    <!-- Resultado -->
-    <div style="background:${margen>=0?'linear-gradient(135deg,#1e1b4b,#312e81)':'linear-gradient(135deg,#450a0a,#7f1d1d)'};border-radius:20px;padding:24px;position:relative;overflow:hidden;box-shadow:0 8px 32px ${margen>=0?'rgba(99,102,241,.25)':'rgba(239,68,68,.2)'}">
-      <div style="position:absolute;top:-20px;right:-20px;width:100px;height:100px;background:rgba(255,255,255,.06);border-radius:50%"></div>
-      <div style="position:absolute;bottom:-30px;left:20px;width:140px;height:140px;background:rgba(255,255,255,.04);border-radius:50%"></div>
-      <div style="font-size:11px;color:${margen>=0?'#c7d2fe':'#fca5a5'};text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:8px">${margen>=0?'💰 Resultado':'⚠️ Resultado'}</div>
-      <div style="font-size:38px;font-weight:900;color:#fff;letter-spacing:-2px;line-height:1">${margen>=0?'+':''}${S(margen)}</div>
-      <div style="margin-top:10px;font-size:12px;color:${margen>=0?'#c7d2fe':'#fca5a5'}">Rentabilidad: ${pctMargen}% ${margen>=0?'✓':'✗'}</div>
-      <div style="margin-top:14px;background:rgba(255,255,255,.12);border-radius:99px;height:4px"><div style="width:${Math.min(100,Math.abs(pctMargen))}%;height:100%;background:${margen>=0?'#a5b4fc':'#ef4444'};border-radius:99px;transition:width .6s"></div></div>
+    <div style="background:linear-gradient(135deg,${margen>=0?'rgba(108,92,231,.18),rgba(108,92,231,.04)':'rgba(231,76,60,.16),rgba(231,76,60,.04)'});border:1px solid ${margen>=0?'rgba(108,92,231,.35)':'rgba(231,76,60,.3)'};border-radius:16px;padding:22px">
+      <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:6px">💰 Margen Bruto</div>
+      <div style="font-size:34px;font-weight:800;color:${margen>=0?'#a29bfe':'#e74c3c'};margin-top:8px;letter-spacing:-1px">${margen>=0?'+':''}${S(margen)}</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">Rentabilidad: ${pctMargen}%</div>
     </div>
   </div>
 
-  <!-- ── METROS POR FRENTE + RENDIMIENTO ──────────────────────────── -->
-  <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-bottom:14px">
-    <div style="background:var(--coal4);border:1px solid var(--border);border-radius:20px;padding:22px">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:18px">
-        <div style="font-size:14px;font-weight:800;color:var(--text)">⛏ Metros Perforados por Frente</div>
-        <div style="text-align:right">
-          <div style="font-size:28px;font-weight:900;color:#3b82f6;letter-spacing:-1px">${metrosTot} m</div>
-          <div style="font-size:10px;color:var(--text3)">Total del mes</div>
-        </div>
-      </div>
-      ${frentesHtml}
+  <!-- 2 TARJETAS SECUNDARIAS -->
+  <div style="display:grid;grid-template-columns:1fr 1.6fr;gap:14px;margin-bottom:14px">
+    <div style="background:var(--coal4);border:1px solid var(--border);border-radius:16px;padding:22px">
+      <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px">⛏ Costo por Metro</div>
+      <div style="font-size:30px;font-weight:800;color:var(--text);margin-top:8px;letter-spacing:-1px">${cpMetro?S(cpMetro):'—'}</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">${avance>0?Math.round(avance)+' m avanzados este mes':'Sin avance registrado'}</div>
     </div>
-    <div style="background:var(--coal4);border:1px solid var(--border);border-radius:20px;padding:22px">
-      <div style="font-size:14px;font-weight:800;color:var(--text);margin-bottom:18px">📊 Indicadores Clave</div>
-      <div style="display:flex;flex-direction:column;gap:14px">
-        <div style="background:var(--coal3);border-radius:12px;padding:14px 16px">
-          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Costo por Metro</div>
-          <div style="font-size:28px;font-weight:900;color:var(--text);letter-spacing:-1px;margin-top:4px">${avance>0?S(costoTot/avance):'—'}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:2px">${avance>0?Math.round(avance)+' m avance':'Sin avance'}</div>
-        </div>
-        <div style="background:var(--coal3);border-radius:12px;padding:14px 16px">
-          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Rendimiento Promedio</div>
-          <div style="font-size:28px;font-weight:900;color:#f59e0b;letter-spacing:-1px;margin-top:4px">${rendProm} m/día</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:2px">${diasPerf} días con actividad</div>
-        </div>
-        <div style="background:rgba(239,68,68,.08);border:1px dashed rgba(239,68,68,.3);border-radius:12px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center">
-          <div><div style="font-size:11px;color:#f87171;font-weight:700">💥 Explosivos (aparte)</div><div style="font-size:10px;color:var(--text3)">No incluido en gasto op.</div></div>
-          <div style="font-size:18px;font-weight:800;color:#ef4444">${S(costoExplo)}</div>
-        </div>
+    <div style="background:var(--coal4);border:1px solid var(--border);border-radius:16px;padding:22px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <span style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px">⚡ Ejecución de Presupuesto</span>
+        <span style="font-size:22px;font-weight:800;color:${pctEjec>100?'#e74c3c':pctEjec>80?'#e67e22':'#27ae60'}">${pctEjec}%</span>
       </div>
+      <div style="background:rgba(255,255,255,.07);border-radius:99px;height:16px;overflow:hidden;margin-top:14px;position:relative">
+        <div style="width:${Math.min(100,pctEjec)}%;height:100%;background:${pctEjec>100?'#e74c3c':pctEjec>80?'#e67e22':'linear-gradient(90deg,#27ae60,#2ecc71)'};border-radius:99px;transition:width .5s"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;color:var(--text3)">
+        <span>Gastado: <strong style="color:var(--text2)">${S(costoTot)}</strong></span>
+        <span>Presupuesto: <strong style="color:var(--text2)">${S(presup)}</strong></span>
+      </div>
+      ${pctEjec>100?`<div style="margin-top:10px;font-size:12px;color:#e74c3c;font-weight:700">⚠️ Presupuesto superado en ${S(costoTot-presup)}</div>`:pctEjec>80?`<div style="margin-top:10px;font-size:12px;color:#e67e22;font-weight:600">⚠️ Cerca del límite presupuestal</div>`:''}
     </div>
   </div>
 
-  <!-- ── P&L POR EQUIPO / MÁQUINA ───────────────────────────────── -->
+  <!-- COMPOSICIÓN DE COSTOS -->
   <div style="margin-bottom:14px">
-    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
-      <div>
-        <div style="font-size:15px;font-weight:900;color:var(--text)">Rentabilidad por Equipo</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">Ingresos (hrs horómetro × tarifa) − Mantenimiento − Combustible − Operador</div>
-      </div>
-      ${totalHorasMes>0?`<div style="font-size:11px;color:var(--text3)">Tarifa: <strong style="color:var(--text2)">${S(tarifaHora)}/hr</strong> · ${totalHorasMes.toFixed(0)} hrs totales</div>`:'<div style="font-size:11px;color:#f59e0b">⚠️ Sin horómetros: ingresos estimados en S/0</div>'}
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:700;color:var(--text)">Egresos de Mina — Composición del Mes</div>
+      <div style="font-size:11px;color:var(--text3)">Total operativo: <strong style="color:#e67e22">${S(costoTot)}</strong></div>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">
-      ${maqCards}
-    </div>
-  </div>
-
-  <!-- ── COMPOSICIÓN DE GASTOS ─────────────────────────────────────── -->
-  <div style="background:var(--coal4);border:1px solid var(--border);border-radius:20px;padding:20px 22px;margin-bottom:14px">
-    <div style="font-size:14px;font-weight:800;color:var(--text);margin-bottom:14px">Composición de Egresos Operativos</div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
-      ${desglose.map(c=>{
-        const pct=costoTot>0?Math.round(c.monto/costoTot*100):0;
-        return `<div style="background:var(--coal3);border-radius:12px;padding:14px 16px;border-left:3px solid ${c.color}">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-            <span style="font-size:12px;color:var(--text2);font-weight:600">${c.icon} ${c.label}</span>
-            <span style="font-size:11px;font-weight:700;color:${c.color}">${pct}%</span>
-          </div>
-          <div style="font-size:20px;font-weight:800;color:${c.color};letter-spacing:-.5px">${Sk(c.monto)}</div>
-          <div style="background:rgba(255,255,255,.06);border-radius:99px;height:4px;overflow:hidden;margin-top:8px"><div style="width:${pct}%;height:100%;background:${c.color};border-radius:99px"></div></div>
-        </div>`;
-      }).join('')}
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">${compHtml}</div>
+    <div style="margin-top:12px;background:rgba(231,76,60,.08);border:1px dashed rgba(231,76,60,.4);border-radius:12px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
+      <div><span style="font-size:13px;color:var(--text2);font-weight:600">💥 Explosivos (NV3190)</span><div style="font-size:11px;color:var(--text3);margin-top:2px">Se contabiliza por separado — no entra en el costo operativo</div></div>
+      <div style="font-size:22px;font-weight:800;color:#e74c3c">${S(costoExplo)}</div>
     </div>
   </div>
 
-  <!-- ── HISTORIAL 6 MESES ──────────────────────────────────────────── -->
-  <div style="background:var(--coal4);border:1px solid var(--border);border-radius:20px;padding:20px 22px">
-    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px">
-      <div style="font-size:14px;font-weight:800;color:var(--text)">Evolución — Últimos 6 Meses</div>
-      <div style="display:flex;gap:12px;font-size:10px;color:var(--text3)">
-        <span><span style="display:inline-block;width:10px;height:10px;background:#6c5ce7;border-radius:2px;margin-right:4px"></span>Valorización</span>
-        <span><span style="display:inline-block;width:10px;height:10px;background:rgba(239,68,68,.4);border-radius:2px;margin-right:4px"></span>Costo</span>
-      </div>
-    </div>
-    <div style="display:flex;gap:10px;align-items:flex-end;height:110px">${histBars}</div>
-    <div style="display:flex;gap:10px;margin-top:8px">
-      ${hist6.map(m=>`<div style="flex:1;text-align:center;font-size:10px;color:${m===mes?'#a29bfe':'var(--text3)'};font-weight:${m===mes?'800':'400'}">${finNombreMes(m).split(' ')[0]}</div>`).join('')}
-    </div>
+  <!-- HISTORIAL VISUAL 6 MESES -->
+  <div style="background:var(--coal4);border:1px solid var(--border);border-radius:16px;padding:20px 22px">
+    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:16px">Valorización — Últimos 6 Meses</div>
+    <div style="display:flex;gap:8px;align-items:flex-end">${histCards}</div>
   </div>
-
-</div>
 </div>`;
 }
 
