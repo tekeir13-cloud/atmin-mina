@@ -7795,27 +7795,22 @@ function renderMantenimiento(){
     else if(log.ok){estLbl='Aprobado Log';estCls='badge-warn';}
     else{estLbl='Pendiente';estCls='badge-danger';}
     const piezas=(m.repuestos&&m.repuestos.length)?m.repuestos.map(p=>`${p.nombre} ×${p.cant}`).join(' · '):'Sin piezas';
-    // Read-only approval status badge
-    let approvalBadge;
-    if((ops.ok===false&&ops.resp&&!ops.ok)||(log.ok===false&&log.resp&&!log.ok)){
-      // Check if explicitly disapproved (rechazado flag)
-      const opsRej=ops.rechazado||false;const logRej=log.rechazado||false;
-      if(opsRej||logRej){approvalBadge=`<span style="font-size:11px;color:#f87171">❌ Desaprobado${opsRej?' (Ops)':''}${logRej?' (Log)':''}</span>`;}
-      else if(ops.ok&&log.ok){approvalBadge=`<span style="font-size:11px;color:#22d3a5">✅ Ops ✅ Log — Listo para despacho</span>`;}
-      else if(ops.ok){approvalBadge=`<span style="font-size:11px;color:#fb923c">✅ Ops ⏳ Log pendiente</span>`;}
-      else if(log.ok){approvalBadge=`<span style="font-size:11px;color:#fb923c">⏳ Ops pendiente ✅ Log</span>`;}
-      else{approvalBadge=`<span style="font-size:11px;color:var(--text3)">⏳ Pendiente</span>`;}
-    } else if(ops.ok&&log.ok){
-      approvalBadge=`<span style="font-size:11px;color:#22d3a5">✅ Ops ✅ Log — Listo para despacho</span>`;
-    } else if(ops.rechazado||log.rechazado){
-      approvalBadge=`<span style="font-size:11px;color:#f87171">❌ Desaprobado${ops.rechazado?' (Ops)':''}${log.rechazado?' (Log)':''}</span>`;
-    } else if(ops.ok){
-      approvalBadge=`<span style="font-size:11px;color:#fb923c">✅ Ops ⏳ Log pendiente</span>`;
-    } else if(log.ok){
-      approvalBadge=`<span style="font-size:11px;color:#fb923c">⏳ Ops pendiente ✅ Log</span>`;
-    } else {
-      approvalBadge=`<span style="font-size:11px;color:var(--text3)">⏳ Pendiente</span>`;
-    }
+    // Read-only approval status badge — estado global + estado por área
+    const opsRej=ops.rechazado||false, logRej=log.rechazado||false;
+    const chip=(label,o)=>{
+      let c,ic;
+      if(o.rechazado){c='#f87171';ic='❌';} else if(o.ok){c='#22d3a5';ic='✅';} else {c='#fb923c';ic='⏳';}
+      const meta=o.resp?` · ${o.resp}${o.fecha?' '+fmtF(o.fecha):''}`:'';
+      return `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:${c};background:rgba(255,255,255,.04);border:1px solid ${c}33;border-radius:20px;padding:2px 8px">${ic} ${label}${meta}</span>`;
+    };
+    let globalBadge;
+    if(opsRej||logRej){globalBadge=`<span style="font-size:12px;font-weight:700;color:#f87171">❌ Desaprobado</span>`;}
+    else if(ops.ok&&log.ok){globalBadge=`<span style="font-size:12px;font-weight:700;color:#22d3a5">✅ Aprobado — Listo para despacho</span>`;}
+    else{globalBadge=`<span style="font-size:12px;font-weight:700;color:#fb923c">⏳ En espera de aprobación</span>`;}
+    const approvalBadge=`<div style="display:flex;flex-direction:column;gap:6px">
+      <div>${globalBadge}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${chip('Operaciones',ops)}${chip('Logística',log)}</div>
+    </div>`;
     const valeBtn=(ops.ok&&log.ok)
       ? `<button class="btn btn-gold" style="font-size:11px;padding:4px 10px" onclick="generarValeDespacho('${m.id}')">📄 Generar Vale de Costeo y Despacho</button>`
       : '';
