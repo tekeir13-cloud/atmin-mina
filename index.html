@@ -7681,6 +7681,10 @@ function renderRendimiento(){
 const MANTREP_KEY='atmin_mant_repuestos';
 function mantRepLoad(){try{const d=localStorage.getItem(MANTREP_KEY);if(d)state.mantRepuestos=JSON.parse(d)||[];}catch(e){}}
 function mantRepSave(){try{localStorage.setItem(MANTREP_KEY,JSON.stringify(state.mantRepuestos||[]));}catch(e){}}
+// ── SOLICITUDES DE KIT (mantenimiento) — persistencia local de aprobaciones ──
+const MANTKIT_KEY='atmin_mant_kits';
+function mantKitLoad(){try{const d=localStorage.getItem(MANTKIT_KEY);if(d){const arr=JSON.parse(d);if(Array.isArray(arr)&&arr.length)state.mantenimiento=arr;}}catch(e){}}
+function mantKitSave(){try{localStorage.setItem(MANTKIT_KEY,JSON.stringify(state.mantenimiento||[]));}catch(e){}}
 function mantRepSeed(){
   if(state.mantRepuestos&&state.mantRepuestos.length)return;
   state.mantRepuestos=[
@@ -7697,7 +7701,7 @@ function mantRepSeed(){
 }
 
 function renderMantenimiento(){
-  mantRepLoad();
+  mantRepLoad();mantKitLoad();
   const ch=state.mantenimiento.filter(m=>m.fecha===hoy()).reduce((s,m)=>s+(m.costo||0),0);
   const cm=state.mantenimiento.reduce((s,m)=>s+(m.costo||0),0);
   document.getElementById('mant-costo-hoy').textContent=fmtS(ch);document.getElementById('mant-costo-mes').textContent=fmtS(cm);
@@ -7706,15 +7710,29 @@ function renderMantenimiento(){
   const lst=document.getElementById('mant-lista');
   if(!state.mantenimiento.length){lst.innerHTML='<div class="card"><div class="empty-state">Sin solicitudes de kit. Crea la primera con ➕.</div></div>';return;}
   lst.innerHTML=sortRegistros(state.mantenimiento).map(m=>{
-    const cls=m.estado==='ok'?'badge-ok':m.estado==='pendiente'?'badge-danger':'badge-warn';
-    const lbl=m.estado==='ok'?'Completado':m.estado==='pendiente'?'Pendiente':'Parcial';
+    const ops=m.aprobOps||{ok:false,resp:'',fecha:''};
+    const log=m.aprobLog||{ok:false,resp:'',fecha:''};
+    let estLbl,estCls;
+    if(ops.ok&&log.ok){estLbl='Aprobado — Listo para despacho';estCls='badge-ok';}
+    else if(ops.ok){estLbl='Aprobado Ops';estCls='badge-warn';}
+    else if(log.ok){estLbl='Aprobado Log';estCls='badge-warn';}
+    else{estLbl='Pendiente';estCls='badge-danger';}
     const piezas=(m.repuestos&&m.repuestos.length)?m.repuestos.map(p=>`${p.nombre} ×${p.cant}`).join(' · '):'Sin piezas';
+    const opsBtn=ops.ok
+      ? `<button class="btn" style="font-size:11px;padding:4px 10px;background:#15803d;color:#fff;border:1px solid #15803d" onclick="aprobarOpsKit('${m.id}')">✔ Operaciones · ${ops.resp||'—'}${ops.fecha?' · '+fmtF(ops.fecha):''}</button>`
+      : `<button class="btn btn-outline" style="font-size:11px;padding:4px 10px" onclick="aprobarOpsKit('${m.id}')">Aprobar Operaciones</button>`;
+    const logBtn=log.ok
+      ? `<button class="btn" style="font-size:11px;padding:4px 10px;background:#15803d;color:#fff;border:1px solid #15803d" onclick="aprobarLogKit('${m.id}')">✔ Logística (despacho) · ${log.resp||'—'}${log.fecha?' · '+fmtF(log.fecha):''}</button>`
+      : `<button class="btn btn-outline" style="font-size:11px;padding:4px 10px" onclick="aprobarLogKit('${m.id}')">Aprobar Logística (despacho)</button>`;
+    const valeBtn=(ops.ok&&log.ok)
+      ? `<button class="btn btn-gold" style="font-size:11px;padding:4px 10px" onclick="generarValeDespacho('${m.id}')">📄 Generar Vale de Costeo y Despacho</button>`
+      : '';
     return`<div class="card" style="margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:6px">
         <div style="display:flex;gap:10px;align-items:flex-start">
           <div style="font-size:22px">${EI[m.equipo]||'🔧'}</div>
           <div>
-            <div style="font-size:14px;font-weight:700;color:var(--text)">${m.equipo} <span class="badge ${cls}" style="margin-left:6px">${lbl}</span> <span style="font-size:11px;color:var(--text3);font-weight:400">${m.tipo}</span></div>
+            <div style="font-size:14px;font-weight:700;color:var(--text)">${m.equipo} <span class="badge ${estCls}" style="margin-left:6px">${estLbl}</span> <span style="font-size:11px;color:var(--text3);font-weight:400">${m.tipo}</span></div>
             <div style="font-size:12px;color:var(--text3);margin-top:2px">${fmtF(m.fecha)} · ${m.resp||'—'}</div>
             <div style="font-size:12px;color:var(--text2);margin-top:4px">${m.desc||''}</div>
           </div>
@@ -7728,6 +7746,7 @@ function renderMantenimiento(){
         </div>
       </div>
       <div style="font-size:12px;color:var(--text2);border-top:1px solid var(--border);padding-top:8px"><strong style="color:var(--text3)">🔩 Kit:</strong> ${piezas}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;border-top:1px solid var(--border);padding-top:8px">${opsBtn}${logBtn}${valeBtn}</div>
     </div>`;
   }).join('');
 }
@@ -7780,10 +7799,10 @@ function editarKitMant(id){
 function eliminarKitMant(id){
   if(!confirm('¿Eliminar esta solicitud de kit?'))return;
   const m=(state.mantenimiento||[]).find(x=>x.id===id);
-  // Reponer stock si estaba completado
-  if(m&&m.estado==='ok'&&m.repuestos){m.repuestos.forEach(p=>{const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);if(r)r.stock=(r.stock||0)+p.cant;});mantRepSave();}
+  // Reponer stock solo si Logística había aprobado el despacho (stock descontado)
+  if(m&&m.aprobLog&&m.aprobLog.ok&&m.repuestos){m.repuestos.forEach(p=>{const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);if(r)r.stock=(r.stock||0)+p.cant;});mantRepSave();}
   state.mantenimiento=(state.mantenimiento||[]).filter(x=>x.id!==id);
-  renderMantenimiento();showNotif('✓ Solicitud eliminada');
+  mantKitSave();renderMantenimiento();showNotif('✓ Solicitud eliminada');
 }
 function guardarKitMant(){
   mantRepLoad();
@@ -7803,22 +7822,134 @@ function guardarKitMant(){
   const editId=g('kit-id').value;
   if(!state.mantenimiento)state.mantenimiento=[];
   const prev=editId?state.mantenimiento.find(x=>x.id===editId):null;
-  // Reponer stock del registro previo si estaba completado (para recalcular)
-  if(prev&&prev.estado==='ok'&&prev.repuestos){prev.repuestos.forEach(p=>{const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);if(r)r.stock=(r.stock||0)+p.cant;});}
-  // Verificar stock si se completa
-  if(estado==='ok'){
+  // El stock SOLO se mueve al aprobar Logística (despacho). Si Logística ya aprobó este
+  // kit, reponer el stock previo y volver a descontar con las piezas nuevas (con guarda).
+  const logAprob=prev&&prev.aprobLog&&prev.aprobLog.ok;
+  if(logAprob&&prev.repuestos){prev.repuestos.forEach(p=>{const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);if(r)r.stock=(r.stock||0)+p.cant;});}
+  if(logAprob){
     for(const p of piezas){const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);if(r&&p.cant>(r.stock||0)){showNotif(`⚠ Stock insuficiente de ${r.nombre} (disp. ${r.stock||0})`,'error');
       // revertir reposición previa
-      if(prev&&prev.estado==='ok'&&prev.repuestos){prev.repuestos.forEach(pp=>{const rr=(state.mantRepuestos||[]).find(x=>x.id===pp.id);if(rr)rr.stock=(rr.stock||0)-pp.cant;});}
+      if(prev.repuestos){prev.repuestos.forEach(pp=>{const rr=(state.mantRepuestos||[]).find(x=>x.id===pp.id);if(rr)rr.stock=(rr.stock||0)-pp.cant;});}
       return;}}
     piezas.forEach(p=>{const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);if(r)r.stock=(r.stock||0)-p.cant;});
   }
   const rec={id:editId||'KM'+Date.now(),fecha:g('kit-fecha').value,equipo:g('kit-equipo').value,tipo:g('kit-tipo').value,
-    resp,responsable:resp,desc,descripcion:desc,repuestos:piezas,manoobra:mo,costo,estado};
+    resp,responsable:resp,desc,descripcion:desc,repuestos:piezas,manoobra:mo,costo,estado,
+    aprobOps:(prev&&prev.aprobOps)||{ok:false,resp:'',fecha:''},
+    aprobLog:(prev&&prev.aprobLog)||{ok:false,resp:'',fecha:''}};
   if(prev){Object.assign(prev,rec);}else{state.mantenimiento.push(rec);}
-  mantRepSave();
+  mantRepSave();mantKitSave();
   cerrarModal('modal-kit-mant');renderMantenimiento();
   showNotif('✓ Solicitud de kit guardada');
+}
+// ── Flujo de doble aprobación (Operaciones + Logística) ──
+function aprobarOpsKit(id){
+  mantRepLoad();mantKitLoad();
+  const m=(state.mantenimiento||[]).find(x=>x.id===id);if(!m)return;
+  if(!m.aprobOps)m.aprobOps={ok:false,resp:'',fecha:''};
+  if(m.aprobOps.ok){
+    if(!confirm('¿Revocar la aprobación de Operaciones?'))return;
+    m.aprobOps={ok:false,resp:'',fecha:''};
+    mantKitSave();renderMantenimiento();showNotif('Aprobación de Operaciones revocada');
+    return;
+  }
+  const def=(typeof usuarioActivo!=='undefined'&&usuarioActivo&&usuarioActivo.nombre)?usuarioActivo.nombre:'';
+  const resp=(prompt('Responsable que aprueba (Operaciones):',def)||def||'').trim();
+  m.aprobOps={ok:true,resp:resp||'—',fecha:hoy()};
+  mantKitSave();renderMantenimiento();showNotif('✓ Aprobado por Operaciones');
+}
+function aprobarLogKit(id){
+  mantRepLoad();mantKitLoad();
+  const m=(state.mantenimiento||[]).find(x=>x.id===id);if(!m)return;
+  if(!m.aprobLog)m.aprobLog={ok:false,resp:'',fecha:''};
+  if(m.aprobLog.ok){
+    if(!confirm('¿Revocar la aprobación de Logística? Se repondrá el stock despachado.'))return;
+    // Restaurar stock
+    (m.repuestos||[]).forEach(p=>{const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);if(r)r.stock=(r.stock||0)+p.cant;});
+    m.aprobLog={ok:false,resp:'',fecha:''};
+    mantRepSave();mantKitSave();renderMantenimiento();showNotif('Aprobación de Logística revocada · stock repuesto');
+    return;
+  }
+  // Guarda de stock antes de descontar
+  for(const p of (m.repuestos||[])){
+    const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);
+    if(r&&p.cant>(r.stock||0)){showNotif(`⚠ Stock insuficiente de ${r.nombre} (disp. ${r.stock||0}) — no se puede aprobar el despacho`,'error');return;}
+  }
+  const def=(typeof usuarioActivo!=='undefined'&&usuarioActivo&&usuarioActivo.nombre)?usuarioActivo.nombre:'';
+  const resp=(prompt('Responsable que aprueba el despacho (Logística):',def)||def||'').trim();
+  // Descontar stock (despacho)
+  (m.repuestos||[]).forEach(p=>{const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);if(r)r.stock=(r.stock||0)-p.cant;});
+  m.aprobLog={ok:true,resp:resp||'—',fecha:hoy()};
+  mantRepSave();mantKitSave();renderMantenimiento();showNotif('✓ Aprobado por Logística · stock despachado');
+}
+// ── Vale de costeo y despacho (Excel) ──
+function generarValeDespacho(id){
+  if(typeof ExcelJS==='undefined'){showNotif('Error: librería Excel (ExcelJS) no cargada','error');return;}
+  mantRepLoad();mantKitLoad();
+  const m=(state.mantenimiento||[]).find(x=>x.id===id);if(!m){showNotif('Solicitud no encontrada','error');return;}
+  const ops=m.aprobOps||{},log=m.aprobLog||{};
+  if(!(ops.ok&&log.ok)){showNotif('⚠ Requiere ambas aprobaciones (Operaciones y Logística)','error');return;}
+  const empresa=(typeof usuarioActivo!=='undefined'&&usuarioActivo&&usuarioActivo.empresa)||'';
+  const C_HEAD='FF111827',C_AZUL='FF1E40AF',C_GOLD='FFB45309',C_GOLDBG='FFFEF3C7';
+  const thin={style:'thin',color:{argb:'FFD1D5DB'}};
+  const allB={top:thin,bottom:thin,left:thin,right:thin};
+  const wb=new ExcelJS.Workbook();
+  const ws=wb.addWorksheet('Vale Despacho',{pageSetup:{paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:0.4,right:0.4,top:0.5,bottom:0.5,header:0.3,footer:0.3}}});
+  ws.columns=[{width:8},{width:30},{width:10},{width:10},{width:14},{width:14}];
+  let R=1;
+  ws.mergeCells(`A${R}:F${R}`);const t=ws.getCell(`A${R}`);t.value='VALE DE COSTEO Y DESPACHO DE MANTENIMIENTO';
+  t.font={bold:true,size:14,color:{argb:C_HEAD}};t.alignment={horizontal:'center'};ws.getRow(R).height=22;R++;
+  if(empresa){ws.mergeCells(`A${R}:F${R}`);const e=ws.getCell(`A${R}`);e.value=empresa;e.font={bold:true,size:11,color:{argb:C_AZUL}};e.alignment={horizontal:'center'};R++;}
+  ws.mergeCells(`A${R}:C${R}`);ws.getCell(`A${R}`).value=`Fecha: ${fmtF(m.fecha)}`;
+  ws.mergeCells(`D${R}:F${R}`);ws.getCell(`D${R}`).value=`Correlativo: ${m.id}`;ws.getCell(`D${R}`).alignment={horizontal:'right'};R++;
+  R++;
+  const lbl=(c,v)=>{ws.getCell(`A${R}`).value=c;ws.getCell(`A${R}`).font={bold:true,color:{argb:C_HEAD}};ws.mergeCells(`B${R}:F${R}`);ws.getCell(`B${R}`).value=v;R++;};
+  lbl('Máquina/Equipo:',m.equipo||'—');
+  lbl('Tipo Mant.:',m.tipo||'—');
+  lbl('Solicitante:',m.resp||m.responsable||'—');
+  lbl('Descripción:',m.desc||m.descripcion||'—');
+  R++;
+  // Tabla de piezas
+  const head=['Código','Repuesto / Pieza','Unidad','Cant.','C. Unit (S/)','C. Total (S/)'];
+  const hr=ws.getRow(R);head.forEach((h,i)=>{const c=hr.getCell(i+1);c.value=h;c.font={bold:true,color:{argb:'FFFFFFFF'}};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:C_HEAD}};c.alignment={horizontal:'center',vertical:'middle'};c.border=allB;});hr.height=18;R++;
+  let totPiezas=0;
+  (m.repuestos||[]).forEach(p=>{
+    const r=(state.mantRepuestos||[]).find(x=>x.id===p.id)||{};
+    const cu=(r.costo!=null?r.costo:p.costo)||0;const ct=cu*(p.cant||0);totPiezas+=ct;
+    const row=ws.getRow(R);
+    row.getCell(1).value=r.codigo||p.id||'—';
+    row.getCell(2).value=r.nombre||p.nombre||'—';
+    row.getCell(3).value=r.unidad||'Unidad';
+    row.getCell(4).value=p.cant||0;
+    row.getCell(5).value=cu;row.getCell(5).numFmt='#,##0.00';
+    row.getCell(6).value=ct;row.getCell(6).numFmt='#,##0.00';
+    for(let i=1;i<=6;i++){const cc=row.getCell(i);cc.border=allB;cc.alignment={horizontal:i===2?'left':'center',vertical:'middle'};cc.font={size:10};}
+    R++;
+  });
+  const mo=m.manoobra||0;
+  const sub=(c,v)=>{ws.mergeCells(`A${R}:E${R}`);const a=ws.getCell(`A${R}`);a.value=c;a.font={bold:true};a.alignment={horizontal:'right'};const b=ws.getCell(`F${R}`);b.value=v;b.numFmt='#,##0.00';b.font={bold:true};b.alignment={horizontal:'center'};b.border=allB;R++;};
+  sub('Sub Total Repuestos (S/)',totPiezas);
+  sub('Mano de Obra (S/)',mo);
+  ws.mergeCells(`A${R}:E${R}`);const tg=ws.getCell(`A${R}`);tg.value='TOTAL GENERAL (S/)';tg.font={bold:true,size:12,color:{argb:C_GOLD}};tg.alignment={horizontal:'right'};tg.fill={type:'pattern',pattern:'solid',fgColor:{argb:C_GOLDBG}};
+  const tgv=ws.getCell(`F${R}`);tgv.value=totPiezas+mo;tgv.numFmt='#,##0.00';tgv.font={bold:true,size:12,color:{argb:C_GOLD}};tgv.alignment={horizontal:'center'};tgv.fill={type:'pattern',pattern:'solid',fgColor:{argb:C_GOLDBG}};tgv.border=allB;R++;
+  R+=2;
+  // Bloques de firma
+  const firma=(col,titulo,resp,fecha)=>{
+    ws.getCell(`${col}${R}`).value='_______________________';
+    ws.getCell(`${col}${R+1}`).value=titulo;ws.getCell(`${col}${R+1}`).font={bold:true,size:10,color:{argb:C_HEAD}};
+    ws.getCell(`${col}${R+2}`).value=resp?('Resp.: '+resp):'';ws.getCell(`${col}${R+2}`).font={size:9};
+    ws.getCell(`${col}${R+3}`).value=fecha?('Fecha: '+fmtF(fecha)):'';ws.getCell(`${col}${R+3}`).font={size:9};
+  };
+  firma('A','Aprobado Operaciones',ops.resp,ops.fecha);
+  firma('D','Aprobado Logística — Despacho',log.resp,log.fecha);
+  R+=5;
+  firma('A','Recibido por','','');
+  wb.xlsx.writeBuffer().then(buf=>{
+    const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    a.download=`Vale_Despacho_${(m.equipo||'kit').replace(/\s+/g,'_')}_${m.fecha||hoy()}.xlsx`;a.click();
+  });
+  showNotif('✓ Vale de despacho generado');
 }
 function renderCostosMant(){
   const eq=['Compresora','Perforadora Jack Leg','Perforadora Stopper','Generador Eléctrico','Bomba de Agua','Winche','Camioneta'];
