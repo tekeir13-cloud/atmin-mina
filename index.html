@@ -7921,202 +7921,261 @@ function aprobarLogKit(id){
 // ══════════════════════════════════════════════════════════════
 //  CONTROL DE COMBUSTIBLE — Logística
 // ══════════════════════════════════════════════════════════════
-const COMB_KEY = 'atmin_combustible_ingresos';
-const COMB_ALERTA = 250; // galones mínimo
+const COMB_KEY_PET = 'atmin_comb_petroleo';
+const COMB_KEY_GAS = 'atmin_comb_gasolina';
+const COMB_CAP_PET = 2000;   // capacidad cisterna petróleo (gln)
+const COMB_CAP_GAS = 120;    // capacidad cisterna gasolina (gln)
+const COMB_ALERTA_PET = 250; // alerta petróleo
+const COMB_ALERTA_GAS = 20;  // alerta gasolina
 
-function combCargar(){ try{return JSON.parse(localStorage.getItem(COMB_KEY)||'[]');}catch(e){return[];} }
-function combGuardar(arr){ try{localStorage.setItem(COMB_KEY,JSON.stringify(arr));}catch(e){} }
+function combCargar(tipo){ const k=tipo==='gas'?COMB_KEY_GAS:COMB_KEY_PET; try{return JSON.parse(localStorage.getItem(k)||'[]');}catch(e){return[];} }
+function combGuardar(tipo,arr){ const k=tipo==='gas'?COMB_KEY_GAS:COMB_KEY_PET; try{localStorage.setItem(k,JSON.stringify(arr));}catch(e){} }
 
-function combStockTotal(){
-  // Total ingresado
-  const ingresos = combCargar().reduce((s,r)=>s+(r.cantidad||0),0);
-  // Total consumido: suma de todos los reportes compresorista
-  const consumido = (state.compresorista||[]).reduce((s,r)=>s+(r.petroleo||[]).reduce((ss,p)=>ss+(p.gln||0),0),0);
-  return Math.max(0, ingresos - consumido);
+function combStockTipo(tipo){
+  const ingresos=combCargar(tipo).reduce((s,r)=>s+(r.cantidad||0),0);
+  let consumido=0;
+  if(tipo==='pet') consumido=(state.compresorista||[]).reduce((s,r)=>s+(r.petroleo||[]).reduce((ss,p)=>ss+(p.gln||0),0),0);
+  else consumido=(state.compresorista||[]).reduce((s,r)=>s+(r.gasolina||[]).reduce((ss,p)=>ss+(p.gln||0),0),0);
+  return Math.max(0,ingresos-consumido);
 }
 
-function combColorSemaforo(stock){
-  if(stock <= COMB_ALERTA) return {color:'#ef4444',label:'CRÍTICO',emoji:'🔴'};
-  if(stock <= COMB_ALERTA * 2) return {color:'#f97316',label:'BAJO',emoji:'🟠'};
+function combSem(stock,alerta){
+  if(stock<=alerta) return {color:'#ef4444',label:'CRÍTICO',emoji:'🔴'};
+  if(stock<=alerta*2) return {color:'#f97316',label:'BAJO',emoji:'🟠'};
   return {color:'#22d3a5',label:'NORMAL',emoji:'🟢'};
 }
 
-function renderCombustible(){
-  const el = document.getElementById('log-combustible');
-  if(!el) return;
-  const stock = combStockTotal();
-  const ingresos = combCargar();
-  const consumido = (state.compresorista||[]).reduce((s,r)=>s+(r.petroleo||[]).reduce((ss,p)=>ss+(p.gln||0),0),0);
-  const totalIngresado = ingresos.reduce((s,r)=>s+(r.cantidad||0),0);
-  const sem = combColorSemaforo(stock);
-  // Nivel porcentual para animación cisterna (capacidad máxima = totalIngresado o 2000 si no hay datos)
-  const capacidad = Math.max(totalIngresado, 2000);
-  const nivel = Math.min(100, Math.max(0, (stock/capacidad)*100));
-
-  el.innerHTML = `
-<div style="padding:16px">
-  <h3 style="color:var(--accent-light);margin-bottom:18px">🛢 Control de Combustible</h3>
-
-  <!-- CISTERNA + KPIs -->
-  <div style="display:grid;grid-template-columns:260px 1fr;gap:20px;margin-bottom:22px;align-items:start">
-
-    <!-- CISTERNA SVG -->
-    <div style="background:var(--coal3);border-radius:14px;padding:20px;text-align:center">
-      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:14px">NIVEL DE CISTERNA</div>
-      <svg width="180" height="240" viewBox="0 0 180 240" style="overflow:visible;display:block;margin:0 auto">
-        <defs>
-          <clipPath id="comb-clip">
-            <rect x="20" y="40" width="140" height="160" rx="12"/>
-          </clipPath>
-          <linearGradient id="comb-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="${sem.color}" stop-opacity="0.9"/>
-            <stop offset="100%" stop-color="${sem.color}" stop-opacity="0.4"/>
-          </linearGradient>
-          <linearGradient id="comb-body-grad" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stop-color="#374151" stop-opacity="1"/>
-            <stop offset="40%" stop-color="#4b5563" stop-opacity="1"/>
-            <stop offset="100%" stop-color="#374151" stop-opacity="1"/>
-          </linearGradient>
-        </defs>
-        <!-- Soporte izquierdo -->
-        <rect x="35" y="200" width="14" height="32" rx="4" fill="#374151"/>
-        <!-- Soporte derecho -->
-        <rect x="131" y="200" width="14" height="32" rx="4" fill="#374151"/>
-        <!-- Base -->
-        <rect x="22" y="228" width="136" height="8" rx="4" fill="#4b5563"/>
-        <!-- Cuerpo cilindro (fondo) -->
-        <ellipse cx="90" cy="200" rx="70" ry="14" fill="#374151"/>
-        <rect x="20" y="40" width="140" height="160" fill="url(#comb-body-grad)"/>
-        <ellipse cx="90" cy="40" rx="70" ry="14" fill="#4b5563"/>
-        <!-- Líquido animado -->
-        <g clip-path="url(#comb-clip)">
-          <rect id="comb-liquid" x="20" y="${40+160*(1-nivel/100)}" width="140" height="${160*nivel/100}" fill="url(#comb-grad)"/>
-          <!-- Ondas en la superficie del líquido -->
-          <ellipse cx="90" cy="${40+160*(1-nivel/100)}" rx="70" ry="7" fill="${sem.color}" opacity="0.6">
-            <animate attributeName="rx" values="68;72;68" dur="2s" repeatCount="indefinite"/>
-            <animate attributeName="cy" values="${40+160*(1-nivel/100)-2};${40+160*(1-nivel/100)+2};${40+160*(1-nivel/100)-2}" dur="2.5s" repeatCount="indefinite"/>
-          </ellipse>
-          <!-- Brillo interior -->
-          <ellipse cx="58" cy="${40+160*(1-nivel/100)+20}" rx="12" ry="40" fill="white" opacity="0.06"/>
-        </g>
-        <!-- Contorno cuerpo -->
-        <rect x="20" y="40" width="140" height="160" rx="12" fill="none" stroke="${sem.color}" stroke-width="2.5" opacity="0.7"/>
-        <ellipse cx="90" cy="40" rx="70" ry="14" fill="none" stroke="${sem.color}" stroke-width="2" opacity="0.5"/>
-        <ellipse cx="90" cy="200" rx="70" ry="14" fill="none" stroke="${sem.color}" stroke-width="2" opacity="0.4"/>
-        <!-- Cuello superior -->
-        <rect x="74" y="22" width="32" height="22" rx="6" fill="#4b5563" stroke="${sem.color}" stroke-width="1.5"/>
-        <!-- Tapa -->
-        <ellipse cx="90" cy="22" rx="20" ry="5" fill="#6b7280" stroke="${sem.color}" stroke-width="1.5"/>
-        <!-- Válvula inferior -->
-        <rect x="78" y="200" width="24" height="10" rx="3" fill="#6b7280"/>
-        <circle cx="90" cy="210" r="4" fill="#374151" stroke="#9ca3af" stroke-width="1"/>
-        <!-- Indicadores de nivel -->
-        <line x1="16" y1="${40+160*0.25}" x2="22" y2="${40+160*0.25}" stroke="#9ca3af" stroke-width="1.5"/>
-        <text x="11" y="${40+160*0.25+4}" font-size="8" fill="#9ca3af" text-anchor="middle">75%</text>
-        <line x1="16" y1="${40+160*0.5}" x2="22" y2="${40+160*0.5}" stroke="#9ca3af" stroke-width="1.5"/>
-        <text x="11" y="${40+160*0.5+4}" font-size="8" fill="#9ca3af" text-anchor="middle">50%</text>
-        <line x1="16" y1="${40+160*0.75}" x2="22" y2="${40+160*0.75}" stroke="#f97316" stroke-width="1.5"/>
-        <text x="11" y="${40+160*0.75+4}" font-size="8" fill="#f97316" text-anchor="middle">25%</text>
-        <!-- Etiqueta central -->
-        <text x="90" y="${Math.max(110, 40+160*(1-nivel/100)+30)}" text-anchor="middle" font-size="22" font-weight="bold" fill="white" opacity="0.9">${stock.toFixed(0)}</text>
-        <text x="90" y="${Math.max(128, 40+160*(1-nivel/100)+48)}" text-anchor="middle" font-size="11" fill="white" opacity="0.7">galones</text>
-      </svg>
-      <!-- Semáforo debajo -->
-      <div style="margin-top:14px;display:flex;align-items:center;justify-content:center;gap:8px">
-        <span style="font-size:20px">${sem.emoji}</span>
-        <span style="font-size:14px;font-weight:700;color:${sem.color}">${sem.label}</span>
-      </div>
-      <div style="font-size:11px;color:var(--text3);margin-top:4px">${nivel.toFixed(0)}% de capacidad</div>
-      ${stock <= COMB_ALERTA ? `<div style="margin-top:10px;background:rgba(239,68,68,.15);border:1px solid #ef4444;border-radius:8px;padding:8px;font-size:12px;color:#ef4444;font-weight:700">⚠️ ALERTA: Stock por debajo de ${COMB_ALERTA} gln<br>Coordinar reabastecimiento urgente</div>` : ''}
-    </div>
-
-    <!-- KPIs y formulario -->
-    <div style="display:flex;flex-direction:column;gap:14px">
-      <!-- KPIs -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
-        <div style="background:var(--coal3);border-radius:10px;padding:14px;border-left:3px solid #22d3a5">
-          <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:3px">Stock actual</div>
-          <div style="font-size:22px;font-weight:700;color:${sem.color}">${stock.toFixed(0)} gln</div>
-        </div>
-        <div style="background:var(--coal3);border-radius:10px;padding:14px;border-left:3px solid #60a5fa">
-          <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:3px">Total ingresado</div>
-          <div style="font-size:22px;font-weight:700;color:#60a5fa">${totalIngresado.toFixed(0)} gln</div>
-        </div>
-        <div style="background:var(--coal3);border-radius:10px;padding:14px;border-left:3px solid #f87171">
-          <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:3px">Consumido total</div>
-          <div style="font-size:22px;font-weight:700;color:#f87171">${consumido.toFixed(1)} gln</div>
-        </div>
-      </div>
-
-      <!-- Formulario ingreso -->
-      <div style="background:var(--coal3);border-radius:10px;padding:16px">
-        <div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:12px">+ Registrar Ingreso de Combustible</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Fecha</label>
-            <input type="date" id="comb-fecha" value="${hoy()}" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:13px"></div>
-          <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Hora</label>
-            <input type="time" id="comb-hora" value="${new Date().toTimeString().slice(0,5)}" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:13px"></div>
-          <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Placa del vehículo</label>
-            <input type="text" id="comb-placa" placeholder="Ej: A5H-320" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:13px;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div>
-          <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Nombre del chofer</label>
-            <input type="text" id="comb-chofer" placeholder="Nombre completo" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:13px"></div>
-          <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Cantidad (galones)</label>
-            <input type="number" id="comb-cantidad" placeholder="0" min="1" step="0.5" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:13px;font-weight:700"></div>
-          <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Observaciones</label>
-            <input type="text" id="comb-obs" placeholder="Opcional" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:13px"></div>
-        </div>
-        <div style="margin-top:12px">
-          <button onclick="combRegistrar()" class="btn btn-gold" style="width:100%">✅ Registrar Ingreso</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- HISTORIAL -->
-  <div style="background:var(--coal3);border-radius:10px;padding:16px">
-    <div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:12px">📋 Historial de Ingresos</div>
-    ${ingresos.length === 0
-      ? '<div style="text-align:center;padding:24px;color:var(--text3)">Sin registros de ingreso aún</div>'
-      : `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr style="color:var(--text2)">${['Fecha','Hora','Placa','Chofer','Galones','Obs.',''].map(h=>`<th style="padding:7px 10px;text-align:${h==='Galones'?'right':'left'};border-bottom:1px solid var(--border);font-weight:600">${h}</th>`).join('')}</tr></thead>
-          <tbody>${[...ingresos].reverse().map((r,i)=>`<tr style="border-bottom:1px solid rgba(255,255,255,.04)">
-            <td style="padding:7px 10px;color:var(--text)">${fmtF(r.fecha)}</td>
-            <td style="padding:7px 10px;color:var(--text2)">${r.hora||'—'}</td>
-            <td style="padding:7px 10px;color:#fbbf24;font-weight:700">${r.placa||'—'}</td>
-            <td style="padding:7px 10px;color:var(--text)">${r.chofer||'—'}</td>
-            <td style="padding:7px 10px;text-align:right;font-size:14px;font-weight:700;color:#60a5fa">+${r.cantidad} gln</td>
-            <td style="padding:7px 10px;color:var(--text3);font-size:11px">${r.obs||'—'}</td>
-            <td style="padding:7px 10px"><button onclick="combEliminar(${ingresos.length-1-i})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:12px;padding:2px 6px;border-radius:4px;hover:opacity:.8">✕</button></td>
-          </tr>`).join('')}</tbody>
-        </table></div>`
-    }
-  </div>
-</div>`;
+// ── SVG cisterna parametrizada ─────────────────────────────
+function combSvgCisterna(id, stock, cap, alerta){
+  const sem=combSem(stock,alerta);
+  const nivel=Math.min(100,Math.max(0,(stock/cap)*100));
+  const liqY=40+160*(1-nivel/100);
+  const liqH=160*nivel/100;
+  return `<svg width="180" height="260" viewBox="0 0 180 260" style="overflow:visible;display:block;margin:0 auto">
+    <defs>
+      <clipPath id="${id}-clip"><rect x="20" y="40" width="140" height="160" rx="10"/></clipPath>
+      <linearGradient id="${id}-grad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${sem.color}" stop-opacity="0.85"/>
+        <stop offset="100%" stop-color="${sem.color}" stop-opacity="0.35"/>
+      </linearGradient>
+      <linearGradient id="${id}-body" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="#374151"/><stop offset="45%" stop-color="#4b5563"/><stop offset="100%" stop-color="#374151"/>
+      </linearGradient>
+      <filter id="${id}-glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+    <!-- Patas -->
+    <rect x="32" y="200" width="12" height="40" rx="3" fill="#374151"/>
+    <rect x="136" y="200" width="12" height="40" rx="3" fill="#374151"/>
+    <!-- Base patas -->
+    <rect x="22" y="236" width="40" height="6" rx="3" fill="#4b5563"/>
+    <rect x="118" y="236" width="40" height="6" rx="3" fill="#4b5563"/>
+    <!-- Refuerzo central inferior -->
+    <rect x="50" y="215" width="80" height="5" rx="2" fill="#4b5563"/>
+    <!-- Tapa inferior cilindro -->
+    <ellipse cx="90" cy="200" rx="70" ry="13" fill="#374151"/>
+    <!-- Cuerpo -->
+    <rect x="20" y="40" width="140" height="160" fill="url(#${id}-body)"/>
+    <!-- Tapa superior cilindro -->
+    <ellipse cx="90" cy="40" rx="70" ry="13" fill="#4b5563"/>
+    <!-- LÍQUIDO -->
+    <g clip-path="url(#${id}-clip)">
+      <rect x="20" y="${liqY}" width="140" height="${liqH}" fill="url(#${id}-grad)"/>
+      <ellipse cx="90" cy="${liqY}" rx="70" ry="7" fill="${sem.color}" opacity="0.55" filter="url(#${id}-glow)">
+        <animate attributeName="rx" values="67;73;67" dur="2.2s" repeatCount="indefinite"/>
+        <animate attributeName="cy" values="${liqY-2};${liqY+2};${liqY-2}" dur="2.8s" repeatCount="indefinite"/>
+      </ellipse>
+      <ellipse cx="62" cy="${liqY+25}" rx="10" ry="36" fill="white" opacity="0.05"/>
+    </g>
+    <!-- Contornos -->
+    <rect x="20" y="40" width="140" height="160" rx="10" fill="none" stroke="${sem.color}" stroke-width="2" opacity="0.6"/>
+    <ellipse cx="90" cy="40" rx="70" ry="13" fill="none" stroke="${sem.color}" stroke-width="1.5" opacity="0.45"/>
+    <ellipse cx="90" cy="200" rx="70" ry="13" fill="none" stroke="${sem.color}" stroke-width="1.5" opacity="0.35"/>
+    <!-- Cuello bocamanhole -->
+    <rect x="76" y="22" width="28" height="22" rx="5" fill="#4b5563" stroke="${sem.color}" stroke-width="1.2"/>
+    <ellipse cx="90" cy="22" rx="18" ry="4.5" fill="#6b7280" stroke="${sem.color}" stroke-width="1.2"/>
+    <!-- Tuerca bocamanhole -->
+    <circle cx="80" cy="22" r="2.5" fill="#9ca3af"/><circle cx="100" cy="22" r="2.5" fill="#9ca3af"/>
+    <!-- Válvula de salida -->
+    <rect x="80" y="200" width="20" height="9" rx="2.5" fill="#6b7280"/>
+    <rect x="86" y="208" width="8" height="12" rx="2" fill="#6b7280"/>
+    <circle cx="90" cy="220" r="3.5" fill="#374151" stroke="#9ca3af" stroke-width="1"/>
+    <!-- Escalas laterales -->
+    ${[0.25,0.5,0.75].map(f=>{const y=40+160*f; const c=f>=0.75?'#f97316':'#9ca3af'; return `<line x1="14" y1="${y}" x2="20" y2="${y}" stroke="${c}" stroke-width="1.5"/><text x="11" y="${y+4}" font-size="8" fill="${c}" text-anchor="middle">${Math.round((1-f)*100)}%</text>`;}).join('')}
+    <!-- Número central -->
+    <text x="90" y="${Math.max(112, liqY+34)}" text-anchor="middle" font-size="20" font-weight="bold" fill="white" opacity="0.92">${stock%1===0?stock:stock.toFixed(1)}</text>
+    <text x="90" y="${Math.max(130, liqY+50)}" text-anchor="middle" font-size="10" fill="white" opacity="0.65">galones</text>
+  </svg>`;
 }
 
-function combRegistrar(){
-  const fecha=document.getElementById('comb-fecha')?.value;
-  const hora=document.getElementById('comb-hora')?.value;
-  const placa=(document.getElementById('comb-placa')?.value||'').trim().toUpperCase();
-  const chofer=(document.getElementById('comb-chofer')?.value||'').trim();
-  const cantidad=parseFloat(document.getElementById('comb-cantidad')?.value||'0');
-  const obs=(document.getElementById('comb-obs')?.value||'').trim();
+// ── Formulario de ingreso (reutilizable) ────────────────────
+function combFormHtml(tipo){
+  const label=tipo==='pet'?'Petróleo':'Gasolina';
+  const maxGln=tipo==='pet'?COMB_CAP_PET:COMB_CAP_GAS;
+  return `<div style="background:var(--coal3);border-radius:10px;padding:16px">
+    <div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:12px">+ Registrar Ingreso — ${label}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Fecha</label>
+        <input type="date" id="comb-${tipo}-fecha" value="${hoy()}" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:13px"></div>
+      <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Hora</label>
+        <input type="time" id="comb-${tipo}-hora" value="${new Date().toTimeString().slice(0,5)}" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:13px"></div>
+      <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Placa del vehículo</label>
+        <input type="text" id="comb-${tipo}-placa" placeholder="Ej: A5H-320" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:13px;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div>
+      <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Nombre del chofer</label>
+        <input type="text" id="comb-${tipo}-chofer" placeholder="Nombre completo" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:13px"></div>
+      <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Cantidad (gln) — máx ${maxGln}</label>
+        <input type="number" id="comb-${tipo}-cant" placeholder="0" min="0.5" max="${maxGln}" step="0.5" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:14px;font-weight:700"></div>
+      <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Observaciones</label>
+        <input type="text" id="comb-${tipo}-obs" placeholder="Opcional" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:13px"></div>
+    </div>
+    <div style="margin-top:12px">
+      <button onclick="combRegistrar('${tipo}')" class="btn btn-gold" style="width:100%">✅ Registrar Ingreso ${label}</button>
+    </div>
+  </div>`;
+}
+
+// ── Historial tabla ─────────────────────────────────────────
+function combHistorialHtml(tipo){
+  const arr=combCargar(tipo);
+  const color=tipo==='pet'?'#f97316':'#22d3a5';
+  if(!arr.length) return '<div style="text-align:center;padding:20px;color:var(--text3)">Sin registros aún</div>';
+  return `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead><tr style="color:var(--text2)">${['Fecha','Hora','Placa','Chofer','Galones','Obs.',''].map(h=>`<th style="padding:7px 10px;text-align:${h==='Galones'?'right':'left'};border-bottom:1px solid var(--border)">${h}</th>`).join('')}</tr></thead>
+    <tbody>${[...arr].reverse().map((r,i)=>`<tr style="border-bottom:1px solid rgba(255,255,255,.04)">
+      <td style="padding:7px 10px;color:var(--text)">${fmtF(r.fecha)}</td>
+      <td style="padding:7px 10px;color:var(--text2)">${r.hora||'—'}</td>
+      <td style="padding:7px 10px;color:#fbbf24;font-weight:700">${r.placa||'—'}</td>
+      <td style="padding:7px 10px;color:var(--text)">${r.chofer||'—'}</td>
+      <td style="padding:7px 10px;text-align:right;font-weight:700;color:${color}">+${r.cantidad} gln</td>
+      <td style="padding:7px 10px;color:var(--text3);font-size:11px">${r.obs||'—'}</td>
+      <td style="padding:7px 10px"><button onclick="combEliminar('${tipo}',${arr.length-1-i})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:12px;padding:2px 6px">✕</button></td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+// ── RENDER PRINCIPAL ────────────────────────────────────────
+function renderCombustible(){
+  const el=document.getElementById('log-combustible');
+  if(!el) return;
+
+  const stPet=combStockTipo('pet'), stGas=combStockTipo('gas');
+  const semPet=combSem(stPet,COMB_ALERTA_PET), semGas=combSem(stGas,COMB_ALERTA_GAS);
+  const ingPet=combCargar('pet'), ingGas=combCargar('gas');
+  const totPet=ingPet.reduce((s,r)=>s+(r.cantidad||0),0);
+  const totGas=ingGas.reduce((s,r)=>s+(r.cantidad||0),0);
+  const consPet=(state.compresorista||[]).reduce((s,r)=>s+(r.petroleo||[]).reduce((ss,p)=>ss+(p.gln||0),0),0);
+  const consGas=(state.compresorista||[]).reduce((s,r)=>s+(r.gasolina||[]).reduce((ss,p)=>ss+(p.gln||0),0),0);
+
+  el.innerHTML=`<div style="padding:16px">
+    <h3 style="color:var(--accent-light);margin-bottom:18px">🛢 Control de Combustible</h3>
+
+    <!-- ALERTAS BANNER -->
+    ${stPet<=COMB_ALERTA_PET?`<div style="background:rgba(239,68,68,.14);border:1px solid #ef4444;border-radius:10px;padding:12px 16px;margin-bottom:14px;color:#ef4444;font-weight:700;font-size:13px">⚠️ PETRÓLEO CRÍTICO — Solo quedan ${stPet.toFixed(0)} galones. Coordinar reabastecimiento urgente.</div>`:''}
+    ${stGas<=COMB_ALERTA_GAS?`<div style="background:rgba(249,115,22,.14);border:1px solid #f97316;border-radius:10px;padding:12px 16px;margin-bottom:14px;color:#f97316;font-weight:700;font-size:13px">⚠️ GASOLINA BAJA — Solo quedan ${stGas.toFixed(1)} galones. Coordinar reabastecimiento.</div>`:''}
+
+    <!-- DOS TANQUES SIDE BY SIDE -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px">
+
+      <!-- ═══ PETRÓLEO ═══ -->
+      <div style="background:var(--coal3);border-radius:14px;padding:18px">
+        <div style="text-align:center;margin-bottom:6px">
+          <div style="font-size:13px;font-weight:700;color:#f97316;text-transform:uppercase;letter-spacing:1px">🛢 Petróleo</div>
+          <div style="font-size:11px;color:var(--text2)">Capacidad: ${COMB_CAP_PET.toLocaleString()} gln</div>
+        </div>
+        ${combSvgCisterna('pet', stPet, COMB_CAP_PET, COMB_ALERTA_PET)}
+        <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px">
+          <span style="font-size:18px">${semPet.emoji}</span>
+          <span style="font-size:13px;font-weight:700;color:${semPet.color}">${semPet.label}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:12px;text-align:center">
+          <div style="background:var(--coal4);border-radius:8px;padding:8px">
+            <div style="font-size:10px;color:var(--text2)">STOCK</div>
+            <div style="font-size:16px;font-weight:700;color:${semPet.color}">${stPet.toFixed(0)}</div>
+            <div style="font-size:9px;color:var(--text3)">galones</div>
+          </div>
+          <div style="background:var(--coal4);border-radius:8px;padding:8px">
+            <div style="font-size:10px;color:var(--text2)">INGRESADO</div>
+            <div style="font-size:16px;font-weight:700;color:#60a5fa">${totPet.toFixed(0)}</div>
+            <div style="font-size:9px;color:var(--text3)">galones</div>
+          </div>
+          <div style="background:var(--coal4);border-radius:8px;padding:8px">
+            <div style="font-size:10px;color:var(--text2)">CONSUMIDO</div>
+            <div style="font-size:16px;font-weight:700;color:#f87171">${consPet.toFixed(0)}</div>
+            <div style="font-size:9px;color:var(--text3)">galones</div>
+          </div>
+        </div>
+        <div style="margin-top:14px">${combFormHtml('pet')}</div>
+      </div>
+
+      <!-- ═══ GASOLINA ═══ -->
+      <div style="background:var(--coal3);border-radius:14px;padding:18px">
+        <div style="text-align:center;margin-bottom:6px">
+          <div style="font-size:13px;font-weight:700;color:#22d3a5;text-transform:uppercase;letter-spacing:1px">⛽ Gasolina</div>
+          <div style="font-size:11px;color:var(--text2)">Capacidad: ${COMB_CAP_GAS} gln</div>
+        </div>
+        ${combSvgCisterna('gas', stGas, COMB_CAP_GAS, COMB_ALERTA_GAS)}
+        <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px">
+          <span style="font-size:18px">${semGas.emoji}</span>
+          <span style="font-size:13px;font-weight:700;color:${semGas.color}">${semGas.label}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:12px;text-align:center">
+          <div style="background:var(--coal4);border-radius:8px;padding:8px">
+            <div style="font-size:10px;color:var(--text2)">STOCK</div>
+            <div style="font-size:16px;font-weight:700;color:${semGas.color}">${stGas.toFixed(1)}</div>
+            <div style="font-size:9px;color:var(--text3)">galones</div>
+          </div>
+          <div style="background:var(--coal4);border-radius:8px;padding:8px">
+            <div style="font-size:10px;color:var(--text2)">INGRESADO</div>
+            <div style="font-size:16px;font-weight:700;color:#60a5fa">${totGas.toFixed(1)}</div>
+            <div style="font-size:9px;color:var(--text3)">galones</div>
+          </div>
+          <div style="background:var(--coal4);border-radius:8px;padding:8px">
+            <div style="font-size:10px;color:var(--text2)">CONSUMIDO</div>
+            <div style="font-size:16px;font-weight:700;color:#f87171">${consGas.toFixed(1)}</div>
+            <div style="font-size:9px;color:var(--text3)">galones</div>
+          </div>
+        </div>
+        <div style="margin-top:14px">${combFormHtml('gas')}</div>
+      </div>
+    </div>
+
+    <!-- HISTORIALES -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+      <div style="background:var(--coal3);border-radius:10px;padding:14px">
+        <div style="font-size:11px;font-weight:700;color:#f97316;text-transform:uppercase;margin-bottom:10px">📋 Historial — Petróleo</div>
+        ${combHistorialHtml('pet')}
+      </div>
+      <div style="background:var(--coal3);border-radius:10px;padding:14px">
+        <div style="font-size:11px;font-weight:700;color:#22d3a5;text-transform:uppercase;margin-bottom:10px">📋 Historial — Gasolina</div>
+        ${combHistorialHtml('gas')}
+      </div>
+    </div>
+  </div>`;
+}
+
+function combRegistrar(tipo){
+  const fecha=document.getElementById(`comb-${tipo}-fecha`)?.value;
+  const hora=document.getElementById(`comb-${tipo}-hora`)?.value;
+  const placa=(document.getElementById(`comb-${tipo}-placa`)?.value||'').trim().toUpperCase();
+  const chofer=(document.getElementById(`comb-${tipo}-chofer`)?.value||'').trim();
+  const cantidad=parseFloat(document.getElementById(`comb-${tipo}-cant`)?.value||'0');
+  const obs=(document.getElementById(`comb-${tipo}-obs`)?.value||'').trim();
   if(!fecha||!placa||!chofer||cantidad<=0){showNotif('Completa todos los campos requeridos','warn');return;}
-  const arr=combCargar();
+  const arr=combCargar(tipo);
   arr.push({fecha,hora,placa,chofer,cantidad,obs});
-  combGuardar(arr);
-  // Alerta automática
-  const stock=combStockTotal();
-  if(stock<=COMB_ALERTA){showNotif(`⚠️ Stock crítico: ${stock.toFixed(0)} galones — coordinar reabastecimiento`,'warn');}
-  else{showNotif(`✅ Ingreso registrado: +${cantidad} galones | Stock: ${stock.toFixed(0)} gln`,'ok');}
+  combGuardar(tipo,arr);
+  const stock=combStockTipo(tipo);
+  const alerta=tipo==='pet'?COMB_ALERTA_PET:COMB_ALERTA_GAS;
+  const nombre=tipo==='pet'?'petróleo':'gasolina';
+  if(stock<=alerta) showNotif(`⚠️ Stock crítico de ${nombre}: ${stock.toFixed(0)} gln`,'warn');
+  else showNotif(`✅ Ingreso registrado: +${cantidad} gln de ${nombre} | Stock: ${stock.toFixed(0)} gln`,'ok');
   renderCombustible();
 }
 
-function combEliminar(idx){
+function combEliminar(tipo,idx){
   if(!confirm('¿Eliminar este ingreso?'))return;
-  const arr=combCargar();
+  const arr=combCargar(tipo);
   arr.splice(idx,1);
-  combGuardar(arr);
+  combGuardar(tipo,arr);
   renderCombustible();
 }
 
