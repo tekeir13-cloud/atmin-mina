@@ -2702,13 +2702,16 @@ select option{background:var(--coal3);}
 <!-- FINANZAS -->
 <div class="page" id="page-finanzas">
   <div class="mod-tabs">
-    <button class="mod-tab active" onclick="modTab('fin','ordenes',this)">📄 Órdenes de Compra</button>
-    <button class="mod-tab" onclick="modTab('fin','solicitudes',this);renderSolicitudesPendientesFin()">🛒 Solicitudes</button>
-    <button class="mod-tab" onclick="modTab('fin','valorizaciones',this)">💵 Valorizaciones</button>
-    <button class="mod-tab" onclick="modTab('fin','proyeccion',this)">📊 Proyección</button>
-    <button class="mod-tab" onclick="modTab('fin','utilidad',this)">💰 Utilidad</button>
+    <button class="mod-tab active" onclick="modTab('fin','dashboard',this)">📊 Dashboard</button>
+    <button class="mod-tab" onclick="modTab('fin','proyeccion',this)">📅 Proyección</button>
+    <button class="mod-tab" onclick="modTab('fin','informe',this)">🧾 Informe Mensual</button>
+    <button class="mod-tab" onclick="modTab('fin','costocentro',this)">💸 Costos por Centro</button>
+    <button class="mod-tab" onclick="modTab('fin','ordenes',this)">📄 Órdenes de Compra</button>
   </div>
-  <div class="mod-pane active" style="display:block" id="fin-ordenes">
+  <div class="mod-pane active" style="display:block" id="fin-dashboard"></div>
+  <div class="mod-pane" style="display:none" id="fin-informe"></div>
+  <div class="mod-pane" style="display:none" id="fin-costocentro"></div>
+  <div class="mod-pane active" style="display:none" id="fin-ordenes">
     <!-- Solicitudes de Compra pendientes de aprobación Finanzas -->
     <div style="margin-bottom:18px">
       <div class="section-title" style="margin-top:0">🛒 Solicitudes de Compra — Pendientes de tu aprobación</div>
@@ -2764,31 +2767,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Concepto</th><th>Metros</th><th>P/m</th><th>Monto (S/)</th></tr></thead><tbody id="val-tbody"></tbody></table></div>
   </div>
-  <div class="mod-pane" style="display:none" id="fin-proyeccion">
-    <div class="kpi-grid">
-      <div class="kpi-card"><div class="kpi-label">Ganancia por Día</div><div class="kpi-value green" id="proy-dia">S/ 0</div></div>
-      <div class="kpi-card"><div class="kpi-label">Ganancia por Equipo</div><div class="kpi-value blue" id="proy-equipo">S/ 0</div></div>
-      <div class="kpi-card"><div class="kpi-label">Ganancia por Metro</div><div class="kpi-value gold" id="proy-metro">S/ 0</div></div>
-      <div class="kpi-card"><div class="kpi-label">Proyección Mensual</div><div class="kpi-value green" id="proy-mes">S/ 0</div></div>
-      <div class="kpi-card"><div class="kpi-label">Ingresos Adicionales</div><div class="kpi-value warn" id="proy-adicionales">S/ 0</div></div>
-      <div class="kpi-card"><div class="kpi-label">Margen Operativo</div><div class="kpi-value blue" id="proy-margen">0 %</div></div>
-    </div>
-    <div class="two-col">
-      <div class="card"><div class="section-title">Ingresos vs Costos</div><div id="proy-ingresos-vs"></div></div>
-      <div class="card"><div class="section-title">Desglose de Costos</div><div id="proy-costos-desglose"></div></div>
-    </div>
-  </div>
-  <div class="mod-pane" style="display:none" id="fin-utilidad">
-    <div class="utilidad-box">
-      <div class="utilidad-label">Utilidad Neta Estimada del Mes</div>
-      <div class="utilidad-value" id="util-neta">S/ 0</div>
-      <div style="font-size:12px;color:var(--text3);margin-top:6px">Ingresos totales − Costos operativos</div>
-    </div>
-    <div class="two-col">
-      <div class="card"><div class="section-title">Ingresos</div><div id="util-ingresos-lista"></div><div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)"><div class="kpi-label">Total ingresos</div><div class="kpi-value green" id="util-ingresos">S/ 0</div></div></div>
-      <div class="card"><div class="section-title">Costos</div><div id="util-costos-lista"></div><div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)"><div class="kpi-label">Total costos</div><div class="kpi-value red" id="util-costos">S/ 0</div></div></div>
-    </div>
-  </div>
+  <div class="mod-pane" style="display:none" id="fin-proyeccion"></div>
 </div>
 
 <!-- REPORTE -->
@@ -3794,7 +3773,7 @@ const MODULE_PANES = {
   'rrhh': ['planilla','tareas','personal','costorrhh'],
   'op': ['tablero','avance','solicitudes','vsproyectado','valorizaciones'],
   'mant': ['registro','programamant','costosmant'],
-  'fin': ['ordenes','solicitudes','valorizaciones','proyeccion','utilidad']
+  'fin': ['dashboard','proyeccion','informe','costocentro','ordenes']
 };
 
 function modTab(mod, pane, btn){
@@ -4038,11 +4017,11 @@ function renderModPane(mod,pane){
   else if(k==='mant-registro')renderMantenimiento();
   else if(k==='mant-programamant')renderProgramaMant();
   else if(k==='mant-costosmant')renderCostosMant();
+  else if(k==='fin-dashboard')renderFinDashboard();
+  else if(k==='fin-proyeccion')renderFinProyeccion();
+  else if(k==='fin-informe')renderFinInforme();
+  else if(k==='fin-costocentro')renderFinCostoCentro();
   else if(k==='fin-ordenes')renderOrdenes();
-  else if(k==='fin-solicitudes')renderSolicitudesPendientesFin();
-  else if(k==='fin-valorizaciones')renderValorizaciones();
-  else if(k==='fin-proyeccion')renderProyeccion();
-  else if(k==='fin-utilidad')renderUtilidad();
 }
 
 function calcCostos(){
@@ -8246,6 +8225,346 @@ function renderUtilidad(){
   const ma=state.mantenimiento.reduce((s,m)=>s+m.costo,0);
   const ex=state.explosivos.historial.reduce((s,e)=>s+(e.cantidad*(e.precio||0)),0);
   document.getElementById('util-costos-lista').innerHTML=[['👷 Jornales',j],['💥 Explosivos',ex],['🛢 Petróleo',pe],['🔧 Mantenimiento',ma]].map(([l,v])=>`<div class="vs-row"><div class="vs-label">${l}</div><div class="vs-real" style="color:var(--text)">${fmtS(v)}</div></div>`).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MÓDULO FINANZAS — Dashboard, Proyección, Informe, Costos
+// ══════════════════════════════════════════════════════════════
+const FIN_PRES_KEY='atmin_fin_presupuesto';
+const FIN_PROY_KEY='atmin_fin_proyeccion';
+const FIN_PROY_KEY2='atmin_fin_proyeccion_vals';
+const FIN_PROY_KEY3='atmin_fin_proyecto';
+
+function finMesActual(){return hoy().slice(0,7);}
+function finMesOffset(n){const d=new Date();d.setMonth(d.getMonth()+n);return d.toISOString().slice(0,7);}
+function finMesLabel(ym){const[y,m]=ym.split('-');const ms=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];return(ms[+m-1]||m)+' '+y;}
+function finFiltrarMes(arr,ym){return(arr||[]).filter(r=>(r.fecha||'').startsWith(ym));}
+function finValorizacionMes(ym){
+  const v=(state.valorizacionesLabor||[]).find(v=>{const my=v.anio&&v.mesNum?`${v.anio}-${String(v.mesNum).padStart(2,'0')}`:null;return my===ym;});
+  return v?{total:v.total||0,descuento:v.descuento||0,rubros:v.rubros||[]}:{total:0,descuento:0,rubros:[]};
+}
+function finCostoKits(ym){return finFiltrarMes(state.mantenimiento||[],ym).filter(k=>k.aprobLog&&k.aprobLog.ok).reduce((s,k)=>s+(k.costo||0),0);}
+function finCostoOrdenes(ym){return finFiltrarMes(state.ordenes||[],ym).filter(o=>['aprobado','recibido','completado'].includes(o.estado)).reduce((s,o)=>s+(o.total||0),0);}
+function finCostoAlmacen(ym){return finFiltrarMes(state.almacen&&state.almacen.salidas||[],ym).reduce((s,x)=>s+(x.monto||x.costo||0),0);}
+function finCostoTotal(ym){return finCostoKits(ym)+finCostoOrdenes(ym)+finCostoAlmacen(ym);}
+function finAvanceMes(ym){return finFiltrarMes(state.perforacion||[],ym).reduce((s,r)=>s+(r.avance||0),0);}
+function finPresupuesto(){return parseFloat(localStorage.getItem(FIN_PRES_KEY)||'500000');}
+
+// ─ DASHBOARD ─────────────────────────────────────────────────
+function renderFinDashboard(){
+  const el=document.getElementById('fin-dashboard');if(!el)return;
+  const ym=finMesActual();
+  const val=finValorizacionMes(ym);
+  const costoTotal=finCostoTotal(ym);
+  const margen=val.total-costoTotal;
+  const margenPct=val.total>0?((margen/val.total)*100).toFixed(1):'—';
+  const avance=finAvanceMes(ym);
+  const costoMetro=avance>0?(costoTotal/avance).toFixed(0):'—';
+  const pres=finPresupuesto();
+  const ejPct=pres>0?Math.min(999,((costoTotal/pres)*100)).toFixed(0):'—';
+  const costoMant=finCostoKits(ym),costoOC=finCostoOrdenes(ym),costoAlm=finCostoAlmacen(ym);
+  // Historial 6 meses
+  const meses=[...Array(6)].map((_,i)=>finMesOffset(i-5));
+  const histRows=meses.map(m=>{const v=finValorizacionMes(m);const c=finCostoTotal(m);const mg=v.total-c;const mgp=v.total>0?((mg/v.total)*100).toFixed(1):'—';return`<tr><td>${finMesLabel(m)}</td><td style="text-align:right;color:#22d3a5">${fmtS2(v.total)}</td><td style="text-align:right;color:#f87171">${fmtS2(c)}</td><td style="text-align:right;color:${mg>=0?'#22d3a5':'#f87171'};font-weight:700">${fmtS2(mg)}</td><td style="text-align:right">${mgp}%</td></tr>`;}).join('');
+  const kpiColor=(val,warn,err)=>val>=err?'#f87171':val>=warn?'#f59e0b':'#22d3a5';
+  el.innerHTML=`
+  <div style="padding:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+      <h3 style="color:var(--accent-light);margin:0">📊 Dashboard Financiero — ${finMesLabel(ym)}</h3>
+      <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2)">Presupuesto:
+        <input type="number" value="${pres}" onchange="localStorage.setItem('${FIN_PRES_KEY}',this.value);renderFinDashboard()"
+          style="width:110px;background:var(--coal3);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px"> S/
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:20px">
+      ${[
+        ['Valorización Neta',fmtS2(val.total),'#22d3a5'],
+        ['Costo Total',fmtS2(costoTotal),'#f87171'],
+        ['Margen Bruto',fmtS2(margen)+(margenPct!=='—'?' ('+margenPct+'%)':''),margen>=0?'#22d3a5':'#f87171'],
+        ['Costo / Metro','S/ '+costoMetro,'#fbbf24'],
+        ['% Ejec. Presupuesto',ejPct+'%',ejPct>=100?'#f87171':ejPct>=80?'#f59e0b':'#22d3a5'],
+      ].map(([l,v,c])=>`<div style="background:var(--coal3);border-radius:10px;padding:14px 16px;border-left:3px solid ${c}">
+        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">${l}</div>
+        <div style="font-size:18px;font-weight:700;color:${c}">${v}</div>
+      </div>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+      <div style="background:var(--coal3);border-radius:10px;padding:16px">
+        <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:12px">WATERFALL FINANCIERO</div>
+        <canvas id="fin-waterfall-chart" height="200"></canvas>
+      </div>
+      <div style="background:var(--coal3);border-radius:10px;padding:16px">
+        <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:12px">COSTOS POR MÓDULO</div>
+        <canvas id="fin-pie-chart" height="200"></canvas>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:10px;font-size:11px">
+          <div style="color:#f59e0b">🔧 Mant. <strong>${fmtS2(costoMant)}</strong></div>
+          <div style="color:#60a5fa">📋 OC <strong>${fmtS2(costoOC)}</strong></div>
+          <div style="color:#a78bfa">📦 Alm. <strong>${fmtS2(costoAlm)}</strong></div>
+        </div>
+      </div>
+    </div>
+    <div style="background:var(--coal3);border-radius:10px;padding:16px">
+      <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:12px">HISTORIAL 6 MESES</div>
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="color:var(--text2)">${['Mes','Valorización','Costo','Margen','Margen%'].map(h=>`<th style="padding:6px 8px;text-align:${h==='Mes'?'left':'right'};font-weight:600;border-bottom:1px solid var(--border)">${h}</th>`).join('')}</tr></thead>
+        <tbody>${histRows||'<tr><td colspan="5" style="text-align:center;padding:12px;color:var(--text3)">Sin datos históricos</td></tr>'}</tbody>
+      </table></div>
+    </div>
+  </div>`;
+  setTimeout(()=>{
+    if(window._finWFC){try{window._finWFC.destroy();}catch(e){}}
+    if(window._finPIE){try{window._finPIE.destroy();}catch(e){}}
+    const brut=val.total+Math.abs(val.descuento);
+    const wc=document.getElementById('fin-waterfall-chart');
+    if(wc&&wc.getContext){window._finWFC=new Chart(wc,{type:'bar',data:{labels:['Val. Bruta','Descuento','Costos','Utilidad'],datasets:[{data:[brut,-Math.abs(val.descuento),-costoTotal,margen],backgroundColor:['#22d3a5','#f87171','#f87171',margen>=0?'#22d3a5':'#f87171'],borderRadius:4}]},options:{plugins:{legend:{display:false}},scales:{y:{ticks:{color:'#9ca3af',callback:v=>'S/'+Math.abs(v/1000).toFixed(0)+'k'},grid:{color:'rgba(255,255,255,.05)'}},x:{ticks:{color:'#9ca3af'},grid:{display:false}}},responsive:true,maintainAspectRatio:false}});}
+    const pc=document.getElementById('fin-pie-chart');
+    if(pc&&pc.getContext&&(costoMant+costoOC+costoAlm)>0){window._finPIE=new Chart(pc,{type:'doughnut',data:{labels:['Mantenimiento','Órdenes Compra','Almacén'],datasets:[{data:[costoMant,costoOC,costoAlm],backgroundColor:['#f59e0b','#60a5fa','#a78bfa'],borderWidth:0}]},options:{plugins:{legend:{display:false}},responsive:true,maintainAspectRatio:false}});}
+  },50);
+}
+
+// ─ PROYECCIÓN ────────────────────────────────────────────────
+function renderFinProyeccion(){
+  const el=document.getElementById('fin-proyeccion');if(!el)return;
+  const cats=[['Mantenimiento','🔧',ym=>finCostoKits(ym)],['Órdenes de Compra','📋',ym=>finCostoOrdenes(ym)],['Almacén','📦',ym=>finCostoAlmacen(ym)]];
+  let overrides={};try{overrides=JSON.parse(localStorage.getItem(FIN_PROY_KEY2)||'{}');}catch(e){}
+  const meses3=[finMesOffset(-3),finMesOffset(-2),finMesOffset(-1)];
+  const ymNext=finMesOffset(1);
+  let valProxEstim=0;try{valProxEstim=parseFloat(localStorage.getItem(FIN_PRES_KEY+'-val-next')||'0');}catch(e){}
+  const rows=cats.map(([nombre,icon,fn])=>{
+    const vals=meses3.map(m=>fn(m));
+    const avg=vals.reduce((s,v)=>s+v,0)/3;
+    const override=overrides[nombre]!=null?overrides[nombre]:avg;
+    return{nombre,icon,avg,override,vals};
+  });
+  const totalProy=rows.reduce((s,r)=>s+r.override,0);
+  const margenProy=valProxEstim>0?valProxEstim-totalProy:null;
+  el.innerHTML=`<div style="padding:16px">
+    <h3 style="color:var(--accent-light);margin-bottom:16px">📅 Proyección de Gasto — ${finMesLabel(ymNext)}</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+      <div style="background:var(--coal3);border-radius:10px;padding:14px">
+        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;margin-bottom:4px">Valorización estimada próx. mes</div>
+        <input type="number" placeholder="S/ estimado" value="${valProxEstim||''}" onchange="localStorage.setItem('${FIN_PRES_KEY}-val-next',this.value);renderFinProyeccion()"
+          style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--text);font-size:16px;font-weight:700">
+      </div>
+      <div style="background:var(--coal3);border-radius:10px;padding:14px">
+        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;margin-bottom:4px">Gasto proyectado total</div>
+        <div style="font-size:22px;font-weight:700;color:#f87171">${fmtS2(totalProy)}</div>
+        ${margenProy!=null?`<div style="font-size:12px;color:${margenProy>=0?'#22d3a5':'#f87171'};margin-top:4px">Margen estimado: ${fmtS2(margenProy)}</div>`:''}
+      </div>
+    </div>
+    <div style="background:var(--coal3);border-radius:10px;padding:16px;margin-bottom:16px;overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="color:var(--text2)">
+          <th style="padding:8px;text-align:left;border-bottom:1px solid var(--border)">Categoría</th>
+          ${meses3.map(m=>`<th style="padding:8px;text-align:right;border-bottom:1px solid var(--border)">${finMesLabel(m)}</th>`).join('')}
+          <th style="padding:8px;text-align:right;border-bottom:1px solid var(--border)">Promedio</th>
+          <th style="padding:8px;text-align:right;border-bottom:1px solid var(--border);color:#fbbf24">Proyección ${finMesLabel(ymNext)}</th>
+        </tr></thead>
+        <tbody>${rows.map(r=>`<tr>
+          <td style="padding:8px;color:var(--text)">${r.icon} ${r.nombre}</td>
+          ${r.vals.map(v=>`<td style="padding:8px;text-align:right;color:var(--text2)">${fmtS2(v)}</td>`).join('')}
+          <td style="padding:8px;text-align:right;color:var(--text)">${fmtS2(r.avg)}</td>
+          <td style="padding:8px;text-align:right"><input type="number" value="${r.override.toFixed(0)}" onchange="(function(){let o={};try{o=JSON.parse(localStorage.getItem('${FIN_PROY_KEY2}')||'{}')}catch(e){};o['${r.nombre}']=parseFloat(this.value)||0;localStorage.setItem('${FIN_PROY_KEY2}',JSON.stringify(o));renderFinProyeccion();}).call(this)"
+            style="width:110px;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:#fbbf24;font-size:13px;font-weight:700;text-align:right"></td>
+        </tr>`).join('')}</tbody>
+        <tfoot><tr style="border-top:2px solid var(--border)">
+          <td colspan="4" style="padding:8px;font-weight:700;color:var(--text)">TOTAL PROYECTADO</td>
+          <td style="padding:8px;text-align:right;font-weight:700;font-size:15px;color:#f87171">${fmtS2(totalProy)}</td>
+        </tr></tfoot>
+      </table>
+    </div>
+    <button onclick="finExportarProyeccion()" class="btn btn-outline" style="font-size:12px">📥 Exportar proyección Excel</button>
+  </div>`;
+}
+async function finExportarProyeccion(){
+  try{
+    const wb=new ExcelJS.Workbook();const ws=wb.addWorksheet('Proyección');
+    ws.columns=[{width:30},{width:18},{width:18},{width:18},{width:18},{width:20}];
+    const ymNext=finMesOffset(1);
+    const meses3=[finMesOffset(-3),finMesOffset(-2),finMesOffset(-1)];
+    let overrides={};try{overrides=JSON.parse(localStorage.getItem(FIN_PROY_KEY2)||'{}');}catch(e){}
+    ws.addRow(['PROYECCIÓN DE GASTO — '+finMesLabel(ymNext).toUpperCase()]);
+    ws.getRow(1).font={bold:true,size:14};ws.addRow([]);
+    ws.addRow(['Categoría',...meses3.map(finMesLabel),'Promedio','Proyección '+finMesLabel(ymNext)]);
+    ws.getRow(3).font={bold:true};
+    const cats=[['Mantenimiento',ym=>finCostoKits(ym)],['Órdenes de Compra',ym=>finCostoOrdenes(ym)],['Almacén',ym=>finCostoAlmacen(ym)]];
+    cats.forEach(([n,fn])=>{const vals=meses3.map(m=>fn(m));const avg=vals.reduce((s,v)=>s+v,0)/3;ws.addRow([n,...vals,avg,overrides[n]!=null?overrides[n]:avg]);});
+    const buf=await wb.xlsx.writeBuffer();const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Proyeccion_${ymNext}.xlsx`;a.click();
+  }catch(e){showNotif('Error al exportar: '+e.message,'error');}
+}
+
+// ─ INFORME MENSUAL ───────────────────────────────────────────
+function renderFinInforme(){
+  const el=document.getElementById('fin-informe');if(!el)return;
+  const mesesDisp=(state.valorizacionesLabor||[]).map(v=>v.anio&&v.mesNum?`${v.anio}-${String(v.mesNum).padStart(2,'0')}`:null).filter(Boolean);
+  const todosYM=[...new Set([finMesActual(),...mesesDisp])].sort((a,b)=>b.localeCompare(a));
+  let proyNombre='';try{proyNombre=localStorage.getItem(FIN_PROY_KEY3)||'Proyecto Minero';}catch(e){}
+  el.innerHTML=`<div style="padding:16px">
+    <h3 style="color:var(--accent-light);margin-bottom:16px">🧾 Informe Financiero Mensual</h3>
+    <div style="background:var(--coal3);border-radius:10px;padding:16px;margin-bottom:16px">
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end">
+        <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:4px">Nombre del Proyecto</label>
+          <input type="text" value="${proyNombre}" placeholder="Proyecto Minero" onchange="localStorage.setItem('${FIN_PROY_KEY3}',this.value)"
+            style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:13px"></div>
+        <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:4px">Mes del Informe</label>
+          <select id="fin-informe-mes" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:13px">
+            ${todosYM.map(m=>`<option value="${m}">${finMesLabel(m)}</option>`).join('')}
+          </select></div>
+        <button onclick="finGenerarInforme()" class="btn btn-gold">📄 Generar Informe</button>
+      </div>
+    </div>
+    <div id="fin-informe-preview"></div>
+  </div>`;
+}
+async function finGenerarInforme(){
+  const ym=document.getElementById('fin-informe-mes')?.value||finMesActual();
+  let proy='';try{proy=localStorage.getItem(FIN_PROY_KEY3)||'Proyecto Minero';}catch(e){}
+  const val=finValorizacionMes(ym);
+  const ymPrev=finMesOffset(-1);const valPrev=finValorizacionMes(ymPrev);
+  const costoMant=finCostoKits(ym),costoOC=finCostoOrdenes(ym),costoAlm=finCostoAlmacen(ym);
+  const costoTotal=costoMant+costoOC+costoAlm;
+  const costoMantP=finCostoKits(ymPrev),costoOCP=finCostoOrdenes(ymPrev),costoAlmP=finCostoAlmacen(ymPrev);
+  const costoTotalP=costoMantP+costoOCP+costoAlmP;
+  const margen=val.total-costoTotal,margenP=valPrev.total-costoTotalP;
+  const avance=finAvanceMes(ym);
+  const costoMetro=avance>0?(costoTotal/avance).toFixed(0):'—';
+  const pl=[
+    ['Valorización bruta',val.total+Math.abs(val.descuento),valPrev.total+Math.abs(valPrev.descuento),'#22d3a5'],
+    ['Descuento almacén',-Math.abs(val.descuento),-Math.abs(valPrev.descuento),'#f87171'],
+    ['Valorización neta',val.total,valPrev.total,'#22d3a5'],
+    ['—','—','—',''],
+    ['Costo Mantenimiento',-costoMant,-costoMantP,'#f87171'],
+    ['Costo Órdenes Compra',-costoOC,-costoOCP,'#f87171'],
+    ['Costo Almacén',-costoAlm,-costoAlmP,'#f87171'],
+    ['TOTAL COSTOS',-costoTotal,-costoTotalP,'#f87171'],
+    ['UTILIDAD ESTIMADA',margen,margenP,margen>=0?'#22d3a5':'#f87171'],
+  ];
+  const rowHtml=([l,a,b,c])=>l==='—'?'<tr><td colspan="3" style="padding:4px 0"></td></tr>':`<tr style="border-bottom:1px solid rgba(255,255,255,.06)">
+    <td style="padding:7px 10px;color:var(--text);font-weight:${['TOTAL COSTOS','UTILIDAD ESTIMADA'].includes(l)?'700':'400'}">${l}</td>
+    <td style="padding:7px 10px;text-align:right;color:${c||'var(--text)'};font-weight:${['TOTAL COSTOS','UTILIDAD ESTIMADA'].includes(l)?'700':'400'}">${typeof a==='number'?fmtS2(a):a}</td>
+    <td style="padding:7px 10px;text-align:right;color:${c||'var(--text2)'};opacity:.7">${typeof b==='number'?fmtS2(b):b}</td>
+  </tr>`;
+  const rubrosHtml=val.rubros.length?val.rubros.map(r=>`<tr><td style="padding:5px 10px">${r.rubro||r.nombre||r.actividad||'—'}</td><td style="padding:5px 10px;text-align:right;color:#fbbf24">${fmtS2(r.monto||0)}</td></tr>`).join(''):'<tr><td colspan="2" style="padding:8px;color:var(--text3)">Sin detalle de rubros</td></tr>';
+  document.getElementById('fin-informe-preview').innerHTML=`
+  <div style="background:var(--coal3);border-radius:10px;padding:24px;font-size:13px" id="fin-informe-doc">
+    <div style="text-align:center;border-bottom:2px solid var(--accent-light);padding-bottom:16px;margin-bottom:20px">
+      <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:2px">Informe Financiero Mensual</div>
+      <div style="font-size:22px;font-weight:700;color:var(--text);margin:6px 0">${proy.toUpperCase()}</div>
+      <div style="font-size:16px;color:var(--accent-light);font-weight:600">${finMesLabel(ym).toUpperCase()}</div>
+    </div>
+    <div style="background:rgba(255,255,255,.04);border-radius:8px;padding:14px;margin-bottom:18px">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:10px">Resumen Ejecutivo</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div>• Valorización del mes: <strong style="color:#22d3a5">${fmtS2(val.total)}</strong></div>
+        <div>• Costo total operativo: <strong style="color:#f87171">${fmtS2(costoTotal)}</strong></div>
+        <div>• Utilidad estimada: <strong style="color:${margen>=0?'#22d3a5':'#f87171'}">${fmtS2(margen)}</strong>${val.total>0?' ('+((margen/val.total)*100).toFixed(1)+'% margen)':''}</div>
+      </div>
+    </div>
+    <div style="margin-bottom:18px">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:10px">Estado de Resultados</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="border-bottom:1px solid var(--border)"><th style="padding:7px 10px;text-align:left;color:var(--text2)">Concepto</th><th style="padding:7px 10px;text-align:right;color:var(--accent-light)">${finMesLabel(ym)}</th><th style="padding:7px 10px;text-align:right;color:var(--text2)">${finMesLabel(ymPrev)}</th></tr></thead>
+        <tbody>${pl.map(rowHtml).join('')}</tbody>
+      </table>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px">
+      <div style="background:rgba(255,255,255,.04);border-radius:8px;padding:14px">
+        <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:8px">Avance Físico</div>
+        <div>Metros avanzados: <strong style="color:#fbbf24">${avance} m</strong></div>
+        <div style="margin-top:4px">Costo por metro: <strong style="color:#fbbf24">S/ ${costoMetro}</strong></div>
+      </div>
+      <div style="background:rgba(255,255,255,.04);border-radius:8px;padding:14px">
+        <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:8px">Costos por Actividad</div>
+        <table style="width:100%;font-size:12px"><tbody>${rubrosHtml}</tbody></table>
+      </div>
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:12px;font-size:11px;color:var(--text3);display:flex;justify-content:space-between">
+      <span>Generado por ATMIN</span><span>${fmtF(hoy())}</span>
+    </div>
+  </div>
+  <div style="margin-top:12px"><button onclick="finExportarInforme('${ym}')" class="btn btn-outline" style="font-size:12px">📥 Exportar Excel</button></div>`;
+}
+async function finExportarInforme(ym){
+  try{
+    let proy='';try{proy=localStorage.getItem(FIN_PROY_KEY3)||'Proyecto Minero';}catch(e){}
+    const val=finValorizacionMes(ym);
+    const ymPrev=finMesOffset(-1);const valPrev=finValorizacionMes(ymPrev);
+    const costoMant=finCostoKits(ym),costoOC=finCostoOrdenes(ym),costoAlm=finCostoAlmacen(ym);
+    const costoTotal=costoMant+costoOC+costoAlm;
+    const costoMantP=finCostoKits(ymPrev),costoOCP=finCostoOrdenes(ymPrev),costoAlmP=finCostoAlmacen(ymPrev);
+    const costoTotalP=costoMantP+costoOCP+costoAlmP;
+    const margen=val.total-costoTotal;
+    const wb=new ExcelJS.Workbook();const ws=wb.addWorksheet('Informe Financiero');
+    ws.pageSetup={orientation:'landscape',fitToPage:true,fitToWidth:1};
+    ws.columns=[{width:35},{width:22},{width:22}];
+    ws.addRow([proy.toUpperCase()+' — INFORME FINANCIERO '+finMesLabel(ym).toUpperCase()]);
+    ws.getRow(1).font={bold:true,size:14};ws.addRow([]);
+    ws.addRow(['ESTADO DE RESULTADOS',finMesLabel(ym),finMesLabel(ymPrev)]);
+    ws.getRow(3).font={bold:true};
+    [[`Valorización bruta`,val.total+Math.abs(val.descuento),valPrev.total+Math.abs(valPrev.descuento)],
+     [`Descuento`,-Math.abs(val.descuento),-Math.abs(valPrev.descuento)],
+     [`Valorización neta`,val.total,valPrev.total],
+     [`Costo Mantenimiento`,-costoMant,-costoMantP],
+     [`Costo Órdenes`,-costoOC,-costoOCP],
+     [`Costo Almacén`,-costoAlm,-costoAlmP],
+     [`TOTAL COSTOS`,-costoTotal,-costoTotalP],
+     [`UTILIDAD ESTIMADA`,margen,valPrev.total-costoTotalP]
+    ].forEach(r=>{const row=ws.addRow(r);if(r[0].startsWith('TOTAL')||r[0].startsWith('UTIL'))row.font={bold:true};});
+    ws.addRow([]);ws.addRow(['Avance físico (m)',finAvanceMes(ym)]);
+    ws.addRow(['Costo/metro (S/)',finAvanceMes(ym)>0?(costoTotal/finAvanceMes(ym)).toFixed(0):'—']);
+    const buf=await wb.xlsx.writeBuffer();const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Informe_Financiero_${ym}.xlsx`;a.click();
+  }catch(e){showNotif('Error al exportar: '+e.message,'error');}
+}
+
+// ─ COSTOS POR CENTRO ─────────────────────────────────────────
+const FIN_SPLIT_KEY='atmin_fin_split';
+function renderFinCostoCentro(){
+  const el=document.getElementById('fin-costocentro');if(!el)return;
+  const ym=finMesActual();
+  let split=60;try{split=parseFloat(localStorage.getItem(FIN_SPLIT_KEY)||'60');}catch(e){}
+  const areas=[
+    ['Mantenimiento','🔧',finCostoKits(ym)],
+    ['Compras / OC','📋',finCostoOrdenes(ym)],
+    ['Almacén / Logística','📦',finCostoAlmacen(ym)],
+    ['RRHH','👷',(state.personal||[]).filter(p=>p.estado==='activo').reduce((s,p)=>s+(p.jornal||0)*(state.metas&&state.metas.dias||26),0)],
+  ];
+  const total=areas.reduce((s,a)=>s+a[2],0)||1;
+  const meses3=[finMesOffset(-3),finMesOffset(-2),finMesOffset(-1)];
+  const areaFns=[ym=>finCostoKits(ym),ym=>finCostoOrdenes(ym),ym=>finCostoAlmacen(ym),()=>0];
+  el.innerHTML=`<div style="padding:16px">
+    <h3 style="color:var(--accent-light);margin-bottom:16px">💸 Costos por Centro — ${finMesLabel(ym)}</h3>
+    <div style="background:var(--coal3);border-radius:10px;padding:16px;margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:12px">Por Área</div>
+      ${areas.map(([n,ic,v])=>{const pct=((v/total)*100).toFixed(1);return`<div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px;color:var(--text)">${ic} ${n}</span><span style="font-size:13px;font-weight:700;color:#f87171">${fmtS2(v)} <span style="color:var(--text2);font-weight:400;font-size:11px">(${pct}%)</span></span></div>
+        <div style="background:var(--coal4);border-radius:4px;height:8px"><div style="height:100%;width:${pct}%;background:#f87171;border-radius:4px"></div></div>
+      </div>`;}).join('')}
+      <div style="border-top:1px solid var(--border);padding-top:10px;font-weight:700;display:flex;justify-content:space-between"><span>TOTAL</span><span style="color:#f87171">${fmtS2(total)}</span></div>
+    </div>
+    <div style="background:var(--coal3);border-radius:10px;padding:16px;margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:10px">Por Frente de Trabajo</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;font-size:12px;color:var(--text2)">
+        Split Rampa Brenda: <input type="number" min="0" max="100" value="${split}" onchange="localStorage.setItem('${FIN_SPLIT_KEY}',this.value);renderFinCostoCentro()"
+          style="width:60px;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:13px"> % / CRNE: ${(100-split).toFixed(0)}%
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        ${[['Rampa Brenda','#fbbf24',split],['CRNE','#60a5fa',100-split]].map(([n,c,pct])=>`<div style="background:var(--coal4);border-radius:8px;padding:14px;border-left:3px solid ${c}">
+          <div style="font-size:12px;color:var(--text2);margin-bottom:4px">${n}</div>
+          <div style="font-size:18px;font-weight:700;color:${c}">${fmtS2(total*(pct/100))}</div>
+          <div style="font-size:11px;color:var(--text2)">${pct.toFixed(0)}% del costo total</div>
+        </div>`).join('')}
+      </div>
+    </div>
+    <div style="background:var(--coal3);border-radius:10px;padding:16px;overflow-x:auto">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:10px">Comparativo 3 Meses por Área</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="color:var(--text2)"><th style="padding:7px 10px;text-align:left;border-bottom:1px solid var(--border)">Área</th>${meses3.map(m=>`<th style="padding:7px 10px;text-align:right;border-bottom:1px solid var(--border)">${finMesLabel(m)}</th>`).join('')}<th style="padding:7px 10px;text-align:right;border-bottom:1px solid var(--border)">${finMesLabel(ym)}</th></tr></thead>
+        <tbody>${areas.map(([n,ic],i)=>`<tr style="border-bottom:1px solid rgba(255,255,255,.04)"><td style="padding:7px 10px;color:var(--text)">${ic} ${n}</td>${meses3.map(m=>`<td style="padding:7px 10px;text-align:right;color:var(--text2)">${fmtS2(areaFns[i](m))}</td>`).join('')}<td style="padding:7px 10px;text-align:right;font-weight:700;color:#f87171">${fmtS2(areas[i][2])}</td></tr>`).join('')}</tbody>
+      </table>
+    </div>
+  </div>`;
 }
 
 // ── REPORTE ──
