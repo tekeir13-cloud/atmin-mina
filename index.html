@@ -2665,8 +2665,7 @@ select option{background:var(--coal3);}
 <div class="page" id="page-mantenimiento">
   <div class="mod-tabs">
     <button class="mod-tab active" onclick="modTab('mant','registro',this)">🧰 Solicitud de Kit</button>
-    <button class="mod-tab" onclick="modTab('mant','almacenmant',this)">📦 Almacén Mant.</button>
-    <button class="mod-tab" onclick="modTab('mant','horometros',this)">⏱ Horómetros</button>
+    <button class="mod-tab" onclick="modTab('mant','programamant',this)">📅 Programa Mant.</button>
     <button class="mod-tab" onclick="modTab('mant','costosmant',this)">💲 Costos por Máquina</button>
   </div>
   <div class="mod-pane active" style="display:block" id="mant-registro">
@@ -2685,44 +2684,7 @@ select option{background:var(--coal3);}
     </div>
     <div id="mant-lista"></div>
   </div>
-  <div class="mod-pane" style="display:none" id="mant-almacenmant">
-    <div class="kpi-grid">
-      <div class="kpi-card"><div class="kpi-label">Repuestos en Catálogo</div><div class="kpi-value blue" id="amant-total">0</div></div>
-      <div class="kpi-card"><div class="kpi-label">Valor de Stock</div><div class="kpi-value gold" id="amant-valor">S/ 0</div></div>
-      <div class="kpi-card"><div class="kpi-label">Bajo Stock</div><div class="kpi-value red" id="amant-bajo">0</div></div>
-    </div>
-    <div class="card" style="margin-bottom:18px">
-      <div class="section-title">Agregar / Reabastecer Repuesto</div>
-      <div class="form-grid">
-        <div class="form-group"><label>Nombre del repuesto</label><input type="text" id="amant-nombre" placeholder="Ej: Filtro de aceite"></div>
-        <div class="form-group"><label>Código</label><input type="text" id="amant-codigo" placeholder="Ej: FIL-001"></div>
-        <div class="form-group"><label>Unidad</label><select id="amant-unidad"><option>Unidad</option><option>Litro</option><option>Galón</option><option>Metro</option><option>Juego</option><option>Kit</option></select></div>
-        <div class="form-group"><label>Stock</label><input type="number" id="amant-stock" placeholder="0" min="0"></div>
-        <div class="form-group"><label>Costo unitario (S/)</label><input type="number" id="amant-costo" placeholder="0" min="0" step="0.01"></div>
-        <div class="form-group"><label>Stock mínimo</label><input type="number" id="amant-min" placeholder="Ej: 2" min="0"></div>
-      </div>
-      <div class="btn-row"><button class="btn btn-gold" onclick="guardarRepuestoMant()">Guardar Repuesto</button><button class="btn btn-outline" onclick="limpiarFormRepuesto()">Limpiar</button></div>
-    </div>
-    <div class="section-title">Inventario de Repuestos</div>
-    <div class="table-wrap"><table><thead><tr><th>Código</th><th>Repuesto</th><th>Unidad</th><th>Stock</th><th>Costo Unit.</th><th>Valor</th><th></th></tr></thead><tbody id="amant-tbody"></tbody></table></div>
-  </div>
-  <div class="mod-pane" style="display:none" id="mant-horometros">
-    <div class="card" style="margin-bottom:18px">
-      <div class="section-title">Registrar Lectura de Horómetro</div>
-      <div class="form-grid">
-        <div class="form-group"><label>Fecha</label><input type="date" id="hor-fecha"></div>
-        <div class="form-group"><label>Equipo</label><select id="hor-equipo"><option>Compresora</option><option>Perforadora Jack Leg</option><option>Perforadora Stopper</option><option>Generador Eléctrico</option><option>Bomba de Agua</option><option>Winche</option><option>Camioneta</option></select></div>
-        <div class="form-group"><label>Lectura (hrs)</label><input type="number" id="hor-lectura" placeholder="Ej: 4520" min="0"></div>
-        <div class="form-group"><label>Horas trabajadas hoy</label><input type="number" id="hor-horas-hoy" placeholder="Ej: 8" min="0" max="24"></div>
-        <div class="form-group"><label>Observación</label><input type="text" id="hor-obs" placeholder="Normal / Vibración / etc."></div>
-      </div>
-      <div class="btn-row"><button class="btn btn-gold" onclick="registrarHorometro()">Registrar Lectura</button></div>
-    </div>
-    <div class="section-title">Estado de Equipos</div>
-    <div id="horom-lista"></div>
-    <div class="section-title" style="margin-top:20px">Historial de Lecturas</div>
-    <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Equipo</th><th>Lectura (hrs)</th><th>Horas Hoy</th><th>Observación</th></tr></thead><tbody id="hor-tbody"></tbody></table></div>
-  </div>
+  <div id="mant-programamant" class="mod-pane" style="display:none"></div>
   <div class="mod-pane" style="display:none" id="mant-costosmant">
     <div class="section-title">Costo de Mantenimiento por Máquina</div>
     <div id="mant-costos-grid"></div>
@@ -3786,7 +3748,7 @@ const state={
   epp:{historial:[]},
   petroleo:{stock:200,historial:[]},
   almacen:{ingresos:[],salidas:[],inventarioInicial:[],historialMeses:[],productos:[],solicitudesCompra:[],explosivos:{ingresos:[],salidas:[]}},
-  perforacion:[],reportesGuardia:[],mantenimiento:[],mantRepuestos:[],horometros:[],tareas:[],
+  perforacion:[],reportesGuardia:[],mantenimiento:[],mantRepuestos:[],horometros:[],tareas:[],mantPrograma:[],
   ordenes:[],valorizaciones:[],valorizacionesLabor:[],
   compresorista:[],
   metas:{f1:20,f2:20,dias:26,mensualF1:520,mensualF2:520},frenteActivo:1,
@@ -3824,7 +3786,7 @@ const MODULE_PANES = {
   'log': ['almacen','historial','inventario','solicitudcompra','productos','explosivos'],
   'rrhh': ['planilla','tareas','personal','costorrhh'],
   'op': ['tablero','avance','solicitudes','vsproyectado','valorizaciones'],
-  'mant': ['registro','almacenmant','horometros','costosmant'],
+  'mant': ['registro','programamant','costosmant'],
   'fin': ['ordenes','solicitudes','valorizaciones','proyeccion','utilidad']
 };
 
@@ -4064,8 +4026,7 @@ function renderModPane(mod,pane){
   else if(k==='op-solicitudes')renderSolicitudesPendientesOp();
   else if(k==='op-vsproyectado')renderResidente();
   else if(k==='mant-registro')renderMantenimiento();
-  else if(k==='mant-almacenmant')renderAlmacenMant();
-  else if(k==='mant-horometros')renderHorometros();
+  else if(k==='mant-programamant')renderProgramaMant();
   else if(k==='mant-costosmant')renderCostosMant();
   else if(k==='fin-ordenes')renderOrdenes();
   else if(k==='fin-solicitudes')renderSolicitudesPendientesFin();
@@ -7771,57 +7732,6 @@ function renderMantenimiento(){
   }).join('');
 }
 
-// ── Repuestos: catálogo / almacén ──
-function renderAlmacenMant(){
-  mantRepLoad();
-  const reps=state.mantRepuestos||[];
-  const valor=reps.reduce((s,r)=>s+(r.stock||0)*(r.costo||0),0);
-  const bajo=reps.filter(r=>(r.stock||0)<=(r.min||0)).length;
-  document.getElementById('amant-total').textContent=reps.length;
-  document.getElementById('amant-valor').textContent=fmtS(valor);
-  document.getElementById('amant-bajo').textContent=bajo;
-  const tb=document.getElementById('amant-tbody');
-  tb.innerHTML=reps.length?reps.map(r=>{
-    const low=(r.stock||0)<=(r.min||0);
-    return`<tr>
-      <td>${r.codigo||'—'}</td>
-      <td><strong style="color:var(--text)">${r.nombre}</strong></td>
-      <td>${r.unidad||'Unidad'}</td>
-      <td style="color:${low?'#f87171':'var(--text)'};font-weight:700">${r.stock||0}${low?' ⚠':''}</td>
-      <td>${fmtS(r.costo||0)}</td>
-      <td>${fmtS((r.stock||0)*(r.costo||0))}</td>
-      <td><button class="btn btn-outline" style="font-size:11px;padding:3px 9px" onclick="editarRepuestoMant('${r.id}')">✎</button> <button class="btn btn-outline" style="font-size:11px;padding:3px 9px;color:#f87171;border-color:#f87171" onclick="eliminarRepuestoMant('${r.id}')">🗑</button></td>
-    </tr>`;
-  }).join(''):'<tr><td colspan="7" class="empty-state">Sin repuestos. Agrega el primero arriba.</td></tr>';
-}
-function limpiarFormRepuesto(){
-  ['amant-nombre','amant-codigo','amant-stock','amant-costo','amant-min'].forEach(i=>{const e=document.getElementById(i);if(e)e.value='';});
-  document.getElementById('amant-nombre').dataset.editId='';
-}
-function editarRepuestoMant(id){
-  const r=(state.mantRepuestos||[]).find(x=>x.id===id);if(!r)return;
-  document.getElementById('amant-nombre').value=r.nombre;document.getElementById('amant-nombre').dataset.editId=id;
-  document.getElementById('amant-codigo').value=r.codigo||'';document.getElementById('amant-unidad').value=r.unidad||'Unidad';
-  document.getElementById('amant-stock').value=r.stock||0;document.getElementById('amant-costo').value=r.costo||0;document.getElementById('amant-min').value=r.min||0;
-  showNotif('Editando '+r.nombre);
-}
-function eliminarRepuestoMant(id){
-  if(!confirm('¿Eliminar este repuesto del almacén?'))return;
-  state.mantRepuestos=(state.mantRepuestos||[]).filter(r=>r.id!==id);
-  mantRepSave();renderAlmacenMant();showNotif('✓ Repuesto eliminado');
-}
-function guardarRepuestoMant(){
-  const g=i=>document.getElementById(i);
-  const nombre=g('amant-nombre').value.trim();
-  if(!nombre){showNotif('⚠ Indica el nombre del repuesto','error');return;}
-  const editId=g('amant-nombre').dataset.editId;
-  const data={codigo:g('amant-codigo').value.trim(),nombre,unidad:g('amant-unidad').value,stock:parseFloat(g('amant-stock').value)||0,costo:parseFloat(g('amant-costo').value)||0,min:parseFloat(g('amant-min').value)||0};
-  if(!state.mantRepuestos)state.mantRepuestos=[];
-  if(editId){const r=state.mantRepuestos.find(x=>x.id===editId);if(r)Object.assign(r,data);}
-  else state.mantRepuestos.push({id:'R'+Date.now(),...data});
-  mantRepSave();limpiarFormRepuesto();renderAlmacenMant();showNotif('✓ Repuesto guardado');
-}
-
 // ── Solicitud de Kit de Mantenimiento ──
 function kitRepOptions(sel){
   return (state.mantRepuestos||[]).map(r=>`<option value="${r.id}" ${sel===r.id?'selected':''}>${r.nombre} (stock ${r.stock||0})</option>`).join('');
@@ -7909,23 +7819,6 @@ function guardarKitMant(){
   mantRepSave();
   cerrarModal('modal-kit-mant');renderMantenimiento();
   showNotif('✓ Solicitud de kit guardada');
-}
-function renderHorometros(){
-  const equipos=['Compresora','Perforadora Jack Leg','Perforadora Stopper','Generador Eléctrico','Bomba de Agua','Winche','Camioneta'];
-  document.getElementById('horom-lista').innerHTML=equipos.map(eq=>{
-    const last=state.horometros.filter(h=>h.equipo===eq).sort((a,b)=>b.fecha.localeCompare(a.fecha))[0];
-    return`<div class="horom-card"><div class="horom-icon">${EI[eq]||'🔧'}</div><div class="horom-info"><div class="horom-name">${eq}</div><div class="horom-detail">Última: ${last?fmtF(last.fecha):'Sin registros'}</div></div><div class="horom-val">${last?last.lectura+' hrs':'—'}</div></div>`;
-  }).join('');
-  document.getElementById('hor-tbody').innerHTML=sortRegistros(state.horometros).map(h=>
-    `<tr><td>${fmtF(h.fecha)}</td><td>${h.equipo}</td><td><strong style="color:var(--text);font-weight:700">${h.lectura} hrs</strong></td><td>${h.horasHoy} hrs</td><td>${h.obs||'Normal'}</td></tr>`
-  ).join('')||'<tr><td colspan="5" class="empty-state">Sin lecturas</td></tr>';
-}
-async function registrarHorometro(){
-  const lec=parseFloat(document.getElementById('hor-lectura').value);
-  if(!lec){showNotif('⚠ Ingresa la lectura','error');return;}
-  const nv={fecha:document.getElementById('hor-fecha').value,equipo:document.getElementById('hor-equipo').value,lectura:lec,horasHoy:parseFloat(document.getElementById('hor-horas-hoy').value)||0,obs:document.getElementById('hor-obs').value};
-  try{await sb.from('horometros').insert([{fecha:nv.fecha,equipo:nv.equipo,lectura:nv.lectura,horas_hoy:nv.horasHoy,obs:nv.obs}]);}catch(e){}
-  state.horometros.push(nv);renderHorometros();showNotif('✓ Horómetro registrado');
 }
 function renderCostosMant(){
   const eq=['Compresora','Perforadora Jack Leg','Perforadora Stopper','Generador Eléctrico','Bomba de Agua','Winche','Camioneta'];
