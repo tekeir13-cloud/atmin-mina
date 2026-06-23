@@ -2348,6 +2348,7 @@ select option{background:var(--coal3);}
     <button class="mod-tab" onclick="modTab('rrhh','tareas',this)">📂 Historial &amp; Edición</button>
     <button class="mod-tab" onclick="modTab('rrhh','personal',this)">👥 Personal</button>
     <button class="mod-tab" onclick="modTab('rrhh','costorrhh',this)">💲 Costo Planilla</button>
+    <button class="mod-tab" onclick="modTab('rrhh','servicios',this)">🤝 Servicios Terceros</button>
   </div>
 
   <div class="mod-pane active" style="display:block" id="rrhh-planilla">
@@ -2567,6 +2568,7 @@ select option{background:var(--coal3);}
     <button id="btn-cerrar-mes" style="display:none" onclick="cerrarMes()"></button>
     <button id="btn-reabrir-mes" style="display:none" onclick="reabrirMes()"></button>
   </div>
+  <div id="rrhh-servicios" class="mod-pane" style="display:none"></div>
 </div>
 
 <!-- OPERACIONES -->
@@ -3715,7 +3717,7 @@ function navigate(page){
 // Mapa explícito de todos los panes por módulo
 const MODULE_PANES = {
   'log': ['almacen','historial','inventario','solicitudcompra','productos','explosivos','solicitudmantlog','combustible'],
-  'rrhh': ['planilla','tareas','personal','costorrhh'],
+  'rrhh': ['planilla','tareas','personal','costorrhh','servicios'],
   'op': ['tablero','avance','solicitudes','vsproyectado','valorizaciones'],
   'mant': ['registro','programamant','costosmant'],
   'fin': ['dashboard','proyeccion','informe','costocentro']
@@ -3955,6 +3957,7 @@ function renderModPane(mod,pane){
   else if(k==='rrhh-tareas')renderTareas();
   else if(k==='rrhh-personal')renderPersonal();
   else if(k==='rrhh-costorrhh')renderCostoRRHH();
+  else if(k==='rrhh-servicios')renderServiciosTerceros();
   else if(k==='op-tablero'){renderTableroOp();}
   else if(k==='op-valorizaciones'){renderValorizacionOp();}
   else if(k==='op-avance'){renderAvance();}
@@ -6652,6 +6655,154 @@ function reabrirMes(){
   saveState();
   renderCostoRRHH();
   showNotif(`🔓 Mes ${mes} reabierto`);
+}
+
+// ===== SERVICIOS TERCEROS =====
+const SERV_KEY='atmin_servicios_terceros';
+const SERV_TIPOS=[
+  {id:'hilux',  label:'Liquidación Alquiler Camioneta Hilux BRY-800', placa:false},
+  {id:'comedor',label:'Liquidación Servicios de Comedor',             placa:false},
+  {id:'camion', label:'Liquidación Alquiler de Camión',               placa:true},
+  {id:'scoop',  label:'Liquidación Alquiler de Scoop',                placa:false},
+  {id:'limpieza',label:'Liquidación Servicios Limpieza y Lavandería', placa:false},
+  {id:'ferreteria',label:'Liquidación Ferretería',                    placa:false},
+  {id:'generales',label:'Liquidación Pagos Generales (Internet, Tienda Almendra, Botica, Adicionales)', placa:false}
+];
+function servCargar(){try{return JSON.parse(localStorage.getItem(SERV_KEY)||'[]');}catch{return[];}}
+function servGuardar(arr){localStorage.setItem(SERV_KEY,JSON.stringify(arr));}
+function finCostoServicios(ym){
+  return servCargar().filter(r=>r.fecha&&r.fecha.startsWith(ym)).reduce((s,r)=>s+(parseFloat(r.monto)||0),0);
+}
+function renderServiciosTerceros(){
+  const el=document.getElementById('rrhh-servicios');
+  if(!el) return;
+  const registros=servCargar();
+  const tipoOpts=SERV_TIPOS.map(t=>`<option value="${t.id}">${t.label}</option>`).join('');
+  const totalMes=finCostoServicios(hoy().slice(0,7));
+  const rows=registros.slice().reverse().map((r,ri)=>{
+    const idx=registros.length-1-ri;
+    const t=SERV_TIPOS.find(x=>x.id===r.tipo)||{label:r.tipo};
+    const foto=r.foto?`<a href="${r.foto}" target="_blank" style="color:#c9a84c;font-size:11px">📷 Ver vale</a>`:'<span style="color:var(--text3);font-size:11px">Sin foto</span>';
+    return`<tr>
+      <td style="padding:10px 8px;font-size:12px;color:var(--text2)">${r.fecha||''}</td>
+      <td style="padding:10px 8px;font-size:12px">${t.label}${r.placa?` <span style="background:#1e293b;padding:2px 6px;border-radius:4px;font-size:11px;color:#c9a84c">${r.placa}</span>`:''}</td>
+      <td style="padding:10px 8px;font-size:13px;font-weight:700;color:#22d3a5;text-align:right">S/ ${(parseFloat(r.monto)||0).toLocaleString('es-PE',{minimumFractionDigits:2})}</td>
+      <td style="padding:10px 8px;font-size:12px;color:var(--text2)">${r.obs||'—'}</td>
+      <td style="padding:10px 8px;text-align:center">${foto}</td>
+      <td style="padding:10px 8px;text-align:center"><button class="btn btn-outline" style="padding:4px 10px;font-size:11px;color:#f87171;border-color:#f87171" onclick="servEliminar(${idx})">🗑</button></td>
+    </tr>`;
+  }).join('');
+  el.innerHTML=`
+  <div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+    <div>
+      <div class="section-title" style="margin:0">🤝 Servicios Terceros</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">Registro de liquidaciones de servicios externos — cargados automáticamente a Finanzas</div>
+    </div>
+    <div class="kpi-card" style="min-width:180px;text-align:center;padding:14px 20px">
+      <div class="kpi-label">Gasto Mes Actual</div>
+      <div class="kpi-value red">S/ ${totalMes.toLocaleString('es-PE',{minimumFractionDigits:2})}</div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="section-title" style="margin-top:0">➕ Registrar Liquidación</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div style="grid-column:1/-1">
+        <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Tipo de Servicio</label>
+        <select id="serv-tipo" class="input-field" style="width:100%" onchange="servTipoChange()">
+          <option value="">— Seleccionar —</option>
+          ${tipoOpts}
+        </select>
+      </div>
+      <div id="serv-placa-wrap" style="display:none;grid-column:1/-1">
+        <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Placa del Camión</label>
+        <input id="serv-placa" class="input-field" style="width:100%;box-sizing:border-box" placeholder="Ej: ABC-123">
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Monto (S/)</label>
+        <input id="serv-monto" type="number" min="0" step="0.01" class="input-field" style="width:100%;box-sizing:border-box" placeholder="0.00">
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Fecha</label>
+        <input id="serv-fecha" type="date" class="input-field" style="width:100%;box-sizing:border-box" value="${hoy()}">
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Observaciones (opcional)</label>
+        <input id="serv-obs" class="input-field" style="width:100%;box-sizing:border-box" placeholder="Detalle adicional...">
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Foto del Vale / Liquidación</label>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <input type="file" id="serv-foto-input" accept="image/*" style="display:none" onchange="servFotoPreview(this)">
+          <button class="btn btn-outline" style="font-size:12px" onclick="document.getElementById('serv-foto-input').click()">📷 Adjuntar Foto</button>
+          <span id="serv-foto-name" style="font-size:12px;color:var(--text3)">Sin archivo</span>
+        </div>
+        <div id="serv-foto-prev" style="margin-top:8px;display:none"><img id="serv-foto-img" style="max-height:120px;border-radius:8px;border:1px solid var(--border)"></div>
+      </div>
+    </div>
+    <button class="btn btn-gold" style="margin-top:14px;width:100%;padding:12px" onclick="servRegistrar()">💾 Guardar Liquidación</button>
+  </div>
+  <div class="card">
+    <div class="section-title" style="margin-top:0">📋 Historial de Liquidaciones</div>
+    ${registros.length===0?'<div style="text-align:center;color:var(--text3);padding:24px">No hay liquidaciones registradas</div>':`
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="background:var(--bg3)">
+        <th style="padding:10px 8px;text-align:left;font-size:12px;color:var(--text3)">Fecha</th>
+        <th style="padding:10px 8px;text-align:left;font-size:12px;color:var(--text3)">Servicio</th>
+        <th style="padding:10px 8px;text-align:right;font-size:12px;color:var(--text3)">Monto</th>
+        <th style="padding:10px 8px;text-align:left;font-size:12px;color:var(--text3)">Obs.</th>
+        <th style="padding:10px 8px;text-align:center;font-size:12px;color:var(--text3)">Vale</th>
+        <th style="padding:10px 8px;text-align:center;font-size:12px;color:var(--text3)"></th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    </div>`}
+  </div>`;
+}
+function servTipoChange(){
+  const v=document.getElementById('serv-tipo')?.value;
+  const t=SERV_TIPOS.find(x=>x.id===v);
+  const wrap=document.getElementById('serv-placa-wrap');
+  if(wrap) wrap.style.display=(t&&t.placa)?'block':'none';
+}
+let _servFotoB64='';
+function servFotoPreview(inp){
+  const file=inp.files[0];if(!file)return;
+  const name=document.getElementById('serv-foto-name');
+  if(name) name.textContent=file.name;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    _servFotoB64=e.target.result;
+    const prev=document.getElementById('serv-foto-prev');
+    const img=document.getElementById('serv-foto-img');
+    if(prev&&img){img.src=_servFotoB64;prev.style.display='block';}
+  };
+  reader.readAsDataURL(file);
+}
+function servRegistrar(){
+  const tipo=document.getElementById('serv-tipo')?.value;
+  const monto=parseFloat(document.getElementById('serv-monto')?.value||'0');
+  const fecha=document.getElementById('serv-fecha')?.value||hoy();
+  const obs=(document.getElementById('serv-obs')?.value||'').trim();
+  const placa=(document.getElementById('serv-placa')?.value||'').trim().toUpperCase();
+  const t=SERV_TIPOS.find(x=>x.id===tipo);
+  if(!tipo){showNotif('Seleccione el tipo de servicio','error');return;}
+  if(!monto||monto<=0){showNotif('Ingrese un monto válido','error');return;}
+  if(t&&t.placa&&!placa){showNotif('Ingrese la placa del camión','error');return;}
+  const arr=servCargar();
+  arr.push({tipo,monto,fecha,obs,placa:t&&t.placa?placa:'',foto:_servFotoB64});
+  servGuardar(arr);
+  _servFotoB64='';
+  showNotif('✅ Liquidación registrada','ok');
+  renderServiciosTerceros();
+}
+function servEliminar(idx){
+  if(!confirm('¿Eliminar esta liquidación?'))return;
+  const arr=servCargar();
+  arr.splice(idx,1);
+  servGuardar(arr);
+  showNotif('Liquidación eliminada','warn');
+  renderServiciosTerceros();
 }
 
 function setAdelanto(pid,mes,tipo,val){
@@ -11362,7 +11513,7 @@ function finValorizacionMes(mesYM){
 }
 function finAvanceMes(mesYM){ const b=finFiltrarMes(state.perforacion||[],mesYM).reduce((s,r)=>s+(r.avance||0),0); const d=finDemoMes(mesYM); return b+(d?d.avance:0); }
 function finCostoAlmacen(mesYM){ const b=finFiltrarMes((state.almacen&&state.almacen.salidas)||[],mesYM).reduce((s,r)=>s+(r.monto||r.costo||0),0); const d=finDemoMes(mesYM); return b+(d?d.alm:0); }
-function finCostoTotal(mesYM){ return finCostoKits(mesYM)+finCostoOrdenes(mesYM)+finCostoAlmacen(mesYM); }
+function finCostoTotal(mesYM){ return finCostoKits(mesYM)+finCostoOrdenes(mesYM)+finCostoAlmacen(mesYM)+(typeof finCostoServicios==='function'?finCostoServicios(mesYM):0); }
 function finMargen(mesYM){ const v=finValorizacionMes(mesYM); return v.total-finCostoTotal(mesYM); }
 function finUltimos6Meses(){
   const meses=[];
