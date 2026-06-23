@@ -6695,7 +6695,8 @@ function renderServiciosTerceros(){
       <td style="padding:10px 8px;text-align:center">${foto}</td>
       <td style="padding:10px 8px;text-align:center">${fotoImp}</td>
       <td style="padding:10px 8px;text-align:center;white-space:nowrap">
-        <button class="btn btn-outline" style="padding:4px 9px;font-size:11px;color:#a3e635;border-color:#a3e635;margin-right:4px" onclick="servExcelLiquidacion(${idx})" title="Generar liquidación Excel">📄 Liquidación</button>
+        <button class="btn btn-outline" style="padding:4px 9px;font-size:11px;color:#60a5fa;border-color:#60a5fa;margin-right:4px" onclick="servImprimirLiquidacion(${idx})" title="Imprimir liquidación">🖨️ Imprimir</button>
+        <button class="btn btn-outline" style="padding:4px 9px;font-size:11px;color:#a3e635;border-color:#a3e635;margin-right:4px" onclick="servExcelLiquidacion(${idx})" title="Descargar liquidación en Excel">📄 Excel</button>
         <button class="btn btn-outline" style="padding:4px 9px;font-size:11px;color:#f87171;border-color:#f87171" onclick="servEliminar(${idx})">🗑</button>
       </td>
     </tr>`;
@@ -6998,6 +6999,99 @@ async function servExcelLiquidacion(idx){
   a.download=`liquidacion_${String(idx+1).padStart(4,'0')}_${r.fecha||hoy()}.xlsx`;
   a.click();
   showNotif('📄 Liquidación generada — imprima, firme y tome foto para guardar en el sistema','ok');
+}
+
+// Monto en letras (compartido)
+function servMontoEnLetras(monto){
+  const enLetras=n=>{
+    const u=['','UN','DOS','TRES','CUATRO','CINCO','SEIS','SIETE','OCHO','NUEVE','DIEZ','ONCE','DOCE','TRECE','CATORCE','QUINCE','DIECISÉIS','DIECISIETE','DIECIOCHO','DIECINUEVE'];
+    const d=['','','VEINTE','TREINTA','CUARENTA','CINCUENTA','SESENTA','SETENTA','OCHENTA','NOVENTA'];
+    if(n===0)return'CERO';if(n<20)return u[n];if(n<100)return d[Math.floor(n/10)]+(n%10?(' Y '+u[n%10]):'');
+    if(n<1000){const c=Math.floor(n/100);return(c===1&&n%100===0?'CIEN':((['','CIENTO','DOSCIENTOS','TRESCIENTOS','CUATROCIENTOS','QUINIENTOS','SEISCIENTOS','SETECIENTOS','OCHOCIENTOS','NOVECIENTOS'][c])))+(n%100?' '+enLetras(n%100):'');}
+    if(n<1000000){const m=Math.floor(n/1000);return(m===1?'MIL':(enLetras(m)+' MIL'))+(n%1000?' '+enLetras(n%1000):'');}
+    return n.toString();
+  };
+  const entero=Math.floor(monto);
+  const cents=Math.round((monto-entero)*100);
+  return `${enLetras(entero)} CON ${String(cents).padStart(2,'0')}/100 NUEVOS SOLES`;
+}
+
+// Imprimir liquidación directamente desde el navegador (vista lista para imprimir)
+function servImprimirLiquidacion(idx){
+  const arr=servCargar();
+  const r=arr[idx];if(!r){showNotif('Liquidación no encontrada','error');return;}
+  const t=SERV_TIPOS.find(x=>x.id===r.tipo)||{label:r.tipo||''};
+  const monto=parseFloat(r.monto)||0;
+  const proyecto=localStorage.getItem('atmin_fin_proyecto')||'Proyecto Minero';
+  const numLiq=String(idx+1).padStart(4,'0');
+  const fechaFmt=r.fecha?r.fecha.split('-').reverse().join('/'):'';
+  const letras=servMontoEnLetras(monto);
+  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const montoFmt='S/ '+monto.toLocaleString('es-PE',{minimumFractionDigits:2});
+
+  const filaDato=(lbl,val)=>`<tr><td class="lbl">${lbl}</td><td class="val">${esc(val)}</td></tr>`;
+  const html=`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Liquidación ${numLiq}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',Arial,sans-serif;color:#222;padding:32px 40px;font-size:13px}
+  .doc{max-width:720px;margin:0 auto}
+  .head{text-align:center;background:#1E3A5F;color:#fff;padding:18px;border-radius:8px 8px 0 0}
+  .head h1{font-size:20px;letter-spacing:1px}
+  .head h2{font-size:13px;color:#D4AF37;margin-top:6px;font-weight:600}
+  .meta{display:flex;justify-content:space-between;background:#D9E2EC;padding:10px 16px;font-weight:600;color:#1E3A5F}
+  .sec{background:#1E3A5F;color:#fff;padding:6px 12px;font-size:12px;font-weight:700;margin-top:16px;letter-spacing:.5px}
+  table{width:100%;border-collapse:collapse}
+  .datos td{border:1px solid #bbb;padding:7px 12px}
+  .datos .lbl{background:#F0F4F8;font-weight:600;color:#444;width:35%}
+  .montos th{background:#D9E2EC;border:1px solid #bbb;padding:7px;font-size:11px;color:#444}
+  .montos td{border:1px solid #bbb;padding:7px 12px}
+  .total td{background:#1E3A5F;color:#fff;font-weight:700;padding:10px 12px;font-size:14px}
+  .total .num{background:#E8F8F0;color:#1a7a4a;text-align:right}
+  .letras{background:#F0F4F8;border:1px solid #bbb;padding:10px 12px;font-style:italic;color:#555;margin-top:2px}
+  .firmas{display:flex;justify-content:space-between;gap:30px;margin-top:60px}
+  .firma{flex:1;text-align:center;border-top:2px solid #1E3A5F;padding-top:6px}
+  .firma .cargo{font-weight:700;color:#1E3A5F;font-size:11px}
+  .firma .tipo{font-size:9px;color:#999;font-style:italic}
+  .foot{text-align:center;color:#999;font-size:10px;font-style:italic;margin-top:40px;border-top:1px solid #ddd;padding-top:8px}
+  .r{text-align:right}
+  @media print{body{padding:0}.noprint{display:none}}
+  .noprint{text-align:center;margin-bottom:18px}
+  .btn{background:#1E3A5F;color:#fff;border:none;padding:10px 24px;border-radius:6px;font-size:14px;cursor:pointer;margin:0 5px}
+</style></head><body>
+<div class="noprint">
+  <button class="btn" onclick="window.print()">🖨️ Imprimir</button>
+  <button class="btn" style="background:#777" onclick="window.close()">Cerrar</button>
+</div>
+<div class="doc">
+  <div class="head"><h1>${esc(proyecto.toUpperCase())}</h1><h2>LIQUIDACIÓN DE SERVICIO A TERCERO</h2></div>
+  <div class="meta"><span>N° Liquidación: ${numLiq}</span><span>Fecha: ${fechaFmt}</span></div>
+  <div class="sec">DATOS DEL SERVICIO</div>
+  <table class="datos">
+    ${filaDato('Tipo de Servicio',t.label)}
+    ${r.placa?filaDato('Placa del Vehículo',r.placa):''}
+    ${filaDato('Período / Fecha',fechaFmt)}
+    ${filaDato('Descripción / Detalle',r.obs||'—')}
+  </table>
+  <div class="sec">DETALLE DEL MONTO A PAGAR</div>
+  <table class="montos">
+    <tr><th style="width:10%">Item</th><th>Descripción</th><th style="width:25%">Monto</th></tr>
+    <tr><td style="text-align:center">1</td><td>${esc(t.label)}</td><td class="r">${montoFmt}</td></tr>
+    <tr class="total"><td colspan="2" class="r">TOTAL A PAGAR</td><td class="num">${montoFmt}</td></tr>
+  </table>
+  <div class="letras">Son: ${esc(letras)}</div>
+  <div class="firmas">
+    <div class="firma"><div class="cargo">Responsable del Servicio</div><div class="tipo">Firma / Huella</div></div>
+    <div class="firma"><div class="cargo">Jefe de Área / Supervisor</div><div class="tipo">Firma</div></div>
+    <div class="firma"><div class="cargo">Aprobado por Gerencia</div><div class="tipo">V°B°</div></div>
+  </div>
+  <div class="foot">Generado por ATMIN · ${fmtF(hoy())} · Documento interno — sujeto a verificación contable</div>
+</div>
+<script>window.onload=function(){setTimeout(function(){window.print();},400);};<\/script>
+</body></html>`;
+
+  const w=window.open('','_blank','width=800,height=900');
+  if(!w){showNotif('Permite las ventanas emergentes para imprimir','warn');return;}
+  w.document.open();w.document.write(html);w.document.close();
 }
 
 // Generar reporte mensual de pagos a terceros en Excel
