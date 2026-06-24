@@ -4460,7 +4460,6 @@ function renderProductos(){
   const prods=(state.almacen&&state.almacen.productos)||[];
   const comb=paramsGetComb()||{pet:24.5,gas:21.0};
   const exp=paramsGetExp()||{...COMP_PRECIOS_EXP_DEFAULT};
-  const ace=paramsGetAce()||{...COMP_PRECIOS_ACEROS_DEFAULT};
 
   const rows=prods.map(p=>`
     <tr>
@@ -4480,15 +4479,6 @@ function renderProductos(){
       <td style="padding:6px 10px;font-size:12px;color:var(--text2)">${c}</td>
       <td style="padding:6px 10px">
         <input type="number" step="0.01" min="0" id="mp-exp-${c.replace(/\./g,'_')}" value="${(exp[c]||0).toFixed(2)}"
-          style="width:80px;background:var(--coal4);border:1px solid var(--border);border-radius:5px;padding:3px 8px;color:var(--text);font-size:12px">
-      </td>
-    </tr>`).join('');
-
-  const aceRows=COMP_ACEROS.map(c=>`
-    <tr>
-      <td style="padding:6px 10px;font-size:12px;color:var(--text2)">${c}</td>
-      <td style="padding:6px 10px">
-        <input type="number" step="0.01" min="0" id="mp-ace-${c.replace(/[^a-zA-Z0-9]/g,'_')}" value="${(ace[c]||0).toFixed(2)}"
           style="width:80px;background:var(--coal4);border:1px solid var(--border);border-radius:5px;padding:3px 8px;color:var(--text);font-size:12px">
       </td>
     </tr>`).join('');
@@ -4547,35 +4537,19 @@ function renderProductos(){
       <div style="font-size:11px;color:var(--text3)">Los reportes ya guardados conservan el precio vigente al momento de su registro.</div>
     </div>
 
-    <!-- EXPLOSIVOS Y ACEROS -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px" id="mp-exp-ace-grid">
-      <div class="card" style="padding:16px">
-        <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:12px">💥 Explosivos (S/ por unidad)</div>
-        <table style="width:100%;border-collapse:collapse">
-          <thead><tr>
-            <th style="text-align:left;font-size:11px;color:var(--text3);padding:4px 10px;font-weight:600">Código</th>
-            <th style="text-align:left;font-size:11px;color:var(--text3);padding:4px 10px;font-weight:600">Precio S/</th>
-          </tr></thead>
-          <tbody>${expRows}</tbody>
-        </table>
-        <button class="btn btn-gold" style="font-size:12px;margin-top:12px;padding:5px 14px" onclick="mpGuardarExplosivos()">💾 Guardar Explosivos</button>
-      </div>
-      <div class="card" style="padding:16px">
-        <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:12px">🔩 Aceros y Brocas (S/ por unidad)</div>
-        <table style="width:100%;border-collapse:collapse">
-          <thead><tr>
-            <th style="text-align:left;font-size:11px;color:var(--text3);padding:4px 10px;font-weight:600">Producto</th>
-            <th style="text-align:left;font-size:11px;color:var(--text3);padding:4px 10px;font-weight:600">Precio S/</th>
-          </tr></thead>
-          <tbody>${aceRows}</tbody>
-        </table>
-        <button class="btn btn-gold" style="font-size:12px;margin-top:12px;padding:5px 14px" onclick="mpGuardarAceros()">💾 Guardar Aceros</button>
-      </div>
+    <!-- EXPLOSIVOS -->
+    <div class="card" style="padding:16px">
+      <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:12px">💥 Explosivos (S/ por unidad)</div>
+      <table style="width:100%;border-collapse:collapse;max-width:420px">
+        <thead><tr>
+          <th style="text-align:left;font-size:11px;color:var(--text3);padding:4px 10px;font-weight:600">Código</th>
+          <th style="text-align:left;font-size:11px;color:var(--text3);padding:4px 10px;font-weight:600">Precio S/</th>
+        </tr></thead>
+        <tbody>${expRows}</tbody>
+      </table>
+      <button class="btn btn-gold" style="font-size:12px;margin-top:12px;padding:5px 14px" onclick="mpGuardarExplosivos()">💾 Guardar Explosivos</button>
     </div>
   `;
-  // responsive
-  const g=el.querySelector('#mp-exp-ace-grid');
-  if(g&&window.innerWidth<640) g.style.gridTemplateColumns='1fr';
 }
 
 function mpGuardarCombustibles(){
@@ -4595,16 +4569,6 @@ function mpGuardarExplosivos(){
   });
   paramsSetExp(exp);
   showNotif('Precios de explosivos guardados','ok');
-}
-
-function mpGuardarAceros(){
-  const ace={};
-  COMP_ACEROS.forEach(c=>{
-    const id=c.replace(/[^a-zA-Z0-9]/g,'_');
-    ace[c]=parseFloat(document.getElementById('mp-ace-'+id)?.value)||COMP_PRECIOS_ACEROS_DEFAULT[c]||0;
-  });
-  paramsSetAce(ace);
-  showNotif('Precios de aceros y brocas guardados','ok');
 }
 
 function descargarPlantillaMaestro(){
@@ -4636,7 +4600,6 @@ function importarMaestroExcel(input){
       const quien=(usuarioActivo&&usuarioActivo.nombre)||'Sistema';
       const newComb={...(paramsGetComb()||{pet:24.5,gas:21.0}), updatedAt:now, updatedBy:quien};
       const newExp={...COMP_PRECIOS_EXP_DEFAULT};
-      const newAce={...COMP_PRECIOS_ACEROS_DEFAULT};
 
       // Reemplaza todo el catálogo general con lo que viene en el Excel
       const nuevosProductos=[];
@@ -4663,11 +4626,7 @@ function importarMaestroExcel(input){
         const expMatch=COMP_EXPLOSIVOS.find(c=>c.toLowerCase()===nombre.toLowerCase());
         if(expMatch){newExp[expMatch]=precio;continue;}
 
-        // aceros — van a params
-        const aceMatch=COMP_ACEROS.find(c=>c.toLowerCase()===nombre.toLowerCase());
-        if(aceMatch){newAce[aceMatch]=precio;continue;}
-
-        // producto general — reemplaza catálogo completo
+        // producto general (incluye aceros y brocas) — reemplaza catálogo completo
         nuevosProductos.push({
           id:'P'+Date.now()+Math.random().toString(36).slice(2,6),
           codigo:'PRD-'+String(counter).padStart(3,'0'),
@@ -4680,7 +4639,6 @@ function importarMaestroExcel(input){
       state.almacen.productos=nuevosProductos;
       paramsSetComb(newComb);
       paramsSetExp(newExp);
-      paramsSetAce(newAce);
       almacenSave();
       renderProductos();
       showNotif(`Catálogo reemplazado: ${nuevosProductos.length} productos cargados`,'ok');
@@ -12823,7 +12781,18 @@ function compGetPrecioGas(){
   return parseFloat(localStorage.getItem(COMP_PRECIO_GAS_KEY)||'21.0')||21.0;
 }
 function compGetPreciosExp(){ return paramsGetExp()||COMP_PRECIOS_EXP_DEFAULT; }
-function compGetPreciosAce(){ return paramsGetAce()||COMP_PRECIOS_ACEROS_DEFAULT; }
+function compGetPreciosAce(){
+  // Los aceros viven en el catálogo general — buscar precio por nombre
+  const prods=(state.almacen&&state.almacen.productos)||[];
+  const ace={...COMP_PRECIOS_ACEROS_DEFAULT};
+  const guardados=paramsGetAce();
+  if(guardados)Object.assign(ace,guardados);
+  COMP_ACEROS.forEach(c=>{
+    const p=prods.find(x=>(x.nombre||'').toLowerCase().trim()===c.toLowerCase().trim());
+    if(p&&p.precio)ace[c]=parseFloat(p.precio)||ace[c];
+  });
+  return ace;
+}
 // Keep alias for any existing references
 const COMP_PRECIOS_EXP = COMP_PRECIOS_EXP_DEFAULT;
 const COMP_PRECIOS_ACEROS = COMP_PRECIOS_ACEROS_DEFAULT;
