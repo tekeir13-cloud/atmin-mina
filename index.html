@@ -1956,12 +1956,13 @@ select option{background:var(--coal3);}
         <span class="login-form-logo-text">Deepmine</span>
       </div>
       <div class="login-title">Iniciar Sesión</div>
-      <div class="login-subtitle">Ingresa tus credenciales para acceder al sistema</div>
+      <div class="login-subtitle">Ingresa tu usuario y contraseña para acceder al sistema</div>
 
       <div class="login-field">
-        <label>Correo electrónico</label>
-        <input type="email" id="login-email" placeholder="usuario@empresa.com"
-               autocomplete="email" inputmode="email">
+        <label>Usuario</label>
+        <input type="text" id="login-email" placeholder="Nombre de usuario"
+               autocomplete="username" inputmode="text"
+               onkeydown="if(event.key==='Enter')document.getElementById('login-pass').focus()">
       </div>
       <div class="login-field">
         <label>Contraseña</label>
@@ -2941,6 +2942,26 @@ select option{background:var(--coal3);}
     </div>
   </div>
 
+  <!-- PRECIOS COMBUSTIBLE EDITABLES -->
+  <div class="card" style="margin-bottom:14px;padding:14px 16px">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:10px">⛽ Precios de Combustible (S/ por galón)</div>
+    <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2)">
+        🛢️ Petróleo S/:
+        <input type="number" step="0.01" min="0" id="comp-precio-pet"
+          style="width:80px;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:13px"
+          onchange="compSetPrecioPet(this.value);showNotif('Precio petróleo actualizado','ok')">
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2)">
+        ⛽ Gasolina S/:
+        <input type="number" step="0.01" min="0" id="comp-precio-gas"
+          style="width:80px;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:13px"
+          onchange="compSetPrecioGas(this.value);showNotif('Precio gasolina actualizado','ok')">
+      </label>
+      <span style="font-size:11px;color:var(--text3)">Los precios se aplican a todos los reportes del turno</span>
+    </div>
+  </div>
+
   <!-- RESUMEN ÚLTIMO TURNO -->
   <div id="comp-resumen" style="display:none;margin-bottom:18px"></div>
 
@@ -3673,10 +3694,41 @@ const FL={1:'Rampa',2:'Cortada'};
 const EI={'Compresora':'🔴','Perforadora Jack Leg':'🔩','Perforadora Stopper':'🔩','Generador Eléctrico':'⚡','Bomba de Agua':'💧','Winche':'⚙','Camioneta':'🚗','Instalaciones eléctricas':'💡'};
 const PT={'dashboard':'Dashboard KPI','logistica':'Módulo Logística','rrhh':'Recursos Humanos','operaciones':'Módulo Operaciones','mantenimiento':'Módulo Mantenimiento','finanzas':'Módulo Finanzas','reporte':'Reporte Mensual','compresorista':'Reporte Compresorista'};
 
+function mostrarAccesoDenegado(page){
+  const nombres={dashboard:'Dashboard',logistica:'Logística',rrhh:'Recursos Humanos',
+    operaciones:'Operaciones',mantenimiento:'Mantenimiento',finanzas:'Finanzas',
+    seguridad:'Seguridad',ia:'Asistente IA',reporte:'Reportes',compresorista:'Compresorista'};
+  // Cambiar al page y mostrar overlay de acceso denegado
+  window._currentPage = page;
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  const pageEl = document.getElementById('page-'+page);
+  if(pageEl){
+    pageEl.classList.add('active');
+    const existing = pageEl.querySelector('.acceso-denegado-overlay');
+    if(!existing){
+      const ov = document.createElement('div');
+      ov.className = 'acceso-denegado-overlay';
+      ov.style.cssText='position:absolute;inset:0;background:rgba(10,10,15,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:50;border-radius:12px';
+      ov.innerHTML=`<div style="font-size:48px">🔒</div>
+        <div style="font-size:20px;font-weight:700;color:var(--text)">Acceso Denegado</div>
+        <div style="font-size:14px;color:var(--text2);text-align:center;max-width:280px">No tienes permiso para acceder al módulo <strong style="color:var(--accent-light)">${nombres[page]||page}</strong>.<br>Contacta al administrador del sistema.</div>
+        <div style="font-size:12px;color:var(--text3);background:var(--coal3);padding:6px 14px;border-radius:6px">Usuario: ${usuarioActivo?ROL_LABELS[usuarioActivo.rol]||usuarioActivo.rol:''}</div>`;
+      pageEl.style.position='relative';
+      pageEl.appendChild(ov);
+    } else { existing.style.display='flex'; }
+  }
+  document.querySelectorAll('.nav-item').forEach(n=>{if(n.getAttribute('onclick')==='navigate(\'' + page + '\')')n.classList.add('active');});
+  document.getElementById('page-title').textContent=(nombres[page]||page)+' — Acceso Denegado';
+  setActiveBottomNav(page);
+}
+
 function navigate(page){
   if(usuarioActivo && usuarioActivo.modulos && !usuarioActivo.modulos.includes(page)){
-    showNotif('Sin acceso a este módulo','error'); return;
+    mostrarAccesoDenegado(page); return;
   }
+  // Si hay overlay de acceso denegado del page anterior, ocultarlo
+  document.querySelectorAll('.acceso-denegado-overlay').forEach(el=>el.style.display='none');
   window._currentPage = page;
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
@@ -3852,26 +3904,8 @@ function seedData(){
     {nombre:'ROJAS GORMAS GUILLERMO RUBEN',rol:'Maestro Perforista 1',frente:1,jornal:140},
     {nombre:'SALDAÑA ZAPATA JUNIOR',rol:'Capataz',frente:1,jornal:130}
   ];
-  cuadrilla.forEach((c,i)=>state.personal.push({id:i+1,nombre:c.nombre,dni:String(10000000+i*731),rol:c.rol,frente:c.frente,estado:i<18?'activo':'ausente',jornal:c.jornal}));
-  for(let d=6;d>=0;d--){const f=new Date();f.setDate(f.getDate()-d);const fs=f.toISOString().split('T')[0];[1,2].forEach(fr=>state.perforacion.push({fecha:fs,frente:fr,metros:15+Math.floor(Math.random()*10),personas:6+Math.floor(Math.random()*3),roca:['Media','Dura','Blanda'][Math.floor(Math.random()*3)],obs:''}));}
-  ['M-1000','M-3000','M-5000','Carmex (por metro)'].forEach(tipo=>{for(let i=0;i<3;i++){const f=new Date();f.setDate(f.getDate()-i*2);state.explosivos.historial.push({fecha:f.toISOString().split('T')[0],frente:(i%2)+1,tipo,cantidad:5+Math.floor(Math.random()*20),detalle:'Voladura',precio:8.5});}});
-  for(let i=0;i<5;i++){
-    const f=new Date();f.setDate(f.getDate()-i*3);
-    state.petroleo.historial.push({
-      fecha:f.toISOString().split('T')[0],
-      frente:(i%2)+1,
-      equipo:['Generador','Camioneta','Bomba de agua'][i%3],
-      galones:10+i*5,
-      precio:14.5
-    });
-  }
-  const eq=['Compresora','Perforadora Jack Leg','Generador Eléctrico','Camioneta'];
-  for(let i=0;i<5;i++){const f=new Date();f.setDate(f.getDate()-i*2);state.mantenimiento.push({fecha:f.toISOString().split('T')[0],equipo:eq[i%4],tipo:i%2===0?'Preventivo':'Correctivo',resp:'Marco Chura',costo:150+i*60,desc:['Cambio aceite','Ajuste válvulas','Revisión eléctrica','Engrase','Cambio filtros'][i],estado:i===0?'pendiente':'ok'});}
-  for(let i=0;i<4;i++){const f=new Date();f.setDate(f.getDate()-i);state.horometros.push({fecha:f.toISOString().split('T')[0],equipo:eq[i],lectura:4000+i*120,horasHoy:8,obs:'Normal'});}
-  state.ordenes=[{_id:1,fecha:hoy(),categoria:'Explosivos',proveedor:'EXSA Perú',desc:'M-1000 x 200 unidades',monto:1700,solicitante:'Jefe de Guardia',estado:'pendiente'},{_id:2,fecha:hoy(),categoria:'EPP',proveedor:'SafeWork SAC',desc:'Cascos y mameluco x10',monto:850,solicitante:'RRHH',estado:'pendiente'},{_id:3,fecha:hoy(),categoria:'Petróleo',proveedor:'Petroperú',desc:'100 galones',monto:1450,solicitante:'Almacén',estado:'aprobada'}];
-  state.valorizaciones=[{_id:1,fecha:hoy(),tipo:'valorización',concepto:'Rampa - Semana 1 Mayo',metros:45,precioMetro:250,montoAdicional:0,monto:11250},{_id:2,fecha:hoy(),tipo:'adicional',concepto:'Drenaje sector norte',metros:0,precioMetro:0,montoAdicional:2500,monto:2500}];
+  cuadrilla.forEach((c,i)=>state.personal.push({id:i+1,nombre:c.nombre,dni:String(10000000+i*731),rol:c.rol,frente:c.frente,estado:'activo',jornal:c.jornal}));
   seedTarifario();
-  state.epp.historial=[{fecha:hoy(),tipo:'Casco',trabajador:'Juan Quispe',cantidad:1,precio:35,motivo:'Nuevo ingreso'},{fecha:hoy(),tipo:'Mameluco',trabajador:'Rampa F1',cantidad:5,precio:45,motivo:'Reposición desgaste'}];
 }
 
 function poblarSelects(){
@@ -3913,7 +3947,7 @@ function renderPage(page){
   else if(page==='seguridad')renderSeguridad();
   else if(page==='ia')renderIA();
   else if(page==='reporte')renderReportePage();
-  else if(page==='compresorista'){if(typeof renderTablaCompresorista==='function'){renderTablaCompresorista();visorPoblarDias();visorRenderDia();}}
+  else if(page==='compresorista'){if(typeof renderTablaCompresorista==='function'){renderTablaCompresorista();visorPoblarDias();visorRenderDia();}const pp=document.getElementById('comp-precio-pet');const pg=document.getElementById('comp-precio-gas');if(pp)pp.value=compGetPrecioPet();if(pg)pg.value=compGetPrecioGas();}
 }
 
 function renderModPane(mod,pane){
@@ -4078,7 +4112,7 @@ function renderDashEjecutivo(){
   const MAQUINAS=[
     {label:'Scoop',           fig:'scoop',     col:'#3b82f6',tags:['scoop epiroc','scoop monte','scoop'],mt:['scoop'],   op:d=>130*d,opL:'S/130/día'},
     {label:'Dumper',          fig:'dumper',    col:'#f59e0b',tags:['dumper'],                          mt:['dumper'],  op:d=>120*d,opL:'S/120/día'},
-    {label:'Compresora',      fig:'compresora',col:'#8b5cf6',tags:['compresora m135','compresora m122','compresora'],mt:['compresora'],op:()=>3500,opL:'S/3,500/mes'},
+    {label:'Compresora',      fig:'compresora',col:'#8b5cf6',tags:['compresora m135','compresora m122','compresora'],mt:['compresora'],op:()=>2500,opL:'S/2,500/mes'},
     {label:'Excavadora',      fig:'excavadora',col:'#10b981',tags:['excavadora'],                      mt:['excavadora'],op:()=>5000,opL:'S/5,000/mes'},
     {label:'Cargador Frontal',fig:'cargador',  col:'#ef4444',tags:['cargador frontal','cargador'],     mt:['cargador'],op:()=>5000,opL:'S/5,000/mes'},
   ];
@@ -5433,7 +5467,28 @@ function aprobarSolicitud(id,area,valor){
   if(area==='op'){sol.aprobOperaciones=valor;sol.fechaAprobOp=hoy();}
   // Actualizar estado
   if(sol.aprobFinanzas===false||sol.aprobOperaciones===false){sol.estado='desaprobado';}
-  else if(sol.aprobFinanzas===true&&sol.aprobOperaciones===true){sol.estado='aprobado';}
+  else if(sol.aprobFinanzas===true&&sol.aprobOperaciones===true){
+    sol.estado='aprobado';
+    // Auto-crear OC si no existe una ya creada para esta solicitud
+    if(!sol._ocCreada){
+      sol._ocCreada=true;
+      const nuevaOC={
+        _id: Date.now(),
+        fecha: hoy(),
+        categoria: sol.categoria||sol.tipo||'Suministros',
+        proveedor: sol.proveedor||'Por definir',
+        desc: sol.descripcion||sol.concepto||'Solicitud aprobada #'+sol.id,
+        monto: sol.monto||sol.total||0,
+        total: sol.monto||sol.total||0,
+        solicitante: sol.solicitante||'Sistema',
+        estado: 'aprobado',
+        _solicitudId: sol.id
+      };
+      if(!state.ordenes) state.ordenes=[];
+      state.ordenes.push(nuevaOC);
+      guardarOrdenes&&guardarOrdenes();
+    }
+  }
   else{sol.estado='espera';}
   almacenSave();
   renderSolicitudCompra();
@@ -6823,9 +6878,7 @@ const SERV_TIPOS=[
 function servCargar(){try{return JSON.parse(localStorage.getItem(SERV_KEY)||'[]');}catch{return[];}}
 function servGuardar(arr){localStorage.setItem(SERV_KEY,JSON.stringify(arr));}
 function finCostoServicios(ym){
-  const b=servCargar().filter(r=>r.fecha&&r.fecha.startsWith(ym)).reduce((s,r)=>s+(parseFloat(r.monto)||0),0);
-  const d=(typeof finDemoMes==='function')?finDemoMes(ym):null;
-  return b+(d&&d.terc?d.terc:0);
+  return servCargar().filter(r=>r.fecha&&r.fecha.startsWith(ym)).reduce((s,r)=>s+(parseFloat(r.monto)||0),0);
 }
 function renderServiciosTerceros(){
   const el=document.getElementById('rrhh-servicios');
@@ -9105,421 +9158,6 @@ function renderUtilidad(){
 }
 
 // ══════════════════════════════════════════════════════════════
-//  MÓDULO FINANZAS — Dashboard, Proyección, Informe, Costos
-// ══════════════════════════════════════════════════════════════
-const FIN_PRES_KEY='atmin_fin_presupuesto';
-const FIN_PROY_KEY='atmin_fin_proyeccion';
-const FIN_PROY_KEY2='atmin_fin_proyeccion_vals';
-const FIN_PROY_KEY3='atmin_fin_proyecto';
-
-function finMesActual(){return hoy().slice(0,7);}
-function finMesOffset(n){const d=new Date();d.setMonth(d.getMonth()+n);return d.toISOString().slice(0,7);}
-function finMesLabel(ym){const[y,m]=ym.split('-');const ms=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];return(ms[+m-1]||m)+' '+y;}
-function finFiltrarMes(arr,ym){return(arr||[]).filter(r=>(r.fecha||'').startsWith(ym));}
-function finValorizacionMes(ym){
-  const v=(state.valorizacionesLabor||[]).find(v=>{const my=v.anio&&v.mesNum?`${v.anio}-${String(v.mesNum).padStart(2,'0')}`:null;return my===ym;});
-  return v?{total:v.total||0,descuento:v.descuento||0,rubros:v.rubros||[]}:{total:0,descuento:0,rubros:[]};
-}
-function finCostoKits(ym){return finFiltrarMes(state.mantenimiento||[],ym).filter(k=>k.aprobLog&&k.aprobLog.ok).reduce((s,k)=>s+(k.costo||0),0);}
-function finCostoOrdenes(ym){return finFiltrarMes(state.ordenes||[],ym).filter(o=>['aprobado','recibido','completado'].includes(o.estado)).reduce((s,o)=>s+(o.total||0),0);}
-function finCostoAlmacen(ym){return finFiltrarMes(state.almacen&&state.almacen.salidas||[],ym).reduce((s,x)=>s+(x.monto||x.costo||0),0);}
-function finCostoTotal(ym){return finCostoKits(ym)+finCostoOrdenes(ym)+finCostoAlmacen(ym);}
-function finAvanceMes(ym){return finFiltrarMes(state.perforacion||[],ym).reduce((s,r)=>s+(r.avance||0),0);}
-function finPresupuesto(){return parseFloat(localStorage.getItem(FIN_PRES_KEY)||'500000');}
-
-// ─ DASHBOARD ─────────────────────────────────────────────────
-function renderFinDashboard(){
-  const el=document.getElementById('fin-dashboard');if(!el)return;
-  const ym=finMesActual();
-  const val=finValorizacionMes(ym);
-  const costoTotal=finCostoTotal(ym);
-  const margen=val.total-costoTotal;
-  const margenPct=val.total>0?((margen/val.total)*100).toFixed(1):'—';
-  const avance=finAvanceMes(ym);
-  const costoMetro=avance>0?(costoTotal/avance).toFixed(0):'—';
-  const pres=finPresupuesto();
-  const ejPct=pres>0?Math.min(100,((costoTotal/pres)*100)):0;
-  const costoMant=finCostoKits(ym),costoOC=finCostoOrdenes(ym),costoAlm=finCostoAlmacen(ym);
-  const meses6=[...Array(6)].map((_,i)=>finMesOffset(i-5));
-  const histRows=meses6.map(m=>{const v=finValorizacionMes(m);const c=finCostoTotal(m);const mg=v.total-c;const mgp=v.total>0?((mg/v.total)*100).toFixed(1):'—';return`<tr><td>${finMesLabel(m)}</td><td style="text-align:right;color:#22d3a5">${fmtS2(v.total)}</td><td style="text-align:right;color:#f87171">${fmtS2(c)}</td><td style="text-align:right;color:${mg>=0?'#22d3a5':'#f87171'};font-weight:700">${fmtS2(mg)}</td><td style="text-align:right">${mgp}%</td></tr>`;}).join('');
-
-  // Velocímetro SVG inline
-  const gaugeAngle=ejPct*1.8; // 0→180°
-  const gR=80,gCX=100,gCY=95;
-  const toRad=d=>(d-180)*Math.PI/180;
-  const needleX=gCX+gR*0.75*Math.cos(toRad(gaugeAngle));
-  const needleY=gCY+gR*0.75*Math.sin(toRad(gaugeAngle));
-  const gColor=ejPct>=100?'#ef4444':ejPct>=80?'#f97316':'#22d3a5';
-
-  el.innerHTML=`<div style="padding:16px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
-      <h3 style="color:var(--accent-light);margin:0">📊 Dashboard Financiero — ${finMesLabel(ym)}</h3>
-      <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2)">Presupuesto S/:
-        <input type="number" value="${pres}" onchange="localStorage.setItem('${FIN_PRES_KEY}',this.value);renderFinDashboard()"
-          style="width:110px;background:var(--coal3);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px">
-      </div>
-    </div>
-
-    <!-- KPI CARDS -->
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:20px">
-      ${[
-        ['Valorización Neta',fmtS2(val.total),'#22d3a5','📥'],
-        ['Costo Total',fmtS2(costoTotal),'#f87171','📤'],
-        ['Margen Bruto',fmtS2(margen)+(margenPct!=='—'?' ('+margenPct+'%)':''),margen>=0?'#22d3a5':'#f87171','💹'],
-        ['Costo / Metro avanz.','S/ '+costoMetro,'#fbbf24','⛏'],
-      ].map(([l,v,c,ic])=>`<div style="background:var(--coal3);border-radius:10px;padding:14px 16px;border-left:3px solid ${c};display:flex;flex-direction:column;gap:4px">
-        <div style="font-size:16px">${ic}</div>
-        <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px">${l}</div>
-        <div style="font-size:17px;font-weight:700;color:${c}">${v}</div>
-      </div>`).join('')}
-    </div>
-
-    <!-- GRÁFICOS FILA 1: línea + velocímetro -->
-    <div style="display:grid;grid-template-columns:1fr 260px;gap:16px;margin-bottom:16px">
-      <div style="background:var(--coal3);border-radius:10px;padding:16px">
-        <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:10px">📈 Tendencia 6 Meses</div>
-        <canvas id="fin-linea-chart" height="160"></canvas>
-      </div>
-      <div style="background:var(--coal3);border-radius:10px;padding:16px;text-align:center">
-        <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:6px">⚡ Ejecución Presupuesto</div>
-        <svg viewBox="0 0 200 110" style="width:100%;max-width:200px">
-          <!-- Fondo arco -->
-          <path d="M 20 95 A 80 80 0 0 1 180 95" fill="none" stroke="#374151" stroke-width="18" stroke-linecap="round"/>
-          <!-- Arco verde (0-80%) -->
-          <path d="M 20 95 A 80 80 0 0 1 ${gCX+gR*Math.cos(toRad(Math.min(gaugeAngle,144)))} ${gCY+gR*Math.sin(toRad(Math.min(gaugeAngle,144)))}" fill="none" stroke="#22d3a5" stroke-width="18" stroke-linecap="round"/>
-          <!-- Arco naranja (80-100%) -->
-          ${gaugeAngle>144?`<path d="M ${gCX+gR*Math.cos(toRad(144))} ${gCY+gR*Math.sin(toRad(144))} A 80 80 0 0 1 ${gCX+gR*Math.cos(toRad(Math.min(gaugeAngle,180)))} ${gCY+gR*Math.sin(toRad(Math.min(gaugeAngle,180)))}" fill="none" stroke="#f97316" stroke-width="18" stroke-linecap="round"/>`:''}
-          <!-- Arco rojo (>100%) -->
-          ${gaugeAngle>=180?`<path d="M ${gCX+gR*Math.cos(toRad(178))} ${gCY+gR*Math.sin(toRad(178))} A 80 80 0 0 1 180 95" fill="none" stroke="#ef4444" stroke-width="18" stroke-linecap="round"/>`:''}
-          <!-- Aguja -->
-          <line x1="${gCX}" y1="${gCY}" x2="${needleX}" y2="${needleY}" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
-          <circle cx="${gCX}" cy="${gCY}" r="5" fill="white"/>
-          <!-- Marcas -->
-          <text x="14" y="108" font-size="9" fill="#9ca3af" text-anchor="middle">0%</text>
-          <text x="100" y="18" font-size="9" fill="#9ca3af" text-anchor="middle">50%</text>
-          <text x="186" y="108" font-size="9" fill="#9ca3af" text-anchor="middle">100%</text>
-          <!-- Valor central -->
-          <text x="${gCX}" y="${gCY+28}" text-anchor="middle" font-size="22" font-weight="bold" fill="${gColor}">${ejPct.toFixed(0)}%</text>
-          <text x="${gCX}" y="${gCY+42}" text-anchor="middle" font-size="9" fill="#9ca3af">ejecutado</text>
-        </svg>
-        <div style="margin-top:6px;font-size:11px;color:var(--text2)">Pres. <strong style="color:var(--text)">${fmtS2(pres)}</strong></div>
-        <div style="font-size:11px;color:var(--text2)">Gasto <strong style="color:#f87171">${fmtS2(costoTotal)}</strong></div>
-        ${ejPct>=100?`<div style="margin-top:8px;font-size:11px;font-weight:700;color:#ef4444">⚠️ Presupuesto superado</div>`:ejPct>=80?`<div style="margin-top:8px;font-size:11px;color:#f97316">⚠️ Cerca del límite</div>`:''}
-      </div>
-    </div>
-
-    <!-- GRÁFICOS FILA 2: barras apiladas + donut -->
-    <div style="display:grid;grid-template-columns:1fr 280px;gap:16px;margin-bottom:20px">
-      <div style="background:var(--coal3);border-radius:10px;padding:16px">
-        <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:10px">📊 Costos por Área — Últimos 6 meses</div>
-        <canvas id="fin-barras-chart" height="160"></canvas>
-      </div>
-      <div style="background:var(--coal3);border-radius:10px;padding:16px">
-        <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:10px">🍩 Distribución Costos — ${finMesLabel(ym)}</div>
-        <canvas id="fin-donut-chart" height="160"></canvas>
-        <div style="display:grid;grid-template-columns:1fr;gap:4px;margin-top:10px;font-size:11px">
-          ${[['🔧 Mantenimiento',costoMant,'#f59e0b'],['📋 Órdenes Compra',costoOC,'#60a5fa'],['📦 Almacén',costoAlm,'#a78bfa']].map(([l,v,c])=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0"><span style="color:${c}">${l}</span><strong style="color:var(--text)">${fmtS2(v)}</strong></div>`).join('')}
-        </div>
-      </div>
-    </div>
-
-    <!-- HISTORIAL TABLA -->
-    <div style="background:var(--coal3);border-radius:10px;padding:16px">
-      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:12px">📋 Historial 6 Meses</div>
-      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead><tr style="color:var(--text2)">${['Mes','Valorización','Costo','Margen','Margen%'].map((h,i)=>`<th style="padding:6px 10px;text-align:${i===0?'left':'right'};font-weight:600;border-bottom:1px solid var(--border)">${h}</th>`).join('')}</tr></thead>
-        <tbody>${histRows||'<tr><td colspan="5" style="text-align:center;padding:12px;color:var(--text3)">Sin datos históricos</td></tr>'}</tbody>
-      </table></div>
-    </div>
-  </div>`;
-
-  // ── Inicializar gráficos ──
-  setTimeout(()=>{
-    ['_finLineaChart','_finBarrasChart','_finDonutChart'].forEach(k=>{if(window[k]){try{window[k].destroy();}catch(e){}}});
-
-    // Datos 6 meses
-    const labels6=meses6.map(finMesLabel);
-    const vals6=meses6.map(m=>finValorizacionMes(m).total);
-    const cost6=meses6.map(m=>finCostoTotal(m));
-    const marg6=meses6.map(m=>finValorizacionMes(m).total-finCostoTotal(m));
-    const mant6=meses6.map(m=>finCostoKits(m));
-    const oc6=meses6.map(m=>finCostoOrdenes(m));
-    const alm6=meses6.map(m=>finCostoAlmacen(m));
-
-    const gridColor='rgba(255,255,255,.06)';
-    const tickColor='#9ca3af';
-    const axisOpts={ticks:{color:tickColor,callback:v=>'S/'+Math.abs(v/1000).toFixed(0)+'k'},grid:{color:gridColor}};
-    const xOpts={ticks:{color:tickColor},grid:{display:false}};
-
-    // 1. Línea tendencia
-    const lc=document.getElementById('fin-linea-chart');
-    if(lc&&lc.getContext) window._finLineaChart=new Chart(lc,{type:'line',data:{labels:labels6,datasets:[
-      {label:'Valorización',data:vals6,borderColor:'#22d3a5',backgroundColor:'rgba(34,211,165,.12)',tension:.4,pointRadius:4,pointBackgroundColor:'#22d3a5',fill:true},
-      {label:'Costos',data:cost6,borderColor:'#f87171',backgroundColor:'rgba(248,113,113,.08)',tension:.4,pointRadius:4,pointBackgroundColor:'#f87171',fill:true},
-      {label:'Margen',data:marg6,borderColor:'#fbbf24',backgroundColor:'rgba(251,191,36,.08)',tension:.4,pointRadius:4,pointBackgroundColor:'#fbbf24',borderDash:[5,4],fill:false},
-    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:tickColor,boxWidth:12,font:{size:11}}}},scales:{y:axisOpts,x:xOpts}}});
-
-    // 2. Barras apiladas
-    const bc=document.getElementById('fin-barras-chart');
-    if(bc&&bc.getContext) window._finBarrasChart=new Chart(bc,{type:'bar',data:{labels:labels6,datasets:[
-      {label:'Mantenimiento',data:mant6,backgroundColor:'#f59e0b',borderRadius:3},
-      {label:'Órdenes Compra',data:oc6,backgroundColor:'#60a5fa',borderRadius:3},
-      {label:'Almacén',data:alm6,backgroundColor:'#a78bfa',borderRadius:3},
-    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:tickColor,boxWidth:12,font:{size:11}}}},scales:{x:{...xOpts,stacked:true},y:{...axisOpts,stacked:true}}}});
-
-    // 3. Donut distribución
-    const dc=document.getElementById('fin-donut-chart');
-    const donutData=[costoMant,costoOC,costoAlm];
-    if(dc&&dc.getContext&&donutData.some(v=>v>0)) window._finDonutChart=new Chart(dc,{type:'doughnut',data:{labels:['Mantenimiento','Órdenes Compra','Almacén'],datasets:[{data:donutData,backgroundColor:['#f59e0b','#60a5fa','#a78bfa'],borderWidth:0,hoverOffset:6}]},options:{responsive:true,maintainAspectRatio:false,cutout:'68%',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${fmtS2(ctx.raw)} (${((ctx.raw/(costoMant+costoOC+costoAlm))*100).toFixed(1)}%)`}}}}});
-    else if(dc&&dc.getContext) { const ctx=dc.getContext('2d');ctx.fillStyle='#6b7280';ctx.font='13px sans-serif';ctx.textAlign='center';ctx.fillText('Sin costos este mes',dc.width/2,dc.height/2); }
-  },50);
-}
-
-// ─ PROYECCIÓN ────────────────────────────────────────────────
-function renderFinProyeccion(){
-  const el=document.getElementById('fin-proyeccion');if(!el)return;
-  const cats=[['Mantenimiento','🔧',ym=>finCostoKits(ym)],['Órdenes de Compra','📋',ym=>finCostoOrdenes(ym)],['Almacén','📦',ym=>finCostoAlmacen(ym)]];
-  let overrides={};try{overrides=JSON.parse(localStorage.getItem(FIN_PROY_KEY2)||'{}');}catch(e){}
-  const meses3=[finMesOffset(-3),finMesOffset(-2),finMesOffset(-1)];
-  const ymNext=finMesOffset(1);
-  let valProxEstim=0;try{valProxEstim=parseFloat(localStorage.getItem(FIN_PRES_KEY+'-val-next')||'0');}catch(e){}
-  const rows=cats.map(([nombre,icon,fn])=>{
-    const vals=meses3.map(m=>fn(m));
-    const avg=vals.reduce((s,v)=>s+v,0)/3;
-    const override=overrides[nombre]!=null?overrides[nombre]:avg;
-    return{nombre,icon,avg,override,vals};
-  });
-  const totalProy=rows.reduce((s,r)=>s+r.override,0);
-  const margenProy=valProxEstim>0?valProxEstim-totalProy:null;
-  el.innerHTML=`<div style="padding:16px">
-    <h3 style="color:var(--accent-light);margin-bottom:16px">📅 Proyección de Gasto — ${finMesLabel(ymNext)}</h3>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
-      <div style="background:var(--coal3);border-radius:10px;padding:14px">
-        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;margin-bottom:4px">Valorización estimada próx. mes</div>
-        <input type="number" placeholder="S/ estimado" value="${valProxEstim||''}" onchange="localStorage.setItem('${FIN_PRES_KEY}-val-next',this.value);renderFinProyeccion()"
-          style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--text);font-size:16px;font-weight:700">
-      </div>
-      <div style="background:var(--coal3);border-radius:10px;padding:14px">
-        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;margin-bottom:4px">Gasto proyectado total</div>
-        <div style="font-size:22px;font-weight:700;color:#f87171">${fmtS2(totalProy)}</div>
-        ${margenProy!=null?`<div style="font-size:12px;color:${margenProy>=0?'#22d3a5':'#f87171'};margin-top:4px">Margen estimado: ${fmtS2(margenProy)}</div>`:''}
-      </div>
-    </div>
-    <div style="background:var(--coal3);border-radius:10px;padding:16px;margin-bottom:16px;overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead><tr style="color:var(--text2)">
-          <th style="padding:8px;text-align:left;border-bottom:1px solid var(--border)">Categoría</th>
-          ${meses3.map(m=>`<th style="padding:8px;text-align:right;border-bottom:1px solid var(--border)">${finMesLabel(m)}</th>`).join('')}
-          <th style="padding:8px;text-align:right;border-bottom:1px solid var(--border)">Promedio</th>
-          <th style="padding:8px;text-align:right;border-bottom:1px solid var(--border);color:#fbbf24">Proyección ${finMesLabel(ymNext)}</th>
-        </tr></thead>
-        <tbody>${rows.map(r=>`<tr>
-          <td style="padding:8px;color:var(--text)">${r.icon} ${r.nombre}</td>
-          ${r.vals.map(v=>`<td style="padding:8px;text-align:right;color:var(--text2)">${fmtS2(v)}</td>`).join('')}
-          <td style="padding:8px;text-align:right;color:var(--text)">${fmtS2(r.avg)}</td>
-          <td style="padding:8px;text-align:right"><input type="number" value="${r.override.toFixed(0)}" onchange="(function(){let o={};try{o=JSON.parse(localStorage.getItem('${FIN_PROY_KEY2}')||'{}')}catch(e){};o['${r.nombre}']=parseFloat(this.value)||0;localStorage.setItem('${FIN_PROY_KEY2}',JSON.stringify(o));renderFinProyeccion();}).call(this)"
-            style="width:110px;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:#fbbf24;font-size:13px;font-weight:700;text-align:right"></td>
-        </tr>`).join('')}</tbody>
-        <tfoot><tr style="border-top:2px solid var(--border)">
-          <td colspan="4" style="padding:8px;font-weight:700;color:var(--text)">TOTAL PROYECTADO</td>
-          <td style="padding:8px;text-align:right;font-weight:700;font-size:15px;color:#f87171">${fmtS2(totalProy)}</td>
-        </tr></tfoot>
-      </table>
-    </div>
-    <button onclick="finExportarProyeccion()" class="btn btn-outline" style="font-size:12px">📥 Exportar proyección Excel</button>
-  </div>`;
-}
-async function finExportarProyeccion(){
-  try{
-    const wb=new ExcelJS.Workbook();const ws=wb.addWorksheet('Proyección');
-    ws.columns=[{width:30},{width:18},{width:18},{width:18},{width:18},{width:20}];
-    const ymNext=finMesOffset(1);
-    const meses3=[finMesOffset(-3),finMesOffset(-2),finMesOffset(-1)];
-    let overrides={};try{overrides=JSON.parse(localStorage.getItem(FIN_PROY_KEY2)||'{}');}catch(e){}
-    ws.addRow(['PROYECCIÓN DE GASTO — '+finMesLabel(ymNext).toUpperCase()]);
-    ws.getRow(1).font={bold:true,size:14};ws.addRow([]);
-    ws.addRow(['Categoría',...meses3.map(finMesLabel),'Promedio','Proyección '+finMesLabel(ymNext)]);
-    ws.getRow(3).font={bold:true};
-    const cats=[['Mantenimiento',ym=>finCostoKits(ym)],['Órdenes de Compra',ym=>finCostoOrdenes(ym)],['Almacén',ym=>finCostoAlmacen(ym)]];
-    cats.forEach(([n,fn])=>{const vals=meses3.map(m=>fn(m));const avg=vals.reduce((s,v)=>s+v,0)/3;ws.addRow([n,...vals,avg,overrides[n]!=null?overrides[n]:avg]);});
-    const buf=await wb.xlsx.writeBuffer();const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Proyeccion_${ymNext}.xlsx`;a.click();
-  }catch(e){showNotif('Error al exportar: '+e.message,'error');}
-}
-
-// ─ INFORME MENSUAL ───────────────────────────────────────────
-function renderFinInforme(){
-  const el=document.getElementById('fin-informe');if(!el)return;
-  const mesesDisp=(state.valorizacionesLabor||[]).map(v=>v.anio&&v.mesNum?`${v.anio}-${String(v.mesNum).padStart(2,'0')}`:null).filter(Boolean);
-  const todosYM=[...new Set([finMesActual(),...mesesDisp])].sort((a,b)=>b.localeCompare(a));
-  let proyNombre='';try{proyNombre=localStorage.getItem(FIN_PROY_KEY3)||'Proyecto Minero';}catch(e){}
-  el.innerHTML=`<div style="padding:16px">
-    <h3 style="color:var(--accent-light);margin-bottom:16px">🧾 Informe Financiero Mensual</h3>
-    <div style="background:var(--coal3);border-radius:10px;padding:16px;margin-bottom:16px">
-      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end">
-        <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:4px">Nombre del Proyecto</label>
-          <input type="text" value="${proyNombre}" placeholder="Proyecto Minero" onchange="localStorage.setItem('${FIN_PROY_KEY3}',this.value)"
-            style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:13px"></div>
-        <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:4px">Mes del Informe</label>
-          <select id="fin-informe-mes" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:13px">
-            ${todosYM.map(m=>`<option value="${m}">${finMesLabel(m)}</option>`).join('')}
-          </select></div>
-        <button onclick="finGenerarInforme()" class="btn btn-gold">📄 Generar Informe</button>
-      </div>
-    </div>
-    <div id="fin-informe-preview"></div>
-  </div>`;
-}
-async function finGenerarInforme(){
-  const ym=document.getElementById('fin-informe-mes')?.value||finMesActual();
-  let proy='';try{proy=localStorage.getItem(FIN_PROY_KEY3)||'Proyecto Minero';}catch(e){}
-  const val=finValorizacionMes(ym);
-  const ymPrev=finMesOffset(-1);const valPrev=finValorizacionMes(ymPrev);
-  const costoMant=finCostoKits(ym),costoOC=finCostoOrdenes(ym),costoAlm=finCostoAlmacen(ym);
-  const costoTotal=costoMant+costoOC+costoAlm;
-  const costoMantP=finCostoKits(ymPrev),costoOCP=finCostoOrdenes(ymPrev),costoAlmP=finCostoAlmacen(ymPrev);
-  const costoTotalP=costoMantP+costoOCP+costoAlmP;
-  const margen=val.total-costoTotal,margenP=valPrev.total-costoTotalP;
-  const avance=finAvanceMes(ym);
-  const costoMetro=avance>0?(costoTotal/avance).toFixed(0):'—';
-  const pl=[
-    ['Valorización bruta',val.total+Math.abs(val.descuento),valPrev.total+Math.abs(valPrev.descuento),'#22d3a5'],
-    ['Descuento almacén',-Math.abs(val.descuento),-Math.abs(valPrev.descuento),'#f87171'],
-    ['Valorización neta',val.total,valPrev.total,'#22d3a5'],
-    ['—','—','—',''],
-    ['Costo Mantenimiento',-costoMant,-costoMantP,'#f87171'],
-    ['Costo Órdenes Compra',-costoOC,-costoOCP,'#f87171'],
-    ['Costo Almacén',-costoAlm,-costoAlmP,'#f87171'],
-    ['TOTAL COSTOS',-costoTotal,-costoTotalP,'#f87171'],
-    ['UTILIDAD ESTIMADA',margen,margenP,margen>=0?'#22d3a5':'#f87171'],
-  ];
-  const rowHtml=([l,a,b,c])=>l==='—'?'<tr><td colspan="3" style="padding:4px 0"></td></tr>':`<tr style="border-bottom:1px solid rgba(255,255,255,.06)">
-    <td style="padding:7px 10px;color:var(--text);font-weight:${['TOTAL COSTOS','UTILIDAD ESTIMADA'].includes(l)?'700':'400'}">${l}</td>
-    <td style="padding:7px 10px;text-align:right;color:${c||'var(--text)'};font-weight:${['TOTAL COSTOS','UTILIDAD ESTIMADA'].includes(l)?'700':'400'}">${typeof a==='number'?fmtS2(a):a}</td>
-    <td style="padding:7px 10px;text-align:right;color:${c||'var(--text2)'};opacity:.7">${typeof b==='number'?fmtS2(b):b}</td>
-  </tr>`;
-  const rubrosHtml=val.rubros.length?val.rubros.map(r=>`<tr><td style="padding:5px 10px">${r.rubro||r.nombre||r.actividad||'—'}</td><td style="padding:5px 10px;text-align:right;color:#fbbf24">${fmtS2(r.monto||0)}</td></tr>`).join(''):'<tr><td colspan="2" style="padding:8px;color:var(--text3)">Sin detalle de rubros</td></tr>';
-  document.getElementById('fin-informe-preview').innerHTML=`
-  <div style="background:var(--coal3);border-radius:10px;padding:24px;font-size:13px" id="fin-informe-doc">
-    <div style="text-align:center;border-bottom:2px solid var(--accent-light);padding-bottom:16px;margin-bottom:20px">
-      <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:2px">Informe Financiero Mensual</div>
-      <div style="font-size:22px;font-weight:700;color:var(--text);margin:6px 0">${proy.toUpperCase()}</div>
-      <div style="font-size:16px;color:var(--accent-light);font-weight:600">${finMesLabel(ym).toUpperCase()}</div>
-    </div>
-    <div style="background:rgba(255,255,255,.04);border-radius:8px;padding:14px;margin-bottom:18px">
-      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:10px">Resumen Ejecutivo</div>
-      <div style="display:flex;flex-direction:column;gap:6px">
-        <div>• Valorización del mes: <strong style="color:#22d3a5">${fmtS2(val.total)}</strong></div>
-        <div>• Costo total operativo: <strong style="color:#f87171">${fmtS2(costoTotal)}</strong></div>
-        <div>• Utilidad estimada: <strong style="color:${margen>=0?'#22d3a5':'#f87171'}">${fmtS2(margen)}</strong>${val.total>0?' ('+((margen/val.total)*100).toFixed(1)+'% margen)':''}</div>
-      </div>
-    </div>
-    <div style="margin-bottom:18px">
-      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:10px">Estado de Resultados</div>
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead><tr style="border-bottom:1px solid var(--border)"><th style="padding:7px 10px;text-align:left;color:var(--text2)">Concepto</th><th style="padding:7px 10px;text-align:right;color:var(--accent-light)">${finMesLabel(ym)}</th><th style="padding:7px 10px;text-align:right;color:var(--text2)">${finMesLabel(ymPrev)}</th></tr></thead>
-        <tbody>${pl.map(rowHtml).join('')}</tbody>
-      </table>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px">
-      <div style="background:rgba(255,255,255,.04);border-radius:8px;padding:14px">
-        <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:8px">Avance Físico</div>
-        <div>Metros avanzados: <strong style="color:#fbbf24">${avance} m</strong></div>
-        <div style="margin-top:4px">Costo por metro: <strong style="color:#fbbf24">S/ ${costoMetro}</strong></div>
-      </div>
-      <div style="background:rgba(255,255,255,.04);border-radius:8px;padding:14px">
-        <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:8px">Costos por Actividad</div>
-        <table style="width:100%;font-size:12px"><tbody>${rubrosHtml}</tbody></table>
-      </div>
-    </div>
-    <div style="border-top:1px solid var(--border);padding-top:12px;font-size:11px;color:var(--text3);display:flex;justify-content:space-between">
-      <span>Generado por ATMIN</span><span>${fmtF(hoy())}</span>
-    </div>
-  </div>
-  <div style="margin-top:12px"><button onclick="finExportarInforme('${ym}')" class="btn btn-outline" style="font-size:12px">📥 Exportar Excel</button></div>`;
-}
-async function finExportarInforme(ym){
-  try{
-    let proy='';try{proy=localStorage.getItem(FIN_PROY_KEY3)||'Proyecto Minero';}catch(e){}
-    const val=finValorizacionMes(ym);
-    const ymPrev=finMesOffset(-1);const valPrev=finValorizacionMes(ymPrev);
-    const costoMant=finCostoKits(ym),costoOC=finCostoOrdenes(ym),costoAlm=finCostoAlmacen(ym);
-    const costoTotal=costoMant+costoOC+costoAlm;
-    const costoMantP=finCostoKits(ymPrev),costoOCP=finCostoOrdenes(ymPrev),costoAlmP=finCostoAlmacen(ymPrev);
-    const costoTotalP=costoMantP+costoOCP+costoAlmP;
-    const margen=val.total-costoTotal;
-    const wb=new ExcelJS.Workbook();const ws=wb.addWorksheet('Informe Financiero');
-    ws.pageSetup={orientation:'landscape',fitToPage:true,fitToWidth:1};
-    ws.columns=[{width:35},{width:22},{width:22}];
-    ws.addRow([proy.toUpperCase()+' — INFORME FINANCIERO '+finMesLabel(ym).toUpperCase()]);
-    ws.getRow(1).font={bold:true,size:14};ws.addRow([]);
-    ws.addRow(['ESTADO DE RESULTADOS',finMesLabel(ym),finMesLabel(ymPrev)]);
-    ws.getRow(3).font={bold:true};
-    [[`Valorización bruta`,val.total+Math.abs(val.descuento),valPrev.total+Math.abs(valPrev.descuento)],
-     [`Descuento`,-Math.abs(val.descuento),-Math.abs(valPrev.descuento)],
-     [`Valorización neta`,val.total,valPrev.total],
-     [`Costo Mantenimiento`,-costoMant,-costoMantP],
-     [`Costo Órdenes`,-costoOC,-costoOCP],
-     [`Costo Almacén`,-costoAlm,-costoAlmP],
-     [`TOTAL COSTOS`,-costoTotal,-costoTotalP],
-     [`UTILIDAD ESTIMADA`,margen,valPrev.total-costoTotalP]
-    ].forEach(r=>{const row=ws.addRow(r);if(r[0].startsWith('TOTAL')||r[0].startsWith('UTIL'))row.font={bold:true};});
-    ws.addRow([]);ws.addRow(['Avance físico (m)',finAvanceMes(ym)]);
-    ws.addRow(['Costo/metro (S/)',finAvanceMes(ym)>0?(costoTotal/finAvanceMes(ym)).toFixed(0):'—']);
-    const buf=await wb.xlsx.writeBuffer();const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Informe_Financiero_${ym}.xlsx`;a.click();
-  }catch(e){showNotif('Error al exportar: '+e.message,'error');}
-}
-
-// ─ COSTOS POR CENTRO ─────────────────────────────────────────
-const FIN_SPLIT_KEY='atmin_fin_split';
-function renderFinCostoCentro(){
-  const el=document.getElementById('fin-costocentro');if(!el)return;
-  const ym=finMesActual();
-  let split=60;try{split=parseFloat(localStorage.getItem(FIN_SPLIT_KEY)||'60');}catch(e){}
-  const areas=[
-    ['Mantenimiento','🔧',finCostoKits(ym)],
-    ['Compras / OC','📋',finCostoOrdenes(ym)],
-    ['Almacén / Logística','📦',finCostoAlmacen(ym)],
-    ['RRHH','👷',(state.personal||[]).filter(p=>p.estado==='activo').reduce((s,p)=>s+(p.jornal||0)*(state.metas&&state.metas.dias||26),0)],
-  ];
-  const total=areas.reduce((s,a)=>s+a[2],0)||1;
-  const meses3=[finMesOffset(-3),finMesOffset(-2),finMesOffset(-1)];
-  const areaFns=[ym=>finCostoKits(ym),ym=>finCostoOrdenes(ym),ym=>finCostoAlmacen(ym),()=>0];
-  el.innerHTML=`<div style="padding:16px">
-    <h3 style="color:var(--accent-light);margin-bottom:16px">💸 Costos por Centro — ${finMesLabel(ym)}</h3>
-    <div style="background:var(--coal3);border-radius:10px;padding:16px;margin-bottom:16px">
-      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:12px">Por Área</div>
-      ${areas.map(([n,ic,v])=>{const pct=((v/total)*100).toFixed(1);return`<div style="margin-bottom:12px">
-        <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px;color:var(--text)">${ic} ${n}</span><span style="font-size:13px;font-weight:700;color:#f87171">${fmtS2(v)} <span style="color:var(--text2);font-weight:400;font-size:11px">(${pct}%)</span></span></div>
-        <div style="background:var(--coal4);border-radius:4px;height:8px"><div style="height:100%;width:${pct}%;background:#f87171;border-radius:4px"></div></div>
-      </div>`;}).join('')}
-      <div style="border-top:1px solid var(--border);padding-top:10px;font-weight:700;display:flex;justify-content:space-between"><span>TOTAL</span><span style="color:#f87171">${fmtS2(total)}</span></div>
-    </div>
-    <div style="background:var(--coal3);border-radius:10px;padding:16px;margin-bottom:16px">
-      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:10px">Por Frente de Trabajo</div>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;font-size:12px;color:var(--text2)">
-        Split Rampa Brenda: <input type="number" min="0" max="100" value="${split}" onchange="localStorage.setItem('${FIN_SPLIT_KEY}',this.value);renderFinCostoCentro()"
-          style="width:60px;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:13px"> % / CRNE: ${(100-split).toFixed(0)}%
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        ${[['Rampa Brenda','#fbbf24',split],['CRNE','#60a5fa',100-split]].map(([n,c,pct])=>`<div style="background:var(--coal4);border-radius:8px;padding:14px;border-left:3px solid ${c}">
-          <div style="font-size:12px;color:var(--text2);margin-bottom:4px">${n}</div>
-          <div style="font-size:18px;font-weight:700;color:${c}">${fmtS2(total*(pct/100))}</div>
-          <div style="font-size:11px;color:var(--text2)">${pct.toFixed(0)}% del costo total</div>
-        </div>`).join('')}
-      </div>
-    </div>
-    <div style="background:var(--coal3);border-radius:10px;padding:16px;overflow-x:auto">
-      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:10px">Comparativo 3 Meses por Área</div>
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead><tr style="color:var(--text2)"><th style="padding:7px 10px;text-align:left;border-bottom:1px solid var(--border)">Área</th>${meses3.map(m=>`<th style="padding:7px 10px;text-align:right;border-bottom:1px solid var(--border)">${finMesLabel(m)}</th>`).join('')}<th style="padding:7px 10px;text-align:right;border-bottom:1px solid var(--border)">${finMesLabel(ym)}</th></tr></thead>
-        <tbody>${areas.map(([n,ic],i)=>`<tr style="border-bottom:1px solid rgba(255,255,255,.04)"><td style="padding:7px 10px;color:var(--text)">${ic} ${n}</td>${meses3.map(m=>`<td style="padding:7px 10px;text-align:right;color:var(--text2)">${fmtS2(areaFns[i](m))}</td>`).join('')}<td style="padding:7px 10px;text-align:right;font-weight:700;color:#f87171">${fmtS2(areas[i][2])}</td></tr>`).join('')}</tbody>
-      </table>
-    </div>
-  </div>`;
-}
-
 // ── REPORTE ──
 // ════════════════════════════════════════════════════════════════
 //  SISTEMA DE REPORTES POR MÓDULO — DEEPMINE
@@ -10688,79 +10326,89 @@ function renderGraficosReporte(modulo, ac, cos, ing, util){
 //  SISTEMA DE AUTENTICACIÓN — DEEPMINE
 // ════════════════════════════════════════════════════
 
+const TODOS_MODULOS = ['dashboard','logistica','rrhh','operaciones','mantenimiento','finanzas','seguridad','ia','reporte','compresorista'];
+
 const ROLES_MODULOS = {
-  gerente:      ['dashboard','logistica','rrhh','operaciones','mantenimiento','finanzas','seguridad','ia','reporte','compresorista'],
-  jefe_guardia: ['dashboard','logistica','rrhh','operaciones','seguridad','ia','compresorista'],
-  almacenero:   ['dashboard','logistica'],
-  mecanico:     ['dashboard','mantenimiento'],
-  contador:     ['dashboard','finanzas','reporte'],
-  operador:     ['dashboard','operaciones'],
-  seguridad:    ['dashboard','seguridad'],
+  gerente_general:      TODOS_MODULOS,
+  jefe_finanzas:        TODOS_MODULOS,
+  jefe_operaciones:     ['dashboard','logistica','operaciones','mantenimiento','compresorista','seguridad'],
+  logistico:            ['dashboard','logistica'],
+  administrador:        ['dashboard','rrhh'],
+  jefe_guardia:         ['dashboard','operaciones','seguridad'],
+  ingeniero_residente:  ['dashboard','operaciones','seguridad'],
+  jefe_mantenimiento:   ['dashboard','mantenimiento'],
+  compresorista:        ['dashboard','compresorista'],
 };
 
 const ROL_LABELS = {
-  gerente:'Gerente / Admin', jefe_guardia:'Jefe de Guardia',
-  almacenero:'Almacenero', mecanico:'Mecánico',
-  contador:'Contador', operador:'Operador', seguridad:'Agente de Seguridad'
+  gerente_general:     'Gerente General',
+  jefe_finanzas:       'Jefe de Finanzas',
+  jefe_operaciones:    'Jefe de Operaciones',
+  logistico:           'Logístico',
+  administrador:       'Administrador',
+  jefe_guardia:        'Jefe de Guardia',
+  ingeniero_residente: 'Ingeniero Residente',
+  jefe_mantenimiento:  'Jefe de Mantenimiento',
+  compresorista:       'Compresorista',
 };
 
 const ROL_COLORS = {
-  gerente:'#1d6fe5', jefe_guardia:'#4493f8', almacenero:'#16a34a',
-  mecanico:'#d97706', contador:'#7c3aed', operador:'#dc2626'
+  gerente_general:     '#1d6fe5',
+  jefe_finanzas:       '#7c3aed',
+  jefe_operaciones:    '#f59e0b',
+  logistico:           '#16a34a',
+  administrador:       '#0ea5e9',
+  jefe_guardia:        '#4493f8',
+  ingeniero_residente: '#10b981',
+  jefe_mantenimiento:  '#d97706',
+  compresorista:       '#8b5cf6',
 };
 
 let usuarios = [
-  { id:1, nombre:'Percy Alcántara',  email:'percy@deepmine.pe',  password:'admin123',   rol:'gerente',      modulos:ROLES_MODULOS.gerente,      activo:true },
-  { id:2, nombre:'Juan Quispe',      email:'juan@deepmine.pe',   password:'guardia123', rol:'jefe_guardia', modulos:ROLES_MODULOS.jefe_guardia, activo:true },
-  { id:3, nombre:'Marco Chura',      email:'marco@deepmine.pe',  password:'mec123',     rol:'mecanico',     modulos:ROLES_MODULOS.mecanico,     activo:true },
-  { id:4, nombre:'Luis Condori',     email:'luis@deepmine.pe',   password:'alma123',    rol:'almacenero',   modulos:ROLES_MODULOS.almacenero,   activo:true },
-  { id:5, nombre:'Carmen Flores',    email:'carmen@deepmine.pe', password:'cont123',    rol:'contador',     modulos:ROLES_MODULOS.contador,     activo:true },
-  { id:6, nombre:'Carlos Huanca',    email:'carlos@deepmine.pe', password:'seg123',     rol:'seguridad',    modulos:ROLES_MODULOS.seguridad,    activo:true },
+  { id:1,  usuario:'gerente',     nombre:'Gerente General',      password:'gerente2024',   rol:'gerente_general',     activo:true },
+  { id:2,  usuario:'finanzas',    nombre:'Jefe de Finanzas',     password:'finanzas2024',  rol:'jefe_finanzas',       activo:true },
+  { id:3,  usuario:'operaciones', nombre:'Jefe de Operaciones',  password:'operaciones24', rol:'jefe_operaciones',    activo:true },
+  { id:4,  usuario:'logistico',   nombre:'Logístico',            password:'logistico24',   rol:'logistico',           activo:true },
+  { id:5,  usuario:'admin',       nombre:'Administrador',        password:'admin2024',     rol:'administrador',       activo:true },
+  { id:6,  usuario:'guardia',     nombre:'Jefe de Guardia',      password:'guardia2024',   rol:'jefe_guardia',        activo:true },
+  { id:7,  usuario:'ingeniero',   nombre:'Ingeniero Residente',  password:'ingeniero24',   rol:'ingeniero_residente', activo:true },
+  { id:8,  usuario:'mantenimiento',nombre:'Jefe de Mantenimiento',password:'mant2024',     rol:'jefe_mantenimiento',  activo:true },
+  { id:9,  usuario:'comp1',       nombre:'Compresorista 1',      password:'comp12024',     rol:'compresorista',       activo:true },
+  { id:10, usuario:'comp2',       nombre:'Compresorista 2',      password:'comp22024',     rol:'compresorista',       activo:true },
 ];
 
 let usuarioActivo = null;
 
 async function doLogin(){
-  const email = document.getElementById('login-email').value.trim().toLowerCase();
+  const usuarioInput = (document.getElementById('login-email')||{value:''}).value.trim().toLowerCase();
   const pass  = document.getElementById('login-pass').value;
   const errEl = document.getElementById('login-error');
   const btnEl = document.getElementById('login-btn');
 
-  if(!email || !pass){
-    errEl.textContent = 'Ingresa tu correo y contraseña';
+  if(!usuarioInput || !pass){
+    errEl.textContent = 'Ingresa tu usuario y contraseña';
     errEl.style.display = 'block'; return;
   }
   errEl.style.display = 'none';
   btnEl.disabled = true;
   btnEl.textContent = 'Verificando...';
 
-  // 1. Buscar en usuarios locales primero
-  let user = usuarios.find(u => u.email === email && u.password === pass && u.activo);
-
-  // 2. Si no, intentar Supabase
-  if(!user){
-    try{
-      const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
-      if(!error && data && data.user){
-        const { data: perfil } = await sb.from('perfiles_usuario').select('*').eq('email', email).single();
-        if(perfil){
-          user = { id: data.user.id, nombre: perfil.nombre, email, rol: perfil.rol,
-                   modulos: perfil.modulos || ROLES_MODULOS[perfil.rol] || [], activo: true };
-        }
-      }
-    }catch(e){}
-  }
+  // Buscar por campo usuario (también acepta email por compatibilidad)
+  let user = usuarios.find(u => u.activo && u.password === pass &&
+    (u.usuario === usuarioInput || (u.email && u.email.toLowerCase() === usuarioInput)));
 
   btnEl.disabled = false;
   btnEl.textContent = 'Entrar al Sistema';
 
   if(!user){
-    errEl.textContent = 'Correo o contraseña incorrectos';
+    errEl.textContent = 'Usuario o contraseña incorrectos';
     errEl.style.display = 'block';
     document.getElementById('login-pass').value = '';
     document.getElementById('login-pass').focus();
     return;
   }
+  // Asignar módulos del rol si no los tiene
+  if(!user.modulos) user.modulos = ROLES_MODULOS[user.rol] || [];
   iniciarSesion(user);
 }
 
@@ -10784,16 +10432,14 @@ function iniciarSesion(user){
   if(rb) rb.textContent = ROL_LABELS[user.rol] || user.rol;
 
   // Botones gerente
-  const esGerente = user.rol === 'gerente';
+  const esGerente = user.rol === 'gerente_general' || user.rol === 'jefe_finanzas';
   ['btn-admin-usuarios','btn-historial-cierres','btn-cierre-mensual'].forEach(id=>{
     const el = document.getElementById(id);
     if(el) el.style.display = esGerente ? 'block' : 'none';
   });
 
-  // Módulos — unir los guardados con los del rol para que aparezcan módulos nuevos
-  const modsRol = ROLES_MODULOS[user.rol] || [];
-  const modsUser = Array.isArray(user.modulos) ? user.modulos : [];
-  user.modulos = Array.from(new Set([...modsUser, ...modsRol]));
+  // Asignar módulos del rol
+  user.modulos = ROLES_MODULOS[user.rol] || [];
   aplicarPermisosNavegacion(user.modulos);
   initSistema();
   // Notificación de bienvenida que desaparece sola
@@ -10821,9 +10467,18 @@ if(_notifEl){
 }
 
 function aplicarPermisosNavegacion(mods){
+  // Todos los módulos visibles — los sin permiso aparecen atenuados con candado
   document.querySelectorAll('.nav-item').forEach(btn=>{
     const m = (btn.getAttribute('onclick')||'').match(/navigate\('([^']+)'\)/);
-    if(m) btn.style.display = mods.includes(m[1]) ? '' : 'none';
+    if(!m) return;
+    btn.style.display = '';
+    if(mods.includes(m[1])){
+      btn.style.opacity = '1';
+      btn.removeAttribute('data-locked');
+    } else {
+      btn.style.opacity = '0.45';
+      btn.setAttribute('data-locked','1');
+    }
   });
 }
 
@@ -11998,65 +11653,44 @@ function preguntaRapidaIA(pregunta){
 window.onload=init;
 
 // ===== FINANZAS MODULE =====
-const FIN_DEMO_KEY='atmin_fin_demo';
-function finDemoOn(){ return localStorage.getItem(FIN_DEMO_KEY)!=='0'; }
-function finDemoData(){
-  const meses=finUltimos6Meses();
-  const seed=[
-    {val:285000,desc:18000,kit:42000,oc:78000,alm:31000,comb:34000,plan:58000,terc:21000,explo:14000,avance:142},
-    {val:310000,desc:21000,kit:38000,oc:85000,alm:29000,comb:37000,plan:61000,terc:23000,explo:15500,avance:156},
-    {val:298000,desc:19500,kit:45000,oc:72000,alm:33000,comb:35500,plan:59000,terc:22000,explo:13800,avance:148},
-    {val:342000,desc:23000,kit:41000,oc:91000,alm:35000,comb:39000,plan:64000,terc:25000,explo:16200,avance:171},
-    {val:325000,desc:20000,kit:39000,oc:88000,alm:30000,comb:38000,plan:62000,terc:24000,explo:15000,avance:163},
-    {val:358000,desc:22000,kit:44000,oc:95000,alm:34000,comb:41000,plan:66000,terc:26000,explo:17000,avance:179}
-  ];
-  const out={};
-  meses.forEach((m,i)=>{ if(seed[i]) out[m]=seed[i]; });
-  return out;
-}
-function finDemoMes(mesYM){ return finDemoOn()?(finDemoData()[mesYM]||null):null; }
-function finToggleDemo(){ localStorage.setItem(FIN_DEMO_KEY, finDemoOn()?'0':'1'); renderFinDashboard(); if(typeof showNotif==='function') showNotif(finDemoOn()?'Datos demo activados':'Datos demo desactivados','ok'); }
 
 function finMesActual(){ return hoy().slice(0,7); }
 function finFiltrarMes(arr,mesYM){ return (arr||[]).filter(r=>(r.fecha||'').startsWith(mesYM)); }
-function finCostoKits(mesYM){ const b=finFiltrarMes(state.mantenimiento||[],mesYM).filter(k=>k.aprobLog&&k.aprobLog.ok).reduce((s,k)=>s+(k.costo||0),0); const d=finDemoMes(mesYM); return b+(d?d.kit:0); }
+function finCostoKits(mesYM){ return finFiltrarMes(state.mantenimiento||[],mesYM).filter(k=>k.aprobLog&&k.aprobLog.ok).reduce((s,k)=>s+(k.costo||0),0); }
 function finCostoMantenimiento(mesYM){ return finCostoKits(mesYM); }
 // Órdenes de compra aprobadas/recibidas — EXCLUYE explosivos (se contabilizan aparte)
-function finCostoOrdenes(mesYM){ const b=finFiltrarMes(state.ordenes||[],mesYM).filter(o=>(o.estado==='aprobado'||o.estado==='recibido'||o.estado==='completado')&&!/explosiv/i.test(o.categoria||'')).reduce((s,o)=>s+(o.total||o.monto||0),0); const d=finDemoMes(mesYM); return b+(d?d.oc:0); }
+function finCostoOrdenes(mesYM){ return finFiltrarMes(state.ordenes||[],mesYM).filter(o=>(o.estado==='aprobado'||o.estado==='aprobada'||o.estado==='recibido'||o.estado==='completado')&&!/explosiv/i.test(o.categoria||'')).reduce((s,o)=>s+(o.total||o.monto||0),0); }
 // Combustible: petróleo + gasolina ingresados en el mes × precio S/ por galón
 function finCostoCombustible(mesYM){
   let b=0;
   try{ ['pet','gas'].forEach(t=>{ (combCargar(t)||[]).filter(r=>(r.fecha||'').startsWith(mesYM)).forEach(r=>{ b+=(r.cantidad||0)*(r.precio||0); }); }); }catch(e){}
-  const d=finDemoMes(mesYM); return b+(d&&d.comb?d.comb:0);
+  return b;
 }
 // Planillas: tareo del mes (jornal × multiplicador)
 function finCostoPlanilla(mesYM){
-  const b=(state.tareas||[]).filter(t=>(t.fecha||'').startsWith(mesYM)).reduce((s,t)=>{
+  return (state.tareas||[]).filter(t=>(t.fecha||'').startsWith(mesYM)).reduce((s,t)=>{
     const p=(state.personal||[]).find(pp=>String(pp.id)===String(t.trabajadorId));
     const j=(t.jornal!=null?t.jornal:(p?p.jornal:0))||0;
     return s+j*(t.mult||1);
   },0);
-  const d=finDemoMes(mesYM); return b+(d&&d.plan?d.plan:0);
 }
 // Explosivos: gasto SEPARADO — NO se suma al costo operativo total
 function finCostoExplosivos(mesYM){
   let b=0;
   try{ b=((state.explosivos&&state.explosivos.historial)||[]).filter(e=>(e.fecha||'').startsWith(mesYM)).reduce((s,e)=>s+((e.cantidad||0)*(e.precio||0)),0); }catch(e){}
-  const d=finDemoMes(mesYM); return b+(d&&d.explo?d.explo:0);
+  return b;
 }
 function finValorizacionMes(mesYM){
   const v=(state.valorizacionesLabor||[]).find(v=>{
     const my=(v.anio&&v.mesNum)?`${v.anio}-${String(v.mesNum).padStart(2,'0')}`:null;
     return my===mesYM;
   });
-  const d=finDemoMes(mesYM);
-  if(v) return {total:(v.total||0)+(d?d.val:0),descuento:(v.descuento||0)+(d?d.desc:0),rubros:v.rubros||[]};
-  if(d) return {total:d.val,descuento:d.desc,rubros:[{rubro:'Avance lineal',monto:d.val*0.62},{rubro:'Sostenimiento',monto:d.val*0.23},{rubro:'Servicios auxiliares',monto:d.val*0.15}]};
+  if(v) return {total:v.total||0,descuento:v.descuento||0,rubros:v.rubros||[]};
   return {total:0,descuento:0,rubros:[]};
 }
-function finAvanceMes(mesYM){ const b=finFiltrarMes(state.perforacion||[],mesYM).reduce((s,r)=>s+(r.avance||0),0); const d=finDemoMes(mesYM); return b+(d?d.avance:0); }
+function finAvanceMes(mesYM){ return finFiltrarMes(state.perforacion||[],mesYM).reduce((s,r)=>s+(r.avance||0),0); }
 // Gasto logístico = salidas de almacén general (aceros, EPP, repuestos…). Explosivos van aparte.
-function finCostoAlmacen(mesYM){ const b=finFiltrarMes((state.almacen&&state.almacen.salidas)||[],mesYM).reduce((s,r)=>s+(r.monto||r.costo||0),0); const d=finDemoMes(mesYM); return b+(d?d.alm:0); }
+function finCostoAlmacen(mesYM){ return finFiltrarMes((state.almacen&&state.almacen.salidas)||[],mesYM).reduce((s,r)=>s+(r.importe||r.monto||r.costo||0),0); }
 function finCostoLogistica(mesYM){ return finCostoAlmacen(mesYM); }
 // Desglose de egresos operativos del mes (NO incluye explosivos, que se reportan aparte)
 function finDesgloseGastos(mesYM){
@@ -12099,8 +11733,6 @@ function renderFinDashboard(){
   const presup=parseFloat(localStorage.getItem('atmin_fin_presupuesto')||'500000');
   const pctEjec=presup>0?Math.round(costoTot/presup*100):0;
   const pctMargen=val.total>0?Math.round(margen/val.total*100):0;
-  const demo=finDemoOn();
-
   const S=n=>'S/ '+Math.round(n).toLocaleString('es-PE');
   // Barra de progreso reutilizable
   const bar=(pct,col)=>`<div style="background:rgba(255,255,255,.07);border-radius:99px;height:8px;overflow:hidden;margin-top:8px"><div style="width:${Math.min(100,Math.max(0,pct))}%;height:100%;background:${col};border-radius:99px;transition:width .4s"></div></div>`;
@@ -12141,7 +11773,6 @@ function renderFinDashboard(){
 <div style="padding:16px">
   <div style="display:flex;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap">
     <h3 style="margin:0;color:var(--text)">Dashboard Financiero — ${finNombreMes(mes)}</h3>
-    <button onclick="finToggleDemo()" title="Mostrar/ocultar datos de ejemplo" style="padding:4px 12px;background:${demo?'#6c5ce7':'var(--coal4)'};color:${demo?'#fff':'var(--text2)'};border:1px solid var(--border);border-radius:99px;cursor:pointer;font-size:11px;font-weight:600">${demo?'● Datos demo ON':'○ Datos demo'}</button>
     <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
       <label style="font-size:12px;color:var(--text2)">Presupuesto S/</label>
       <input id="fin-presup-input" type="number" value="${presup}" style="width:110px;padding:5px 9px;border:1px solid var(--border);border-radius:6px;background:var(--coal4);color:var(--text);font-size:13px">
@@ -12797,8 +12428,12 @@ compCargarLocal();
 
 const COMP_EXPLOSIVOS = ['E.1000','E.3000','E.5000','CX.1.80','CX.2.40','FM','Neiter'];
 const COMP_PRECIOS_EXP = {'E.1000':1.36,'E.3000':1.54,'E.5000':2.34,'CX.1.80':3.81,'CX.2.40':4.10,'FM':4.00,'Neiter':2.00};
-const COMP_PRECIO_PET = 24.5;
-const COMP_PRECIO_GAS = 21.0;
+const COMP_PRECIO_PET_KEY='atmin_comp_precio_pet';
+const COMP_PRECIO_GAS_KEY='atmin_comp_precio_gas';
+function compGetPrecioPet(){ return parseFloat(localStorage.getItem(COMP_PRECIO_PET_KEY)||'24.5')||24.5; }
+function compGetPrecioGas(){ return parseFloat(localStorage.getItem(COMP_PRECIO_GAS_KEY)||'21.0')||21.0; }
+function compSetPrecioPet(v){ localStorage.setItem(COMP_PRECIO_PET_KEY,v); }
+function compSetPrecioGas(v){ localStorage.setItem(COMP_PRECIO_GAS_KEY,v); }
 const COMP_ACEROS = ['BARRA CONICA 4\' X 7/8"','BARRA CONICA 6\' X 7/8"','BARRA CONICA 8\' X 7/8"','BROCA DESCARTABLE DE BOTONES 36 MM','BROCA DESCARTABLE DE BOTONES 32 MM','BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'','BARRA DE ALUMINIO PARA ACUÑAR 1" X 10\'','BARRA DE ALUMINIO PARA ACUÑAR 1" X 12'];
 const COMP_PRECIOS_ACEROS = {'BARRA CONICA 4\' X 7/8"':249.17,'BARRA CONICA 6\' X 7/8"':330.29,'BARRA CONICA 8\' X 7/8"':411.41,'BROCA DESCARTABLE DE BOTONES 36 MM':76.88,'BROCA DESCARTABLE DE BOTONES 32 MM':74.91,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'':102.6,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 10\'':118.35,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 12':141.9};
 
@@ -12808,8 +12443,8 @@ function compCostoReporte(r){
   const efTotal = ef.reduce((s,e)=>s+((e.rampa||0)+(e.galeria||0))*(COMP_PRECIOS_EXP[e.codigo]||0),0);
   const cExpCardex = r.explosivos.reduce((s,e)=>s+(e.C||0)*(COMP_PRECIOS_EXP[e.codigo]||0),0);
   const cExp = efTotal > 0 ? efTotal : cExpCardex;
-  const cPet = r.petroleo.reduce((s,p)=>s+p.gln,0)*COMP_PRECIO_PET;
-  const cGas = r.gasolina.reduce((s,g)=>s+g.gln,0)*COMP_PRECIO_GAS;
+  const cPet = r.petroleo.reduce((s,p)=>s+p.gln,0)*compGetPrecioPet();
+  const cGas = r.gasolina.reduce((s,g)=>s+g.gln,0)*compGetPrecioGas();
   const cAce = (r.aceros||[]).reduce((s,a)=>s+((a.rampa||0)+(a.galeria||0))*(COMP_PRECIOS_ACEROS[a.codigo]||0),0);
   return {cExp, cPet, cGas, cAce, total:cExp+cPet+cGas+cAce};
 }
