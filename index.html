@@ -2684,11 +2684,13 @@ select option{background:var(--coal3);}
     <button class="mod-tab" onclick="modTab('fin','proyeccion',this)">📅 Proyección</button>
     <button class="mod-tab" onclick="modTab('fin','informe',this)">🧾 Informe Mensual</button>
     <button class="mod-tab" onclick="modTab('fin','costocentro',this)">💸 Costos por Centro</button>
+    <button class="mod-tab" onclick="modTab('fin','parametros',this)">⚙️ Parámetros</button>
   </div>
   <div id="fin-dashboard" class="mod-pane active" style="display:block"></div>
   <div id="fin-proyeccion" class="mod-pane" style="display:none"></div>
   <div id="fin-informe" class="mod-pane" style="display:none"></div>
   <div id="fin-costocentro" class="mod-pane" style="display:none"></div>
+  <div id="fin-parametros" class="mod-pane" style="display:none"></div>
 </div>
 
 <!-- REPORTE -->
@@ -2942,25 +2944,6 @@ select option{background:var(--coal3);}
     </div>
   </div>
 
-  <!-- PRECIOS COMBUSTIBLE EDITABLES -->
-  <div class="card" style="margin-bottom:14px;padding:14px 16px">
-    <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:10px">⛽ Precios de Combustible (S/ por galón)</div>
-    <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center">
-      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2)">
-        🛢️ Petróleo S/:
-        <input type="number" step="0.01" min="0" id="comp-precio-pet"
-          style="width:80px;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:13px"
-          onchange="compSetPrecioPet(this.value);showNotif('Precio petróleo actualizado','ok')">
-      </label>
-      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2)">
-        ⛽ Gasolina S/:
-        <input type="number" step="0.01" min="0" id="comp-precio-gas"
-          style="width:80px;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:13px"
-          onchange="compSetPrecioGas(this.value);showNotif('Precio gasolina actualizado','ok')">
-      </label>
-      <span style="font-size:11px;color:var(--text3)">Los precios se aplican a todos los reportes del turno</span>
-    </div>
-  </div>
 
   <!-- RESUMEN ÚLTIMO TURNO -->
   <div id="comp-resumen" style="display:none;margin-bottom:18px"></div>
@@ -3982,7 +3965,7 @@ function renderPage(page){
   else if(page==='seguridad')renderSeguridad();
   else if(page==='ia')renderIA();
   else if(page==='reporte')renderReportePage();
-  else if(page==='compresorista'){if(typeof renderTablaCompresorista==='function'){renderTablaCompresorista();visorPoblarDias();visorRenderDia();}const pp=document.getElementById('comp-precio-pet');const pg=document.getElementById('comp-precio-gas');if(pp)pp.value=compGetPrecioPet();if(pg)pg.value=compGetPrecioGas();}
+  else if(page==='compresorista'){if(typeof renderTablaCompresorista==='function'){renderTablaCompresorista();visorPoblarDias();visorRenderDia();}}
 }
 
 function renderModPane(mod,pane){
@@ -4012,6 +3995,7 @@ function renderModPane(mod,pane){
   else if(k==='fin-proyeccion') renderFinProyeccion();
   else if(k==='fin-informe') renderFinInforme();
   else if(k==='fin-costocentro') renderFinCostoCentro();
+  else if(k==='fin-parametros') renderFinParametros();
 }
 
 function calcCostos(){
@@ -12479,6 +12463,136 @@ function finGuardarSplit(){
   localStorage.setItem('atmin_fin_split',JSON.stringify({brenda:b,crne:c}));
   showNotif('Split guardado','ok');
 }
+function renderFinParametros(){
+  const el=document.getElementById('fin-parametros');
+  if(!el)return;
+  const comb=paramsGetComb()||{pet:24.5,gas:21.0};
+  const exp=paramsGetExp()||{...COMP_PRECIOS_EXP_DEFAULT};
+  const ace=paramsGetAce()||{...COMP_PRECIOS_ACEROS_DEFAULT};
+  const updatedAt=comb.updatedAt||'—';
+  const updatedBy=comb.updatedBy||'—';
+
+  let expRows=COMP_EXPLOSIVOS.map(c=>`
+    <tr>
+      <td style="padding:7px 10px;color:var(--text2);font-size:13px">${c}</td>
+      <td style="padding:7px 10px">
+        <input type="number" step="0.01" min="0" id="fparam-exp-${c.replace(/\./g,'_')}"
+          value="${(exp[c]||0).toFixed(2)}"
+          style="width:90px;background:var(--coal4);border:1px solid var(--border);border-radius:5px;padding:4px 8px;color:var(--text);font-size:13px">
+      </td>
+    </tr>`).join('');
+
+  let aceRows=COMP_ACEROS.map(c=>`
+    <tr>
+      <td style="padding:7px 10px;color:var(--text2);font-size:12px">${c}</td>
+      <td style="padding:7px 10px">
+        <input type="number" step="0.01" min="0" id="fparam-ace-${c.replace(/[^a-zA-Z0-9]/g,'_')}"
+          value="${(ace[c]||0).toFixed(2)}"
+          style="width:90px;background:var(--coal4);border:1px solid var(--border);border-radius:5px;padding:4px 8px;color:var(--text);font-size:13px">
+      </td>
+    </tr>`).join('');
+
+  el.innerHTML=`
+    <div style="padding:16px 0">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:18px">
+        <div>
+          <div style="font-size:17px;font-weight:700;color:var(--text)">⚙️ Parámetros de Costos</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">Última actualización: ${updatedAt} — ${updatedBy}</div>
+        </div>
+        <div style="font-size:11px;color:#f59e0b;background:rgba(245,158,11,0.1);padding:6px 12px;border-radius:6px;border:1px solid rgba(245,158,11,0.3)">
+          ⚠️ Solo Jefe de Finanzas puede editar estos valores
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;flex-wrap:wrap" class="params-grid">
+
+        <!-- COMBUSTIBLES -->
+        <div class="card" style="padding:16px">
+          <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:14px">⛽ Combustibles (S/ por galón)</div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <label style="display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--text2)">
+              🛢️ Petróleo S/:
+              <input type="number" step="0.01" min="0" id="fparam-pet" value="${comb.pet||24.5}"
+                style="width:100px;background:var(--coal4);border:1px solid var(--border);border-radius:5px;padding:5px 8px;color:var(--text);font-size:13px">
+            </label>
+            <label style="display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--text2)">
+              ⛽ Gasolina S/:
+              <input type="number" step="0.01" min="0" id="fparam-gas" value="${comb.gas||21.0}"
+                style="width:100px;background:var(--coal4);border:1px solid var(--border);border-radius:5px;padding:5px 8px;color:var(--text);font-size:13px">
+            </label>
+          </div>
+        </div>
+
+        <!-- NOTA -->
+        <div class="card" style="padding:16px;display:flex;align-items:center">
+          <div style="font-size:12px;color:var(--text3);line-height:1.7">
+            <div style="color:var(--text2);font-weight:600;margin-bottom:6px">📌 Importante</div>
+            Los precios aquí configurados se aplican a <strong style="color:var(--text)">nuevos reportes</strong> desde la fecha de actualización.<br><br>
+            Los reportes ya guardados conservan los precios vigentes al momento de su registro y <strong style="color:var(--text)">no se modifican</strong>.
+          </div>
+        </div>
+
+        <!-- EXPLOSIVOS -->
+        <div class="card" style="padding:16px">
+          <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:14px">💥 Explosivos (S/ por unidad)</div>
+          <table style="width:100%;border-collapse:collapse">
+            <thead><tr>
+              <th style="text-align:left;font-size:11px;color:var(--text3);padding:4px 10px;font-weight:600">Código</th>
+              <th style="text-align:left;font-size:11px;color:var(--text3);padding:4px 10px;font-weight:600">Precio S/</th>
+            </tr></thead>
+            <tbody>${expRows}</tbody>
+          </table>
+        </div>
+
+        <!-- ACEROS -->
+        <div class="card" style="padding:16px">
+          <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:14px">🔩 Aceros y Brocas (S/ por unidad)</div>
+          <table style="width:100%;border-collapse:collapse">
+            <thead><tr>
+              <th style="text-align:left;font-size:11px;color:var(--text3);padding:4px 10px;font-weight:600">Producto</th>
+              <th style="text-align:left;font-size:11px;color:var(--text3);padding:4px 10px;font-weight:600">Precio S/</th>
+            </tr></thead>
+            <tbody>${aceRows}</tbody>
+          </table>
+        </div>
+
+      </div>
+
+      <div style="margin-top:20px;display:flex;gap:12px;justify-content:flex-end">
+        <button class="btn btn-outline" onclick="renderFinParametros()">↩ Cancelar</button>
+        <button class="btn btn-gold" onclick="finGuardarParametros()">💾 Guardar Parámetros</button>
+      </div>
+    </div>
+  `;
+  // responsive grid
+  const grid=el.querySelector('.params-grid');
+  if(grid&&window.innerWidth<640) grid.style.gridTemplateColumns='1fr';
+}
+
+function finGuardarParametros(){
+  const pet=parseFloat(document.getElementById('fparam-pet')?.value)||24.5;
+  const gas=parseFloat(document.getElementById('fparam-gas')?.value)||21.0;
+  const now=new Date().toISOString().split('T')[0];
+  const quien=(usuarioActivo&&usuarioActivo.nombre)||'Finanzas';
+  paramsSetComb({pet,gas,updatedAt:now,updatedBy:quien});
+
+  const exp={};
+  COMP_EXPLOSIVOS.forEach(c=>{
+    const id=c.replace(/\./g,'_');
+    exp[c]=parseFloat(document.getElementById('fparam-exp-'+id)?.value)||COMP_PRECIOS_EXP_DEFAULT[c]||0;
+  });
+  paramsSetExp(exp);
+
+  const ace={};
+  COMP_ACEROS.forEach(c=>{
+    const id=c.replace(/[^a-zA-Z0-9]/g,'_');
+    ace[c]=parseFloat(document.getElementById('fparam-ace-'+id)?.value)||COMP_PRECIOS_ACEROS_DEFAULT[c]||0;
+  });
+  paramsSetAce(ace);
+
+  showNotif('Parámetros guardados correctamente','ok');
+  renderFinParametros();
+}
 // ===== END FINANZAS MODULE =====
 
 </script>
@@ -12577,25 +12691,60 @@ function compCargarLocal() {
 compCargarLocal();
 
 const COMP_EXPLOSIVOS = ['E.1000','E.3000','E.5000','CX.1.80','CX.2.40','FM','Neiter'];
-const COMP_PRECIOS_EXP = {'E.1000':1.36,'E.3000':1.54,'E.5000':2.34,'CX.1.80':3.81,'CX.2.40':4.10,'FM':4.00,'Neiter':2.00};
+const COMP_PRECIOS_EXP_DEFAULT = {'E.1000':1.36,'E.3000':1.54,'E.5000':2.34,'CX.1.80':3.81,'CX.2.40':4.10,'FM':4.00,'Neiter':2.00};
+const COMP_ACEROS = ['BARRA CONICA 4\' X 7/8"','BARRA CONICA 6\' X 7/8"','BARRA CONICA 8\' X 7/8"','BROCA DESCARTABLE DE BOTONES 36 MM','BROCA DESCARTABLE DE BOTONES 32 MM','BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'','BARRA DE ALUMINIO PARA ACUÑAR 1" X 10\'','BARRA DE ALUMINIO PARA ACUÑAR 1" X 12'];
+const COMP_PRECIOS_ACEROS_DEFAULT = {'BARRA CONICA 4\' X 7/8"':249.17,'BARRA CONICA 6\' X 7/8"':330.29,'BARRA CONICA 8\' X 7/8"':411.41,'BROCA DESCARTABLE DE BOTONES 36 MM':76.88,'BROCA DESCARTABLE DE BOTONES 32 MM':74.91,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'':102.6,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 10\'':118.35,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 12':141.9};
+
+// Parametros centralizados — solo jefe_finanzas puede editar
+const PARAMS_COMB_KEY  = 'atmin_params_comb';
+const PARAMS_EXP_KEY   = 'atmin_params_exp';
+const PARAMS_ACE_KEY   = 'atmin_params_ace';
+// backward compat keys (keep reading old values)
 const COMP_PRECIO_PET_KEY='atmin_comp_precio_pet';
 const COMP_PRECIO_GAS_KEY='atmin_comp_precio_gas';
-function compGetPrecioPet(){ return parseFloat(localStorage.getItem(COMP_PRECIO_PET_KEY)||'24.5')||24.5; }
-function compGetPrecioGas(){ return parseFloat(localStorage.getItem(COMP_PRECIO_GAS_KEY)||'21.0')||21.0; }
-function compSetPrecioPet(v){ localStorage.setItem(COMP_PRECIO_PET_KEY,v); }
-function compSetPrecioGas(v){ localStorage.setItem(COMP_PRECIO_GAS_KEY,v); }
-const COMP_ACEROS = ['BARRA CONICA 4\' X 7/8"','BARRA CONICA 6\' X 7/8"','BARRA CONICA 8\' X 7/8"','BROCA DESCARTABLE DE BOTONES 36 MM','BROCA DESCARTABLE DE BOTONES 32 MM','BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'','BARRA DE ALUMINIO PARA ACUÑAR 1" X 10\'','BARRA DE ALUMINIO PARA ACUÑAR 1" X 12'];
-const COMP_PRECIOS_ACEROS = {'BARRA CONICA 4\' X 7/8"':249.17,'BARRA CONICA 6\' X 7/8"':330.29,'BARRA CONICA 8\' X 7/8"':411.41,'BROCA DESCARTABLE DE BOTONES 36 MM':76.88,'BROCA DESCARTABLE DE BOTONES 32 MM':74.91,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'':102.6,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 10\'':118.35,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 12':141.9};
+
+function paramsGetComb(){
+  try{ const d=JSON.parse(localStorage.getItem(PARAMS_COMB_KEY)); return d||null; }catch(e){return null;}
+}
+function paramsGetExp(){
+  try{ const d=JSON.parse(localStorage.getItem(PARAMS_EXP_KEY)); return d&&Object.keys(d).length?d:null; }catch(e){return null;}
+}
+function paramsGetAce(){
+  try{ const d=JSON.parse(localStorage.getItem(PARAMS_ACE_KEY)); return d&&Object.keys(d).length?d:null; }catch(e){return null;}
+}
+function paramsSetComb(obj){ localStorage.setItem(PARAMS_COMB_KEY,JSON.stringify(obj)); }
+function paramsSetExp(obj){ localStorage.setItem(PARAMS_EXP_KEY,JSON.stringify(obj)); }
+function paramsSetAce(obj){ localStorage.setItem(PARAMS_ACE_KEY,JSON.stringify(obj)); }
+
+function compGetPrecioPet(){
+  const c=paramsGetComb(); if(c&&c.pet) return c.pet;
+  return parseFloat(localStorage.getItem(COMP_PRECIO_PET_KEY)||'24.5')||24.5;
+}
+function compGetPrecioGas(){
+  const c=paramsGetComb(); if(c&&c.gas) return c.gas;
+  return parseFloat(localStorage.getItem(COMP_PRECIO_GAS_KEY)||'21.0')||21.0;
+}
+function compGetPreciosExp(){ return paramsGetExp()||COMP_PRECIOS_EXP_DEFAULT; }
+function compGetPreciosAce(){ return paramsGetAce()||COMP_PRECIOS_ACEROS_DEFAULT; }
+// Keep alias for any existing references
+const COMP_PRECIOS_EXP = COMP_PRECIOS_EXP_DEFAULT;
+const COMP_PRECIOS_ACEROS = COMP_PRECIOS_ACEROS_DEFAULT;
 
 function compCostoReporte(r){
-  // Usa expFrente si hay datos, si no usa columna C del cardex
+  // Usa precios del snapshot del reporte si existen (precios históricos no cambian)
+  const snp = r._precios||{};
+  const pExp = snp.explosivos||compGetPreciosExp();
+  const pAce = snp.aceros||compGetPreciosAce();
+  const pPet = snp.pet||compGetPrecioPet();
+  const pGas = snp.gas||compGetPrecioGas();
+
   const ef = r.expFrente||[];
-  const efTotal = ef.reduce((s,e)=>s+((e.rampa||0)+(e.galeria||0))*(COMP_PRECIOS_EXP[e.codigo]||0),0);
-  const cExpCardex = r.explosivos.reduce((s,e)=>s+(e.C||0)*(COMP_PRECIOS_EXP[e.codigo]||0),0);
+  const efTotal = ef.reduce((s,e)=>s+((e.rampa||0)+(e.galeria||0))*(pExp[e.codigo]||0),0);
+  const cExpCardex = r.explosivos.reduce((s,e)=>s+(e.C||0)*(pExp[e.codigo]||0),0);
   const cExp = efTotal > 0 ? efTotal : cExpCardex;
-  const cPet = r.petroleo.reduce((s,p)=>s+p.gln,0)*compGetPrecioPet();
-  const cGas = r.gasolina.reduce((s,g)=>s+g.gln,0)*compGetPrecioGas();
-  const cAce = (r.aceros||[]).reduce((s,a)=>s+((a.rampa||0)+(a.galeria||0))*(COMP_PRECIOS_ACEROS[a.codigo]||0),0);
+  const cPet = r.petroleo.reduce((s,p)=>s+p.gln,0)*pPet;
+  const cGas = r.gasolina.reduce((s,g)=>s+g.gln,0)*pGas;
+  const cAce = (r.aceros||[]).reduce((s,a)=>s+((a.rampa||0)+(a.galeria||0))*(pAce[a.codigo]||0),0);
   return {cExp, cPet, cGas, cAce, total:cExp+cPet+cGas+cAce};
 }
 const COMP_PETROLEO   = ['Grupo Electrógeno','Compresora M135','Compresora M122','Scoop Epiroc','Scoop Monte','Dumper'];
@@ -12786,7 +12935,9 @@ function guardarReporteComp() {
 
   const obs = document.getElementById('comp-obs').value.trim();
 
-  const reporte = {fecha, turno:_compTurnoSeleccionado, nombre, dni, materialesAlmacen, explosivos, expFrente, aceros, consumoRampa, consumoGaleria, petroleo, gasolina, horometros, obs};
+  const reporte = {fecha, turno:_compTurnoSeleccionado, nombre, dni, materialesAlmacen, explosivos, expFrente, aceros, consumoRampa, consumoGaleria, petroleo, gasolina, horometros, obs,
+    _precios:{pet:compGetPrecioPet(), gas:compGetPrecioGas(), explosivos:compGetPreciosExp(), aceros:compGetPreciosAce()}
+  };
 
   const idx = state.compresorista.findIndex(r => r.fecha===fecha && r.turno===_compTurnoSeleccionado);
   if(idx>=0){
