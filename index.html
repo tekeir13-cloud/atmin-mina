@@ -2684,11 +2684,13 @@ select option{background:var(--coal3);}
     <button class="mod-tab" onclick="modTab('fin','proyeccion',this)">📅 Proyección</button>
     <button class="mod-tab" onclick="modTab('fin','informe',this)">🧾 Informe Mensual</button>
     <button class="mod-tab" onclick="modTab('fin','costocentro',this)">💸 Costos por Centro</button>
+    <button class="mod-tab" onclick="modTab('fin','ingmaq',this);renderFinIngresosMaq()">🚧 Ingresos x Máq.</button>
   </div>
   <div id="fin-dashboard" class="mod-pane active" style="display:block"></div>
   <div id="fin-proyeccion" class="mod-pane" style="display:none"></div>
   <div id="fin-informe" class="mod-pane" style="display:none"></div>
   <div id="fin-costocentro" class="mod-pane" style="display:none"></div>
+  <div id="fin-ingmaq" class="mod-pane" style="display:none"></div>
 </div>
 
 <!-- REPORTE -->
@@ -3996,6 +3998,7 @@ function renderModPane(mod,pane){
   else if(k==='fin-proyeccion') renderFinProyeccion();
   else if(k==='fin-informe') renderFinInforme();
   else if(k==='fin-costocentro') renderFinCostoCentro();
+  else if(k==='fin-ingmaq') renderFinIngresosMaq();
 }
 
 function calcCostos(){
@@ -4111,44 +4114,42 @@ function renderDashEjecutivo(){
 
   // ── P&L POR EQUIPO ──
   const compMes=(state.compresorista||[]).filter(r=>(r.fecha||'').startsWith(mes));
-  const horasMaq={},galMaq={};
+  const horasMaq={},galMaqPet={},galMaqGas={};
   compMes.forEach(r=>{
     (r.horometros||[]).forEach(h=>{horasMaq[h.equipo]=(horasMaq[h.equipo]||0)+(h.HT||0);});
-    (r.petroleo||[]).forEach(p=>{galMaq[p.equipo]=(galMaq[p.equipo]||0)+(p.gln||0);});
+    (r.petroleo||[]).forEach(p=>{galMaqPet[p.equipo]=(galMaqPet[p.equipo]||0)+(p.gln||0);});
+    (r.gasolina||[]).forEach(p=>{galMaqGas[p.equipo]=(galMaqGas[p.equipo]||0)+(p.gln||0);});
   });
-  const diasMes=compMes.length>0?[...new Set(compMes.map(r=>r.fecha))].length:26;
-  // Precio de galón: promedio del combustible del mes, si no 14
-  let precioComb=14;
-  try{
-    const arr=(typeof combCargar==='function'?combCargar('pet')||[]:[]).filter(r=>(r.fecha||'').startsWith(mes));
-    if(arr.length)precioComb=(arr.reduce((s,r)=>s+(r.precio||0),0)/arr.length)||14;
-  }catch(e){}
+  const precioPet=compGetPrecioPet();
+  const precioGas=compGetPrecioGas();
   const mantMes=(state.mantenimiento||[]).filter(m=>(m.fecha||'').startsWith(mes));
   const mantPorEq=tags=>mantMes.filter(m=>tags.some(t=>(m.equipo||'').toLowerCase().includes(t))).reduce((s,m)=>s+(m.costo||0),0);
-  const totalHoras=Object.values(horasMaq).reduce((s,h)=>s+h,0);
-  const tarifaHora=totalHoras>0?val.total/totalHoras:0;
+  const ingMes=finIngMaqGet(mes);
 
   const MAQUINAS=[
-    {label:'Scoop',           fig:'scoop',     col:'#3b82f6',tags:['scoop epiroc','scoop monte','scoop'],mt:['scoop'],   op:d=>130*d,opL:'S/130/día'},
-    {label:'Dumper',          fig:'dumper',    col:'#f59e0b',tags:['dumper'],                          mt:['dumper'],  op:d=>120*d,opL:'S/120/día'},
+    {label:'Scoop',           fig:'scoop',     col:'#3b82f6',tags:['scoop epiroc','scoop monte','scoop'],mt:['scoop'],   op:()=>3900,opL:'S/3,900/mes'},
+    {label:'Dumper',          fig:'dumper',    col:'#f59e0b',tags:['dumper'],                          mt:['dumper'],  op:()=>3600,opL:'S/3,600/mes'},
     {label:'Compresora',      fig:'compresora',col:'#8b5cf6',tags:['compresora m135','compresora m122','compresora'],mt:['compresora'],op:()=>2500,opL:'S/2,500/mes'},
     {label:'Excavadora',      fig:'excavadora',col:'#10b981',tags:['excavadora'],                      mt:['excavadora'],op:()=>5000,opL:'S/5,000/mes'},
     {label:'Cargador Frontal',fig:'cargador',  col:'#ef4444',tags:['cargador frontal','cargador'],     mt:['cargador'],op:()=>5000,opL:'S/5,000/mes'},
   ];
   const maqData=MAQUINAS.map(m=>{
     const horas=m.tags.reduce((s,t)=>s+(horasMaq[t]||0),0);
-    const gal=m.tags.reduce((s,t)=>s+(galMaq[t]||0),0);
-    const ingresos=horas*tarifaHora;
+    const galPet=m.tags.reduce((s,t)=>s+(galMaqPet[t]||0),0);
+    const galGas=m.tags.reduce((s,t)=>s+(galMaqGas[t]||0),0);
+    const ingresos=ingMes[m.label]||0;
+    const ingRegistrado=m.label in ingMes;
     const cMant=mantPorEq(m.mt);
-    const cComb=gal*precioComb;
-    const cOp=m.op(diasMes);
-    return {...m,horas,gal,ingresos,cMant,cComb,cOp,resultado:ingresos-cMant-cComb-cOp};
+    const cComb=galPet*precioPet+galGas*precioGas;
+    const cOp=m.op();
+    return {...m,horas,galPet,galGas,ingresos,ingRegistrado,cMant,cComb,cOp,resultado:ingresos-cMant-cComb-cOp};
   });
   const maxAbs=Math.max(1,...maqData.map(m=>Math.abs(m.resultado)));
   const maqCards=maqData.map(m=>{
-    const ok=m.resultado>=0;const pctBar=Math.round(Math.abs(m.resultado)/maxAbs*100);
-    const hasData=m.horas>0||m.cMant>0||m.gal>0;
-    return `<div style="background:var(--coal4);border:1px solid ${ok?'rgba(16,185,129,.25)':'rgba(239,68,68,.25)'};border-radius:16px;padding:16px;position:relative;overflow:hidden">
+    const ok=m.resultado>=0;
+    const pctBar=m.ingRegistrado?Math.round(Math.abs(m.resultado)/maxAbs*100):0;
+    const sinIngreso=!m.ingRegistrado;
+    return `<div style="background:var(--coal4);border:1px solid ${sinIngreso?'rgba(245,158,11,.3)':ok?'rgba(16,185,129,.25)':'rgba(239,68,68,.25)'};border-radius:16px;padding:16px;position:relative;overflow:hidden">
       <div style="position:absolute;top:0;right:0;width:70px;height:70px;background:${m.col}0f;border-radius:0 16px 0 70px"></div>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
         <div><div style="width:52px;height:33px;display:flex;align-items:center;margin-bottom:3px">${eqSvg(m.fig,m.col,52)}</div>
@@ -4156,19 +4157,23 @@ function renderDashEjecutivo(){
           <div style="font-size:10px;color:var(--text3);margin-top:1px">${m.horas>0?m.horas.toFixed(1)+' hrs operadas':'sin horómetro'}</div>
         </div>
         <div style="text-align:right">
-          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">${ok?'GANANCIA':'PÉRDIDA'}</div>
-          <div style="font-size:24px;font-weight:900;color:${ok?'#10b981':'#ef4444'};letter-spacing:-1px;line-height:1.1">${ok?'+':''}${Sk(m.resultado)}</div>
+          ${sinIngreso
+            ? `<div style="font-size:10px;color:#f59e0b;text-transform:uppercase;letter-spacing:.5px">⚠️ SIN INGRESO</div>
+               <div style="font-size:11px;color:var(--text3);margin-top:2px">Registrar en</div>
+               <div style="font-size:10px;color:#f59e0b;cursor:pointer" onclick="modTab('fin','ingmaq',document.querySelector('.mod-tab[onclick*=ingmaq]'));renderFinIngresosMaq()">Ingresos x Máq. →</div>`
+            : `<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">${ok?'GANANCIA':'PÉRDIDA'}</div>
+               <div style="font-size:24px;font-weight:900;color:${ok?'#10b981':'#ef4444'};letter-spacing:-1px;line-height:1.1">${ok?'+':''}${Sk(m.resultado)}</div>`
+          }
         </div>
       </div>
       <div style="background:rgba(255,255,255,.06);border-radius:99px;height:5px;overflow:hidden;margin-bottom:11px">
         <div style="width:${pctBar}%;height:100%;background:${ok?'linear-gradient(90deg,#10b981,#34d399)':'linear-gradient(90deg,#ef4444,#f87171)'};border-radius:99px"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;font-size:10.5px">
-        ${m.horas>0?`<div style="background:rgba(16,185,129,.07);border-radius:7px;padding:6px 9px"><div style="color:var(--text3)">📥 Ingresos</div><div style="font-weight:700;color:#10b981;margin-top:1px">${Sk(m.ingresos)}</div></div>`:''}
+        <div style="background:rgba(16,185,129,.07);border-radius:7px;padding:6px 9px"><div style="color:var(--text3)">📥 Ingresos</div><div style="font-weight:700;color:#10b981;margin-top:1px">${m.ingRegistrado?Sk(m.ingresos):'—'}</div></div>
         ${m.cMant>0?`<div style="background:rgba(245,158,11,.07);border-radius:7px;padding:6px 9px"><div style="color:var(--text3)">🔧 Mant.</div><div style="font-weight:700;color:#f59e0b;margin-top:1px">-${Sk(m.cMant)}</div></div>`:''}
-        ${m.gal>0?`<div style="background:rgba(239,68,68,.07);border-radius:7px;padding:6px 9px"><div style="color:var(--text3)">🛢 Combustible</div><div style="font-weight:700;color:#ef4444;margin-top:1px">-${Sk(m.cComb)}</div></div>`:''}
+        ${m.cComb>0?`<div style="background:rgba(239,68,68,.07);border-radius:7px;padding:6px 9px"><div style="color:var(--text3)">🛢 Combustible</div><div style="font-weight:700;color:#ef4444;margin-top:1px">-${Sk(m.cComb)}</div><div style="color:var(--text3);font-size:9px">${m.galPet>0?m.galPet.toFixed(1)+'gal pet':''} ${m.galGas>0?m.galGas.toFixed(1)+'gal gas':''}</div></div>`:''}
         <div style="background:rgba(139,92,246,.07);border-radius:7px;padding:6px 9px"><div style="color:var(--text3)">👷 Operador</div><div style="font-weight:700;color:#8b5cf6;margin-top:1px">-${Sk(m.cOp)}</div><div style="color:var(--text3);font-size:9px">${m.opL}</div></div>
-        ${!hasData?`<div style="background:rgba(255,255,255,.04);border-radius:7px;padding:6px 9px;grid-column:1/-1;text-align:center;color:var(--text3)">Solo costo de operador estimado</div>`:''}
       </div>
     </div>`;
   }).join('');
@@ -12649,6 +12654,110 @@ function finGuardarSplit(){
   localStorage.setItem('atmin_fin_split',JSON.stringify({brenda:b,crne:c}));
   showNotif('Split guardado','ok');
 }
+function renderFinIngresosMaq(){
+  const el=document.getElementById('fin-ingmaq');if(!el)return;
+  const hoy=new Date().toISOString().slice(0,7);
+  const mesActualEl=document.getElementById('fim-mes');
+  const mes=(mesActualEl&&mesActualEl.value)||hoy;
+  const ingGuardados=finIngMaqGet(mes);
+
+  const MAQUINAS_LABELS=[
+    {label:'Scoop',col:'#3b82f6',tags:['scoop epiroc','scoop monte','scoop'],mt:['scoop'],op:3900,opL:'S/3,900/mes'},
+    {label:'Dumper',col:'#f59e0b',tags:['dumper'],mt:['dumper'],op:3600,opL:'S/3,600/mes'},
+    {label:'Compresora',col:'#8b5cf6',tags:['compresora m135','compresora m122','compresora'],mt:['compresora'],op:2500,opL:'S/2,500/mes'},
+    {label:'Excavadora',col:'#10b981',tags:['excavadora'],mt:['excavadora'],op:5000,opL:'S/5,000/mes'},
+    {label:'Cargador Frontal',col:'#ef4444',tags:['cargador frontal','cargador'],mt:['cargador'],op:5000,opL:'S/5,000/mes'},
+  ];
+
+  const compMes=(state.compresorista||[]).filter(r=>(r.fecha||'').startsWith(mes));
+  const galMaqPet={},galMaqGas={};
+  compMes.forEach(r=>{
+    (r.petroleo||[]).forEach(p=>{galMaqPet[p.equipo]=(galMaqPet[p.equipo]||0)+(p.gln||0);});
+    (r.gasolina||[]).forEach(p=>{galMaqGas[p.equipo]=(galMaqGas[p.equipo]||0)+(p.gln||0);});
+  });
+  const pPet=compGetPrecioPet(),pGas=compGetPrecioGas();
+  const mantMes=(state.mantenimiento||[]).filter(m=>(m.fecha||'').startsWith(mes));
+  const mantPorEq=tags=>mantMes.filter(m=>tags.some(t=>(m.equipo||'').toLowerCase().includes(t))).reduce((s,m)=>s+(m.costo||0),0);
+
+  const filas=MAQUINAS_LABELS.map(m=>{
+    const galPet=m.tags.reduce((s,t)=>s+(galMaqPet[t]||0),0);
+    const galGas=m.tags.reduce((s,t)=>s+(galMaqGas[t]||0),0);
+    const cComb=galPet*pPet+galGas*pGas;
+    const cMant=mantPorEq(m.mt);
+    const ingReg=ingGuardados[m.label]||0;
+    const resultado=ingReg-m.op-cComb-cMant;
+    const ok=resultado>=0;
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:11px 12px;font-weight:700;color:${m.col}">${m.label}</td>
+      <td style="padding:11px 12px;text-align:right">
+        <input type="number" min="0" step="100" id="fim-ing-${m.label.replace(/ /g,'_')}"
+          value="${ingReg||''}" placeholder="0"
+          style="width:110px;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:13px;text-align:right">
+      </td>
+      <td style="padding:11px 12px;text-align:right;color:#8b5cf6;font-weight:600">-S/ ${m.op.toLocaleString()}</td>
+      <td style="padding:11px 12px;text-align:right;color:#ef4444;font-weight:600">${cComb>0?'-S/ '+cComb.toFixed(0):'—'}</td>
+      <td style="padding:11px 12px;text-align:right;color:#f59e0b;font-weight:600">${cMant>0?'-S/ '+cMant.toFixed(0):'—'}</td>
+      <td style="padding:11px 12px;text-align:right;font-weight:800;color:${ingReg>0?(ok?'#10b981':'#ef4444'):'var(--text3)'}">
+        ${ingReg>0?(ok?'+':'')+resultado.toFixed(0):'—'}
+      </td>
+    </tr>`;
+  }).join('');
+
+  const meses=[];for(let i=0;i<6;i++){const d=new Date();d.setMonth(d.getMonth()-i);meses.push(d.toISOString().slice(0,7));}
+  const optsMes=meses.map(m=>`<option value="${m}" ${m===mes?'selected':''}>${m}</option>`).join('');
+
+  el.innerHTML=`
+  <div style="padding:16px 0">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:18px">
+      <div>
+        <div style="font-size:17px;font-weight:700;color:var(--text)">🚧 Ingresos por Máquina</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">Ingreso mensual facturado por cada equipo. Los costos se cruzan automáticamente.</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <select id="fim-mes" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:6px 10px;color:var(--text);font-size:13px"
+          onchange="renderFinIngresosMaq()">${optsMes}</select>
+        <button class="btn btn-gold" onclick="finGuardarIngresosMaq()">💾 Guardar</button>
+      </div>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:18px">
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:var(--coal3)">
+            <th style="padding:9px 12px;text-align:left;font-size:11px;color:var(--text3);font-weight:600">MÁQUINA</th>
+            <th style="padding:9px 12px;text-align:right;font-size:11px;color:var(--text3);font-weight:600">📥 INGRESO MES (S/)</th>
+            <th style="padding:9px 12px;text-align:right;font-size:11px;color:var(--text3);font-weight:600">👷 OPERADOR</th>
+            <th style="padding:9px 12px;text-align:right;font-size:11px;color:var(--text3);font-weight:600">⛽ COMBUSTIBLE</th>
+            <th style="padding:9px 12px;text-align:right;font-size:11px;color:var(--text3);font-weight:600">🔧 MANTENIMIENTO</th>
+            <th style="padding:9px 12px;text-align:right;font-size:11px;color:var(--text3);font-weight:600">= RESULTADO</th>
+          </tr>
+        </thead>
+        <tbody>${filas}</tbody>
+      </table>
+    </div>
+
+    <div style="font-size:11px;color:var(--text3);line-height:1.7">
+      <strong style="color:var(--text2)">Combustible</strong> cruzado con reportes de compresorista del mes · Precio: S/${pPet}/gal petróleo, S/${pGas}/gal gasolina<br>
+      <strong style="color:var(--text2)">Mantenimiento</strong> cruzado con costos registrados en módulo de Mantenimiento<br>
+      <strong style="color:var(--text2)">Sueldos</strong>: Scoop S/3,900 · Dumper S/3,600 · Compresora S/2,500 · Excavadora/Cargador S/5,000
+    </div>
+  </div>`;
+}
+
+function finGuardarIngresosMaq(){
+  const mesEl=document.getElementById('fim-mes');if(!mesEl)return;
+  const mes=mesEl.value;
+  const labels=['Scoop','Dumper','Compresora','Excavadora','Cargador Frontal'];
+  const data={};
+  labels.forEach(l=>{
+    const v=parseFloat(document.getElementById('fim-ing-'+l.replace(/ /g,'_'))?.value)||0;
+    data[l]=v;
+  });
+  finIngMaqSet(mes,data);
+  showNotif('Ingresos guardados para '+mes,'ok');
+  renderFinIngresosMaq();
+}
+
 // ===== END FINANZAS MODULE =====
 
 </script>
@@ -12752,6 +12861,11 @@ const COMP_ACEROS = ['BARRA CONICA 4\' X 7/8"','BARRA CONICA 6\' X 7/8"','BARRA 
 const COMP_PRECIOS_ACEROS_DEFAULT = {'BARRA CONICA 4\' X 7/8"':249.17,'BARRA CONICA 6\' X 7/8"':330.29,'BARRA CONICA 8\' X 7/8"':411.41,'BROCA DESCARTABLE DE BOTONES 36 MM':76.88,'BROCA DESCARTABLE DE BOTONES 32 MM':74.91,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'':102.6,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 10\'':118.35,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 12':141.9};
 
 // Parametros centralizados — solo jefe_finanzas puede editar
+// Ingresos manuales por máquina: {mes: {label: importe}}
+const FIN_ING_MAQ_KEY='atmin_fin_ing_maq';
+function finIngMaqGet(mes){try{return JSON.parse(localStorage.getItem(FIN_ING_MAQ_KEY)||'{}')[mes]||{};}catch(e){return {};}}
+function finIngMaqSet(mes,data){try{const all=JSON.parse(localStorage.getItem(FIN_ING_MAQ_KEY)||'{}');all[mes]=data;localStorage.setItem(FIN_ING_MAQ_KEY,JSON.stringify(all));}catch(e){}}
+
 const PARAMS_COMB_KEY  = 'atmin_params_comb';
 const PARAMS_EXP_KEY   = 'atmin_params_exp';
 const PARAMS_ACE_KEY   = 'atmin_params_ace';
