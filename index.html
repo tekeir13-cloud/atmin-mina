@@ -2683,9 +2683,12 @@ select option{background:var(--coal3);}
   <div class="mod-pane" style="display:none" id="rrhh-tareas">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
       <div style="font-size:13px;font-weight:700;color:var(--text2)">Tareos archivados por turno</div>
-      <select id="hist-mes" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:7px 12px;color:var(--text);font-size:12px" onchange="renderTareas()">
-        <option value="">— Todos los meses —</option>
-      </select>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-gold" onclick="registrarAsistencia()" style="font-size:12px;padding:7px 14px">+ Registrar Tareo Hoy</button>
+        <select id="hist-mes" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:7px 12px;color:var(--text);font-size:12px" onchange="renderTareas()">
+          <option value="">— Todos los meses —</option>
+        </select>
+      </div>
     </div>
     <div id="tareos-archivados"></div>
   </div>
@@ -3032,7 +3035,12 @@ select option{background:var(--coal3);}
         <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--text)">🦺 Reporte de Seguridad</div>
         <div style="font-size:11px;color:var(--text3);margin-top:3px">Registro fotográfico de frentes perforados</div>
       </div>
-      <button class="btn btn-gold" onclick="abrirModalSeguridad()">+ Nuevo Reporte</button>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <select id="seg-filtro-mes" onchange="renderSeguridad()" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:7px 12px;color:var(--text);font-size:12px">
+          <option value="">— Todos los meses —</option>
+        </select>
+        <button class="btn btn-gold" onclick="abrirModalSeguridad()">+ Nuevo Reporte</button>
+      </div>
     </div>
   </div>
 
@@ -6880,7 +6888,69 @@ function renderPlanilla(){
   actualizarKpisTareo(hoy());
 }
 
-function registrarAsistencia(){}
+function registrarAsistencia(){
+  const activos=state.personal.filter(p=>p.estado!=='baja'&&p.estado!=='inactivo');
+  if(!activos.length){showNotif('No hay personal activo registrado','error');return;}
+  const fecha=hoy();
+  const rows=activos.map(p=>`
+    <div style="display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:center;padding:8px 12px;background:var(--coal3);border-radius:8px;margin-bottom:6px">
+      <input type="checkbox" id="tar-chk-${p.id}" checked style="width:16px;height:16px;cursor:pointer">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text)">${p.nombre}</div>
+        <div style="font-size:10px;color:var(--text3)">${p.rol||'—'} · Jornal: ${fmtS(p.jornal||0)}</div>
+      </div>
+      <select id="tar-mult-${p.id}" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
+        <option value="1">×1 Normal</option>
+        <option value="1.5">×1.5 Sobretiempo</option>
+        <option value="2">×2 Feriado</option>
+      </select>
+      <select id="tar-turno-${p.id}" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
+        <option value="DIA">☀ Día</option>
+        <option value="NOCHE">🌙 Noche</option>
+      </select>
+    </div>`).join('');
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9998;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML=`
+    <div style="background:var(--coal2);border-radius:16px;width:min(580px,96vw);max-height:85vh;overflow-y:auto;padding:24px;border:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text)">📋 Registrar Tareo — ${fmtF(fecha)}</div>
+        <button onclick="this.closest('[data-tareo-overlay]').remove()" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer">✕</button>
+      </div>
+      <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
+        <label style="font-size:11px;color:var(--text3)">Fecha:</label>
+        <input type="date" id="tar-fecha" value="${fecha}" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px">
+      </div>
+      <div id="tar-personal-rows">${rows}</div>
+      <div style="display:flex;gap:10px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+        <button onclick="guardarTareoHoy(this)" class="btn btn-gold" style="flex:1">💾 Guardar Tareo</button>
+        <button onclick="this.closest('[data-tareo-overlay]').remove()" class="btn btn-outline">Cancelar</button>
+      </div>
+    </div>`;
+  overlay.setAttribute('data-tareo-overlay','1');
+  document.body.appendChild(overlay);
+}
+
+function guardarTareoHoy(btn){
+  const overlay=btn.closest('[data-tareo-overlay]');
+  const fecha=document.getElementById('tar-fecha')?.value||hoy();
+  const activos=state.personal.filter(p=>p.estado!=='baja'&&p.estado!=='inactivo');
+  let count=0;
+  activos.forEach(p=>{
+    const chk=document.getElementById('tar-chk-'+p.id);
+    if(!chk||!chk.checked)return;
+    const mult=parseFloat(document.getElementById('tar-mult-'+p.id)?.value)||1;
+    const turno=document.getElementById('tar-turno-'+p.id)?.value||'DIA';
+    const existe=state.tareas.find(t=>t.fecha===fecha&&String(t.trabajadorId)===String(p.id)&&(t.turno||'DIA')===turno);
+    if(existe){existe.mult=mult;count++;}
+    else{state.tareas.push({fecha,trabajadorId:p.id,tarea:'Tareo diario',frente:p.frente||1,detalle:'',estadoTarea:'completado',mult,turno,jornal:p.jornal||0,id:'T'+Date.now()+Math.random().toString(36).slice(2)});count++;}
+  });
+  guardarEstado();
+  renderTareas();
+  if(typeof renderCostoRRHH==='function')renderCostoRRHH();
+  if(overlay)overlay.remove();
+  showNotif('✓ Tareo registrado: '+count+' trabajador'+(count!==1?'es':''));
+}
 function registrarTodosActivos(){}
 
 function seedTareoDemo(){
@@ -9064,7 +9134,8 @@ function renderMantenimiento(){
 
 // ── Solicitud de Kit de Mantenimiento ──
 function kitRepOptions(sel){
-  return (state.mantRepuestos||[]).map(r=>`<option value="${r.id}" ${sel===r.id?'selected':''}>${r.nombre} (stock ${r.stock||0})</option>`).join('');
+  const prods=(typeof calcStock==='function'?calcStock():[]).filter(p=>p.almacen==='Mantenimiento'&&p.stock>0);
+  return prods.map(p=>`<option value="${p.key}" ${sel===p.key?'selected':''}>${p.producto||p.descripcion} — ${p.unidad} (stock ${p.stock})</option>`).join('');
 }
 function kitAddPiezaRow(id,cant){
   const wrap=document.getElementById('kit-piezas-rows');if(!wrap)return;
@@ -9077,12 +9148,13 @@ function kitAddPiezaRow(id,cant){
   wrap.appendChild(div);
 }
 function kitRecalcCosto(){
+  const prods=typeof calcStock==='function'?calcStock():[];
   let piezas=0;
   document.querySelectorAll('#kit-piezas-rows .kit-pieza-row').forEach(row=>{
-    const id=row.querySelector('.kit-pieza-id')?.value;
+    const key=row.querySelector('.kit-pieza-id')?.value;
     const cant=parseFloat(row.querySelector('.kit-pieza-cant')?.value)||0;
-    const r=(state.mantRepuestos||[]).find(x=>x.id===id);
-    if(r&&cant>0)piezas+=cant*(r.costo||0);
+    const r=prods.find(x=>x.key===key);
+    if(r&&cant>0)piezas+=cant*(r.precio||0);
   });
   const mo=parseFloat(document.getElementById('kit-manoobra')?.value)||0;
   const cp=document.getElementById('kit-costo-piezas');if(cp)cp.textContent=fmtS(piezas);
@@ -9125,7 +9197,7 @@ function eliminarKitMant(id){
   if(!confirm('¿Eliminar esta solicitud de kit?'))return;
   const m=(state.mantenimiento||[]).find(x=>x.id===id);
   // Reponer stock solo si Logística había aprobado el despacho (stock descontado)
-  if(m&&m.aprobLog&&m.aprobLog.ok&&m.repuestos){m.repuestos.forEach(p=>{const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);if(r)r.stock=(r.stock||0)+p.cant;});mantRepSave();}
+  if(m&&m.aprobLog&&m.aprobLog.ok){state.almacen=state.almacen||{};state.almacen.salidas=(state.almacen.salidas||[]).filter(s=>s.grupo!=='KIT-'+m.id);almacenSave();}
   state.mantenimiento=(state.mantenimiento||[]).filter(x=>x.id!==id);
   mantKitSave();renderMantenimiento();showNotif('✓ Solicitud eliminada');
 }
@@ -9134,12 +9206,13 @@ function guardarKitMant(){
   const g=i=>document.getElementById(i);
   const resp=g('kit-resp').value.trim(),desc=g('kit-desc').value.trim();
   if(!desc){showNotif('⚠ Describe el trabajo a realizar','error');return;}
+  const prods=typeof calcStock==='function'?calcStock():[];
   const piezas=[];
   document.querySelectorAll('#kit-piezas-rows .kit-pieza-row').forEach(row=>{
-    const id=row.querySelector('.kit-pieza-id')?.value;
+    const key=row.querySelector('.kit-pieza-id')?.value;
     const cant=parseFloat(row.querySelector('.kit-pieza-cant')?.value)||0;
-    const r=(state.mantRepuestos||[]).find(x=>x.id===id);
-    if(r&&cant>0)piezas.push({id,nombre:r.nombre,cant,costo:r.costo||0});
+    const r=prods.find(x=>x.key===key);
+    if(r&&cant>0)piezas.push({key,nombre:r.producto||r.descripcion,unidad:r.unidad,cant,costo:r.precio||0});
   });
   const mo=parseFloat(g('kit-manoobra').value)||0;
   const costo=piezas.reduce((s,p)=>s+p.cant*p.costo,0)+mo;
@@ -9147,16 +9220,25 @@ function guardarKitMant(){
   const editId=g('kit-id').value;
   if(!state.mantenimiento)state.mantenimiento=[];
   const prev=editId?state.mantenimiento.find(x=>x.id===editId):null;
-  // El stock SOLO se mueve al aprobar Logística (despacho). Si Logística ya aprobó este
-  // kit, reponer el stock previo y volver a descontar con las piezas nuevas (con guarda).
+  // Si Logística ya aprobó este kit y se edita, actualizar las salidas de almacén.
   const logAprob=prev&&prev.aprobLog&&prev.aprobLog.ok;
-  if(logAprob&&prev.repuestos){prev.repuestos.forEach(p=>{const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);if(r)r.stock=(r.stock||0)+p.cant;});}
-  if(logAprob){
-    for(const p of piezas){const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);if(r&&p.cant>(r.stock||0)){showNotif(`⚠ Stock insuficiente de ${r.nombre} (disp. ${r.stock||0})`,'error');
-      // revertir reposición previa
-      if(prev.repuestos){prev.repuestos.forEach(pp=>{const rr=(state.mantRepuestos||[]).find(x=>x.id===pp.id);if(rr)rr.stock=(rr.stock||0)-pp.cant;});}
-      return;}}
-    piezas.forEach(p=>{const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);if(r)r.stock=(r.stock||0)-p.cant;});
+  if(logAprob&&editId){
+    state.almacen=state.almacen||{};
+    state.almacen.salidas=(state.almacen.salidas||[]).filter(s=>s.grupo!=='KIT-'+editId);
+    const baseE=Date.now();
+    piezas.forEach((p,idx)=>{
+      if(!p.key||!p.cant)return;
+      state.almacen.salidas.push({
+        id:'SM'+(baseE+idx),grupo:'KIT-'+editId,
+        fecha:hoy(),destino:'mantenimiento',
+        almacen:'Mantenimiento',maquina:g('kit-equipo').value,
+        solicitante:resp||'—',
+        codigo:p.key,producto:p.nombre,descripcion:p.nombre,
+        unidad:p.unidad||'UND',precio:p.costo||0,
+        cantidad:p.cant,importe:p.cant*(p.costo||0)
+      });
+    });
+    almacenSave();
   }
   const nivelMant=(g('kit-nivel-mant')?g('kit-nivel-mant').value:'')||'';
   const equipo=g('kit-equipo').value;
@@ -9546,9 +9628,24 @@ function aprobarLogKitLog(id){
   const def=(typeof usuarioActivo!=='undefined'&&usuarioActivo&&usuarioActivo.nombre)?usuarioActivo.nombre:'';
   const resp=(prompt('Responsable que aprueba el despacho (Logística):',def)||'').trim();
   if(!resp){showNotif('Cancelado — se requiere nombre','error');return;}
-  (m.repuestos||[]).forEach(p=>{const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);if(r)r.stock=(r.stock||0)-p.cant;});
+  const base=Date.now();
+  (m.repuestos||[]).forEach((p,idx)=>{
+    if(!p.key||!p.cant) return;
+    state.almacen=state.almacen||{ingresos:[],salidas:[],inventarioInicial:[],solicitudesCompra:[]};
+    state.almacen.salidas=state.almacen.salidas||[];
+    state.almacen.salidas.push({
+      id:'SM'+(base+idx),grupo:'KIT-'+m.id,
+      fecha:hoy(),destino:'mantenimiento',
+      almacen:'Mantenimiento',maquina:m.equipo,
+      solicitante:m.resp||'—',
+      codigo:p.key,producto:p.nombre,descripcion:p.nombre,
+      unidad:p.unidad||'UND',precio:p.costo||0,
+      cantidad:p.cant,importe:p.cant*(p.costo||0)
+    });
+  });
+  almacenSave();
   m.aprobLog={ok:true,resp,fecha:hoy()};
-  mantRepSave();mantKitSave();renderSolicitudMantLog();showNotif('✓ Aprobado por Logística · stock despachado');
+  mantKitSave();renderSolicitudMantLog();showNotif('✓ Aprobado por Logística · stock despachado');
 }
 function rechazarLogKitLog(id){
   mantRepLoad();mantKitLoad();
@@ -11604,7 +11701,14 @@ function segBadgeUpdate(){
 (function(){ segBadgeUpdate(); })();
 
 function renderSeguridad(){
-  const lista  = state.seguridad || [];
+  const filtroEl=document.getElementById('seg-filtro-mes');
+  const meses=[...new Set((state.seguridad||[]).map(r=>(r.fecha||'').slice(0,7)).filter(Boolean))].sort().reverse();
+  if(filtroEl){
+    const prev=filtroEl.value;
+    filtroEl.innerHTML='<option value="">— Todos los meses —</option>'+meses.map(m=>`<option value="${m}"${m===prev?' selected':''}>${m}</option>`).join('');
+  }
+  const filtroMes=filtroEl?filtroEl.value:'';
+  const lista  = (state.seguridad||[]).filter(r=>!filtroMes||(r.fecha||'').startsWith(filtroMes));
   const galeria= document.getElementById('seg-galeria');
   const empty  = document.getElementById('seg-empty');
   if(!galeria) return;
@@ -12139,8 +12243,8 @@ async function enviarMensajeIA(textoDirecto){
 
   } catch(e) {
     if(typingEl) typingEl.remove();
-    _iaAgregarMsg('Sin conexión a la API. Verifica tu conexión a internet.', true);
-    if(status) status.innerHTML = '<div style="width:7px;height:7px;border-radius:50%;background:var(--negative);box-shadow:0 0 6px var(--negative)"></div> Error';
+    _iaAgregarMsg('El asistente IA no está disponible en este momento. Se requiere configuración del servidor.', true);
+    if(status) status.innerHTML = '<div style="width:7px;height:7px;border-radius:50%;background:var(--negative);box-shadow:0 0 6px var(--negative)"></div> No disponible';
     console.error('IA error:', e);
   }
 }
@@ -13294,13 +13398,28 @@ function seleccionarTurno(turno) {
 
 function compAddMat() {
   const row = document.createElement('div');
-  row.style.cssText = 'display:grid;grid-template-columns:1fr 80px 70px 30px;gap:6px;margin-bottom:6px';
-  row.innerHTML = `
-    <input type="text" placeholder="Descripción del material" style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 10px;font-size:12px">
-    <input type="number" min="0" placeholder="Cant." style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 8px;font-size:12px;text-align:center">
-    <input type="text" placeholder="Unidad" style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 8px;font-size:12px">
+  row.style.cssText = 'display:grid;grid-template-columns:2fr 80px 70px 30px;gap:6px;margin-bottom:6px';
+  const salidas2820 = ((state.almacen&&state.almacen.salidas)||[]).filter(s=>String(s.destino)==='2820');
+  const prodMap={};
+  salidas2820.forEach(s=>{const k=s.codigo||s.producto;if(k&&!prodMap[k])prodMap[k]={nombre:s.producto||s.codigo,unidad:s.unidad||'UND',codigo:k};});
+  const prods=Object.values(prodMap);
+  const opts=prods.length
+    ?prods.map(p=>`<option value="${p.codigo}" data-unidad="${p.unidad}">${p.nombre}</option>`).join('')
+    :'<option value="">Sin materiales asignados a NV2820</option>';
+  row.innerHTML=`
+    <select class="comp-mat-sel" onchange="compMatSelChange(this)" style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 10px;font-size:12px">
+      <option value="">— Seleccionar material —</option>${opts}
+    </select>
+    <input type="number" class="comp-mat-cant" min="0" placeholder="Cant." style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 8px;font-size:12px;text-align:center">
+    <input type="text" class="comp-mat-unidad" placeholder="Unidad" style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 8px;font-size:12px">
     <button onclick="this.parentElement.remove()" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);color:var(--negative);border-radius:4px;cursor:pointer;font-size:14px">×</button>`;
   document.getElementById('comp-mat-rows').appendChild(row);
+}
+function compMatSelChange(sel){
+  const row=sel.parentElement;
+  const opt=sel.options[sel.selectedIndex];
+  const u=row.querySelector('.comp-mat-unidad');
+  if(u&&opt)u.value=opt.dataset.unidad||'';
 }
 
 function compAddCons(frente) {
@@ -13350,8 +13469,11 @@ function guardarReporteComp() {
   // materiales almacén
   const materialesAlmacen = [];
   document.getElementById('comp-mat-rows').querySelectorAll('div').forEach(row => {
-    const ins = row.querySelectorAll('input');
-    if(ins[0]?.value.trim()) materialesAlmacen.push({desc:ins[0].value.trim(), cant:ins[1]?.value||'', unidad:ins[2]?.value||''});
+    const sel=row.querySelector('.comp-mat-sel');
+    const cant=row.querySelector('.comp-mat-cant');
+    const unidad=row.querySelector('.comp-mat-unidad');
+    const desc=sel?(sel.options[sel.selectedIndex]?.text||''):'';
+    if(desc&&desc!=='— Seleccionar material —'&&desc!=='Sin materiales asignados a NV2820') materialesAlmacen.push({desc,cant:cant?.value||'',unidad:unidad?.value||''});
   });
 
   // explosivos
