@@ -2684,13 +2684,11 @@ select option{background:var(--coal3);}
     <button class="mod-tab" onclick="modTab('fin','proyeccion',this)">📅 Proyección</button>
     <button class="mod-tab" onclick="modTab('fin','informe',this)">🧾 Informe Mensual</button>
     <button class="mod-tab" onclick="modTab('fin','costocentro',this)">💸 Costos por Centro</button>
-    <button class="mod-tab" onclick="modTab('fin','parametros',this)">⚙️ Parámetros</button>
   </div>
   <div id="fin-dashboard" class="mod-pane active" style="display:block"></div>
   <div id="fin-proyeccion" class="mod-pane" style="display:none"></div>
   <div id="fin-informe" class="mod-pane" style="display:none"></div>
   <div id="fin-costocentro" class="mod-pane" style="display:none"></div>
-  <div id="fin-parametros" class="mod-pane" style="display:none"></div>
 </div>
 
 <!-- REPORTE -->
@@ -3334,6 +3332,9 @@ select option{background:var(--coal3);}
       <div class="form-group"><label>Unidad de medida</label><select id="prod-unidad"><option>UND</option><option>KG</option><option>BOL</option><option>ROLL</option><option>JGO</option><option>PZA</option><option>M</option><option>LT</option><option>GLN</option></select></div>
       <div class="form-group" style="grid-column:1/-1"><label>Nombre corto</label><input type="text" id="prod-nombre" placeholder="Ej: Aleta / Cemento / Aceite"></div>
       <div class="form-group" style="grid-column:1/-1"><label>Descripción completa</label><input type="text" id="prod-descripcion" placeholder="Ej: CEMENTO GRIS ANTISALITRE TIPO MS x 42.5 KG"></div>
+        <label class="form-label">Precio Unitario (S/)
+          <input id="prod-precio" type="number" step="0.01" min="0" class="form-input" placeholder="0.00">
+        </label>
     </div>
     <div class="btn-row" style="margin-top:16px">
       <button class="btn btn-gold" onclick="guardarProductoCatalogo()">✓ Guardar</button>
@@ -3995,7 +3996,6 @@ function renderModPane(mod,pane){
   else if(k==='fin-proyeccion') renderFinProyeccion();
   else if(k==='fin-informe') renderFinInforme();
   else if(k==='fin-costocentro') renderFinCostoCentro();
-  else if(k==='fin-parametros') renderFinParametros();
 }
 
 function calcCostos(){
@@ -4421,6 +4421,7 @@ function abrirModalProducto(id){
     g('prod-nombre').value=p.nombre;
     g('prod-descripcion').value=p.descripcion||'';
     g('prod-unidad').value=p.unidad;
+    document.getElementById('prod-precio').value = p.precio||'';
   }else{
     g('modal-prod-titulo').textContent='Nuevo Producto';
     g('prod-edit-id').value='';
@@ -4428,6 +4429,7 @@ function abrirModalProducto(id){
     g('prod-nombre').value='';
     g('prod-descripcion').value='';
     g('prod-unidad').value='UND';
+    document.getElementById('prod-precio').value = '';
   }
   abrirModal('modal-producto');
 }
@@ -4436,12 +4438,13 @@ function guardarProductoCatalogo(){
   const nombre=g('prod-nombre').value.trim();
   if(!nombre){showNotif('⚠ El nombre es requerido','error');return;}
   const editId=g('prod-edit-id').value;
+  const precio = parseFloat(document.getElementById('prod-precio')?.value)||0;
   if(!state.almacen.productos)state.almacen.productos=[];
   if(editId){
     const p=state.almacen.productos.find(x=>x.id===editId);
-    if(p){p.nombre=nombre;p.descripcion=g('prod-descripcion').value.trim();p.unidad=g('prod-unidad').value;}
+    if(p){p.nombre=nombre;p.descripcion=g('prod-descripcion').value.trim();p.unidad=g('prod-unidad').value;p.precio = precio;}
   }else{
-    state.almacen.productos.push({id:'P'+Date.now(),codigo:g('prod-codigo').value,nombre,descripcion:g('prod-descripcion').value.trim(),unidad:g('prod-unidad').value});
+    state.almacen.productos.push({id:'P'+Date.now(),codigo:g('prod-codigo').value,nombre,descripcion:g('prod-descripcion').value.trim(),unidad:g('prod-unidad').value,precio});
   }
   almacenSave();cerrarModal('modal-producto');renderProductos();
   showNotif('Producto guardado','success');
@@ -4452,18 +4455,243 @@ function eliminarProducto(id){
   almacenSave();renderProductos();
 }
 function renderProductos(){
-  if(!document.getElementById('prod-tbody'))return;
-  const q=(document.getElementById('prod-buscar')?.value||'').toLowerCase();
-  let lista=(state.almacen.productos||[]).filter(p=>!q||p.codigo.toLowerCase().includes(q)||p.nombre.toLowerCase().includes(q)||(p.descripcion||'').toLowerCase().includes(q));
-  lista=[...lista].sort((a,b)=>a.codigo.localeCompare(b.codigo));
-  document.getElementById('prod-tbody').innerHTML=lista.length?lista.map(p=>`<tr>
-    <td style="font-family:'DM Mono',monospace;font-weight:700;color:var(--gold-light)">${p.codigo}</td>
-    <td style="font-weight:600">${p.nombre}</td>
-    <td style="font-size:12px;color:var(--text3)">${p.descripcion||'—'}</td>
-    <td>${p.unidad}</td>
-    <td><button class="btn btn-outline" style="padding:3px 10px;font-size:11px" onclick="abrirModalProducto('${p.id}')">✏</button> <button style="background:none;border:none;color:#f87171;cursor:pointer;font-size:13px" onclick="eliminarProducto('${p.id}')">🗑</button></td>
-  </tr>`).join(''):`<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:24px">No hay productos en el catálogo. Agrega el primero.</td></tr>`;
+  const el=document.getElementById('log-productos');
+  if(!el)return;
+  const prods=(state.almacen&&state.almacen.productos)||[];
+  const comb=paramsGetComb()||{pet:24.5,gas:21.0};
+  const exp=paramsGetExp()||{...COMP_PRECIOS_EXP_DEFAULT};
+  const ace=paramsGetAce()||{...COMP_PRECIOS_ACEROS_DEFAULT};
+
+  const rows=prods.map(p=>`
+    <tr>
+      <td style="padding:8px 10px;font-size:12px;color:var(--text3)">${p.codigo||''}</td>
+      <td style="padding:8px 10px;font-size:13px;color:var(--text)">${p.nombre||''}</td>
+      <td style="padding:8px 10px;font-size:12px;color:var(--text2)">${p.descripcion||''}</td>
+      <td style="padding:8px 10px;font-size:12px;color:var(--text2);text-align:center">${p.unidad||''}</td>
+      <td style="padding:8px 10px;font-size:13px;color:var(--gold);text-align:right">S/ ${(p.precio||0).toFixed(2)}</td>
+      <td style="padding:8px 10px;text-align:center">
+        <button class="btn btn-outline" style="padding:3px 10px;font-size:11px" onclick="abrirModalProducto('${p.id}')">✏️</button>
+        <button class="btn btn-outline" style="padding:3px 10px;font-size:11px;color:#ef4444;border-color:#ef4444" onclick="eliminarProducto('${p.id}')">🗑</button>
+      </td>
+    </tr>`).join('');
+
+  const expRows=COMP_EXPLOSIVOS.map(c=>`
+    <tr>
+      <td style="padding:6px 10px;font-size:12px;color:var(--text2)">${c}</td>
+      <td style="padding:6px 10px">
+        <input type="number" step="0.01" min="0" id="mp-exp-${c.replace(/\./g,'_')}" value="${(exp[c]||0).toFixed(2)}"
+          style="width:80px;background:var(--coal4);border:1px solid var(--border);border-radius:5px;padding:3px 8px;color:var(--text);font-size:12px">
+      </td>
+    </tr>`).join('');
+
+  const aceRows=COMP_ACEROS.map(c=>`
+    <tr>
+      <td style="padding:6px 10px;font-size:12px;color:var(--text2)">${c}</td>
+      <td style="padding:6px 10px">
+        <input type="number" step="0.01" min="0" id="mp-ace-${c.replace(/[^a-zA-Z0-9]/g,'_')}" value="${(ace[c]||0).toFixed(2)}"
+          style="width:80px;background:var(--coal4);border:1px solid var(--border);border-radius:5px;padding:3px 8px;color:var(--text);font-size:12px">
+      </td>
+    </tr>`).join('');
+
+  el.innerHTML=`
+    <!-- HEADER -->
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+      <div style="font-size:16px;font-weight:700;color:var(--text)">📦 Maestro de Productos</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <label class="btn btn-outline" style="cursor:pointer;padding:6px 14px;font-size:12px">
+          📥 Importar Excel
+          <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarMaestroExcel(this)">
+        </label>
+        <button class="btn btn-outline" style="font-size:12px" onclick="descargarPlantillaMaestro()">📄 Plantilla</button>
+        <button class="btn btn-gold" style="font-size:12px" onclick="abrirModalProducto()">+ Nuevo Producto</button>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:14px">
+      El Excel debe tener 3 columnas: <strong style="color:var(--text2)">Nombre</strong>, <strong style="color:var(--text2)">Unidad</strong>, <strong style="color:var(--text2)">Precio</strong>.
+      Al importar se actualizan todos los precios del sistema (compresorista, guardia, mantenimiento, logístico).
+    </div>
+
+    <!-- TABLA PRODUCTOS GENERALES -->
+    <div class="card" style="margin-bottom:18px;padding:0;overflow:hidden">
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:var(--coal3)">
+            <th style="padding:9px 10px;font-size:11px;color:var(--text3);text-align:left;font-weight:600">CÓDIGO</th>
+            <th style="padding:9px 10px;font-size:11px;color:var(--text3);text-align:left;font-weight:600">NOMBRE</th>
+            <th style="padding:9px 10px;font-size:11px;color:var(--text3);text-align:left;font-weight:600">DESCRIPCIÓN</th>
+            <th style="padding:9px 10px;font-size:11px;color:var(--text3);text-align:center;font-weight:600">UNIDAD</th>
+            <th style="padding:9px 10px;font-size:11px;color:var(--text3);text-align:right;font-weight:600">PRECIO S/</th>
+            <th style="padding:9px 10px;font-size:11px;color:var(--text3);text-align:center;font-weight:600">ACCIONES</th>
+          </tr>
+        </thead>
+        <tbody>${rows||'<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--text3)">Sin productos registrados</td></tr>'}</tbody>
+      </table>
+    </div>
+
+    <!-- COMBUSTIBLES -->
+    <div class="card" style="margin-bottom:18px;padding:16px">
+      <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:14px">⛽ Combustibles — Precio por Galón (S/)</div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2)">
+          🛢️ Petróleo:
+          <input type="number" step="0.01" min="0" id="mp-pet" value="${comb.pet||24.5}"
+            style="width:90px;background:var(--coal4);border:1px solid var(--border);border-radius:5px;padding:5px 8px;color:var(--text);font-size:13px">
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2)">
+          ⛽ Gasolina:
+          <input type="number" step="0.01" min="0" id="mp-gas" value="${comb.gas||21.0}"
+            style="width:90px;background:var(--coal4);border:1px solid var(--border);border-radius:5px;padding:5px 8px;color:var(--text);font-size:13px">
+        </label>
+        <button class="btn btn-gold" style="font-size:12px;padding:5px 14px" onclick="mpGuardarCombustibles()">💾 Guardar Combustibles</button>
+      </div>
+      <div style="font-size:11px;color:var(--text3)">Los reportes ya guardados conservan el precio vigente al momento de su registro.</div>
+    </div>
+
+    <!-- EXPLOSIVOS Y ACEROS -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px" id="mp-exp-ace-grid">
+      <div class="card" style="padding:16px">
+        <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:12px">💥 Explosivos (S/ por unidad)</div>
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr>
+            <th style="text-align:left;font-size:11px;color:var(--text3);padding:4px 10px;font-weight:600">Código</th>
+            <th style="text-align:left;font-size:11px;color:var(--text3);padding:4px 10px;font-weight:600">Precio S/</th>
+          </tr></thead>
+          <tbody>${expRows}</tbody>
+        </table>
+        <button class="btn btn-gold" style="font-size:12px;margin-top:12px;padding:5px 14px" onclick="mpGuardarExplosivos()">💾 Guardar Explosivos</button>
+      </div>
+      <div class="card" style="padding:16px">
+        <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:12px">🔩 Aceros y Brocas (S/ por unidad)</div>
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr>
+            <th style="text-align:left;font-size:11px;color:var(--text3);padding:4px 10px;font-weight:600">Producto</th>
+            <th style="text-align:left;font-size:11px;color:var(--text3);padding:4px 10px;font-weight:600">Precio S/</th>
+          </tr></thead>
+          <tbody>${aceRows}</tbody>
+        </table>
+        <button class="btn btn-gold" style="font-size:12px;margin-top:12px;padding:5px 14px" onclick="mpGuardarAceros()">💾 Guardar Aceros</button>
+      </div>
+    </div>
+  `;
+  // responsive
+  const g=el.querySelector('#mp-exp-ace-grid');
+  if(g&&window.innerWidth<640) g.style.gridTemplateColumns='1fr';
 }
+
+function mpGuardarCombustibles(){
+  const pet=parseFloat(document.getElementById('mp-pet')?.value)||24.5;
+  const gas=parseFloat(document.getElementById('mp-gas')?.value)||21.0;
+  const now=new Date().toISOString().split('T')[0];
+  const quien=(usuarioActivo&&usuarioActivo.nombre)||'Sistema';
+  paramsSetComb({pet,gas,updatedAt:now,updatedBy:quien});
+  showNotif('Precios de combustible guardados','ok');
+}
+
+function mpGuardarExplosivos(){
+  const exp={};
+  COMP_EXPLOSIVOS.forEach(c=>{
+    const id=c.replace(/\./g,'_');
+    exp[c]=parseFloat(document.getElementById('mp-exp-'+id)?.value)||COMP_PRECIOS_EXP_DEFAULT[c]||0;
+  });
+  paramsSetExp(exp);
+  showNotif('Precios de explosivos guardados','ok');
+}
+
+function mpGuardarAceros(){
+  const ace={};
+  COMP_ACEROS.forEach(c=>{
+    const id=c.replace(/[^a-zA-Z0-9]/g,'_');
+    ace[c]=parseFloat(document.getElementById('mp-ace-'+id)?.value)||COMP_PRECIOS_ACEROS_DEFAULT[c]||0;
+  });
+  paramsSetAce(ace);
+  showNotif('Precios de aceros y brocas guardados','ok');
+}
+
+function descargarPlantillaMaestro(){
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet([
+    ['Nombre','Unidad','Precio'],
+    ['Aceite Air Tool','GAL',45.00],
+    ['Cemento MS','BLS',32.50],
+    ['Petróleo','GLN',24.50],
+    ['Gasolina','GLN',21.00],
+    ['E.1000','UND',1.36],
+  ]);
+  ws['!cols']=[{wch:40},{wch:10},{wch:12}];
+  XLSX.utils.book_append_sheet(wb,ws,'Productos');
+  XLSX.writeFile(wb,'plantilla_maestro_productos.xlsx');
+}
+
+function importarMaestroExcel(input){
+  const file=input.files[0]; if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      if(rows.length<2){showNotif('El archivo está vacío','error');return;}
+
+      const now=new Date().toISOString().split('T')[0];
+      const quien=(usuarioActivo&&usuarioActivo.nombre)||'Sistema';
+      const newComb={...(paramsGetComb()||{pet:24.5,gas:21.0}), updatedAt:now, updatedBy:quien};
+      const newExp={...COMP_PRECIOS_EXP_DEFAULT};
+      const newAce={...COMP_PRECIOS_ACEROS_DEFAULT};
+
+      // Reemplaza todo el catálogo general con lo que viene en el Excel
+      const nuevosProductos=[];
+      let counter=1;
+
+      for(let i=1;i<rows.length;i++){
+        const row=rows[i];
+        const nombre=String(row[0]||'').trim();
+        const unidad=String(row[1]||'UND').trim().toUpperCase()||'UND';
+        const precio=parseFloat(row[2])||0;
+        if(!nombre)continue;
+
+        const nom_low=nombre.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+
+        // combustibles — van a params, no al catálogo general
+        if(nom_low.includes('petroleo')||nom_low.includes('diesel')||nom_low.includes('gasoil')){
+          newComb.pet=precio; continue;
+        }
+        if(nom_low.includes('gasolina')){
+          newComb.gas=precio; continue;
+        }
+
+        // explosivos — van a params
+        const expMatch=COMP_EXPLOSIVOS.find(c=>c.toLowerCase()===nombre.toLowerCase());
+        if(expMatch){newExp[expMatch]=precio;continue;}
+
+        // aceros — van a params
+        const aceMatch=COMP_ACEROS.find(c=>c.toLowerCase()===nombre.toLowerCase());
+        if(aceMatch){newAce[aceMatch]=precio;continue;}
+
+        // producto general — reemplaza catálogo completo
+        nuevosProductos.push({
+          id:'P'+Date.now()+Math.random().toString(36).slice(2,6),
+          codigo:'PRD-'+String(counter).padStart(3,'0'),
+          nombre, descripcion:'', unidad, precio
+        });
+        counter++;
+      }
+
+      if(!state.almacen)state.almacen={productos:[]};
+      state.almacen.productos=nuevosProductos;
+      paramsSetComb(newComb);
+      paramsSetExp(newExp);
+      paramsSetAce(newAce);
+      almacenSave();
+      renderProductos();
+      showNotif(`Catálogo reemplazado: ${nuevosProductos.length} productos cargados`,'ok');
+    }catch(err){
+      showNotif('Error al leer el archivo: '+err.message,'error');
+    }
+    input.value='';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
 function almacenSeedDemo(){
   const ing=[
     {id:'I001',fecha:'2026-03-23',vale:'112437',detalle:'Almacen Poderosa',almacen:'General',producto:'CEMENTO',descripcion:'CEMENTO GRIS ANTISALITRE PORTL. TIPO MS',unidad:'BOL',cantidad:100,precio:27.73,total:2773.00},
@@ -12462,136 +12690,6 @@ function finGuardarSplit(){
   const c=parseFloat(document.getElementById('fin-split-c')?.value)||40;
   localStorage.setItem('atmin_fin_split',JSON.stringify({brenda:b,crne:c}));
   showNotif('Split guardado','ok');
-}
-function renderFinParametros(){
-  const el=document.getElementById('fin-parametros');
-  if(!el)return;
-  const comb=paramsGetComb()||{pet:24.5,gas:21.0};
-  const exp=paramsGetExp()||{...COMP_PRECIOS_EXP_DEFAULT};
-  const ace=paramsGetAce()||{...COMP_PRECIOS_ACEROS_DEFAULT};
-  const updatedAt=comb.updatedAt||'—';
-  const updatedBy=comb.updatedBy||'—';
-
-  let expRows=COMP_EXPLOSIVOS.map(c=>`
-    <tr>
-      <td style="padding:7px 10px;color:var(--text2);font-size:13px">${c}</td>
-      <td style="padding:7px 10px">
-        <input type="number" step="0.01" min="0" id="fparam-exp-${c.replace(/\./g,'_')}"
-          value="${(exp[c]||0).toFixed(2)}"
-          style="width:90px;background:var(--coal4);border:1px solid var(--border);border-radius:5px;padding:4px 8px;color:var(--text);font-size:13px">
-      </td>
-    </tr>`).join('');
-
-  let aceRows=COMP_ACEROS.map(c=>`
-    <tr>
-      <td style="padding:7px 10px;color:var(--text2);font-size:12px">${c}</td>
-      <td style="padding:7px 10px">
-        <input type="number" step="0.01" min="0" id="fparam-ace-${c.replace(/[^a-zA-Z0-9]/g,'_')}"
-          value="${(ace[c]||0).toFixed(2)}"
-          style="width:90px;background:var(--coal4);border:1px solid var(--border);border-radius:5px;padding:4px 8px;color:var(--text);font-size:13px">
-      </td>
-    </tr>`).join('');
-
-  el.innerHTML=`
-    <div style="padding:16px 0">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:18px">
-        <div>
-          <div style="font-size:17px;font-weight:700;color:var(--text)">⚙️ Parámetros de Costos</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:2px">Última actualización: ${updatedAt} — ${updatedBy}</div>
-        </div>
-        <div style="font-size:11px;color:#f59e0b;background:rgba(245,158,11,0.1);padding:6px 12px;border-radius:6px;border:1px solid rgba(245,158,11,0.3)">
-          ⚠️ Solo Jefe de Finanzas puede editar estos valores
-        </div>
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;flex-wrap:wrap" class="params-grid">
-
-        <!-- COMBUSTIBLES -->
-        <div class="card" style="padding:16px">
-          <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:14px">⛽ Combustibles (S/ por galón)</div>
-          <div style="display:flex;flex-direction:column;gap:10px">
-            <label style="display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--text2)">
-              🛢️ Petróleo S/:
-              <input type="number" step="0.01" min="0" id="fparam-pet" value="${comb.pet||24.5}"
-                style="width:100px;background:var(--coal4);border:1px solid var(--border);border-radius:5px;padding:5px 8px;color:var(--text);font-size:13px">
-            </label>
-            <label style="display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--text2)">
-              ⛽ Gasolina S/:
-              <input type="number" step="0.01" min="0" id="fparam-gas" value="${comb.gas||21.0}"
-                style="width:100px;background:var(--coal4);border:1px solid var(--border);border-radius:5px;padding:5px 8px;color:var(--text);font-size:13px">
-            </label>
-          </div>
-        </div>
-
-        <!-- NOTA -->
-        <div class="card" style="padding:16px;display:flex;align-items:center">
-          <div style="font-size:12px;color:var(--text3);line-height:1.7">
-            <div style="color:var(--text2);font-weight:600;margin-bottom:6px">📌 Importante</div>
-            Los precios aquí configurados se aplican a <strong style="color:var(--text)">nuevos reportes</strong> desde la fecha de actualización.<br><br>
-            Los reportes ya guardados conservan los precios vigentes al momento de su registro y <strong style="color:var(--text)">no se modifican</strong>.
-          </div>
-        </div>
-
-        <!-- EXPLOSIVOS -->
-        <div class="card" style="padding:16px">
-          <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:14px">💥 Explosivos (S/ por unidad)</div>
-          <table style="width:100%;border-collapse:collapse">
-            <thead><tr>
-              <th style="text-align:left;font-size:11px;color:var(--text3);padding:4px 10px;font-weight:600">Código</th>
-              <th style="text-align:left;font-size:11px;color:var(--text3);padding:4px 10px;font-weight:600">Precio S/</th>
-            </tr></thead>
-            <tbody>${expRows}</tbody>
-          </table>
-        </div>
-
-        <!-- ACEROS -->
-        <div class="card" style="padding:16px">
-          <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:14px">🔩 Aceros y Brocas (S/ por unidad)</div>
-          <table style="width:100%;border-collapse:collapse">
-            <thead><tr>
-              <th style="text-align:left;font-size:11px;color:var(--text3);padding:4px 10px;font-weight:600">Producto</th>
-              <th style="text-align:left;font-size:11px;color:var(--text3);padding:4px 10px;font-weight:600">Precio S/</th>
-            </tr></thead>
-            <tbody>${aceRows}</tbody>
-          </table>
-        </div>
-
-      </div>
-
-      <div style="margin-top:20px;display:flex;gap:12px;justify-content:flex-end">
-        <button class="btn btn-outline" onclick="renderFinParametros()">↩ Cancelar</button>
-        <button class="btn btn-gold" onclick="finGuardarParametros()">💾 Guardar Parámetros</button>
-      </div>
-    </div>
-  `;
-  // responsive grid
-  const grid=el.querySelector('.params-grid');
-  if(grid&&window.innerWidth<640) grid.style.gridTemplateColumns='1fr';
-}
-
-function finGuardarParametros(){
-  const pet=parseFloat(document.getElementById('fparam-pet')?.value)||24.5;
-  const gas=parseFloat(document.getElementById('fparam-gas')?.value)||21.0;
-  const now=new Date().toISOString().split('T')[0];
-  const quien=(usuarioActivo&&usuarioActivo.nombre)||'Finanzas';
-  paramsSetComb({pet,gas,updatedAt:now,updatedBy:quien});
-
-  const exp={};
-  COMP_EXPLOSIVOS.forEach(c=>{
-    const id=c.replace(/\./g,'_');
-    exp[c]=parseFloat(document.getElementById('fparam-exp-'+id)?.value)||COMP_PRECIOS_EXP_DEFAULT[c]||0;
-  });
-  paramsSetExp(exp);
-
-  const ace={};
-  COMP_ACEROS.forEach(c=>{
-    const id=c.replace(/[^a-zA-Z0-9]/g,'_');
-    ace[c]=parseFloat(document.getElementById('fparam-ace-'+id)?.value)||COMP_PRECIOS_ACEROS_DEFAULT[c]||0;
-  });
-  paramsSetAce(ace);
-
-  showNotif('Parámetros guardados correctamente','ok');
-  renderFinParametros();
 }
 // ===== END FINANZAS MODULE =====
 
