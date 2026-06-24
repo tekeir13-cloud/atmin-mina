@@ -1902,6 +1902,36 @@ select option{background:var(--coal3);}
   }
 }
 
+/* ── Badge de reportes no leídos ── */
+.nav-badge {
+  display: none;
+  min-width: 18px; height: 18px;
+  padding: 0 5px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px; font-weight: 700;
+  font-family: 'DM Mono', monospace;
+  border-radius: 99px;
+  align-items: center; justify-content: center;
+  line-height: 1;
+  margin-left: auto;
+  flex-shrink: 0;
+  animation: badgePop .25s cubic-bezier(.34,1.56,.64,1) both;
+}
+.nav-badge.show { display: flex; }
+/* Badge en bottom nav — sobre el icono */
+.bn-badge-wrap { position: relative; display: inline-flex; align-items: center; justify-content: center; }
+.bn-badge-wrap .nav-badge {
+  position: absolute; top: -6px; right: -8px;
+  margin: 0;
+  min-width: 16px; height: 16px;
+  font-size: 9px; padding: 0 4px;
+}
+@keyframes badgePop {
+  0%   { transform: scale(0); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
 /* Bottom nav active — forzado */
 @media (max-width: 768px) {
   .bn-item { color: var(--text3); transition: color 0.2s; }
@@ -2314,7 +2344,7 @@ select option{background:var(--coal3);}
     <button class="nav-item" onclick="navigate('mantenimiento')"><span class="icon">🔧</span> Mantenimiento</button>
     <button class="nav-item" onclick="navigate('finanzas')"><span class="icon">💰</span> Finanzas</button>
     <div class="nav-section">Reportes</div>
-    <button class="nav-item" onclick="navigate('seguridad')"><span class="icon">🦺</span> Seguridad</button>
+    <button class="nav-item" onclick="navigate('seguridad')"><span class="icon">🦺</span> Seguridad<span class="nav-badge" id="seg-badge-side"></span></button>
     <button class="nav-item" onclick="navigate('ia')"><span class="icon">🤖</span> Asistente IA</button>
     <button class="nav-item" onclick="navigate('reporte')"><span class="icon">📋</span> Reporte Mensual</button>
     <button class="nav-item" onclick="navigate('compresorista')"><span class="icon">🔧</span> Compresorista</button>
@@ -3988,6 +4018,8 @@ function navigate(page){
   renderPage(page);
   // Actualizar bottom nav móvil automáticamente
   setActiveBottomNav(page);
+  // Marcar reportes de seguridad como leídos al entrar al módulo
+  if(page === 'seguridad'){ segBadgeLeer(); }
 }
 // Mapa explícito de todos los panes por módulo
 const MODULE_PANES = {
@@ -11562,11 +11594,38 @@ async function guardarReporteSeguridad(){
 
   if(!state.seguridad) state.seguridad = [];
   state.seguridad.unshift(nv);
+  segBadgeUpdate();
 
   cerrarModal('modal-seguridad');
   renderSeguridad();
   showNotif('✓ Reporte de seguridad guardado');
 }
+
+// ── Badge de reportes de seguridad no leídos ──────────────────
+const SEG_BADGE_KEY = 'atmin_seg_leido_ts';
+function segBadgeGetTs(){
+  try{ return parseInt(localStorage.getItem(SEG_BADGE_KEY)||'0')||0; }catch(e){ return 0; }
+}
+function segBadgeLeer(){
+  try{ localStorage.setItem(SEG_BADGE_KEY, String(Date.now())); }catch(e){}
+  segBadgeUpdate();
+}
+function segBadgeCount(){
+  const ts = segBadgeGetTs();
+  return (state.seguridad||[]).filter(r => (r.id||0) > ts).length;
+}
+function segBadgeUpdate(){
+  const n = segBadgeCount();
+  const txt = n > 99 ? '99+' : String(n);
+  ['seg-badge-side','seg-badge-bn','seg-badge-mob'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    if(n > 0){ el.textContent = txt; el.classList.add('show'); }
+    else     { el.textContent = '';  el.classList.remove('show'); }
+  });
+}
+// Inicializar badge al cargar
+(function(){ segBadgeUpdate(); })();
 
 function renderSeguridad(){
   const lista  = state.seguridad || [];
@@ -13007,7 +13066,7 @@ function finGuardarIngresosMaq(){
       <span class="bn-label">Log.</span>
     </button>
     <button class="bn-item" id="bn-seguridad" onclick="navigate('seguridad');setActiveBottomNav('seguridad')">
-      <span class="bn-icon">🦺</span>
+      <span class="bn-badge-wrap"><span class="bn-icon">🦺</span><span class="nav-badge" id="seg-badge-bn"></span></span>
       <span class="bn-label">Segur.</span>
     </button>
     <button class="bn-item" id="bn-menu" onclick="abrirMenuMobile()">
@@ -13058,7 +13117,7 @@ function finGuardarIngresosMaq(){
       <button class="mob-nav-btn" onclick="navMobile('mantenimiento')"><span>🔧</span> Mantenimiento</button>
       <button class="mob-nav-btn" onclick="navMobile('finanzas')"><span>💰</span> Finanzas</button>
       <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;padding:4px 8px;margin:8px 0 4px">Reportes</div>
-      <button class="mob-nav-btn mob-nav-highlight" onclick="navMobile('seguridad')"><span>🦺</span> Seguridad</button>
+      <button class="mob-nav-btn mob-nav-highlight" onclick="navMobile('seguridad')" style="justify-content:space-between"><span><span>🦺</span> Seguridad</span><span class="nav-badge" id="seg-badge-mob"></span></button>
       <button class="mob-nav-btn mob-nav-highlight" onclick="navMobile('ia')"><span>🤖</span> Asistente IA</button>
       <button class="mob-nav-btn" onclick="navMobile('reporte')"><span>📊</span> Reporte Mensual</button>
       <button class="mob-nav-btn" onclick="navMobile('compresorista')"><span>🔧</span> Compresorista</button>
