@@ -4591,11 +4591,24 @@ function eqSvg(id,col,size){
 }
 
 // ── PANEL EJECUTIVO (Gerencia General) ──
+// Mes mostrado en el panel ejecutivo. null = mes actual. No se persiste:
+// al recargar vuelve al mes en curso; al importar una valorización salta a su mes.
+let _ejecMes = null;
+function ejecMesActual(){
+  return _ejecMes || ((typeof finMesActual==='function')?finMesActual():new Date().toISOString().slice(0,7));
+}
+function ejecCambiarMes(delta){
+  const base=ejecMesActual();
+  const [y,m]=base.split('-').map(Number);
+  const d=new Date(y, m-1+delta, 1);
+  _ejecMes = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  renderDashEjecutivo();
+}
 function renderDashEjecutivo(){
   const cont=document.getElementById('d-ejecutivo');
   if(!cont)return;
-  // Mes en curso (usa helper de Finanzas si existe, si no el mes calendario actual)
-  const mes=(typeof finMesActual==='function')?finMesActual():new Date().toISOString().slice(0,7);
+  // Mes seleccionado en el panel (por defecto el mes en curso)
+  const mes=ejecMesActual();
   const nombreMes=(typeof finNombreMes==='function')?finNombreMes(mes):mes;
 
   const S=n=>'S/ '+Math.round(n||0).toLocaleString('es-PE');
@@ -4702,7 +4715,12 @@ function renderDashEjecutivo(){
 <div style="background:linear-gradient(180deg,rgba(91,110,245,.05),transparent 280px);border-radius:20px;padding:4px;margin-bottom:18px">
   <div style="padding:14px 16px 4px">
     <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;font-weight:700">📊 Reporte Ejecutivo · Gerencia General</div>
-    <div style="font-size:20px;font-weight:900;color:var(--text);letter-spacing:-.5px;margin-top:2px">${nombreMes}</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:2px">
+      <button onclick="ejecCambiarMes(-1)" title="Mes anterior" style="background:var(--coal3);border:1px solid var(--border);color:var(--text2);border-radius:8px;width:30px;height:30px;cursor:pointer;font-size:15px;line-height:1;flex-shrink:0">‹</button>
+      <div style="font-size:20px;font-weight:900;color:var(--text);letter-spacing:-.5px;min-width:130px;text-align:center">${nombreMes}</div>
+      <button onclick="ejecCambiarMes(1)" title="Mes siguiente" style="background:var(--coal3);border:1px solid var(--border);color:var(--text2);border-radius:8px;width:30px;height:30px;cursor:pointer;font-size:15px;line-height:1;flex-shrink:0">›</button>
+      ${_ejecMes&&_ejecMes!==((typeof finMesActual==='function')?finMesActual():'')?`<button onclick="_ejecMes=null;renderDashEjecutivo()" style="background:none;border:none;color:var(--accent-light);font-size:11px;cursor:pointer;text-decoration:underline">Mes actual</button>`:''}
+    </div>
   </div>
 
   <!-- 3 KPI HÉROE -->
@@ -9461,7 +9479,15 @@ async function importarValorizacion(input){
     valLaborSave();
     input.value='';
     renderValorizacionOp(id);
-    showNotif(`✓ Valorización importada: ${rows.length} partidas`);
+    // Conectar de inmediato con el ingreso del dashboard ejecutivo:
+    // si se detectó el mes/año, el panel salta a ese mes y se refresca.
+    if(mesNum&&anio){
+      _ejecMes = anio+'-'+String(mesNum).padStart(2,'0');
+      try{ renderDashboard(); }catch(e){}
+      showNotif(`✓ Valorización de ${VAL_MESES[mesNum-1]} ${anio} importada (${rows.length} partidas) — ingreso S/ ${Math.round(total).toLocaleString('es-PE')} actualizado en el dashboard`);
+    }else{
+      showNotif(`⚠ Valorización importada (${rows.length} partidas), pero NO se detectó el mes en el título. El ingreso no se vinculará al dashboard hasta que el título incluya el mes y año (ej. "VALORIZACIÓN MAYO 2026").`,'warn');
+    }
   }catch(e){console.error(e);showNotif('Error al leer el Excel: '+e.message,'error');input.value='';}
 }
 
@@ -15231,13 +15257,15 @@ function visorRenderDia() {
 
   // ── Gráfico Combustible — doughnut por máquina + tabla costo y % ──
   const FUEL_COLORS = ['#e59022','#f87171','#60a5fa','#34d399','#a78bfa','#fb923c','#38bdf8','#facc15','#f472b6','#4ade80'];
-  const petFilt = r.petroleo.filter(p=>p.gln && p.equipo!=='Mina');
-  const gasFilt = r.gasolina.filter(g=>g.gln && g.equipo!=='Mina');
+  // Incluir TODO el combustible con galones (incluido consumo general "Mina"),
+  // así el donut nunca queda vacío cuando arriba sí hay costo de combustible.
+  const petFilt = r.petroleo.filter(p=>p.gln);
+  const gasFilt = r.gasolina.filter(g=>g.gln);
   const totalPetS = petFilt.reduce((s,p)=>s+p.gln*COMP_PRECIO_PET,0);
   const totalGasS = gasFilt.reduce((s,g)=>s+g.gln*COMP_PRECIO_GAS,0);
   const fuelItems = [
-    ...petFilt.map((p,i)=>({label:p.equipo, val:+(p.gln*COMP_PRECIO_PET).toFixed(2), gln:p.gln, tipo:'P', color:FUEL_COLORS[i%FUEL_COLORS.length], grupTotal:totalPetS})),
-    ...gasFilt.map((g,i)=>({label:g.equipo, val:+(g.gln*COMP_PRECIO_GAS).toFixed(2), gln:g.gln, tipo:'G', color:FUEL_COLORS[(petFilt.length+i)%FUEL_COLORS.length], grupTotal:totalGasS})),
+    ...petFilt.map((p,i)=>({label:p.equipo==='Mina'?'Mina (general)':p.equipo, val:+(p.gln*COMP_PRECIO_PET).toFixed(2), gln:p.gln, tipo:'P', color:FUEL_COLORS[i%FUEL_COLORS.length], grupTotal:totalPetS})),
+    ...gasFilt.map((g,i)=>({label:g.equipo==='Mina'?'Mina (general)':g.equipo, val:+(g.gln*COMP_PRECIO_GAS).toFixed(2), gln:g.gln, tipo:'G', color:FUEL_COLORS[(petFilt.length+i)%FUEL_COLORS.length], grupTotal:totalGasS})),
   ];
   const fuelTotal = fuelItems.reduce((s,x)=>s+x.val,0);
   const ctxFuel = document.getElementById('vt-chart-fuel');
@@ -15267,7 +15295,7 @@ function visorRenderDia() {
         const pctG=totalPetS>0?(val/totalPetS*100).toFixed(1):'0';
         return `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border2);font-size:10px">
           <div style="width:8px;height:8px;border-radius:50%;background:${FUEL_COLORS[i%FUEL_COLORS.length]};flex-shrink:0"></div>
-          <span style="color:var(--text);flex:1">${p.equipo}</span>
+          <span style="color:var(--text);flex:1">${p.equipo==='Mina'?'Mina (general)':p.equipo}</span>
           <span style="color:var(--warn);font-weight:600">S/ ${val.toFixed(2)}</span>
           <span style="color:var(--text3)">${pctG}%pet</span>
           <span style="color:var(--text3)">${pctT}%tot</span>
@@ -15279,7 +15307,7 @@ function visorRenderDia() {
         const pctG=totalGasS>0?(val/totalGasS*100).toFixed(1):'0';
         return `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border2);font-size:10px">
           <div style="width:8px;height:8px;border-radius:50%;background:${FUEL_COLORS[(petFilt.length+i)%FUEL_COLORS.length]};flex-shrink:0"></div>
-          <span style="color:var(--text);flex:1">${g.equipo}</span>
+          <span style="color:var(--text);flex:1">${g.equipo==='Mina'?'Mina (general)':g.equipo}</span>
           <span style="color:var(--positive);font-weight:600">S/ ${val.toFixed(2)}</span>
           <span style="color:var(--text3)">${pctG}%gas</span>
           <span style="color:var(--text3)">${pctT}%tot</span>
