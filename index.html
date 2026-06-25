@@ -2018,6 +2018,23 @@ select option{background:var(--coal3);}
   text-align:right;
 }
 
+/* ── IA chat móvil ── */
+@media(max-width:768px){
+  #page-ia .card:first-child { padding:12px 14px; margin-bottom:10px; }
+  #ia-messages { height:calc(100svh - 310px) !important; min-height:220px; padding:14px 12px !important; }
+  .ia-msg-bubble { max-width:82%; font-size:12.5px; padding:10px 12px; }
+  .ia-msg-avatar { width:28px; height:28px; font-size:13px; }
+  .ia-msg { gap:7px; }
+  /* Input bar: micrófono + campo + enviar en una sola fila compacta */
+  #ia-input-bar { padding:10px 12px !important; gap:8px !important; }
+  #ia-mic-btn { width:38px !important; height:38px !important; font-size:16px !important; }
+  #ia-input { font-size:13px !important; padding:9px 11px !important; }
+  #ia-send-btn { height:38px !important; padding:0 14px !important; font-size:11px !important; }
+  /* Preguntas rápidas: scroll horizontal en una sola fila */
+  #ia-sugerencias { flex-wrap:nowrap !important; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:4px; scrollbar-width:none; }
+  #ia-sugerencias::-webkit-scrollbar { display:none; }
+  #ia-sugerencias button { white-space:nowrap; flex-shrink:0; }
+}
 /* Typing indicator */
 .ia-typing { display:flex; gap:4px; align-items:center; padding:4px 0; }
 .ia-typing span {
@@ -2988,21 +3005,21 @@ select option{background:var(--coal3);}
     </div>
 
     <!-- Input -->
-    <div style="border-top:1px solid var(--border);padding:14px 16px;display:flex;gap:10px;align-items:center;background:var(--coal2)">
+    <div id="ia-input-bar" style="border-top:1px solid var(--border);padding:14px 16px;display:flex;gap:10px;align-items:center;background:var(--coal2)">
       <button id="ia-mic-btn" onclick="toggleMicIA()"
         style="width:42px;height:42px;border-radius:50%;background:var(--coal4);border:1px solid var(--border);
                color:var(--text2);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;
                transition:all 0.2s;flex-shrink:0" title="Hablar">
         🎙
       </button>
-      <input id="ia-input" type="text" placeholder="Escribe tu pregunta o toca el micrófono..."
-        style="flex:1;background:var(--coal4);border:1px solid var(--border);border-radius:10px;
+      <input id="ia-input" type="text" placeholder="Escribe o toca el micrófono..."
+        style="flex:1;min-width:0;background:var(--coal4);border:1px solid var(--border);border-radius:10px;
                padding:11px 14px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif"
         onkeydown="if(event.key==='Enter')enviarMensajeIA()">
-      <button onclick="enviarMensajeIA()"
+      <button id="ia-send-btn" onclick="enviarMensajeIA()"
         style="height:42px;padding:0 18px;background:var(--grad-accent);color:#fff;border:none;
                border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;
-               font-family:'Syne',sans-serif;letter-spacing:0.5px;
+               font-family:'Syne',sans-serif;letter-spacing:0.5px;flex-shrink:0;
                box-shadow:0 4px 14px var(--accent-glow);white-space:nowrap">
         Enviar
       </button>
@@ -12154,26 +12171,10 @@ function renderIA(){
   if(container){
     container.innerHTML = '';
   }
-  // Saludo inicial con voz (en móvil el audio requiere gesto del usuario, se activa al tocar el botón 🔊)
+  // Saludo inicial con voz — PC y móvil
   setTimeout(()=>{
-    const esMobil = window.innerWidth <= 768;
-    _iaAgregarMsg(IA_SALUDO + (esMobil ? ' (toca 🔊 para escuchar)' : ''), true);
-    if(!esMobil){
-      // En PC el audio automático funciona sin restricciones
-      _iaHablar(IA_SALUDO);
-    } else {
-      // En móvil agrega botón de audio para respetar la política de gesto del usuario
-      setTimeout(()=>{
-        const container = document.getElementById('ia-messages');
-        if(!container) return;
-        const btn = document.createElement('button');
-        btn.textContent = '🔊 Escuchar presentación';
-        btn.style.cssText = 'background:var(--coal4);border:1px solid var(--border);color:var(--text2);border-radius:8px;padding:8px 14px;font-size:12px;cursor:pointer;margin:4px 0 8px 44px;font-family:"DM Sans",sans-serif';
-        btn.onclick = () => { _iaHablar(IA_SALUDO); btn.remove(); };
-        container.appendChild(btn);
-        container.scrollTop = container.scrollHeight;
-      }, 100);
-    }
+    _iaAgregarMsg(IA_SALUDO, true);
+    _iaHablar(IA_SALUDO);
   }, 350);
 }
 
