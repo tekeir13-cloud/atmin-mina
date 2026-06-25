@@ -3013,8 +3013,9 @@ select option{background:var(--coal3);}
   <div class="card" style="padding:14px">
     <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;font-weight:700">Preguntas rápidas</div>
     <div style="display:flex;flex-wrap:wrap;gap:8px" id="ia-sugerencias">
-      ${['¿Cómo va la producción este mes?','¿Cuál es el costo por metro?','¿Quiénes están ausentes?',
-         '¿Cuánto gastamos en petróleo?','¿Vamos a cumplir la meta?','Dame un resumen ejecutivo'].map(q=>
+      ${['¿Cómo va la producción este mes?','Ganancia por equipo','¿Cuánto ganó la compresora?',
+         '¿Cuál es el costo por metro?','¿Cuánto gastamos en petróleo?','¿Quiénes están ausentes?',
+         '¿Vamos a cumplir la meta?','Dame un resumen ejecutivo'].map(q=>
         `<button onclick="preguntaRapidaIA('${q}')"
           style="background:var(--coal4);border:1px solid var(--border);color:var(--text2);
                  border-radius:8px;padding:7px 12px;font-size:11px;cursor:pointer;
@@ -12144,26 +12145,20 @@ let _iaHablando    = false;
 let _iaMicActivo   = false;
 let _iaMensajes    = []; // historial del chat
 
-let _iaUsuarioNombre = null;
-let _iaEsperandoNombre = false;
+const IA_SALUDO = 'Hola, soy el asistente MUKICLOUD asignado por el ingeniero Percy Alcántara para las operaciones de Temual. Mucho gusto. Puede preguntarme por los gastos, la utilidad, los ingresos, la ganancia por equipo —como la compresora, el scoop, el dumper, la excavadora o el cargador frontal—, el personal, el avance de perforación, el petróleo y las órdenes de compra.';
 
 function renderIA(){
   _iaMensajes = [];
-  _iaUsuarioNombre = null;
-  _iaEsperandoNombre = false;
   // Limpiar mensajes previos del contenedor
   const container = document.getElementById('ia-messages');
   if(container){
     container.innerHTML = '';
   }
-  // Saludo inicial tras breve pausa para que el DOM esté listo
+  // Saludo inicial tras breve pausa para que el DOM esté listo — con voz
   setTimeout(()=>{
-    _iaAgregarMsg(
-      'Hola, soy el asistente MUKICLOUD asignado por el ingeniero Percy Alcántara para las operaciones de Temual. Para brindarte un mejor servicio, ¿cuál es tu nombre?',
-      true
-    );
-    _iaEsperandoNombre = true;
-  }, 300);
+    _iaAgregarMsg(IA_SALUDO, true);
+    _iaHablar(IA_SALUDO);
+  }, 350);
 }
 
 // ── Construir contexto de la mina para Claude ──
@@ -12266,11 +12261,80 @@ function _iaMetrics(){
   }catch(e){ console.warn('metrics',e); }
   return m;
 }
+// ── P&L por equipo: replica el cálculo "Ganancia por Equipo" del dashboard ──
+function _iaEquipos(){
+  try{
+    const mes=(typeof finMesActual==='function')?finMesActual():new Date().toISOString().slice(0,7);
+    const compMes=(state.compresorista||[]).filter(r=>(r.fecha||'').startsWith(mes));
+    const horasMaq={},galMaqPet={},galMaqGas={};
+    compMes.forEach(r=>{
+      (r.horometros||[]).forEach(h=>{horasMaq[h.equipo]=(horasMaq[h.equipo]||0)+(h.HT||0);});
+      (r.petroleo||[]).forEach(p=>{galMaqPet[p.equipo]=(galMaqPet[p.equipo]||0)+(p.gln||0);});
+      (r.gasolina||[]).forEach(p=>{galMaqGas[p.equipo]=(galMaqGas[p.equipo]||0)+(p.gln||0);});
+    });
+    const precioPet=(typeof compGetPrecioPet==='function')?compGetPrecioPet():0;
+    const precioGas=(typeof compGetPrecioGas==='function')?compGetPrecioGas():0;
+    const mantMes=(state.mantenimiento||[]).filter(m=>(m.fecha||'').startsWith(mes));
+    const mantPorEq=tags=>mantMes.filter(m=>tags.some(t=>(m.equipo||'').toLowerCase().includes(t))).reduce((s,m)=>s+(m.costo||0),0);
+    const ingMes=(typeof finIngMaqGet==='function')?finIngMaqGet(mes):{};
+    const MAQUINAS=[
+      {label:'Scoop',           tags:['scoop epiroc','scoop monte','scoop'],mt:['scoop'],   op:3900},
+      {label:'Dumper',          tags:['dumper'],                          mt:['dumper'],  op:3600},
+      {label:'Compresora',      tags:['compresora m135','compresora m122','compresora'],mt:['compresora'],op:2500},
+      {label:'Excavadora',      tags:['excavadora'],                      mt:['excavadora'],op:5000},
+      {label:'Cargador Frontal',tags:['cargador frontal','cargador'],     mt:['cargador'],op:5000},
+    ];
+    return MAQUINAS.map(m=>{
+      const horas=m.tags.reduce((s,t)=>s+(horasMaq[t]||0),0);
+      const galPet=m.tags.reduce((s,t)=>s+(galMaqPet[t]||0),0);
+      const galGas=m.tags.reduce((s,t)=>s+(galMaqGas[t]||0),0);
+      const ingresos=ingMes[m.label]||0;
+      const ingRegistrado=m.label in ingMes;
+      const cMant=mantPorEq(m.mt);
+      const cComb=galPet*precioPet+galGas*precioGas;
+      const cOp=m.op;
+      return {label:m.label,horas,galPet,galGas,ingresos,ingRegistrado,cMant,cComb,cOp,resultado:ingresos-cMant-cComb-cOp};
+    });
+  }catch(e){ console.warn('iaEquipos',e); return []; }
+}
+function _iaRespuestaEquipo(q,fS){
+  const eqs=_iaEquipos();
+  if(!eqs.length) return null;
+  // Buscar un equipo específico mencionado
+  const alias={
+    'scoop':'Scoop','dumper':'Dumper','volquete':'Dumper',
+    'compresora':'Compresora','compresor':'Compresora',
+    'excavadora':'Excavadora','retroexcavadora':'Excavadora',
+    'cargador':'Cargador Frontal','frontal':'Cargador Frontal',
+  };
+  let objetivo=null;
+  for(const k in alias){ if(q.includes(k)){ objetivo=alias[k]; break; } }
+  if(objetivo){
+    const e=eqs.find(x=>x.label===objetivo);
+    if(!e) return null;
+    if(!e.ingRegistrado)
+      return `El equipo ${e.label} aún no tiene ingresos registrados este mes. Sus costos son: mantenimiento ${fS(e.cMant)}, combustible ${fS(e.cComb)} y operador ${fS(e.cOp)}. Registre el ingreso en Finanzas › Ingresos x Máq. para ver su ganancia.`;
+    const signo=e.resultado>=0?'una ganancia':'una pérdida';
+    return `El equipo ${e.label} generó ${signo} de ${fS(e.resultado)} este mes. Ingresos ${fS(e.ingresos)} menos mantenimiento ${fS(e.cMant)}, combustible ${fS(e.cComb)} y operador ${fS(e.cOp)}. Operó ${e.horas.toFixed(1)} horas.`;
+  }
+  // Resumen general de todos los equipos
+  const conIng=eqs.filter(e=>e.ingRegistrado);
+  if(!conIng.length)
+    return `Aún no hay ingresos registrados por equipo este mes. Los equipos en seguimiento son: ${eqs.map(e=>e.label).join(', ')}. Registre ingresos en Finanzas › Ingresos x Máq.`;
+  const totRes=conIng.reduce((s,e)=>s+e.resultado,0);
+  const detalle=conIng.map(e=>`${e.label} ${e.resultado>=0?'+':''}${fS(e.resultado)}`).join(', ');
+  return `Resultado por equipo este mes (${totRes>=0?'+':''}${fS(totRes)} en total): ${detalle}. Pregúnteme por un equipo específico —scoop, dumper, compresora, excavadora o cargador— para ver su desglose.`;
+}
 function _iaRespuestaLocal(texto){
   const m=_iaMetrics();
   const fS=v=>'S/ '+(Number(v)||0).toFixed(2);
   const q=(texto||'').toLowerCase();
   const has=(...ws)=>ws.some(w=>q.includes(w));
+  // ── Equipos (ganancia/gasto por equipo) — prioridad alta ──
+  if(has('equipo','equipos','scoop','dumper','volquete','compresora','compresor','excavadora','cargador','maquina','máquina','flota')){
+    const r=_iaRespuestaEquipo(q,fS);
+    if(r) return r;
+  }
   if(has('personal','trabajador','gente','cuadrilla','obrero','asisten'))
     return `Actualmente hay ${m.activos} trabajadores activos y ${m.ausentes} ausentes en la operación.`;
   if(has('metro','avance','perfora','rampa','cortada'))
@@ -12307,22 +12371,6 @@ async function enviarMensajeIA(textoDirecto){
   _iaAgregarMsg(texto, false);
   _iaMensajes.push({ role:'user', content: texto });
 
-  // ── Si estamos esperando el nombre del usuario ──
-  if(_iaEsperandoNombre){
-    _iaEsperandoNombre = false;
-    // Limpiar y capitalizar el nombre dado
-    const nombreLimpio = texto.trim().split(' ').map(p=>p.charAt(0).toUpperCase()+p.slice(1).toLowerCase()).join(' ');
-    _iaUsuarioNombre = nombreLimpio;
-    const resp = `Mucho gusto, señor ${_iaUsuarioNombre}. Estoy listo para ayudarle con la información de la operación. Puede preguntarme sobre producción, costos, personal, combustible, explosivos o mantenimiento. También puede usar los botones de preguntas rápidas.`;
-    _iaAgregarMsg(resp, true);
-    _iaMensajes.push({ role:'assistant', content: resp });
-    _iaHablar(resp);
-    return;
-  }
-
-  // Prefijo de cortesía con el nombre
-  const prefijo = _iaUsuarioNombre ? `Señor ${_iaUsuarioNombre}, ` : '';
-
   // Indicador de typing
   const typingEl = _iaAgregarMsg('', true, true);
 
@@ -12333,16 +12381,13 @@ async function enviarMensajeIA(textoDirecto){
   let respuesta = null;
   // 1) Intentar el servidor de IA (si está configurado)
   try {
-    const sistemaConNombre = _iaContexto() + (
-      _iaUsuarioNombre ? `\nEl usuario se llama ${_iaUsuarioNombre}. Siempre dirígete a él como "Señor ${_iaUsuarioNombre}" al inicio de la respuesta.` : ''
-    );
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 300,
-        system: sistemaConNombre,
+        system: _iaContexto(),
         messages: _iaMensajes.slice(-8),
       })
     });
@@ -12358,8 +12403,7 @@ async function enviarMensajeIA(textoDirecto){
 
   // 2) Fallback local: leer y resumir los datos reales del dashboard
   if(!respuesta){
-    const base = _iaRespuestaLocal(texto);
-    respuesta = prefijo + base.charAt(0).toLowerCase() + base.slice(1);
+    respuesta = _iaRespuestaLocal(texto);
   }
 
   if(typingEl) typingEl.remove();
