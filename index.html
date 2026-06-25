@@ -12378,33 +12378,10 @@ async function enviarMensajeIA(textoDirecto){
   const status = document.getElementById('ia-status');
   if(status) status.innerHTML = '<div style="width:7px;height:7px;border-radius:50%;background:var(--warn);box-shadow:0 0 6px var(--warn)"></div> Procesando...';
 
-  let respuesta = null;
-  // 1) Intentar el servidor de IA (si está configurado)
-  try {
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 300,
-        system: _iaContexto(),
-        messages: _iaMensajes.slice(-8),
-      })
-    });
-    if(response.ok){
-      const data = await response.json();
-      if(data && data.content && data.content[0] && data.content[0].text){
-        respuesta = data.content[0].text;
-      }
-    }
-  } catch(e) {
-    console.warn('IA servidor no disponible, usando lectura local del dashboard:', e.message);
-  }
-
-  // 2) Fallback local: leer y resumir los datos reales del dashboard
-  if(!respuesta){
-    respuesta = _iaRespuestaLocal(texto);
-  }
+  // Respuesta 100% local: lee y resume los datos reales del dashboard (sin API)
+  const respuesta = _iaRespuestaLocal(texto);
+  // Pequeña pausa para que se vea el indicador "Procesando..."
+  await new Promise(r=>setTimeout(r,400));
 
   if(typingEl) typingEl.remove();
   _iaAgregarMsg(respuesta, true);
