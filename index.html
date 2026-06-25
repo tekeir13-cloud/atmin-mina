@@ -12154,10 +12154,26 @@ function renderIA(){
   if(container){
     container.innerHTML = '';
   }
-  // Saludo inicial tras breve pausa para que el DOM esté listo — con voz
+  // Saludo inicial con voz (en móvil el audio requiere gesto del usuario, se activa al tocar el botón 🔊)
   setTimeout(()=>{
-    _iaAgregarMsg(IA_SALUDO, true);
-    _iaHablar(IA_SALUDO);
+    const esMobil = window.innerWidth <= 768;
+    _iaAgregarMsg(IA_SALUDO + (esMobil ? ' (toca 🔊 para escuchar)' : ''), true);
+    if(!esMobil){
+      // En PC el audio automático funciona sin restricciones
+      _iaHablar(IA_SALUDO);
+    } else {
+      // En móvil agrega botón de audio para respetar la política de gesto del usuario
+      setTimeout(()=>{
+        const container = document.getElementById('ia-messages');
+        if(!container) return;
+        const btn = document.createElement('button');
+        btn.textContent = '🔊 Escuchar presentación';
+        btn.style.cssText = 'background:var(--coal4);border:1px solid var(--border);color:var(--text2);border-radius:8px;padding:8px 14px;font-size:12px;cursor:pointer;margin:4px 0 8px 44px;font-family:"DM Sans",sans-serif';
+        btn.onclick = () => { _iaHablar(IA_SALUDO); btn.remove(); };
+        container.appendChild(btn);
+        container.scrollTop = container.scrollHeight;
+      }, 100);
+    }
   }, 350);
 }
 
@@ -12421,8 +12437,13 @@ function toggleMicIA(){
   const btn = document.getElementById('ia-mic-btn');
   if(!btn) return;
 
+  // Si el audio de presentación está sonando, detenerlo antes de escuchar
+  if(window.speechSynthesis && window.speechSynthesis.speaking){
+    window.speechSynthesis.cancel();
+    _iaHablando = false;
+  }
+
   if(_iaMicActivo){
-    // Detener
     if(_iaRecognition) _iaRecognition.stop();
     _iaMicActivo = false;
     btn.classList.remove('grabando');
@@ -12432,50 +12453,72 @@ function toggleMicIA(){
 
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SpeechRecognition){
-    showNotif('Tu navegador no soporta reconocimiento de voz','error');
+    showNotif('Micrófono no disponible en este navegador. Usa Chrome o Edge.','error');
     return;
   }
 
-  _iaRecognition = new SpeechRecognition();
+  // En iOS Safari webkitSpeechRecognition existe pero puede fallar sin HTTPS
+  try {
+    _iaRecognition = new SpeechRecognition();
+  } catch(e) {
+    showNotif('No se pudo activar el micrófono: ' + e.message, 'error');
+    return;
+  }
+
+  // Intentar múltiples idiomas para mayor compatibilidad en móvil
   _iaRecognition.lang = 'es-PE';
   _iaRecognition.continuous = false;
   _iaRecognition.interimResults = false;
+  _iaRecognition.maxAlternatives = 1;
+
+  const setStatus = (html) => {
+    const s = document.getElementById('ia-status');
+    if(s) s.innerHTML = html;
+  };
+  const resetBtn = () => {
+    _iaMicActivo = false;
+    btn.classList.remove('grabando');
+    btn.textContent = '🎙';
+    setStatus('<div style="width:7px;height:7px;border-radius:50%;background:var(--positive);box-shadow:0 0 6px var(--positive)"></div> Listo');
+  };
 
   _iaRecognition.onstart = () => {
     _iaMicActivo = true;
     btn.classList.add('grabando');
     btn.textContent = '⏹';
-    const status = document.getElementById('ia-status');
-    if(status) status.innerHTML = '<div style="width:7px;height:7px;border-radius:50%;background:var(--negative);box-shadow:0 0 6px var(--negative);animation:ia-mic-pulse 1s infinite"></div> Escuchando...';
+    setStatus('<div style="width:7px;height:7px;border-radius:50%;background:var(--negative);box-shadow:0 0 6px var(--negative);animation:ia-mic-pulse 1s infinite"></div> Escuchando...');
   };
 
   _iaRecognition.onresult = (e) => {
-    const texto = e.results[0][0].transcript;
+    const texto = e.results[0][0].transcript.trim();
+    if(!texto){ resetBtn(); return; }
     const input = document.getElementById('ia-input');
     if(input) input.value = texto;
-    _iaMicActivo = false;
-    btn.classList.remove('grabando');
-    btn.textContent = '🎙';
-    // Enviar automáticamente
-    setTimeout(() => enviarMensajeIA(), 300);
+    resetBtn();
+    setTimeout(() => enviarMensajeIA(), 200);
   };
 
   _iaRecognition.onerror = (e) => {
-    _iaMicActivo = false;
-    btn.classList.remove('grabando');
-    btn.textContent = '🎙';
-    if(e.error !== 'no-speech') showNotif('Error de micrófono: ' + e.error, 'error');
+    resetBtn();
+    const msgs = {
+      'not-allowed':'Permiso de micrófono denegado. Actívalo en ajustes del navegador.',
+      'network':'Error de red al procesar la voz.',
+      'no-speech':'No se detectó voz. Intenta de nuevo.',
+      'audio-capture':'No se encontró micrófono en el dispositivo.',
+      'aborted':'',
+    };
+    const m = msgs[e.error];
+    if(m) showNotif(m, e.error==='no-speech'?'info':'error');
   };
 
-  _iaRecognition.onend = () => {
-    _iaMicActivo = false;
-    btn.classList.remove('grabando');
-    btn.textContent = '🎙';
-    const status = document.getElementById('ia-status');
-    if(status) status.innerHTML = '<div style="width:7px;height:7px;border-radius:50%;background:var(--positive);box-shadow:0 0 6px var(--positive)"></div> Listo';
-  };
+  _iaRecognition.onend = () => { resetBtn(); };
 
-  _iaRecognition.start();
+  try {
+    _iaRecognition.start();
+  } catch(e) {
+    resetBtn();
+    showNotif('Error al iniciar micrófono: ' + e.message, 'error');
+  }
 }
 
 // ── Pregunta rápida ──
