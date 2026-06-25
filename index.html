@@ -2462,6 +2462,7 @@ select option{background:var(--coal3);}
     <button class="mod-tab" id="tab-productos" onclick="modTab('log','productos',this);renderProductos()">📦 Productos</button>
     <button class="mod-tab" onclick="modTab('log','explosivos',this)">💣 Explosivos NV3190</button>
     <button class="mod-tab" onclick="modTab('log','stockremanente',this)">📉 Stock Remanente</button>
+    <button class="mod-tab" onclick="modTab('log','subalmacen2820',this)">🏗 Subalmacén NV2820</button>
     <button class="mod-tab" onclick="modTab('log','solicitudmantlog',this)">📋 Solic. Mantenimiento</button>
     <button class="mod-tab" onclick="modTab('log','combustible',this)">🛢 Combustible</button>
   </div>
@@ -2571,6 +2572,7 @@ select option{background:var(--coal3);}
   <div class="mod-pane" style="display:none" id="log-solicitudmantlog"></div>
   <div class="mod-pane" style="display:none" id="log-combustible"></div>
   <div class="mod-pane" style="display:none" id="log-stockremanente"></div>
+  <div class="mod-pane" style="display:none" id="log-subalmacen2820"></div>
 
   <!-- ════ TAB 4: PRODUCTOS ════ -->
   <div class="mod-pane" id="log-productos" style="display:none">
@@ -4043,7 +4045,7 @@ function navigate(page){
 }
 // Mapa explícito de todos los panes por módulo
 const MODULE_PANES = {
-  'log': ['almacen','historial','inventario','solicitudcompra','productos','explosivos','stockremanente','solicitudmantlog','combustible'],
+  'log': ['almacen','historial','inventario','solicitudcompra','productos','explosivos','stockremanente','subalmacen2820','solicitudmantlog','combustible'],
   'rrhh': ['planilla','tareas','personal','costorrhh','servicios'],
   'op': ['tablero','avance','solicitudes','vsproyectado','valorizaciones'],
   'mant': ['registro','programamant','costosmant'],
@@ -4261,6 +4263,7 @@ function renderModPane(mod,pane){
   else if(k==='log-productos')renderProductos();
   else if(k==='log-explosivos')renderExploTab();
   else if(k==='log-stockremanente')renderStockRemanente();
+  else if(k==='log-subalmacen2820')renderSubalmacen2820();
   else if(k==='log-solicitudmantlog')renderSolicitudMantLog();
   else if(k==='log-combustible')renderCombustible();
   else if(k==='rrhh-planilla')renderPlanilla();
@@ -4283,26 +4286,75 @@ function renderModPane(mod,pane){
   else if(k==='fin-ingmaq') renderFinIngresosMaq();
 }
 
+// ════ SUB-ALMACÉN NV2820 ════
+// Ingreso = salidas de Logística con destino '2820'.
+// Egreso  = consumo Rampa/Cortada que registra el Compresorista.
+// NO entra en la fórmula Almacén General = Insumos + Mantenimiento (es un sub-almacén de control).
+function nv2820Stock(){
+  const map={};
+  const ensure=(cod,nombre,unidad)=>{
+    const k=String(cod||nombre||'').trim();
+    if(!k)return null;
+    if(!map[k])map[k]={codigo:k,nombre:nombre||cod,unidad:unidad||'UND',ingreso:0,egreso:0,stock:0};
+    return map[k];
+  };
+  // INGRESO: Logística → NV2820
+  ((state.almacen&&state.almacen.salidas)||[]).filter(s=>String(s.destino)==='2820').forEach(s=>{
+    const r=ensure(s.codigo||s.producto, s.producto||s.codigo, s.unidad);
+    if(r)r.ingreso+=Number(s.cantidad)||0;
+  });
+  // EGRESO: Compresorista → Rampa/Cortada
+  (state.compresorista||[]).forEach(rep=>{
+    [...(rep.consumoRampa||[]),...(rep.consumoGaleria||[])].forEach(c=>{
+      const r=ensure(c.codigo||c.desc, c.desc||c.codigo, c.unidad);
+      if(r)r.egreso+=Number(c.cant)||0;
+    });
+  });
+  Object.values(map).forEach(r=>r.stock=r.ingreso-r.egreso);
+  return Object.values(map).sort((a,b)=>String(a.nombre).localeCompare(String(b.nombre)));
+}
+
+// Figuras (emoji) por explosivo del catálogo
+const EXPLO_FIG={M1000:'🧨',M3000:'🧨',M5000:'🧨',CARMEX18:'🧵',CARMEX240:'🧵',FAMECORTE:'🪢',NEITHER:'🌀'};
+function exploFig(id){return EXPLO_FIG[id]||'🧨';}
+// Stock de explosivos en almacén (ingresos − salidas de state.almacen.explosivos), en unidades
+function exploStockTotal(){
+  const cat=(typeof EXPLO_CATALOGO!=='undefined')?EXPLO_CATALOGO:[];
+  const ex=(state.almacen&&state.almacen.explosivos)||{ingresos:[],salidas:[]};
+  const res={};
+  cat.forEach(c=>res[c.id]={...c,ingreso:0,salida:0,stock:0});
+  (ex.ingresos||[]).forEach(i=>{const r=res[i.producto];if(r)r.ingreso+=Number(i.totalUnidades||i.unidades||0);});
+  (ex.salidas||[]).forEach(s=>{const r=res[s.producto];if(r)r.salida+=Number(s.totalUnidades||s.unidades||0);});
+  Object.values(res).forEach(r=>r.stock=r.ingreso-r.salida);
+  return Object.values(res);
+}
+
 // ════ STOCK REMANENTE (Logística) ════
 // Muestra: (1) egreso de explosivos reportado en Compresorista,
 //          (2) historial de explosivo consumido reportado por el Jefe de Guardia.
 function renderStockRemanente(){
   const cont=document.getElementById('log-stockremanente');
   if(!cont)return;
-  const COD=(typeof COMP_EXPLOSIVOS!=='undefined')?COMP_EXPLOSIVOS:[];
   const fmtN=n=>(Math.round((n||0)*100)/100).toLocaleString('es-PE');
 
-  // ── (1) Egreso de explosivos desde Compresorista ──
-  const egreso={}; COD.forEach(c=>egreso[c]=0);
-  (state.compresorista||[]).forEach(r=>{
-    (r.explosivos||[]).forEach(e=>{ if(e.codigo in egreso) egreso[e.codigo]+=(e.E||0); });
-  });
-  const totalEgreso=Object.values(egreso).reduce((s,v)=>s+v,0);
-  const egresoRows=COD.filter(c=>egreso[c]>0).map(c=>`
-    <tr>
-      <td style="padding:9px 12px;font-weight:600;color:var(--text)">${c}</td>
-      <td style="padding:9px 12px;text-align:right;font-weight:700;color:#f87171">${fmtN(egreso[c])} und</td>
-    </tr>`).join('') || `<tr><td colspan="2" style="padding:14px;text-align:center;color:var(--text3)">Sin egresos registrados en Compresorista</td></tr>`;
+  // ── (1) Explosivos: figura, código y stock remanente ──
+  const expStock=(typeof exploStockTotal==='function')?exploStockTotal():[];
+  const expCards=expStock.map(e=>{
+    const fig=(typeof exploFig==='function')?exploFig(e.id):'🧨';
+    const col=e.stock>50?'#22c55e':(e.stock>0?'#f59e0b':'#ef4444');
+    const um=e.unidad==='rollo'?'rollos':'und';
+    return `<div style="background:var(--coal3);border:1px solid var(--border);border-radius:14px;padding:14px;text-align:center;position:relative;overflow:hidden">
+      <div style="position:absolute;top:0;right:0;width:54px;height:54px;background:${col}14;border-radius:0 14px 0 54px"></div>
+      <div style="font-size:30px;line-height:1;margin-bottom:6px">${fig}</div>
+      <div style="font-size:13px;font-weight:800;color:var(--text)">${e.nombre}</div>
+      <div style="font-size:10px;color:var(--text3);margin-bottom:8px;font-family:monospace">${e.id}</div>
+      <div style="font-size:22px;font-weight:900;color:${col};letter-spacing:-1px;line-height:1">${fmtN(e.stock)}</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:2px">${um} en stock</div>
+      <div style="font-size:9.5px;color:var(--text3);margin-top:6px;border-top:1px solid var(--border);padding-top:6px">
+        ↓${fmtN(e.ingreso)} · ↑${fmtN(e.salida)}
+      </div>
+    </div>`;
+  }).join('') || `<div style="grid-column:1/-1;padding:18px;text-align:center;color:var(--text3)">Sin explosivos en catálogo</div>`;
 
   // ── (2) Historial Jefe de Guardia ──
   const nombreExp=id=>(typeof exploNombre==='function')?exploNombre(id):id;
@@ -4347,19 +4399,69 @@ function renderStockRemanente(){
     <div style="font-size:12px;color:var(--text3);margin:-6px 0 18px">Explosivo egresado en Compresorista y consumo reportado por los Jefes de Guardia.</div>
 
     <div style="background:var(--coal2);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:22px">
-      <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:10px">🧨 Egreso de Explosivos — Compresorista</div>
-      <table style="width:100%;border-collapse:collapse;font-size:12.5px">
-        <thead><tr style="border-bottom:1px solid var(--border)">
-          <th style="padding:8px 12px;text-align:left;color:var(--text3);font-weight:600">Explosivo</th>
-          <th style="padding:8px 12px;text-align:right;color:var(--text3);font-weight:600">Total Egresado</th>
-        </tr></thead>
-        <tbody>${egresoRows}</tbody>
-        ${totalEgreso>0?`<tfoot><tr style="border-top:2px solid var(--border)"><td style="padding:9px 12px;font-weight:700;color:var(--text)">TOTAL</td><td style="padding:9px 12px;text-align:right;font-weight:800;color:#f87171">${fmtN(totalEgreso)} und</td></tr></tfoot>`:''}
-      </table>
+      <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:12px">🧨 Explosivos — Stock Remanente</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px">${expCards}</div>
     </div>
 
     <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:12px">👷 Reporte Jefe de Guardia — Consumo de Explosivos</div>
     ${repCards}
+  `;
+}
+
+// ════ SUB-ALMACÉN NV2820 (Logística) ════
+// Todo lo que salió del almacén principal hacia NV2820 (ingreso) y lo que el
+// compresorista movió a Rampa/Cortada (egreso). Stock = ingreso − egreso.
+function renderSubalmacen2820(){
+  const cont=document.getElementById('log-subalmacen2820');
+  if(!cont)return;
+  const fmtN=n=>(Math.round((n||0)*100)/100).toLocaleString('es-PE');
+  const items=(typeof nv2820Stock==='function')?nv2820Stock():[];
+  const totIng=items.reduce((s,r)=>s+r.ingreso,0);
+  const totEgr=items.reduce((s,r)=>s+r.egreso,0);
+  const totStk=items.reduce((s,r)=>s+r.stock,0);
+
+  const rows=items.map(r=>{
+    const col=r.stock>0?'#22c55e':(r.stock<0?'#ef4444':'var(--text3)');
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:9px 12px;font-weight:600;color:var(--text)">${r.nombre}</td>
+      <td style="padding:9px 12px;text-align:center;color:var(--text3);font-size:11px">${r.unidad}</td>
+      <td style="padding:9px 12px;text-align:right;color:#60a5fa;font-weight:600">${fmtN(r.ingreso)}</td>
+      <td style="padding:9px 12px;text-align:right;color:#f87171;font-weight:600">${fmtN(r.egreso)}</td>
+      <td style="padding:9px 12px;text-align:right;font-weight:800;color:${col}">${fmtN(r.stock)}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="5" style="padding:18px;text-align:center;color:var(--text3)">Sin movimientos en NV2820. Registra salidas con destino NV2820 en Almacén General.</td></tr>`;
+
+  cont.innerHTML=`
+    <div class="section-title" style="margin-top:0">🏗 Subalmacén NV2820</div>
+    <div style="font-size:12px;color:var(--text3);margin:-6px 0 16px">Control de materiales movidos desde el almacén principal hacia el nivel NV2820. No forma parte de la fórmula Almacén General = Insumos + Mantenimiento.</div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+      <div style="background:var(--coal3);border:1px solid var(--border);border-radius:14px;padding:14px 16px">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">📥 Ingresado (Logística)</div>
+        <div style="font-size:24px;font-weight:900;color:#60a5fa;letter-spacing:-1px;margin-top:3px">${fmtN(totIng)}</div>
+      </div>
+      <div style="background:var(--coal3);border:1px solid var(--border);border-radius:14px;padding:14px 16px">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">📤 Consumido (Rampa/Cortada)</div>
+        <div style="font-size:24px;font-weight:900;color:#f87171;letter-spacing:-1px;margin-top:3px">${fmtN(totEgr)}</div>
+      </div>
+      <div style="background:var(--coal3);border:1px solid var(--border);border-radius:14px;padding:14px 16px">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">📦 Stock en NV2820</div>
+        <div style="font-size:24px;font-weight:900;color:#22c55e;letter-spacing:-1px;margin-top:3px">${fmtN(totStk)}</div>
+      </div>
+    </div>
+
+    <div style="background:var(--coal2);border:1px solid var(--border);border-radius:16px;padding:16px;overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:480px">
+        <thead><tr style="border-bottom:2px solid var(--border)">
+          <th style="padding:8px 12px;text-align:left;color:var(--text3);font-weight:600">Material</th>
+          <th style="padding:8px 12px;text-align:center;color:var(--text3);font-weight:600">U.M.</th>
+          <th style="padding:8px 12px;text-align:right;color:var(--text3);font-weight:600">📥 Ingresó</th>
+          <th style="padding:8px 12px;text-align:right;color:var(--text3);font-weight:600">📤 Consumió</th>
+          <th style="padding:8px 12px;text-align:right;color:var(--text3);font-weight:600">📦 Stock</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
   `;
 }
 
@@ -13717,12 +13819,25 @@ function compMatSelChange(sel){
 function compAddCons(frente) {
   const row = document.createElement('div');
   row.style.cssText = 'display:grid;grid-template-columns:1fr 80px 70px 30px;gap:6px;margin-bottom:6px';
+  // Productos disponibles en el subalmacén NV2820 (con stock)
+  const stock=(typeof nv2820Stock==='function')?nv2820Stock().filter(p=>p.stock>0):[];
+  const opts=stock.length
+    ?stock.map(p=>`<option value="${p.codigo}" data-unidad="${p.unidad}" data-desc="${(p.nombre||'').replace(/"/g,'&quot;')}">${p.nombre} (disp: ${p.stock} ${p.unidad})</option>`).join('')
+    :'<option value="">Sin stock en NV2820</option>';
   row.innerHTML = `
-    <input type="text" placeholder="Descripción" style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 10px;font-size:12px">
-    <input type="number" min="0" placeholder="Cant." style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 8px;font-size:12px;text-align:center">
-    <input type="text" placeholder="Unidad" style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 8px;font-size:12px">
+    <select class="comp-cons-sel" onchange="compConsSelChange(this)" style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 10px;font-size:12px">
+      <option value="">— Material del subalmacén NV2820 —</option>${opts}
+    </select>
+    <input type="number" class="comp-cons-cant" min="0" placeholder="Cant." style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 8px;font-size:12px;text-align:center">
+    <input type="text" class="comp-cons-unidad" placeholder="Unidad" style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 8px;font-size:12px">
     <button onclick="this.parentElement.remove()" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);color:var(--negative);border-radius:4px;cursor:pointer;font-size:14px">×</button>`;
   document.getElementById('comp-cons-'+(frente==='rampa'?'rampa':'gal')+'-rows').appendChild(row);
+}
+function compConsSelChange(sel){
+  const row=sel.parentElement;
+  const opt=sel.options[sel.selectedIndex];
+  const u=row.querySelector('.comp-cons-unidad');
+  if(u&&opt)u.value=opt.getAttribute('data-unidad')||'';
 }
 
 function compCalcF(codigo) {
@@ -13784,18 +13899,24 @@ function guardarReporteComp() {
     const id = c.replace(/[^a-zA-Z0-9]/g,'_');
     return {codigo:c, rampa:parseFloat(document.getElementById('cace-'+id+'-R')?.value)||0, galeria:parseFloat(document.getElementById('cace-'+id+'-G')?.value)||0};
   });
-  // consumo rampa
-  const consumoRampa = [];
-  document.getElementById('comp-cons-rampa-rows').querySelectorAll('div').forEach(row => {
-    const ins = row.querySelectorAll('input');
-    if(ins[0]?.value.trim()) consumoRampa.push({desc:ins[0].value.trim(), cant:ins[1]?.value||'', unidad:ins[2]?.value||''});
-  });
-  // consumo galeria
-  const consumoGaleria = [];
-  document.getElementById('comp-cons-gal-rows').querySelectorAll('div').forEach(row => {
-    const ins = row.querySelectorAll('input');
-    if(ins[0]?.value.trim()) consumoGaleria.push({desc:ins[0].value.trim(), cant:ins[1]?.value||'', unidad:ins[2]?.value||''});
-  });
+  // consumo rampa — egreso del subalmacén NV2820
+  const leerConsumo = wrapId => {
+    const out=[];
+    document.getElementById(wrapId).querySelectorAll('div').forEach(row => {
+      const sel=row.querySelector('.comp-cons-sel');
+      const cant=row.querySelector('.comp-cons-cant');
+      const unidad=row.querySelector('.comp-cons-unidad');
+      if(!sel)return;
+      const opt=sel.options[sel.selectedIndex];
+      const codigo=sel.value;
+      const desc=codigo?(opt?.getAttribute('data-desc')||opt?.text||''):'';
+      const c=parseFloat(cant?.value)||0;
+      if(codigo&&c>0) out.push({codigo, desc, cant:c, unidad:unidad?.value||''});
+    });
+    return out;
+  };
+  const consumoRampa = leerConsumo('comp-cons-rampa-rows');
+  const consumoGaleria = leerConsumo('comp-cons-gal-rows');
 
   // petróleo
   const petroleo = COMP_PETROLEO.map(m => ({equipo:m, gln:parseFloat(document.getElementById('cpet-'+m.replace(/ /g,'_'))?.value)||0}));
