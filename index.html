@@ -11718,6 +11718,16 @@ function segBadgeUpdate(){
 // Inicializar badge al cargar
 (function(){ segBadgeUpdate(); })();
 
+// Mapa de zonas de seguridad (frente -> nombre + color)
+const SEG_ZONAS = {
+  1:{n:'Rampa',c:'#1d6fe5'}, 2:{n:'Cortada',c:'#7c3aed'},
+  3:{n:'Carretera',c:'#0891b2'}, 4:{n:'Patio de maniobra',c:'#d97706'},
+  5:{n:'Zona de equipos',c:'#16a34a'}, 6:{n:'Plataforma de materiales',c:'#db2777'},
+  7:{n:'Almacén Compresorista',c:'#9333ea'}, 8:{n:'Almacén General',c:'#0d9488'},
+  9:{n:'Almacén Mantenimiento',c:'#ca8a04'},
+};
+function segZona(f){ return SEG_ZONAS[f] || SEG_ZONAS[parseInt(f)] || {n:'—',c:'var(--text3)'}; }
+
 function renderSeguridad(){
   const filtroEl=document.getElementById('seg-filtro-mes');
   const meses=[...new Set((state.seguridad||[]).map(r=>(r.fecha||'').slice(0,7)).filter(Boolean))].sort().reverse();
@@ -11741,7 +11751,8 @@ function renderSeguridad(){
   galeria.style.display = 'grid';
 
   galeria.innerHTML = lista.map((r,i) => {
-    const frenteNom = r.frente===1 ? 'Rampa' : 'Cortada';
+    const zona = segZona(r.frente);
+    const frenteNom = zona.n;
     const turnoIcon = r.turno==='dia' ? '☀' : '🌙';
     const turnoNom  = r.turno==='dia' ? 'Día' : 'Noche';
     const fotoHtml  = r.foto
@@ -11760,10 +11771,6 @@ function renderSeguridad(){
         <div style="padding:14px">
           <!-- Header -->
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-            <div style="display:flex;align-items:center;gap:8px">
-              <div style="width:8px;height:8px;border-radius:50%;background:${r.frente===1?'#1d6fe5':'#7c3aed'}"></div>
-              <span style="font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:var(--text)">${frenteNom}</span>
-            </div>
             <div style="font-size:10px;color:var(--text3);background:var(--coal3);padding:3px 8px;border-radius:3px">
               ${turnoIcon} ${turnoNom}
             </div>
@@ -11772,13 +11779,13 @@ function renderSeguridad(){
           <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text2);margin-bottom:10px">
             ${fmtF(r.fecha)} — ${r.hora||'—'}
           </div>
-          <!-- Taladros -->
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">
-            ${[['Totales',r.taladros,'#1d6fe5'],['Cargados',r.cargados,'#d97706'],['Disparados',r.disparados,'#16a34a']].map(([l,v,c])=>`
-              <div style="background:var(--coal3);padding:8px;text-align:center">
-                <div style="font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">${l}</div>
-                <div style="font-family:'DM Mono',monospace;font-size:20px;font-weight:800;color:${c}">${v||0}</div>
-              </div>`).join('')}
+          <!-- Zona / ubicación -->
+          <div style="display:flex;align-items:center;gap:8px;background:var(--coal3);border-left:3px solid ${zona.c};padding:9px 12px;border-radius:4px;margin-bottom:10px">
+            <span style="font-size:15px">📍</span>
+            <div>
+              <div style="font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:1px">Zona del reporte</div>
+              <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text)">${frenteNom}</div>
+            </div>
           </div>
           ${r.obs ? `<div style="font-size:10px;color:var(--text3);line-height:1.5;border-top:1px solid var(--border);padding-top:8px">${r.obs}</div>` : ''}
           <!-- Registrado -->
@@ -11795,7 +11802,8 @@ function renderSeguridad(){
 function verReporteSeg(i){
   const r = state.seguridad[i];
   if(!r) return;
-  const frenteNom = r.frente===1?'Rampa':'Cortada';
+  const zona = segZona(r.frente);
+  const frenteNom = zona.n;
   const turnoNom  = r.turno==='dia'?'☀ Día':'🌙 Noche';
   const modal = document.getElementById('modal-seg-ver-content');
   if(!modal) return;
@@ -11819,12 +11827,12 @@ function verReporteSeg(i){
           <div style="font-size:12px;color:var(--text);font-weight:600">${v}</div>
         </div>`).join('')}
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
-      ${[['Taladros Totales',r.taladros,'#1d6fe5'],['Cargados',r.cargados,'#d97706'],['Disparados',r.disparados,'#16a34a']].map(([l,v,c])=>`
-        <div style="background:var(--coal3);padding:12px;text-align:center">
-          <div style="font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">${l}</div>
-          <div style="font-family:'DM Mono',monospace;font-size:28px;font-weight:800;color:${c}">${v||0}</div>
-        </div>`).join('')}
+    <div style="display:flex;align-items:center;gap:10px;background:var(--coal3);border-left:4px solid ${zona.c};padding:12px 14px;border-radius:4px;margin-bottom:16px">
+      <span style="font-size:20px">📍</span>
+      <div>
+        <div style="font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">Zona donde ocurrió</div>
+        <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--text)">${frenteNom}</div>
+      </div>
     </div>
     ${r.obs ? `<div style="background:var(--coal3);padding:12px;font-size:11px;color:var(--text2);line-height:1.6">
       <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Observaciones</div>
@@ -12213,6 +12221,63 @@ function _iaAgregarMsg(texto, esBot, esTyping=false){
   return div;
 }
 
+// ── Respuesta local: lee los datos reales del dashboard sin servidor ──
+function _iaMetrics(){
+  const m={};
+  try{
+    const pers=state.personal.filter(p=>p.estado==='activo');
+    const aus =state.personal.filter(p=>p.estado==='ausente');
+    const perf=state.perforacion||[];
+    m.activos=pers.length; m.ausentes=aus.length;
+    m.metros=perf.reduce((s,p)=>s+(p.metros||0),0);
+    m.f1=perf.filter(p=>p.frente===1).reduce((s,p)=>s+(p.metros||0),0);
+    m.f2=perf.filter(p=>p.frente===2).reduce((s,p)=>s+(p.metros||0),0);
+    m.dias=new Set(perf.map(p=>p.fecha)).size;
+    m.meta=(state.metas.f1+state.metas.f2)*state.metas.dias;
+    m.cum=m.meta>0?Math.round((m.metros/m.meta)*100):0;
+    m.prom=m.dias>0?(m.metros/m.dias):0;
+    m.costo=(typeof calcCostos==='function')?calcCostos():0;
+    m.ingreso=(typeof calcIngresos==='function')?calcIngresos():0;
+    m.util=m.ingreso-m.costo;
+    m.margen=m.ingreso>0?Math.round((m.util/m.ingreso)*100):0;
+    m.cxm=m.metros>0?(m.costo/m.metros):0;
+    m.pet=(state.petroleo.historial||[]).reduce((s,p)=>s+(p.galones*p.precio),0);
+    m.petStock=state.petroleo.stock||0;
+    m.exp=(state.explosivos.historial||[]).reduce((s,e)=>s+(e.cantidad*(e.precio||0)),0);
+    m.mant=(state.mantenimiento||[]).reduce((s,x)=>s+(x.costo||0),0);
+    m.ocPend=(state.ordenes||[]).filter(o=>o.estado==='pendiente').length;
+  }catch(e){ console.warn('metrics',e); }
+  return m;
+}
+function _iaRespuestaLocal(texto){
+  const m=_iaMetrics();
+  const fS=v=>'S/ '+(Number(v)||0).toFixed(2);
+  const q=(texto||'').toLowerCase();
+  const has=(...ws)=>ws.some(w=>q.includes(w));
+  if(has('personal','trabajador','gente','cuadrilla','obrero','asisten'))
+    return `Actualmente hay ${m.activos} trabajadores activos y ${m.ausentes} ausentes en la operación.`;
+  if(has('metro','avance','perfora','rampa','cortada'))
+    return `El avance acumulado es de ${m.metros.toFixed(1)} m (Rampa ${m.f1.toFixed(1)} m · Cortada ${m.f2.toFixed(1)} m), con ${m.cum}% de cumplimiento de la meta de ${m.meta} m. Promedio diario: ${m.prom.toFixed(1)} m/día.`;
+  if(has('utilidad','ganancia','margen','rentab'))
+    return `La utilidad es de ${fS(m.util)} con un margen del ${m.margen}%. Ingresos ${fS(m.ingreso)} contra costos ${fS(m.costo)}.`;
+  if(has('costo','gasto','egreso'))
+    return `El costo operativo total es ${fS(m.costo)}, equivalente a ${fS(m.cxm)} por metro. Desglose: petróleo ${fS(m.pet)}, explosivos ${fS(m.exp)}, mantenimiento ${fS(m.mant)}.`;
+  if(has('ingreso','valoriza','factura'))
+    return `Los ingresos registrados suman ${fS(m.ingreso)}, lo que deja una utilidad de ${fS(m.util)} (margen ${m.margen}%).`;
+  if(has('petroleo','petróleo','combustible','diesel','gasolina'))
+    return `El gasto en petróleo es ${fS(m.pet)} y el stock disponible es de ${m.petStock} galones.`;
+  if(has('explosiv','dinamita','anfo'))
+    return `El consumo de explosivos representa ${fS(m.exp)} en costos hasta el momento.`;
+  if(has('mantenimiento','maquina','equipo','reparac'))
+    return `El costo de mantenimiento acumulado es ${fS(m.mant)}. Hay ${m.ocPend} órdenes de compra pendientes.`;
+  if(has('orden','compra','pedido'))
+    return `Hay ${m.ocPend} órdenes de compra pendientes de atención.`;
+  if(has('cumplimiento','meta','programa','proyecta'))
+    return `El cumplimiento del programa es ${m.cum}% (${m.metros.toFixed(1)} m de ${m.meta} m). A un promedio de ${m.prom.toFixed(1)} m/día en ${m.dias} días operados.`;
+  // Resumen general por defecto
+  return `Resumen de la operación: ${m.activos} trabajadores activos, ${m.metros.toFixed(1)} m avanzados (${m.cum}% de la meta), utilidad ${fS(m.util)} (margen ${m.margen}%) y costo por metro ${fS(m.cxm)}. Pregúntame por personal, avance, costos, utilidad, petróleo o mantenimiento para más detalle.`;
+}
+
 // ── Enviar mensaje ──
 async function enviarMensajeIA(textoDirecto){
   const input = document.getElementById('ia-input');
@@ -12232,6 +12297,8 @@ async function enviarMensajeIA(textoDirecto){
   const status = document.getElementById('ia-status');
   if(status) status.innerHTML = '<div style="width:7px;height:7px;border-radius:50%;background:var(--warn);box-shadow:0 0 6px var(--warn)"></div> Procesando...';
 
+  let respuesta = null;
+  // 1) Intentar el servidor de IA (si está configurado)
   try {
     const response = await fetch('/api/chat', {
       method: 'POST',
@@ -12243,28 +12310,26 @@ async function enviarMensajeIA(textoDirecto){
         messages: _iaMensajes.slice(-8), // últimos 8 mensajes para contexto
       })
     });
-
-    const data = await response.json();
-    const respuesta = data.content && data.content[0] ? data.content[0].text : 'No pude procesar tu consulta.';
-
-    // Quitar typing
-    if(typingEl) typingEl.remove();
-
-    // Mostrar respuesta
-    _iaAgregarMsg(respuesta, true);
-    _iaMensajes.push({ role:'assistant', content: respuesta });
-
-    // Leer en voz alta — voz masculina grave
-    _iaHablar(respuesta);
-
-    if(status) status.innerHTML = '<div style="width:7px;height:7px;border-radius:50%;background:var(--positive);box-shadow:0 0 6px var(--positive)"></div> Listo';
-
+    if(response.ok){
+      const data = await response.json();
+      if(data && data.content && data.content[0] && data.content[0].text){
+        respuesta = data.content[0].text;
+      }
+    }
   } catch(e) {
-    if(typingEl) typingEl.remove();
-    _iaAgregarMsg('El asistente IA no está disponible en este momento. Se requiere configuración del servidor.', true);
-    if(status) status.innerHTML = '<div style="width:7px;height:7px;border-radius:50%;background:var(--negative);box-shadow:0 0 6px var(--negative)"></div> No disponible';
-    console.error('IA error:', e);
+    console.warn('IA servidor no disponible, usando lectura local del dashboard:', e.message);
   }
+
+  // 2) Fallback local: leer y resumir los datos reales del dashboard
+  if(!respuesta){
+    respuesta = _iaRespuestaLocal(texto);
+  }
+
+  if(typingEl) typingEl.remove();
+  _iaAgregarMsg(respuesta, true);
+  _iaMensajes.push({ role:'assistant', content: respuesta });
+  _iaHablar(respuesta);
+  if(status) status.innerHTML = '<div style="width:7px;height:7px;border-radius:50%;background:var(--positive);box-shadow:0 0 6px var(--positive)"></div> Listo';
 }
 
 // ── Voz masculina grave ──
