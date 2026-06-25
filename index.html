@@ -4144,26 +4144,29 @@ function mostrarLogin(){
 async function cargarDesdeSB(){
   try{
     // Obtener mes activo
-    const { data: mesData } = await sb.from('meses').select('*').eq('activo',true).single().catch(()=>({data:null}));
+    // El query builder de supabase-js es "thenable" pero NO tiene .catch().
+    // Lo envolvemos con Promise.resolve(...) para tolerar tablas inexistentes/errores.
+    const safe = q => Promise.resolve(q).then(r=>r, ()=>({data:null}));
+    const { data: mesData } = await safe(sb.from('meses').select('*').eq('activo',true).single());
     if(mesData){
       state.mesActivo = { id: mesData.id, mes: mesData.mes, año: mesData.año };
     }
-    const mesId = state.mesActivo.id;
+    const mesId = state.mesActivo && state.mesActivo.id;
 
     const[per,perf,expH,expS,petH,acH,mant,hor,tar,ocs,vals,eppH,petStock]=await Promise.all([
-      sb.from('personal').select('*').order('id'),
-      mesId ? sb.from('perforacion').select('*').eq('mes_id',mesId).order('fecha') : {data:[]},
-      mesId ? sb.from('explosivos_historial').select('*').eq('mes_id',mesId).order('fecha') : {data:[]},
-      sb.from('explosivos_stock').select('*'),
-      mesId ? sb.from('petroleo_historial').select('*').eq('mes_id',mesId).order('fecha') : {data:[]},
-      mesId ? sb.from('aceros_historial').select('*').eq('mes_id',mesId).order('fecha') : {data:[]},
-      mesId ? sb.from('mantenimiento').select('*').eq('mes_id',mesId).order('fecha') : {data:[]},
-      sb.from('horometros').select('*').order('fecha').catch(()=>({data:[]})),
-      mesId ? sb.from('tareas').select('*').eq('mes_id',mesId).order('fecha').catch(()=>({data:[]})) : {data:[]},
-      mesId ? sb.from('ordenes_compra').select('*').eq('mes_id',mesId).order('fecha').catch(()=>({data:[]})) : {data:[]},
-      mesId ? sb.from('valorizaciones').select('*').eq('mes_id',mesId).order('fecha').catch(()=>({data:[]})) : {data:[]},
-      mesId ? sb.from('epp_historial').select('*').eq('mes_id',mesId).order('fecha').catch(()=>({data:[]})) : {data:[]},
-      sb.from('petroleo_stock').select('*').single().catch(()=>({data:null})),
+      safe(sb.from('personal').select('*').order('id')),
+      mesId ? safe(sb.from('perforacion').select('*').eq('mes_id',mesId).order('fecha')) : {data:[]},
+      mesId ? safe(sb.from('explosivos_historial').select('*').eq('mes_id',mesId).order('fecha')) : {data:[]},
+      safe(sb.from('explosivos_stock').select('*')),
+      mesId ? safe(sb.from('petroleo_historial').select('*').eq('mes_id',mesId).order('fecha')) : {data:[]},
+      mesId ? safe(sb.from('aceros_historial').select('*').eq('mes_id',mesId).order('fecha')) : {data:[]},
+      mesId ? safe(sb.from('mantenimiento').select('*').eq('mes_id',mesId).order('fecha')) : {data:[]},
+      safe(sb.from('horometros').select('*').order('fecha')),
+      mesId ? safe(sb.from('tareas').select('*').eq('mes_id',mesId).order('fecha')) : {data:[]},
+      mesId ? safe(sb.from('ordenes_compra').select('*').eq('mes_id',mesId).order('fecha')) : {data:[]},
+      mesId ? safe(sb.from('valorizaciones').select('*').eq('mes_id',mesId).order('fecha')) : {data:[]},
+      mesId ? safe(sb.from('epp_historial').select('*').eq('mes_id',mesId).order('fecha')) : {data:[]},
+      safe(sb.from('petroleo_stock').select('*').single()),
     ]);
     // Stock de petróleo desde tabla dedicada
     if(petStock && petStock.data) state.petroleo.stock = Number(petStock.data.cantidad);
