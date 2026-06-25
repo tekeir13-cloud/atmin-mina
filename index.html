@@ -12144,9 +12144,26 @@ let _iaHablando    = false;
 let _iaMicActivo   = false;
 let _iaMensajes    = []; // historial del chat
 
+let _iaUsuarioNombre = null;
+let _iaEsperandoNombre = false;
+
 function renderIA(){
-  // Ya está renderizado en HTML, solo inicializar
   _iaMensajes = [];
+  _iaUsuarioNombre = null;
+  _iaEsperandoNombre = false;
+  // Limpiar mensajes previos del contenedor
+  const container = document.getElementById('ia-messages');
+  if(container){
+    container.innerHTML = '';
+  }
+  // Saludo inicial tras breve pausa para que el DOM esté listo
+  setTimeout(()=>{
+    _iaAgregarMsg(
+      'Hola, soy el asistente MUKICLOUD asignado por el ingeniero Percy Alcántara para las operaciones de Temual. Para brindarte un mejor servicio, ¿cuál es tu nombre?',
+      true
+    );
+    _iaEsperandoNombre = true;
+  }, 300);
 }
 
 // ── Construir contexto de la mina para Claude ──
@@ -12290,6 +12307,22 @@ async function enviarMensajeIA(textoDirecto){
   _iaAgregarMsg(texto, false);
   _iaMensajes.push({ role:'user', content: texto });
 
+  // ── Si estamos esperando el nombre del usuario ──
+  if(_iaEsperandoNombre){
+    _iaEsperandoNombre = false;
+    // Limpiar y capitalizar el nombre dado
+    const nombreLimpio = texto.trim().split(' ').map(p=>p.charAt(0).toUpperCase()+p.slice(1).toLowerCase()).join(' ');
+    _iaUsuarioNombre = nombreLimpio;
+    const resp = `Mucho gusto, señor ${_iaUsuarioNombre}. Estoy listo para ayudarle con la información de la operación. Puede preguntarme sobre producción, costos, personal, combustible, explosivos o mantenimiento. También puede usar los botones de preguntas rápidas.`;
+    _iaAgregarMsg(resp, true);
+    _iaMensajes.push({ role:'assistant', content: resp });
+    _iaHablar(resp);
+    return;
+  }
+
+  // Prefijo de cortesía con el nombre
+  const prefijo = _iaUsuarioNombre ? `Señor ${_iaUsuarioNombre}, ` : '';
+
   // Indicador de typing
   const typingEl = _iaAgregarMsg('', true, true);
 
@@ -12300,14 +12333,17 @@ async function enviarMensajeIA(textoDirecto){
   let respuesta = null;
   // 1) Intentar el servidor de IA (si está configurado)
   try {
+    const sistemaConNombre = _iaContexto() + (
+      _iaUsuarioNombre ? `\nEl usuario se llama ${_iaUsuarioNombre}. Siempre dirígete a él como "Señor ${_iaUsuarioNombre}" al inicio de la respuesta.` : ''
+    );
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 300,
-        system: _iaContexto(),
-        messages: _iaMensajes.slice(-8), // últimos 8 mensajes para contexto
+        system: sistemaConNombre,
+        messages: _iaMensajes.slice(-8),
       })
     });
     if(response.ok){
@@ -12322,7 +12358,8 @@ async function enviarMensajeIA(textoDirecto){
 
   // 2) Fallback local: leer y resumir los datos reales del dashboard
   if(!respuesta){
-    respuesta = _iaRespuestaLocal(texto);
+    const base = _iaRespuestaLocal(texto);
+    respuesta = prefijo + base.charAt(0).toLowerCase() + base.slice(1);
   }
 
   if(typingEl) typingEl.remove();
