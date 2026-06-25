@@ -13793,27 +13793,12 @@ function seleccionarTurno(turno) {
 function compAddMat() {
   const row = document.createElement('div');
   row.style.cssText = 'display:grid;grid-template-columns:2fr 80px 70px 30px;gap:6px;margin-bottom:6px';
-  const salidas2820 = ((state.almacen&&state.almacen.salidas)||[]).filter(s=>String(s.destino)==='2820');
-  const prodMap={};
-  salidas2820.forEach(s=>{const k=s.codigo||s.producto;if(k&&!prodMap[k])prodMap[k]={nombre:s.producto||s.codigo,unidad:s.unidad||'UND',codigo:k};});
-  const prods=Object.values(prodMap);
-  const opts=prods.length
-    ?prods.map(p=>`<option value="${p.codigo}" data-unidad="${p.unidad}">${p.nombre}</option>`).join('')
-    :'<option value="">Sin materiales asignados a NV2820</option>';
   row.innerHTML=`
-    <select class="comp-mat-sel" onchange="compMatSelChange(this)" style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 10px;font-size:12px">
-      <option value="">— Seleccionar material —</option>${opts}
-    </select>
+    <input type="text" class="comp-mat-desc" placeholder="Descripción del material" style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 10px;font-size:12px">
     <input type="number" class="comp-mat-cant" min="0" placeholder="Cant." style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 8px;font-size:12px;text-align:center">
     <input type="text" class="comp-mat-unidad" placeholder="Unidad" style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 8px;font-size:12px">
     <button onclick="this.parentElement.remove()" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);color:var(--negative);border-radius:4px;cursor:pointer;font-size:14px">×</button>`;
   document.getElementById('comp-mat-rows').appendChild(row);
-}
-function compMatSelChange(sel){
-  const row=sel.parentElement;
-  const opt=sel.options[sel.selectedIndex];
-  const u=row.querySelector('.comp-mat-unidad');
-  if(u&&opt)u.value=opt.dataset.unidad||'';
 }
 
 function compAddCons(frente) {
@@ -13876,11 +13861,10 @@ function guardarReporteComp() {
   // materiales almacén
   const materialesAlmacen = [];
   document.getElementById('comp-mat-rows').querySelectorAll('div').forEach(row => {
-    const sel=row.querySelector('.comp-mat-sel');
-    const cant=row.querySelector('.comp-mat-cant');
-    const unidad=row.querySelector('.comp-mat-unidad');
-    const desc=sel?(sel.options[sel.selectedIndex]?.text||''):'';
-    if(desc&&desc!=='— Seleccionar material —'&&desc!=='Sin materiales asignados a NV2820') materialesAlmacen.push({desc,cant:cant?.value||'',unidad:unidad?.value||''});
+    const desc=(row.querySelector('.comp-mat-desc')?.value||'').trim();
+    const cant=row.querySelector('.comp-mat-cant')?.value||'';
+    const unidad=row.querySelector('.comp-mat-unidad')?.value||'';
+    if(desc) materialesAlmacen.push({desc,cant,unidad});
   });
 
   // explosivos
