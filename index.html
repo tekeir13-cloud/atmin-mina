@@ -4590,9 +4590,9 @@ function renderDashEjecutivo(){
   const compMes=(state.compresorista||[]).filter(r=>(r.fecha||'').startsWith(mes));
   const horasMaq={},galMaqPet={},galMaqGas={};
   compMes.forEach(r=>{
-    (r.horometros||[]).forEach(h=>{horasMaq[h.equipo]=(horasMaq[h.equipo]||0)+(h.HT||0);});
-    (r.petroleo||[]).forEach(p=>{galMaqPet[p.equipo]=(galMaqPet[p.equipo]||0)+(p.gln||0);});
-    (r.gasolina||[]).forEach(p=>{galMaqGas[p.equipo]=(galMaqGas[p.equipo]||0)+(p.gln||0);});
+    (r.horometros||[]).forEach(h=>{const k=(h.equipo||'').toLowerCase();horasMaq[k]=(horasMaq[k]||0)+(h.HT||0);});
+    (r.petroleo||[]).forEach(p=>{const k=(p.equipo||'').toLowerCase();galMaqPet[k]=(galMaqPet[k]||0)+(p.gln||0);});
+    (r.gasolina||[]).forEach(p=>{const k=(p.equipo||'').toLowerCase();galMaqGas[k]=(galMaqGas[k]||0)+(p.gln||0);});
   });
   const precioPet=compGetPrecioPet();
   const precioGas=compGetPrecioGas();
@@ -5241,7 +5241,13 @@ function sincronizarPerforacionReportes(){
 }
 
 function seedModulosDemo(){
-  const DIA='2026-06-25';
+  // Anclar el demo al mes/día REAL de hoy para que todos los dashboards
+  // (tarjetas "hoy", avance mensual, P&L por equipo) siempre tengan datos.
+  const DIA=hoy();
+  const MES=DIA.slice(0,7);
+  const dM=(dd)=>MES+'-'+String(dd).padStart(2,'0');  // día dd del mes actual
+  const _yy=+MES.slice(0,4), _mm=+MES.slice(5,7);
+  const MES_NOMBRE=['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][_mm]+' '+_yy;
 
   // ── 1. REPORTES DE GUARDIA (Operaciones) ──
   if(!(state.reportesGuardia&&state.reportesGuardia.length)){
@@ -5298,7 +5304,9 @@ function seedModulosDemo(){
          {equipo:'Compresora M122',gln:15},
          {equipo:'Scoop Epiroc',gln:12},
          {equipo:'Scoop Monte',gln:10},
-         {equipo:'Dumper',gln:6}
+         {equipo:'Dumper',gln:6},
+         {equipo:'Excavadora',gln:18},
+         {equipo:'Cargador Frontal',gln:14}
        ],
        gasolina:[
          {equipo:'Camioneta Blanca',gln:3},
@@ -5312,7 +5320,9 @@ function seedModulosDemo(){
          {equipo:'Compresora M122',HI:9870,HF:9882,HT:12},
          {equipo:'Scoop Epiroc',HI:6240,HF:6250,HT:10},
          {equipo:'Scoop Monte',HI:4180,HF:4190,HT:10},
-         {equipo:'Dumper',HI:3320,HF:3328,HT:8}
+         {equipo:'Dumper',HI:3320,HF:3328,HT:8},
+         {equipo:'Excavadora',HI:5510,HF:5520,HT:10},
+         {equipo:'Cargador Frontal',HI:2890,HF:2898,HT:8}
        ],
        obs:'Turno sin incidentes. Compresoras operando al 100%. Avance satisfactorio en ambos frentes. Se realizó engrase preventivo de Scoop Epiroc.',
        _precios:{petroleo:14.5,gasolina:16.2}}
@@ -5345,14 +5355,14 @@ function seedModulosDemo(){
        ],
        horasMant:3,manoobra:112.50,costo:267.50,estado:'pendiente',
        aprobOps:null,aprobLog:null},
-      {id:'KM2002',fecha:'2026-06-24',equipo:'Scoop Epiroc',tipo:'Correctivo',
+      {id:'KM2002',fecha:dM(24),equipo:'Scoop Epiroc',tipo:'Correctivo',
        resp:'Roberto Díaz Huanca',desc:'Reparación de manguera hidráulica rota — parada de emergencia en Rampa',
        repuestos:[
          {id:'R006',key:'R006',nombre:'Manguera hidráulica 1/2" x 1m',unidad:'UND',cant:2,costo:48.00}
        ],
        horasMant:2,manoobra:75.00,costo:171.00,estado:'ok',
-       aprobOps:{ok:true,resp:'Percy Alcántara',fecha:'2026-06-24'},
-       aprobLog:{ok:true,resp:'Ana Puma Ccama',fecha:'2026-06-24'}}
+       aprobOps:{ok:true,resp:'Percy Alcántara',fecha:dM(24)},
+       aprobLog:{ok:true,resp:'Ana Puma Ccama',fecha:dM(24)}}
     ];
     try{localStorage.setItem(MANTKIT_KEY,JSON.stringify(state.mantenimiento));}catch(e){}
   }
@@ -5381,20 +5391,20 @@ function seedModulosDemo(){
   }catch(e){}
 
   // ── 7. INGRESOS JUNIO en ALMACÉN (si el mes actual no tiene registros) ──
-  const tieneJunio=(state.almacen.ingresos||[]).some(i=>(i.fecha||'').startsWith('2026-06'));
+  const tieneJunio=(state.almacen.ingresos||[]).some(i=>(i.fecha||'').startsWith(MES));
   if(!tieneJunio){
     const ingJun=[
-      {id:'I101',fecha:'2026-06-02',vale:'120100',detalle:'Almacen Poderosa',almacen:'General',
+      {id:'I101',fecha:dM(2),vale:'120100',detalle:'Almacen Poderosa',almacen:'General',
        producto:'PERNO',descripcion:'PERNO SPLIT SET 33 X 5 PIES CON PLATINA',unidad:'UND',cantidad:300,precio:12.50,total:3750.00},
-      {id:'I102',fecha:'2026-06-02',vale:'120100',detalle:'Almacen Poderosa',almacen:'General',
+      {id:'I102',fecha:dM(2),vale:'120100',detalle:'Almacen Poderosa',almacen:'General',
        producto:'RESINA',descripcion:'RESINA POLESTER RAPIDA 330CC',unidad:'UND',cantidad:150,precio:8.90,total:1335.00},
-      {id:'I103',fecha:'2026-06-10',vale:'120450',detalle:'Logistica Trujillo',almacen:'General',
+      {id:'I103',fecha:dM(10),vale:'120450',detalle:'Logistica Trujillo',almacen:'General',
        producto:'MALLA',descripcion:'MALLA ELECTROSOLDADA Nº 10',unidad:'ROLL',cantidad:8,precio:374.91,total:2999.28},
-      {id:'I104',fecha:'2026-06-10',vale:'120450',detalle:'Logistica Trujillo',almacen:'General',
+      {id:'I104',fecha:dM(10),vale:'120450',detalle:'Logistica Trujillo',almacen:'General',
        producto:'CEMENTO',descripcion:'CEMENTO GRIS ANTISALITRE PORTL. TIPO MS',unidad:'BOL',cantidad:80,precio:27.73,total:2218.40},
-      {id:'I105',fecha:'2026-06-18',vale:'120890',detalle:'Almacen Poderosa',almacen:'Mantenimiento',
+      {id:'I105',fecha:dM(18),vale:'120890',detalle:'Almacen Poderosa',almacen:'Mantenimiento',
        producto:'FILTRO',descripcion:'FILTRO DE ACEITE COMPRESORA M135',unidad:'UND',cantidad:10,precio:35.00,total:350.00},
-      {id:'I106',fecha:'2026-06-18',vale:'120890',detalle:'Almacen Poderosa',almacen:'Mantenimiento',
+      {id:'I106',fecha:dM(18),vale:'120890',detalle:'Almacen Poderosa',almacen:'Mantenimiento',
        producto:'RODAJE',descripcion:'RODAJE 6205-2RS',unidad:'UND',cantidad:5,precio:65.00,total:325.00},
       {id:'I107',fecha:DIA,vale:'121200',detalle:'Almacen Poderosa',almacen:'General',
        producto:'BROCA',descripcion:'BROCA DESCARTABLE DE BOTONES 36 MM',unidad:'UND',cantidad:30,precio:76.88,total:2306.40},
@@ -5402,16 +5412,16 @@ function seedModulosDemo(){
        producto:'BROCA',descripcion:'BROCA DESCARTABLE DE BOTONES 32 MM',unidad:'UND',cantidad:20,precio:74.91,total:1498.20}
     ];
     const salJun=[
-      {id:'SJ01',fecha:'2026-06-05',destino:'2820',almacen:'General',maquina:'',solicitante:'Juan Quispe',
+      {id:'SJ01',fecha:dM(5),destino:'2820',almacen:'General',maquina:'',solicitante:'Juan Quispe',
        codigo:'PERNO',producto:'PERNO',descripcion:'PERNO SPLIT SET 33 X 5 PIES CON PLATINA',unidad:'UND',precio:12.50,cantidad:100,importe:1250.00},
-      {id:'SJ02',fecha:'2026-06-05',destino:'2820',almacen:'General',maquina:'',solicitante:'Juan Quispe',
+      {id:'SJ02',fecha:dM(5),destino:'2820',almacen:'General',maquina:'',solicitante:'Juan Quispe',
        codigo:'RESINA',producto:'RESINA',descripcion:'RESINA POLESTER RAPIDA 330CC',unidad:'UND',precio:8.90,cantidad:60,importe:534.00},
-      {id:'SJ03',fecha:'2026-06-12',destino:'2830',almacen:'General',maquina:'',solicitante:'Carlos Mamani',
+      {id:'SJ03',fecha:dM(12),destino:'2830',almacen:'General',maquina:'',solicitante:'Carlos Mamani',
        codigo:'MALLA',producto:'MALLA',descripcion:'MALLA ELECTROSOLDADA Nº 10',unidad:'ROLL',precio:374.91,cantidad:4,importe:1499.64},
-      {id:'SJ04',fecha:'2026-06-20',destino:'2820',almacen:'General',maquina:'',solicitante:'Juan Quispe',
+      {id:'SJ04',fecha:dM(20),destino:'2820',almacen:'General',maquina:'',solicitante:'Juan Quispe',
        codigo:'BROCA',producto:'BROCA',descripcion:'BROCA DESCARTABLE DE BOTONES 36 MM',unidad:'UND',precio:76.88,cantidad:10,importe:768.80},
       // Despacho del kit de mantenimiento KM2002 (aprobado por Logística) — consistente con aprobarLogKitLog
-      {id:'SMKM2002',grupo:'KIT-KM2002',fecha:'2026-06-24',destino:'mantenimiento',almacen:'Mantenimiento',maquina:'Scoop Epiroc',solicitante:'Roberto Díaz Huanca',
+      {id:'SMKM2002',grupo:'KIT-KM2002',fecha:dM(24),destino:'mantenimiento',almacen:'Mantenimiento',maquina:'Scoop Epiroc',solicitante:'Roberto Díaz Huanca',
        codigo:'R006',producto:'Manguera hidráulica 1/2" x 1m',descripcion:'Manguera hidráulica 1/2" x 1m',unidad:'UND',precio:48.00,cantidad:2,importe:96.00}
     ];
     ingJun.forEach(i=>{i.grupo='GI|'+i.fecha+'|'+i.detalle+'|'+i.almacen;});
@@ -5421,17 +5431,17 @@ function seedModulosDemo(){
     // Explosivos junio
     if(!(state.almacen.explosivos.ingresos||[]).length){
       state.almacen.explosivos.ingresos=[
-        {id:'EXI001',fecha:'2026-06-01',vale:'E-8821',producto:'M1000',cajas:2,unidades:0,totalUnidades:100,origen:'Almacén Poderosa',fotoBase64:null},
-        {id:'EXI002',fecha:'2026-06-01',vale:'E-8821',producto:'M3000',cajas:1,unidades:0,totalUnidades:40,origen:'Almacén Poderosa',fotoBase64:null},
-        {id:'EXI003',fecha:'2026-06-01',vale:'E-8821',producto:'CARMEX18',cajas:3,unidades:0,totalUnidades:150,origen:'Almacén Poderosa',fotoBase64:null},
-        {id:'EXI004',fecha:'2026-06-01',vale:'E-8821',producto:'FAMECORTE',cajas:0,unidades:5,totalUnidades:5,origen:'Almacén Poderosa',fotoBase64:null}
+        {id:'EXI001',fecha:dM(1),vale:'E-8821',producto:'M1000',cajas:2,unidades:0,totalUnidades:100,origen:'Almacén Poderosa',fotoBase64:null},
+        {id:'EXI002',fecha:dM(1),vale:'E-8821',producto:'M3000',cajas:1,unidades:0,totalUnidades:40,origen:'Almacén Poderosa',fotoBase64:null},
+        {id:'EXI003',fecha:dM(1),vale:'E-8821',producto:'CARMEX18',cajas:3,unidades:0,totalUnidades:150,origen:'Almacén Poderosa',fotoBase64:null},
+        {id:'EXI004',fecha:dM(1),vale:'E-8821',producto:'FAMECORTE',cajas:0,unidades:5,totalUnidades:5,origen:'Almacén Poderosa',fotoBase64:null}
       ];
       state.almacen.explosivos.salidas=[
-        {id:'EXS001',fecha:'2026-06-03',vale:'ES-1101',producto:'M1000',cajas:0,unidades:30,totalUnidades:30,destino:'NV2820',fotoBase64:null},
-        {id:'EXS002',fecha:'2026-06-03',vale:'ES-1101',producto:'CARMEX18',cajas:0,unidades:42,totalUnidades:42,destino:'NV2820',fotoBase64:null},
-        {id:'EXS003',fecha:'2026-06-15',vale:'ES-1102',producto:'M1000',cajas:0,unidades:30,totalUnidades:30,destino:'NV2820',fotoBase64:null},
-        {id:'EXS004',fecha:'2026-06-15',vale:'ES-1102',producto:'M3000',cajas:0,unidades:12,totalUnidades:12,destino:'NV2820',fotoBase64:null},
-        {id:'EXS005',fecha:'2026-06-15',vale:'ES-1102',producto:'CARMEX18',cajas:0,unidades:42,totalUnidades:42,destino:'NV2820',fotoBase64:null},
+        {id:'EXS001',fecha:dM(3),vale:'ES-1101',producto:'M1000',cajas:0,unidades:30,totalUnidades:30,destino:'NV2820',fotoBase64:null},
+        {id:'EXS002',fecha:dM(3),vale:'ES-1101',producto:'CARMEX18',cajas:0,unidades:42,totalUnidades:42,destino:'NV2820',fotoBase64:null},
+        {id:'EXS003',fecha:dM(15),vale:'ES-1102',producto:'M1000',cajas:0,unidades:30,totalUnidades:30,destino:'NV2820',fotoBase64:null},
+        {id:'EXS004',fecha:dM(15),vale:'ES-1102',producto:'M3000',cajas:0,unidades:12,totalUnidades:12,destino:'NV2820',fotoBase64:null},
+        {id:'EXS005',fecha:dM(15),vale:'ES-1102',producto:'CARMEX18',cajas:0,unidades:42,totalUnidades:42,destino:'NV2820',fotoBase64:null},
         {id:'EXS006',fecha:DIA,vale:'ES-1103',producto:'M1000',cajas:0,unidades:30,totalUnidades:30,destino:'NV2820',fotoBase64:null},
         {id:'EXS007',fecha:DIA,vale:'ES-1103',producto:'CARMEX18',cajas:0,unidades:42,totalUnidades:42,destino:'NV2820',fotoBase64:null},
         {id:'EXS008',fecha:DIA,vale:'ES-1103',producto:'FAMECORTE',cajas:0,unidades:4,totalUnidades:4,destino:'NV2820',fotoBase64:null}
@@ -5446,7 +5456,7 @@ function seedModulosDemo(){
     const vl=vlRaw?JSON.parse(vlRaw):[];
     if(!vl.length){
       state.valorizacionesLabor=[{
-        id:'VL202606',titulo:'Valorización Junio 2026',periodo:'2026-06',mesNum:6,anio:2026,
+        id:'VL'+MES.replace('-',''),titulo:'Valorización '+MES_NOMBRE,periodo:MES,mesNum:_mm,anio:_yy,
         rows:[
           {sact:'Avance lineal RA Brenda',cant:62.5,pu:980,parcial:61250},
           {sact:'Avance lineal CRNE',cant:48.0,pu:980,parcial:47040},
@@ -5464,24 +5474,25 @@ function seedModulosDemo(){
   try{
     if(!combCargar('pet').length){
       combGuardar('pet',[
-        {fecha:'2026-06-08',hora:'07:30',placa:'XAB-123',chofer:'Transp. Andino',cantidad:1500,precio:14.50,obs:'Abastecimiento cisterna'},
-        {fecha:'2026-06-22',hora:'08:00',placa:'XAB-123',chofer:'Transp. Andino',cantidad:1200,precio:14.80,obs:'Abastecimiento cisterna'}
+        {fecha:dM(8),hora:'07:30',placa:'XAB-123',chofer:'Transp. Andino',cantidad:1500,precio:14.50,obs:'Abastecimiento cisterna'},
+        {fecha:dM(22),hora:'08:00',placa:'XAB-123',chofer:'Transp. Andino',cantidad:1200,precio:14.80,obs:'Abastecimiento cisterna'}
       ]);
     }
     if(!combCargar('gas').length){
       combGuardar('gas',[
-        {fecha:'2026-06-08',hora:'07:45',placa:'XAB-123',chofer:'Transp. Andino',cantidad:100,precio:16.20,obs:'Abastecimiento cisterna'}
+        {fecha:dM(8),hora:'07:45',placa:'XAB-123',chofer:'Transp. Andino',cantidad:100,precio:16.20,obs:'Abastecimiento cisterna'}
       ]);
     }
   }catch(e){}
 
   // ── 10. INGRESO POR MÁQUINA (parámetro Finanzas) — junio 2026 ──
   try{
-    const mesJun='2026-06';
+    const mesJun=MES;
     if(!Object.keys(finIngMaqGet(mesJun)).length){
+      // Las llaves DEBEN ser los labels del P&L: Scoop, Dumper, Compresora, Excavadora, Cargador Frontal
       finIngMaqSet(mesJun,{
-        'Scoop Epiroc':28000,'Scoop Monte':22000,'Dumper':15000,
-        'Compresora M135':12000,'Compresora M122':9000,'Grupo Electrógeno':4000
+        'Scoop':56000,'Dumper':35000,'Compresora':12000,
+        'Excavadora':35000,'Cargador Frontal':21000
       });
     }
   }catch(e){}
@@ -13719,8 +13730,8 @@ function renderFinIngresosMaq(){
   const compMes=(state.compresorista||[]).filter(r=>(r.fecha||'').startsWith(mes));
   const galMaqPet={},galMaqGas={};
   compMes.forEach(r=>{
-    (r.petroleo||[]).forEach(p=>{galMaqPet[p.equipo]=(galMaqPet[p.equipo]||0)+(p.gln||0);});
-    (r.gasolina||[]).forEach(p=>{galMaqGas[p.equipo]=(galMaqGas[p.equipo]||0)+(p.gln||0);});
+    (r.petroleo||[]).forEach(p=>{const k=(p.equipo||'').toLowerCase();galMaqPet[k]=(galMaqPet[k]||0)+(p.gln||0);});
+    (r.gasolina||[]).forEach(p=>{const k=(p.equipo||'').toLowerCase();galMaqGas[k]=(galMaqGas[k]||0)+(p.gln||0);});
   });
   const pPet=compGetPrecioPet(),pGas=compGetPrecioGas();
   const mantMes=(state.mantenimiento||[]).filter(m=>(m.fecha||'').startsWith(mes));
