@@ -3942,6 +3942,11 @@ select option{background:var(--coal3);}
 const SUPABASE_URL='https://ueiermflrxiapeednrov.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlaWVybWZscnhpYXBlZWRucm92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MTM4NDYsImV4cCI6MjA5NTQ4OTg0Nn0.75qDiRT0azEfjR0Boqah4rWy2GFumLfhJayKU6S_6e8';
 let sb;
+let SB_ONLINE = false;
+// La sincronización a la nube se habilita SOLO después de haber cargado primero
+// desde la nube. Evita que un dispositivo con localStorage vacío suba el demo
+// y pise los datos reales del equipo.
+let CLOUD_SYNC_READY = false;
 const _isHttps = location.protocol === 'https:' || location.hostname === 'localhost';
 if(!_isHttps){
   console.warn('Modo offline — archivo local detectado');
@@ -3949,6 +3954,7 @@ if(!_isHttps){
 try {
   if(_isHttps && typeof supabase !== 'undefined'){
     sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    SB_ONLINE = true;
   } else {
     throw new Error('offline');
   }
@@ -4170,8 +4176,47 @@ async function cargarDesdeSB(){
     state.valorizaciones=(vals.data||[]).map(v=>({_id:v.id,fecha:v.fecha,tipo:v.tipo,concepto:v.concepto,metros:Number(v.metros||0),precioMetro:Number(v.precio_metro||0),montoAdicional:Number(v.monto_adicional||0),monto:Number(v.monto||0)}));
     state.epp.historial=(eppH.data||[]).map(e=>({_id:e.id,fecha:e.fecha,tipo:e.tipo,trabajador:e.trabajador,cantidad:Number(e.cantidad),precio:Number(e.precio||0),motivo:e.motivo}));
     await cargarSeguridadSB();
+    await cargarAlmacenCombustibleSB();
     showNotif('✓ Datos cargados');
   }catch(err){console.error(err);try{seedData();}catch(e2){console.error('seedData error:',e2);}showNotif('ℹ Modo demo activo','warn');}
+}
+
+// Cargar almacén y combustible desde la nube (snapshot por módulo).
+// Si la nube está vacía, sube el estado local (bootstrap del primer dispositivo).
+async function cargarAlmacenCombustibleSB(){
+  if(!SB_ONLINE) return;
+  try{
+    // ── ALMACÉN ──
+    const almNube = await sbLoadModulo('almacen');
+    // A partir de aquí ya leímos la nube: habilitar escritura (incl. bootstrap)
+    CLOUD_SYNC_READY = true;
+    if(almNube && (((almNube.ingresos||[]).length)||((almNube.salidas||[]).length)||((almNube.inventarioInicial||[]).length))){
+      // La nube manda: reemplaza el estado local y persiste
+      state.almacen={
+        ingresos:almNube.ingresos||[], salidas:almNube.salidas||[],
+        inventarioInicial:almNube.inventarioInicial||[], historialMeses:almNube.historialMeses||[],
+        productos:almNube.productos||state.almacen.productos||[], solicitudesCompra:almNube.solicitudesCompra||[],
+        explosivos:almNube.explosivos||{ingresos:[],salidas:[]}
+      };
+      try{localStorage.setItem(ALM_KEY,JSON.stringify(state.almacen));}catch(e){}
+    }else{
+      // Nube vacía: subir lo que tiene este dispositivo (ya sembrado a full)
+      await sbSyncModulo('almacen', {...state.almacen, productos:state.almacen.productos||[]});
+    }
+    // ── COMBUSTIBLE ──
+    for(const tipo of ['pet','gas']){
+      const arrNube = await sbLoadModulo('comb_'+tipo);
+      if(Array.isArray(arrNube) && arrNube.length){
+        const k=tipo==='gas'?COMB_KEY_GAS:COMB_KEY_PET;
+        try{localStorage.setItem(k,JSON.stringify(arrNube));}catch(e){}
+      }else{
+        const local=combCargar(tipo);
+        if(local.length) await sbSyncModulo('comb_'+tipo, local);
+      }
+    }
+    if(typeof renderAlmacen==='function' && document.getElementById('log-almacen')) renderAlmacen();
+    if(typeof renderDashboard==='function') renderDashboard();
+  }catch(e){ console.error('cargarAlmacenCombustibleSB:',e); }
 }
 
 function seedTarifario(){
@@ -5004,11 +5049,33 @@ function renderDashAlertas(){
   cont.innerHTML=`<div style="margin-bottom:8px"><div style="font-size:13px;font-weight:800;color:var(--text);margin:0 2px 11px">🔔 Alertas de la Operación</div>${body}</div>`;
 }
 
+// ════════════════ SINCRONIZACIÓN EN LA NUBE (snapshot por módulo) ════════════════
+// Tabla Supabase: app_modulos (modulo text PK, data jsonb, updated_at timestamptz)
+// Cada módulo (almacén, combustible) se guarda como un snapshot JSON. Last-write-wins.
+async function sbSyncModulo(modulo, dataObj){
+  if(!SB_ONLINE || !CLOUD_SYNC_READY) return;
+  try{
+    await sb.from('app_modulos').upsert(
+      { modulo, data: dataObj, updated_at: new Date().toISOString() },
+      { onConflict: 'modulo' }
+    );
+  }catch(e){ /* offline o tabla inexistente: el dato ya quedó en localStorage */ }
+}
+async function sbLoadModulo(modulo){
+  if(!SB_ONLINE) return null;
+  try{
+    const { data } = await sb.from('app_modulos').select('data').eq('modulo', modulo).single();
+    return data ? data.data : null;
+  }catch(e){ return null; }
+}
+
 // ════════════════ MÓDULO ALMACÉN / INVENTARIO ════════════════
 const ALM_KEY='atmin_almacen';
 function almacenSave(){
   try{
     localStorage.setItem(ALM_KEY,JSON.stringify({...state.almacen,productos:state.almacen.productos||[]}));
+    // Sincronizar a la nube (no bloquea: si falla, el dato ya está en localStorage)
+    sbSyncModulo('almacen', {...state.almacen, productos: state.almacen.productos||[]});
     return true;
   }catch(e){
     // Cuota excedida (típicamente por fotos en base64): avisar en vez de fallar en silencio
@@ -9988,7 +10055,7 @@ const COMB_ALERTA_PET = 250; // alerta petróleo
 const COMB_ALERTA_GAS = 20;  // alerta gasolina
 
 function combCargar(tipo){ const k=tipo==='gas'?COMB_KEY_GAS:COMB_KEY_PET; try{return JSON.parse(localStorage.getItem(k)||'[]');}catch(e){return[];} }
-function combGuardar(tipo,arr){ const k=tipo==='gas'?COMB_KEY_GAS:COMB_KEY_PET; try{localStorage.setItem(k,JSON.stringify(arr));}catch(e){} }
+function combGuardar(tipo,arr){ const k=tipo==='gas'?COMB_KEY_GAS:COMB_KEY_PET; try{localStorage.setItem(k,JSON.stringify(arr));}catch(e){} sbSyncModulo('comb_'+(tipo==='gas'?'gas':'pet'), arr); }
 
 function combStockTipo(tipo){
   const ingresos=combCargar(tipo).reduce((s,r)=>s+(r.cantidad||0),0);
