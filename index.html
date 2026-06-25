@@ -4098,6 +4098,8 @@ async function init(){
   try{const m=localStorage.getItem(METAS_KEY);if(m)state.metas=JSON.parse(m)||{};}catch(e){}
   // Seed demostración si los módulos están vacíos
   if(typeof seedModulosDemo==='function') seedModulosDemo();
+  // Derivar avance lineal desde los reportes de guardia
+  if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes();
   // Mostrar login inmediatamente — no esperar a Supabase
   mostrarLogin();
 
@@ -4155,6 +4157,7 @@ async function cargarDesdeSB(){
     state.personal=(per.data||[]).map(p=>({id:p.id,nombre:p.nombre,dni:p.dni,rol:p.rol,frente:p.frente,estado:p.estado||'activo',jornal:Number(p.jornal)}));
     normalizarCargos();
     state.perforacion=(perf.data||[]).map(p=>({_id:p.id,fecha:p.fecha,frente:p.frente,metros:Number(p.metros),personas:p.personas,roca:p.roca,obs:p.obs}));
+    if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes();
     state.explosivos.historial=(expH.data||[]).map(e=>({_id:e.id,fecha:e.fecha,frente:e.frente,tipo:e.tipo,cantidad:e.cantidad,detalle:e.detalle,precio:Number(e.precio||0)}));
     if(expS.data&&expS.data.length>0){state.explosivos.stock={};expS.data.forEach(r=>{state.explosivos.stock[r.tipo]=r.cantidad;});}
     state.petroleo.historial=(petH.data||[]).map(p=>({_id:p.id,fecha:p.fecha,frente:p.frente,equipo:p.equipo,galones:Number(p.galones),precio:Number(p.precio)}));
@@ -5217,6 +5220,22 @@ function almacenSeedProductos(){
 //  SEED — datos de demostración para un día completo (2026-06-25)
 //  Se ejecuta UNA VEZ si cada módulo está vacío
 // ══════════════════════════════════════════════════════════════
+// Reconstruye el avance lineal (state.perforacion) a partir de los reportes de guardia.
+// Necesario porque state.perforacion no se persiste en localStorage; se deriva en cada carga.
+// Conserva las entradas de otras fuentes (con _id) y reemplaza solo las derivadas de reportes (_rg).
+function sincronizarPerforacionReportes(){
+  let perf=(state.perforacion||[]).filter(p=>!p._rg);
+  (state.reportesGuardia||[]).forEach(rep=>{
+    const fecha=rep.fecha, jefe=rep.jefe||'';
+    const br=(rep.brenda&&rep.brenda.metros)||0;
+    const cr=(rep.crne&&rep.crne.metros)||0;
+    if(br>0)perf.push({_rg:rep.id,fecha,frente:1,metros:br,personas:1,roca:'—',obs:'RA Brenda — '+jefe});
+    if(cr>0)perf.push({_rg:rep.id,fecha,frente:2,metros:cr,personas:1,roca:'—',obs:'CRNE — '+jefe});
+    (rep.frentesExtra||[]).forEach((f,i)=>{if(f.metros>0)perf.push({_rg:rep.id+'_fx'+(i+1),fecha,frente:3+i,metros:f.metros,personas:1,roca:'—',obs:(f.nombre||'Frente extra '+(i+1))+' — '+jefe});});
+  });
+  state.perforacion=perf;
+}
+
 function seedModulosDemo(){
   const DIA='2026-06-25';
 
@@ -5412,6 +5431,67 @@ function seedModulosDemo(){
       ];
     }
     almacenSave();
+  }
+
+  // ── 8. VALORIZACIÓN (ingreso de la contrata) — junio 2026 ──
+  try{
+    const vlRaw=localStorage.getItem(VALLAB_KEY);
+    const vl=vlRaw?JSON.parse(vlRaw):[];
+    if(!vl.length){
+      state.valorizacionesLabor=[{
+        id:'VL202606',titulo:'Valorización Junio 2026',periodo:'2026-06',mesNum:6,anio:2026,
+        rows:[
+          {sact:'Avance lineal RA Brenda',cant:62.5,pu:980,parcial:61250},
+          {sact:'Avance lineal CRNE',cant:48.0,pu:980,parcial:47040},
+          {sact:'Sostenimiento con perno',cant:180,pu:45,parcial:8100}
+        ],
+        subtotal:116390,descuento:5819.50,total:110570.50,rubros:[],importadoEn:0
+      }];
+      localStorage.setItem(VALLAB_KEY,JSON.stringify(state.valorizacionesLabor));
+    }
+  }catch(e){}
+
+  // ── 9. COMBUSTIBLE (ingreso a cisterna Logística) — junio 2026 ──
+  try{
+    if(!combCargar('pet').length){
+      combGuardar('pet',[
+        {fecha:'2026-06-08',hora:'07:30',placa:'XAB-123',chofer:'Transp. Andino',cantidad:1500,precio:14.50,obs:'Abastecimiento cisterna'},
+        {fecha:'2026-06-22',hora:'08:00',placa:'XAB-123',chofer:'Transp. Andino',cantidad:1200,precio:14.80,obs:'Abastecimiento cisterna'}
+      ]);
+    }
+    if(!combCargar('gas').length){
+      combGuardar('gas',[
+        {fecha:'2026-06-08',hora:'07:45',placa:'XAB-123',chofer:'Transp. Andino',cantidad:100,precio:16.20,obs:'Abastecimiento cisterna'}
+      ]);
+    }
+  }catch(e){}
+
+  // ── 10. INGRESO POR MÁQUINA (parámetro Finanzas) — junio 2026 ──
+  try{
+    const mesJun='2026-06';
+    if(!Object.keys(finIngMaqGet(mesJun)).length){
+      finIngMaqSet(mesJun,{
+        'Scoop Epiroc':28000,'Scoop Monte':22000,'Dumper':15000,
+        'Compresora M135':12000,'Compresora M122':9000,'Grupo Electrógeno':4000
+      });
+    }
+  }catch(e){}
+
+  // ── 11. PLANILLA / TAREO del día (jornal embebido) ──
+  if(!(state.tareas&&state.tareas.length)){
+    const peonsDia=[
+      ['T01','Maestro Perforista',1.0],['T02','Ayudante Perforista',1.0],
+      ['T03','Maestro Sostenimiento',1.0],['T04','Ayudante Sostenimiento',1.0],
+      ['T05','Operador Scoop',1.5],['T06','Bodeguero',1.0],
+      ['T07','Maestro Perforista',1.0],['T08','Ayudante Perforista',1.0],
+      ['T09','Maestro Sostenimiento',1.0],['T10','Operador Scoop',1.5],
+      ['T11','Cargador Anfo',1.0],['T12','Tubería y Servicios',1.0]
+    ];
+    state.tareas=peonsDia.map((p,i)=>({
+      fecha:DIA,trabajadorId:p[0],tarea:'Tareo diario',rol:p[1],
+      frente:i<6?1:2,detalle:'Guardia operativa',estadoTarea:'completado',
+      mult:p[2],jornal:80,turno:i<6?'DIA':'NOCHE'
+    }));
   }
 }
 
@@ -12957,9 +13037,10 @@ function finValorizacionMes(mesYM){
   if(v) return {total:v.total||0,descuento:v.descuento||0,rubros:v.rubros||[]};
   return {total:0,descuento:0,rubros:[]};
 }
-function finAvanceMes(mesYM){ return finFiltrarMes(state.perforacion||[],mesYM).reduce((s,r)=>s+(r.avance||0),0); }
+function finAvanceMes(mesYM){ return finFiltrarMes(state.perforacion||[],mesYM).reduce((s,r)=>s+(r.metros||r.avance||0),0); }
 // Gasto logístico = salidas de almacén general (aceros, EPP, repuestos…). Explosivos van aparte.
-function finCostoAlmacen(mesYM){ return finFiltrarMes((state.almacen&&state.almacen.salidas)||[],mesYM).reduce((s,r)=>s+(r.importe||r.monto||r.costo||0),0); }
+// Excluye despachos a mantenimiento (destino 'mantenimiento'): esos ya se contabilizan en finCostoKits.
+function finCostoAlmacen(mesYM){ return finFiltrarMes((state.almacen&&state.almacen.salidas)||[],mesYM).filter(r=>String(r.destino)!=='mantenimiento').reduce((s,r)=>s+(r.importe||r.monto||r.costo||0),0); }
 function finCostoLogistica(mesYM){ return finCostoAlmacen(mesYM); }
 // Desglose de egresos operativos del mes (NO incluye explosivos, que se reportan aparte)
 function finDesgloseGastos(mesYM){
