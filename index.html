@@ -4182,9 +4182,11 @@ async function cargarDesdeSB(){
     state.valorizaciones=(vals.data||[]).map(v=>({_id:v.id,fecha:v.fecha,tipo:v.tipo,concepto:v.concepto,metros:Number(v.metros||0),precioMetro:Number(v.precio_metro||0),montoAdicional:Number(v.monto_adicional||0),monto:Number(v.monto||0)}));
     state.epp.historial=(eppH.data||[]).map(e=>({_id:e.id,fecha:e.fecha,tipo:e.tipo,trabajador:e.trabajador,cantidad:Number(e.cantidad),precio:Number(e.precio||0),motivo:e.motivo}));
     await cargarSeguridadSB();
-    await cargarAlmacenCombustibleSB();
     showNotif('✓ Datos cargados');
   }catch(err){console.error(err);try{seedData();}catch(e2){console.error('seedData error:',e2);}showNotif('ℹ Modo demo activo','warn');}
+  // Sincronización de almacén/combustible: SIEMPRE, aunque las tablas principales
+  // de Supabase no existan o falle la carga anterior. Aquí se activa CLOUD_SYNC_READY.
+  try{ await cargarAlmacenCombustibleSB(); }catch(e){ console.error('almacen/comb sync:',e); }
 }
 
 // Cargar almacén y combustible desde la nube (snapshot por módulo).
