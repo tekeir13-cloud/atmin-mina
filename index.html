@@ -4770,15 +4770,19 @@ function renderDashAvanceMeta(){
   const cont=document.getElementById('d-avance-meta'); if(!cont)return;
   const FNOM={1:'Rampa',2:'Cortada'};
   const FCOL={1:'#5b6ef5',2:'#10b981'};
+  const M=state.metas||{};
+  const dias=M.dias||M.diasMes||26;
+  const metaF1=M.mensualF1||(M.mensual&&M.mensual.f1)||((M.f1||0)*dias)||0;
+  const metaF2=M.mensualF2||(M.mensual&&M.mensual.f2)||((M.f2||0)*dias)||0;
   const tot=state.perforacion.reduce((s,p)=>s+p.metros,0);
-  const mp=(state.metas.f1+state.metas.f2)*state.metas.dias;
+  const mp=metaF1+metaF2;
   const pct=mp>0?Math.round(tot/mp*100):0;
   const ok=pct>=100;
 
   // por frente
   const filas=[1,2].map(f=>{
     const real=state.perforacion.filter(p=>p.frente===f).reduce((s,p)=>s+p.metros,0);
-    const meta=(f===1?state.metas.f1:state.metas.f2)*state.metas.dias;
+    const meta=f===1?metaF1:metaF2;
     const p=meta>0?Math.round(real/meta*100):0;
     return `<div style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
@@ -5357,7 +5361,7 @@ function seedModulosDemo(){
   try{
     const metasRaw=localStorage.getItem(METAS_KEY);
     if(!metasRaw||JSON.stringify(JSON.parse(metasRaw))==='{}'){
-      state.metas={diasMes:25,f1:3.5,f2:3.0,mensual:{f1:87.5,f2:75.0}};
+      state.metas={dias:25,f1:3.5,f2:3.0,mensualF1:87.5,mensualF2:75.0};
       localStorage.setItem(METAS_KEY,JSON.stringify(state.metas));
     }
   }catch(e){}
