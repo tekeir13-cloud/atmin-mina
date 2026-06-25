@@ -2449,6 +2449,7 @@ select option{background:var(--coal3);}
   <!-- ── Resumen del día + avance + alertas (reconstruido, intuitivo) ── -->
   <div id="d-resumen-hoy"></div>
   <div id="d-avance-meta"></div>
+  <div id="d-stock-actual"></div>
   <div id="d-alertas-panel"></div>
 </div>
 
@@ -4725,6 +4726,7 @@ function renderDashboard(){
   renderDashEjecutivo();
   renderDashResumenHoy();
   renderDashAvanceMeta();
+  renderDashStockActual();
   renderDashAlertas();
 }
 
@@ -4809,6 +4811,164 @@ function renderDashAvanceMeta(){
     <div style="margin-top:6px;padding-top:14px;border-top:1px solid var(--border);font-size:12px;color:${ok?'#10b981':'var(--text3)'}">
       ${ok?'✅ Meta del período alcanzada':`Faltan <strong style="color:var(--text2)">${Math.max(0,mp-tot)} m</strong> para la meta`}
     </div>
+  </div>`;
+}
+
+// Stock actual — cilindros de combustible + explosivos + materiales clave
+function renderDashStockActual(){
+  const cont=document.getElementById('d-stock-actual'); if(!cont)return;
+
+  // ── Combustible ──
+  const stPet=(typeof combStockTipo==='function')?combStockTipo('pet'):0;
+  const stGas=(typeof combStockTipo==='function')?combStockTipo('gas'):0;
+  const capPet=(typeof COMB_CAP_PET!=='undefined')?COMB_CAP_PET:2000;
+  const capGas=(typeof COMB_CAP_GAS!=='undefined')?COMB_CAP_GAS:120;
+  const altPet=(typeof COMB_ALERTA_PET!=='undefined')?COMB_ALERTA_PET:250;
+  const altGas=(typeof COMB_ALERTA_GAS!=='undefined')?COMB_ALERTA_GAS:20;
+
+  const pctPet=Math.min(100,Math.max(0,Math.round(stPet/capPet*100)));
+  const pctGas=Math.min(100,Math.max(0,Math.round(stGas/capGas*100)));
+
+  const semColor=(stock,alerta)=>{
+    if(stock<=alerta) return '#ef4444';
+    if(stock<=alerta*2) return '#f97316';
+    return '#22d3a5';
+  };
+  const colPet=semColor(stPet,altPet);
+  const colGas=semColor(stGas,altGas);
+
+  // Mini cisterna SVG inline (compacta para dashboard)
+  const miniCisterna=(id,stock,cap,alerta,label,unit)=>{
+    const col=semColor(stock,alerta);
+    const pct=Math.min(100,Math.max(0,(stock/cap)*100));
+    const liqY=28+100*(1-pct/100);
+    const liqH=100*pct/100;
+    const sem=stock<=alerta?'CRÍTICO':stock<=alerta*2?'BAJO':'NORMAL';
+    return `<div style="text-align:center;padding:16px 12px;background:var(--coal3);border-radius:14px;border:1px solid ${col}33;min-width:130px;flex:1">
+      <div style="font-size:11px;font-weight:700;color:${col};text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">${label}</div>
+      <svg width="90" height="155" viewBox="0 0 90 155" style="display:block;margin:0 auto;overflow:visible">
+        <defs>
+          <clipPath id="dc-${id}-clip"><rect x="10" y="28" width="70" height="100" rx="7"/></clipPath>
+          <linearGradient id="dc-${id}-g" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${col}" stop-opacity=".85"/>
+            <stop offset="100%" stop-color="${col}" stop-opacity=".3"/>
+          </linearGradient>
+          <linearGradient id="dc-${id}-b" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#374151"/><stop offset="50%" stop-color="#4b5563"/><stop offset="100%" stop-color="#374151"/>
+          </linearGradient>
+        </defs>
+        <!-- patas -->
+        <rect x="16" y="128" width="7" height="20" rx="2" fill="#374151"/>
+        <rect x="67" y="128" width="7" height="20" rx="2" fill="#374151"/>
+        <rect x="10" y="145" width="26" height="4" rx="2" fill="#4b5563"/>
+        <rect x="54" y="145" width="26" height="4" rx="2" fill="#4b5563"/>
+        <!-- tapa inferior -->
+        <ellipse cx="45" cy="128" rx="35" ry="7" fill="#374151"/>
+        <!-- cuerpo -->
+        <rect x="10" y="28" width="70" height="100" fill="url(#dc-${id}-b)"/>
+        <!-- tapa superior -->
+        <ellipse cx="45" cy="28" rx="35" ry="7" fill="#4b5563"/>
+        <!-- líquido -->
+        <g clip-path="url(#dc-${id}-clip)">
+          <rect x="10" y="${liqY}" width="70" height="${liqH}" fill="url(#dc-${id}-g)"/>
+          <ellipse cx="45" cy="${liqY}" rx="35" ry="4" fill="${col}" opacity=".45">
+            <animate attributeName="cy" values="${liqY-1};${liqY+1};${liqY-1}" dur="2.5s" repeatCount="indefinite"/>
+          </ellipse>
+        </g>
+        <!-- contorno -->
+        <rect x="10" y="28" width="70" height="100" rx="7" fill="none" stroke="${col}" stroke-width="1.5" opacity=".6"/>
+        <ellipse cx="45" cy="28" rx="35" ry="7" fill="none" stroke="${col}" stroke-width="1" opacity=".4"/>
+        <ellipse cx="45" cy="128" rx="35" ry="7" fill="none" stroke="${col}" stroke-width="1" opacity=".3"/>
+        <!-- bocamanhole -->
+        <rect x="37" y="15" width="16" height="15" rx="3" fill="#4b5563" stroke="${col}" stroke-width="1"/>
+        <ellipse cx="45" cy="15" rx="10" ry="3" fill="#6b7280" stroke="${col}" stroke-width="1"/>
+        <!-- marcas %-->
+        ${[0.25,0.5,0.75].map(f=>{const y=28+100*f;return `<line x1="6" y1="${y}" x2="10" y2="${y}" stroke="#9ca3af" stroke-width="1"/><text x="5" y="${y+3}" font-size="6" fill="#9ca3af" text-anchor="end">${Math.round((1-f)*100)}</text>`;}).join('')}
+        <!-- cantidad central -->
+        <text x="45" y="${Math.max(82,liqY+30)}" text-anchor="middle" font-size="13" font-weight="900" fill="white" opacity=".95">${stock%1===0?stock:stock.toFixed(0)}</text>
+        <text x="45" y="${Math.max(94,liqY+42)}" text-anchor="middle" font-size="7" fill="white" opacity=".55">${unit}</text>
+      </svg>
+      <div style="margin-top:8px">
+        <div style="font-size:18px;font-weight:900;color:${col}">${pct}%</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px">${stock%1===0?stock:stock.toFixed(0)} / ${cap} ${unit}</div>
+        <div style="margin-top:5px;display:inline-block;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;background:${col}22;color:${col}">${sem}</div>
+      </div>
+    </div>`;
+  };
+
+  // ── Explosivos ──
+  const expStock=state.explosivos&&state.explosivos.stock?state.explosivos.stock:{};
+  const expItems=Object.entries(expStock);
+
+  // ── Almacén — top 5 productos con menor stock ──
+  const invItems=(()=>{
+    try{
+      const inv=(state.almacen&&state.almacen.inventarioInicial)||[];
+      const ingresos=(state.almacen&&state.almacen.ingresos)||[];
+      const salidas=(state.almacen&&state.almacen.salidas)||[];
+      const map={};
+      inv.forEach(r=>{if(r.producto){map[r.producto]=(map[r.producto]||0)+(r.cantidad||0);}});
+      ingresos.forEach(r=>{if(r.producto){map[r.producto]=(map[r.producto]||0)+(r.cantidad||0);}});
+      salidas.forEach(r=>{if(r.producto){map[r.producto]=(map[r.producto]||0)-(r.cantidad||0);}});
+      return Object.entries(map).map(([p,q])=>({p,q:Math.max(0,q)})).sort((a,b)=>a.q-b.q).slice(0,6);
+    }catch(e){return [];}
+  })();
+
+  const barColor=q=>q<=0?'#ef4444':q<=5?'#f97316':q<=20?'#f59e0b':'#22d3a5';
+
+  cont.innerHTML=`
+  <div style="margin-bottom:18px">
+    <div style="font-size:13px;font-weight:800;color:var(--text);margin:0 2px 14px">🏭 Stock Actual</div>
+
+    <!-- COMBUSTIBLE: cilindros -->
+    <div style="background:var(--coal4);border:1px solid var(--border);border-radius:18px;padding:20px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:14px">🛢 Combustible en Cisterna</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center">
+        ${miniCisterna('pet-dash',stPet,capPet,altPet,'Petróleo DB5','gln')}
+        ${miniCisterna('gas-dash',stGas,capGas,altGas,'Gasolina 90','gln')}
+      </div>
+      <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+        ${stPet<=altPet?`<div style="flex:1;min-width:180px;background:rgba(239,68,68,.1);border:1px solid #ef4444;border-radius:10px;padding:10px 14px;font-size:12px;font-weight:700;color:#ef4444">⚠️ Petróleo CRÍTICO — coordinar reabastecimiento</div>`:''}
+        ${stGas<=altGas?`<div style="flex:1;min-width:180px;background:rgba(249,115,22,.1);border:1px solid #f97316;border-radius:10px;padding:10px 14px;font-size:12px;font-weight:700;color:#f97316">⚠️ Gasolina BAJA — verificar stock</div>`:''}
+        ${stPet>altPet&&stGas>altGas?`<div style="font-size:12px;color:var(--text3);padding:4px 0">✅ Niveles de combustible normales</div>`:''}
+      </div>
+    </div>
+
+    <!-- EXPLOSIVOS -->
+    ${expItems.length?`<div style="background:var(--coal4);border:1px solid var(--border);border-radius:18px;padding:20px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:12px">💣 Stock Explosivos</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">
+        ${expItems.map(([prod,q])=>{
+          const col=q<30?'#ef4444':q<100?'#f59e0b':'#22d3a5';
+          return `<div style="background:var(--coal3);border:1px solid ${col}33;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:10px">
+            <div style="font-size:20px">💣</div>
+            <div style="min-width:0">
+              <div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${prod}</div>
+              <div style="font-size:20px;font-weight:900;color:${col};line-height:1.1">${q}</div>
+              <div style="font-size:9px;color:var(--text3)">unidades</div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`:''}
+
+    <!-- ALMACÉN TOP items -->
+    ${invItems.length?`<div style="background:var(--coal4);border:1px solid var(--border);border-radius:18px;padding:20px">
+      <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:12px">📦 Materiales — Stock Crítico</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${invItems.map(({p,q})=>{
+          const col=barColor(q);
+          const pctBar=Math.min(100,q/50*100);
+          return `<div style="display:flex;align-items:center;gap:10px">
+            <div style="width:140px;font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0">${p}</div>
+            <div style="flex:1;background:rgba(255,255,255,.06);border-radius:99px;height:10px;overflow:hidden">
+              <div style="width:${pctBar}%;height:100%;background:${col};border-radius:99px;transition:width .6s"></div>
+            </div>
+            <div style="width:40px;text-align:right;font-size:12px;font-weight:700;color:${col};flex-shrink:0">${q}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`:''}
   </div>`;
 }
 
