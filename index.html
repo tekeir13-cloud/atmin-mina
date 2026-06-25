@@ -4091,6 +4091,13 @@ async function init(){
   almacenLoad();
   // Almacén de mantenimiento (repuestos)
   if(typeof mantRepLoad==='function'){mantRepLoad();if(typeof mantRepSeed==='function')mantRepSeed();}
+  // Cargar módulos secundarios antes de seed
+  if(typeof reportesGuardiaLoad==='function') reportesGuardiaLoad();
+  if(typeof mantKitLoad==='function') mantKitLoad();
+  try{const r=localStorage.getItem(REU_KEY);if(r)state.reuniones=JSON.parse(r)||[];}catch(e){}
+  try{const m=localStorage.getItem(METAS_KEY);if(m)state.metas=JSON.parse(m)||{};}catch(e){}
+  // Seed demostración si los módulos están vacíos
+  if(typeof seedModulosDemo==='function') seedModulosDemo();
   // Mostrar login inmediatamente — no esperar a Supabase
   mostrarLogin();
 
@@ -5207,6 +5214,205 @@ function almacenSeedProductos(){
     {id:'P036',codigo:'PRD-036',nombre:'Grapa Acero 3/16"',descripcion:'GRAPA DE ACERO PARA CABLE 3/16"',unidad:'UND'},
   ];
 }
+// ══════════════════════════════════════════════════════════════
+//  SEED — datos de demostración para un día completo (2026-06-25)
+//  Se ejecuta UNA VEZ si cada módulo está vacío
+// ══════════════════════════════════════════════════════════════
+function seedModulosDemo(){
+  const DIA='2026-06-25';
+
+  // ── 1. REPORTES DE GUARDIA (Operaciones) ──
+  if(!(state.reportesGuardia&&state.reportesGuardia.length)){
+    state.reportesGuardia=[
+      {id:'RG2001',fecha:DIA,turno:'DIA',jefe:'Carlos Mamani Quispe',
+       brenda:{metros:2.4,trabajos:'Avance',sost:1,cimbra:0,perno:6,malla:1,tperf:10,tcarg:8,masas:[28,30,27,25,24,26,22,20,19,21]},
+       crne:{metros:1.8,trabajos:'Avance',sost:1,cimbra:0,perno:4,malla:1,tperf:8,tcarg:6,masas:[20,22,19,18,17,21,16,15]},
+       frentesExtra:[],creadoEn:DIA+'T08:10:00'},
+      {id:'RG2002',fecha:DIA,turno:'NOCHE',jefe:'Luis Torres Flores',
+       brenda:{metros:2.1,trabajos:'Avance',sost:1,cimbra:0,perno:5,malla:1,tperf:9,tcarg:7,masas:[26,28,25,24,22,20,19,18,17]},
+       crne:{metros:1.6,trabajos:'Avance',sost:0,cimbra:0,perno:4,malla:1,tperf:7,tcarg:5,masas:[18,20,17,16,15,14]},
+       frentesExtra:[],creadoEn:DIA+'T20:05:00'}
+    ];
+    try{localStorage.setItem(RG_KEY,JSON.stringify(state.reportesGuardia));}catch(e){}
+  }
+
+  // ── 2. REPORTE COMPRESORISTA ──
+  if(!(state.compresorista&&state.compresorista.length)){
+    state.compresorista=[
+      {fecha:DIA,turno:'DIA',nombre:'Juan Quispe Mamani',dni:'42156789',
+       materialesAlmacen:[
+         {desc:'Aceite hidráulico Mobil DTE 46',cant:'2',unidad:'GLN'},
+         {desc:'Grasa multiusos SKF',cant:'1',unidad:'KG'}
+       ],
+       explosivos:[
+         {codigo:'E.1000',I:50,E:0,C:30,F:20},
+         {codigo:'E.3000',I:20,E:0,C:12,F:8},
+         {codigo:'E.5000',I:0,E:0,C:0,F:0},
+         {codigo:'CX.1.80',I:60,E:0,C:42,F:18},
+         {codigo:'CX.2.40',I:0,E:0,C:0,F:0},
+         {codigo:'FM',I:5,E:0,C:4,F:1},
+         {codigo:'Neiter',I:10,E:0,C:0,F:10}
+       ],
+       expFrente:[
+         {codigo:'E.1000',rampa:18,galeria:12},
+         {codigo:'E.3000',rampa:7,galeria:5},
+         {codigo:'CX.1.80',rampa:25,galeria:17},
+         {codigo:'FM',rampa:2,galeria:2}
+       ],
+       aceros:[
+         {codigo:'BARRA CONICA 4\' X 7/8"',rampa:2,galeria:1},
+         {codigo:'BROCA DESCARTABLE DE BOTONES 36 MM',rampa:1,galeria:1}
+       ],
+       consumoRampa:[
+         {codigo:'ANILLO',desc:'ANILLO RNORP-214B',cant:2,unidad:'UND'},
+         {codigo:'PERNO',desc:'PERNO PASADOR RNS58F-36K',cant:1,unidad:'UND'}
+       ],
+       consumoGaleria:[
+         {codigo:'ANILLO',desc:'ANILLO RNORP-214B',cant:1,unidad:'UND'}
+       ],
+       petroleo:[
+         {equipo:'Grupo Electrógeno',gln:8},
+         {equipo:'Compresora M135',gln:20},
+         {equipo:'Compresora M122',gln:15},
+         {equipo:'Scoop Epiroc',gln:12},
+         {equipo:'Scoop Monte',gln:10},
+         {equipo:'Dumper',gln:6}
+       ],
+       gasolina:[
+         {equipo:'Camioneta Blanca',gln:3},
+         {equipo:'Camioneta Roja',gln:2},
+         {equipo:'Cuatrimoto C',gln:1},
+         {equipo:'Cuatrimoto N',gln:0}
+       ],
+       horometros:[
+         {equipo:'Grupo Electrógeno',HI:8420,HF:8432,HT:12},
+         {equipo:'Compresora M135',HI:12350,HF:12362,HT:12},
+         {equipo:'Compresora M122',HI:9870,HF:9882,HT:12},
+         {equipo:'Scoop Epiroc',HI:6240,HF:6250,HT:10},
+         {equipo:'Scoop Monte',HI:4180,HF:4190,HT:10},
+         {equipo:'Dumper',HI:3320,HF:3328,HT:8}
+       ],
+       obs:'Turno sin incidentes. Compresoras operando al 100%. Avance satisfactorio en ambos frentes. Se realizó engrase preventivo de Scoop Epiroc.',
+       _precios:{petroleo:14.5,gasolina:16.2}}
+    ];
+    try{localStorage.setItem(COMP_STORAGE_KEY,JSON.stringify(state.compresorista));}catch(e){}
+  }
+
+  // ── 3. REPUESTOS DE MANTENIMIENTO ──
+  if(!(state.mantRepuestos&&state.mantRepuestos.length)){
+    state.mantRepuestos=[
+      {id:'R001',codigo:'FIL-001',nombre:'Filtro de aceite Compresora',unidad:'UND',stock:8,costo:35.00,min:3},
+      {id:'R002',codigo:'FAJ-001',nombre:'Faja trapezoidal B-65',unidad:'UND',stock:4,costo:85.00,min:2},
+      {id:'R003',codigo:'ACE-001',nombre:'Aceite hidráulico ISO 46',unidad:'GLN',stock:20,costo:42.00,min:5},
+      {id:'R004',codigo:'EMP-001',nombre:'Empaque de culata JL-500',unidad:'UND',stock:2,costo:120.00,min:1},
+      {id:'R005',codigo:'ROD-001',nombre:'Rodaje 6205-2RS',unidad:'UND',stock:3,costo:65.00,min:2},
+      {id:'R006',codigo:'MAN-001',nombre:'Manguera hidráulica 1/2" x 1m',unidad:'UND',stock:5,costo:48.00,min:2},
+      {id:'R007',codigo:'SEL-001',nombre:'Sello mecánico bomba agua',unidad:'UND',stock:1,costo:95.00,min:1}
+    ];
+    try{localStorage.setItem(MANTREP_KEY,JSON.stringify(state.mantRepuestos));}catch(e){}
+  }
+
+  // ── 4. KITS DE MANTENIMIENTO ──
+  if(!(state.mantenimiento&&state.mantenimiento.length)){
+    state.mantenimiento=[
+      {id:'KM2001',fecha:DIA,equipo:'Compresora M135',tipo:'Preventivo',
+       resp:'Roberto Díaz Huanca',desc:'Cambio de filtro de aceite y revisión de fajas — mantenimiento programado 250h',
+       repuestos:[
+         {id:'R001',key:'R001',nombre:'Filtro de aceite Compresora',unidad:'UND',cant:2,costo:35.00},
+         {id:'R002',key:'R002',nombre:'Faja trapezoidal B-65',unidad:'UND',cant:1,costo:85.00}
+       ],
+       horasMant:3,manoobra:112.50,costo:267.50,estado:'pendiente',
+       aprobOps:null,aprobLog:null},
+      {id:'KM2002',fecha:'2026-06-24',equipo:'Scoop Epiroc',tipo:'Correctivo',
+       resp:'Roberto Díaz Huanca',desc:'Reparación de manguera hidráulica rota — parada de emergencia en Rampa',
+       repuestos:[
+         {id:'R006',key:'R006',nombre:'Manguera hidráulica 1/2" x 1m',unidad:'UND',cant:2,costo:48.00}
+       ],
+       horasMant:2,manoobra:75.00,costo:171.00,estado:'ok',
+       aprobOps:{ok:true,resp:'Percy Alcántara',fecha:'2026-06-24'},
+       aprobLog:{ok:true,resp:'Ana Puma Ccama',fecha:'2026-06-24'}}
+    ];
+    try{localStorage.setItem(MANTKIT_KEY,JSON.stringify(state.mantenimiento));}catch(e){}
+  }
+
+  // ── 5. METAS MENSUALES ──
+  try{
+    const metasRaw=localStorage.getItem(METAS_KEY);
+    if(!metasRaw||JSON.stringify(JSON.parse(metasRaw))==='{}'){
+      state.metas={diasMes:25,f1:3.5,f2:3.0,mensual:{f1:87.5,f2:75.0}};
+      localStorage.setItem(METAS_KEY,JSON.stringify(state.metas));
+    }
+  }catch(e){}
+
+  // ── 6. REUNIONES ──
+  try{
+    const reuRaw=localStorage.getItem(REU_KEY);
+    if(!reuRaw||!JSON.parse(reuRaw).length){
+      state.reuniones=[
+        {id:'REU2001',fecha:DIA,tipo:'Guardia',participantes:'Percy Alcántara, Carlos Mamani, Juan Quispe, Roberto Díaz',
+         acuerdos:'1. Mantener ritmo de avance de 2.4m/guardia en RA Brenda.\n2. Revisar desgaste de brocas al inicio de cada turno.\n3. Reporte de horómetros obligatorio al cierre de turno.',
+         observaciones:'Se detectó vibración inusual en Compresora M122 — programar revisión preventiva.',
+         creadoEn:DIA+'T07:00:00'}
+      ];
+      localStorage.setItem(REU_KEY,JSON.stringify(state.reuniones));
+    }
+  }catch(e){}
+
+  // ── 7. INGRESOS JUNIO en ALMACÉN (si el mes actual no tiene registros) ──
+  const tieneJunio=(state.almacen.ingresos||[]).some(i=>(i.fecha||'').startsWith('2026-06'));
+  if(!tieneJunio){
+    const ingJun=[
+      {id:'I101',fecha:'2026-06-02',vale:'120100',detalle:'Almacen Poderosa',almacen:'General',
+       producto:'PERNO',descripcion:'PERNO SPLIT SET 33 X 5 PIES CON PLATINA',unidad:'UND',cantidad:300,precio:12.50,total:3750.00},
+      {id:'I102',fecha:'2026-06-02',vale:'120100',detalle:'Almacen Poderosa',almacen:'General',
+       producto:'RESINA',descripcion:'RESINA POLESTER RAPIDA 330CC',unidad:'UND',cantidad:150,precio:8.90,total:1335.00},
+      {id:'I103',fecha:'2026-06-10',vale:'120450',detalle:'Logistica Trujillo',almacen:'General',
+       producto:'MALLA',descripcion:'MALLA ELECTROSOLDADA Nº 10',unidad:'ROLL',cantidad:8,precio:374.91,total:2999.28},
+      {id:'I104',fecha:'2026-06-10',vale:'120450',detalle:'Logistica Trujillo',almacen:'General',
+       producto:'CEMENTO',descripcion:'CEMENTO GRIS ANTISALITRE PORTL. TIPO MS',unidad:'BOL',cantidad:80,precio:27.73,total:2218.40},
+      {id:'I105',fecha:'2026-06-18',vale:'120890',detalle:'Almacen Poderosa',almacen:'Mantenimiento',
+       producto:'FILTRO',descripcion:'FILTRO DE ACEITE COMPRESORA M135',unidad:'UND',cantidad:10,precio:35.00,total:350.00},
+      {id:'I106',fecha:'2026-06-18',vale:'120890',detalle:'Almacen Poderosa',almacen:'Mantenimiento',
+       producto:'RODAJE',descripcion:'RODAJE 6205-2RS',unidad:'UND',cantidad:5,precio:65.00,total:325.00},
+      {id:'I107',fecha:DIA,vale:'121200',detalle:'Almacen Poderosa',almacen:'General',
+       producto:'BROCA',descripcion:'BROCA DESCARTABLE DE BOTONES 36 MM',unidad:'UND',cantidad:30,precio:76.88,total:2306.40},
+      {id:'I108',fecha:DIA,vale:'121200',detalle:'Almacen Poderosa',almacen:'General',
+       producto:'BROCA',descripcion:'BROCA DESCARTABLE DE BOTONES 32 MM',unidad:'UND',cantidad:20,precio:74.91,total:1498.20}
+    ];
+    const salJun=[
+      {id:'SJ01',fecha:'2026-06-05',destino:'2820',almacen:'General',maquina:'',solicitante:'Juan Quispe',
+       producto:'PERNO',descripcion:'PERNO SPLIT SET 33 X 5 PIES CON PLATINA',unidad:'UND',precio:12.50,cantidad:100,importe:1250.00},
+      {id:'SJ02',fecha:'2026-06-05',destino:'2820',almacen:'General',maquina:'',solicitante:'Juan Quispe',
+       producto:'RESINA',descripcion:'RESINA POLESTER RAPIDA 330CC',unidad:'UND',precio:8.90,cantidad:60,importe:534.00},
+      {id:'SJ03',fecha:'2026-06-12',destino:'2830',almacen:'General',maquina:'',solicitante:'Carlos Mamani',
+       producto:'MALLA',descripcion:'MALLA ELECTROSOLDADA Nº 10',unidad:'ROLL',precio:374.91,cantidad:4,importe:1499.64},
+      {id:'SJ04',fecha:'2026-06-20',destino:'2820',almacen:'General',maquina:'',solicitante:'Juan Quispe',
+       producto:'BROCA',descripcion:'BROCA DESCARTABLE DE BOTONES 36 MM',unidad:'UND',precio:76.88,cantidad:10,importe:768.80}
+    ];
+    ingJun.forEach(i=>{i.grupo='GI|'+i.fecha+'|'+i.detalle+'|'+i.almacen;});
+    salJun.forEach(s=>{s.grupo='GS|'+s.fecha+'|'+s.destino+'|GEN';});
+    state.almacen.ingresos=[...(state.almacen.ingresos||[]),...ingJun];
+    state.almacen.salidas=[...(state.almacen.salidas||[]),...salJun];
+    // Explosivos junio
+    if(!(state.almacen.explosivos.ingresos||[]).length){
+      state.almacen.explosivos.ingresos=[
+        {id:'EXI001',fecha:'2026-06-01',vale:'E-8821',producto:'M1000',cajas:2,unidades:0,totalUnidades:100,origen:'Almacén Poderosa',fotoBase64:null},
+        {id:'EXI002',fecha:'2026-06-01',vale:'E-8821',producto:'M3000',cajas:1,unidades:0,totalUnidades:40,origen:'Almacén Poderosa',fotoBase64:null},
+        {id:'EXI003',fecha:'2026-06-01',vale:'E-8821',producto:'CARMEX18',cajas:3,unidades:0,totalUnidades:150,origen:'Almacén Poderosa',fotoBase64:null},
+        {id:'EXI004',fecha:'2026-06-01',vale:'E-8821',producto:'FAMECORTE',cajas:0,unidades:5,totalUnidades:5,origen:'Almacén Poderosa',fotoBase64:null}
+      ];
+      state.almacen.explosivos.salidas=[
+        {id:'EXS001',fecha:'2026-06-03',vale:'ES-1101',producto:'M1000',cajas:0,unidades:30,totalUnidades:30,destino:'NV2820',fotoBase64:null},
+        {id:'EXS002',fecha:'2026-06-03',vale:'ES-1101',producto:'CARMEX18',cajas:0,unidades:42,totalUnidades:42,destino:'NV2820',fotoBase64:null},
+        {id:'EXS003',fecha:'2026-06-15',vale:'ES-1102',producto:'M1000',cajas:0,unidades:30,totalUnidades:30,destino:'NV2820',fotoBase64:null},
+        {id:'EXS004',fecha:'2026-06-15',vale:'ES-1102',producto:'M3000',cajas:0,unidades:12,totalUnidades:12,destino:'NV2820',fotoBase64:null},
+        {id:'EXS005',fecha:'2026-06-15',vale:'ES-1102',producto:'CARMEX18',cajas:0,unidades:42,totalUnidades:42,destino:'NV2820',fotoBase64:null}
+      ];
+    }
+    almacenSave();
+  }
+}
+
 function almMesActual(){return hoy().slice(0,7);}
 // Mes con datos más reciente (para que el selector no quede vacío al abrir)
 function almMesConDatos(){
