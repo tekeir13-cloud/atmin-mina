@@ -9675,47 +9675,8 @@ function guardarKitMant(){
   cerrarModal('modal-kit-mant');renderMantenimiento();
   showNotif('✓ Solicitud de kit guardada');
 }
-// ── Flujo de doble aprobación (Operaciones + Logística) ──
-function aprobarOpsKit(id){
-  mantRepLoad();mantKitLoad();
-  const m=(state.mantenimiento||[]).find(x=>x.id===id);if(!m)return;
-  if(!m.aprobOps)m.aprobOps={ok:false,resp:'',fecha:''};
-  if(m.aprobOps.ok){
-    if(!confirm('¿Revocar la aprobación de Operaciones?'))return;
-    m.aprobOps={ok:false,resp:'',fecha:''};
-    mantKitSave();renderMantenimiento();showNotif('Aprobación de Operaciones revocada');
-    return;
-  }
-  const def=(typeof usuarioActivo!=='undefined'&&usuarioActivo&&usuarioActivo.nombre)?usuarioActivo.nombre:'';
-  const resp=(prompt('Responsable que aprueba (Operaciones):',def)||def||'').trim();
-  m.aprobOps={ok:true,resp:resp||'—',fecha:hoy()};
-  mantKitSave();renderMantenimiento();showNotif('✓ Aprobado por Operaciones');
-}
-function aprobarLogKit(id){
-  mantRepLoad();mantKitLoad();
-  const m=(state.mantenimiento||[]).find(x=>x.id===id);if(!m)return;
-  if(!m.aprobLog)m.aprobLog={ok:false,resp:'',fecha:''};
-  if(m.aprobLog.ok){
-    if(!confirm('¿Revocar la aprobación de Logística? Se repondrá el stock despachado.'))return;
-    // Restaurar stock
-    (m.repuestos||[]).forEach(p=>{const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);if(r)r.stock=(r.stock||0)+p.cant;});
-    m.aprobLog={ok:false,resp:'',fecha:''};
-    mantRepSave();mantKitSave();renderMantenimiento();showNotif('Aprobación de Logística revocada · stock repuesto');
-    return;
-  }
-  // Guarda de stock antes de descontar
-  for(const p of (m.repuestos||[])){
-    const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);
-    if(r&&p.cant>(r.stock||0)){showNotif(`⚠ Stock insuficiente de ${r.nombre} (disp. ${r.stock||0}) — no se puede aprobar el despacho`,'error');return;}
-  }
-  const def=(typeof usuarioActivo!=='undefined'&&usuarioActivo&&usuarioActivo.nombre)?usuarioActivo.nombre:'';
-  const resp=(prompt('Responsable que aprueba el despacho (Logística):',def)||def||'').trim();
-  // Descontar stock (despacho)
-  (m.repuestos||[]).forEach(p=>{const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);if(r)r.stock=(r.stock||0)-p.cant;});
-  m.aprobLog={ok:true,resp:resp||'—',fecha:hoy()};
-  mantRepSave();mantKitSave();renderMantenimiento();showNotif('✓ Aprobado por Logística · stock despachado');
-}
 // ── Logística: Solicitudes de Mantenimiento ──
+// (El flujo de doble aprobación activo está en aprobarOpsKitOp / aprobarLogKitLog / rechazar*)
 // ══════════════════════════════════════════════════════════════
 //  CONTROL DE COMBUSTIBLE — Logística
 // ══════════════════════════════════════════════════════════════
