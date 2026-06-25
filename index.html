@@ -10092,13 +10092,15 @@ function visorRenderDia() {
 
   // ── Gráfico Combustible — doughnut por máquina + tabla costo y % ──
   const FUEL_COLORS = ['#e59022','#f87171','#60a5fa','#34d399','#a78bfa','#fb923c','#38bdf8','#facc15','#f472b6','#4ade80'];
-  const petFilt = r.petroleo.filter(p=>p.gln && p.equipo!=='Mina');
-  const gasFilt = r.gasolina.filter(g=>g.gln && g.equipo!=='Mina');
+  // Incluir TODO el combustible con galones (incluido consumo general "Mina"),
+  // así el donut nunca queda vacío cuando arriba sí hay costo de combustible.
+  const petFilt = r.petroleo.filter(p=>p.gln);
+  const gasFilt = r.gasolina.filter(g=>g.gln);
   const totalPetS = petFilt.reduce((s,p)=>s+p.gln*COMP_PRECIO_PET,0);
   const totalGasS = gasFilt.reduce((s,g)=>s+g.gln*COMP_PRECIO_GAS,0);
   const fuelItems = [
-    ...petFilt.map((p,i)=>({label:p.equipo, val:+(p.gln*COMP_PRECIO_PET).toFixed(2), gln:p.gln, tipo:'P', color:FUEL_COLORS[i%FUEL_COLORS.length], grupTotal:totalPetS})),
-    ...gasFilt.map((g,i)=>({label:g.equipo, val:+(g.gln*COMP_PRECIO_GAS).toFixed(2), gln:g.gln, tipo:'G', color:FUEL_COLORS[(petFilt.length+i)%FUEL_COLORS.length], grupTotal:totalGasS})),
+    ...petFilt.map((p,i)=>({label:p.equipo==='Mina'?'Mina (general)':p.equipo, val:+(p.gln*COMP_PRECIO_PET).toFixed(2), gln:p.gln, tipo:'P', color:FUEL_COLORS[i%FUEL_COLORS.length], grupTotal:totalPetS})),
+    ...gasFilt.map((g,i)=>({label:g.equipo==='Mina'?'Mina (general)':g.equipo, val:+(g.gln*COMP_PRECIO_GAS).toFixed(2), gln:g.gln, tipo:'G', color:FUEL_COLORS[(petFilt.length+i)%FUEL_COLORS.length], grupTotal:totalGasS})),
   ];
   const fuelTotal = fuelItems.reduce((s,x)=>s+x.val,0);
   const ctxFuel = document.getElementById('vt-chart-fuel');
@@ -10128,7 +10130,7 @@ function visorRenderDia() {
         const pctG=totalPetS>0?(val/totalPetS*100).toFixed(1):'0';
         return `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border2);font-size:10px">
           <div style="width:8px;height:8px;border-radius:50%;background:${FUEL_COLORS[i%FUEL_COLORS.length]};flex-shrink:0"></div>
-          <span style="color:var(--text);flex:1">${p.equipo}</span>
+          <span style="color:var(--text);flex:1">${p.equipo==='Mina'?'Mina (general)':p.equipo}</span>
           <span style="color:var(--warn);font-weight:600">S/ ${val.toFixed(2)}</span>
           <span style="color:var(--text3)">${pctG}%pet</span>
           <span style="color:var(--text3)">${pctT}%tot</span>
@@ -10140,7 +10142,7 @@ function visorRenderDia() {
         const pctG=totalGasS>0?(val/totalGasS*100).toFixed(1):'0';
         return `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border2);font-size:10px">
           <div style="width:8px;height:8px;border-radius:50%;background:${FUEL_COLORS[(petFilt.length+i)%FUEL_COLORS.length]};flex-shrink:0"></div>
-          <span style="color:var(--text);flex:1">${g.equipo}</span>
+          <span style="color:var(--text);flex:1">${g.equipo==='Mina'?'Mina (general)':g.equipo}</span>
           <span style="color:var(--positive);font-weight:600">S/ ${val.toFixed(2)}</span>
           <span style="color:var(--text3)">${pctG}%gas</span>
           <span style="color:var(--text3)">${pctT}%tot</span>
