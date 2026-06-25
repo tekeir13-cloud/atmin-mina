@@ -3614,7 +3614,7 @@ select option{background:var(--coal3);}
     </div>
     <input type="hidden" id="prod-edit-id">
     <div class="form-grid">
-      <div class="form-group"><label>Código</label><input type="text" id="prod-codigo" readonly style="opacity:0.7;font-family:'DM Mono',monospace" placeholder="Auto-generado"></div>
+      <div class="form-group"><label>Código</label><input type="text" id="prod-codigo" style="font-family:'DM Mono',monospace" placeholder="Ej: PRD-001 / MAT-05"></div>
       <div class="form-group"><label>Unidad de medida</label><select id="prod-unidad"><option>UND</option><option>KG</option><option>BOL</option><option>ROLL</option><option>JGO</option><option>PZA</option><option>M</option><option>LT</option><option>GLN</option></select></div>
       <div class="form-group" style="grid-column:1/-1"><label>Nombre corto</label><input type="text" id="prod-nombre" placeholder="Ej: Aleta / Cemento / Aceite"></div>
       <div class="form-group" style="grid-column:1/-1"><label>Descripción completa</label><input type="text" id="prod-descripcion" placeholder="Ej: CEMENTO GRIS ANTISALITRE TIPO MS x 42.5 KG"></div>
@@ -5193,7 +5193,7 @@ function abrirModalProducto(id){
   }else{
     g('modal-prod-titulo').textContent='Nuevo Producto';
     g('prod-edit-id').value='';
-    g('prod-codigo').value=nextCodigoProducto();
+    g('prod-codigo').value='';
     g('prod-nombre').value='';
     g('prod-descripcion').value='';
     g('prod-unidad').value='UND';
@@ -5204,15 +5204,20 @@ function abrirModalProducto(id){
 function guardarProductoCatalogo(){
   const g=k=>document.getElementById(k);
   const nombre=g('prod-nombre').value.trim();
+  const codigo=g('prod-codigo').value.trim();
   if(!nombre){showNotif('⚠ El nombre es requerido','error');return;}
+  if(!codigo){showNotif('⚠ El código es requerido','error');return;}
   const editId=g('prod-edit-id').value;
-  const precio = parseFloat(document.getElementById('prod-precio')?.value)||0;
+  const precio=parseFloat(document.getElementById('prod-precio')?.value)||0;
   if(!state.almacen.productos)state.almacen.productos=[];
+  // Validar código único (salvo en edición del mismo ítem)
+  const duplicado=state.almacen.productos.find(x=>x.codigo===codigo&&x.id!==editId);
+  if(duplicado){showNotif('⚠ Ya existe un producto con ese código','error');return;}
   if(editId){
     const p=state.almacen.productos.find(x=>x.id===editId);
-    if(p){p.nombre=nombre;p.descripcion=g('prod-descripcion').value.trim();p.unidad=g('prod-unidad').value;p.precio = precio;}
+    if(p){p.codigo=codigo;p.nombre=nombre;p.descripcion=g('prod-descripcion').value.trim();p.unidad=g('prod-unidad').value;p.precio=precio;}
   }else{
-    state.almacen.productos.push({id:'P'+Date.now(),codigo:g('prod-codigo').value,nombre,descripcion:g('prod-descripcion').value.trim(),unidad:g('prod-unidad').value,precio});
+    state.almacen.productos.push({id:'P'+Date.now(),codigo,nombre,descripcion:g('prod-descripcion').value.trim(),unidad:g('prod-unidad').value,precio});
   }
   almacenSave();cerrarModal('modal-producto');renderProductos();
   showNotif('Producto guardado','success');
@@ -5341,14 +5346,14 @@ function mpGuardarExplosivos(){
 function descargarPlantillaMaestro(){
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.aoa_to_sheet([
-    ['Nombre','Unidad','Precio'],
-    ['Aceite Air Tool','GAL',45.00],
-    ['Cemento MS','BLS',32.50],
-    ['Petróleo','GLN',24.50],
-    ['Gasolina','GLN',21.00],
-    ['M1000','UND',1.36],
+    ['Código','Nombre','Descripción','Unidad','Precio'],
+    ['MAT-001','Aceite Air Tool','ACEITE AIR TOOL ISO VG 100 x 1 GAL','GAL',45.00],
+    ['MAT-002','Cemento MS','CEMENTO GRIS ANTISALITRE TIPO MS x 42.5 KG','BLS',32.50],
+    ['MAT-003','Petróleo','PETROLEO DIESEL B5 x GLN','GLN',24.50],
+    ['MAT-004','Gasolina','GASOLINA 90 OCTANOS x GLN','GLN',21.00],
+    ['MAT-005','M1000','MECHA DE SEGURIDAD M1000','UND',1.36],
   ]);
-  ws['!cols']=[{wch:40},{wch:10},{wch:12}];
+  ws['!cols']=[{wch:12},{wch:30},{wch:50},{wch:10},{wch:12}];
   XLSX.utils.book_append_sheet(wb,ws,'Productos');
   XLSX.writeFile(wb,'plantilla_maestro_productos.xlsx');
 }
@@ -5372,11 +5377,29 @@ function importarMaestroExcel(input){
       const nuevosProductos=[];
       let counter=1;
 
+      // Detectar si es formato nuevo (4 cols: Código, Nombre, Descripción, Unidad, Precio)
+      // o formato legado (3 cols: Nombre, Unidad, Precio)
+      const header=(rows[0]||[]).map(h=>String(h||'').toLowerCase());
+      const tieneCodigoCol = header[0].includes('cod') || header[0].includes('cód');
+
       for(let i=1;i<rows.length;i++){
         const row=rows[i];
-        const nombre=String(row[0]||'').trim();
-        const unidad=String(row[1]||'UND').trim().toUpperCase()||'UND';
-        const precio=parseFloat(row[2])||0;
+        let codigo, nombre, descripcion, unidad, precio;
+        if(tieneCodigoCol){
+          // Formato nuevo: Código | Nombre | Descripción | Unidad | Precio
+          codigo     = String(row[0]||'').trim();
+          nombre     = String(row[1]||'').trim();
+          descripcion= String(row[2]||'').trim();
+          unidad     = String(row[3]||'UND').trim().toUpperCase()||'UND';
+          precio     = parseFloat(row[4])||0;
+        }else{
+          // Formato legado: Nombre | Unidad | Precio
+          codigo     = 'PRD-'+String(counter).padStart(3,'0');
+          nombre     = String(row[0]||'').trim();
+          descripcion= '';
+          unidad     = String(row[1]||'UND').trim().toUpperCase()||'UND';
+          precio     = parseFloat(row[2])||0;
+        }
         if(!nombre)continue;
 
         const nom_low=nombre.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
@@ -5393,11 +5416,10 @@ function importarMaestroExcel(input){
         const expMatch=COMP_EXPLOSIVOS.find(c=>c.toLowerCase()===nombre.toLowerCase());
         if(expMatch){newExp[expMatch]=precio;continue;}
 
-        // producto general (incluye aceros y brocas) — reemplaza catálogo completo
+        // producto general — respeta el código del Excel
         nuevosProductos.push({
           id:'P'+Date.now()+Math.random().toString(36).slice(2,6),
-          codigo:'PRD-'+String(counter).padStart(3,'0'),
-          nombre, descripcion:'', unidad, precio
+          codigo, nombre, descripcion, unidad, precio
         });
         counter++;
       }
