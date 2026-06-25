@@ -4483,7 +4483,7 @@ function calcCostos(){
   if(state.tareas && state.tareas.length > 0){
     jornales = state.tareas.reduce((s,t) => {
       const p = state.personal.find(x => x.id === t.trabajadorId);
-      return s + (p ? Number(p.jornal) * Number(t.mult || 1) : 0);
+      return s + (Number(t.jornal??p?.jornal??0)) * Number(t.mult || 1);
     }, 0);
   } else {
     // Estimado si no hay tareas registradas
@@ -4736,9 +4736,9 @@ function renderDashResumenHoy(){
   const activos=state.personal.filter(p=>p.estado==='activo').length;
   const totReg=state.personal.length;
   const mH=state.perforacion.filter(p=>p.fecha===ts).reduce((s,p)=>s+p.metros,0);
-  const pH=state.petroleo.historial.filter(p=>p.fecha===ts).reduce((s,p)=>s+p.galones,0);
-  const cH=state.personal.filter(p=>p.estado==='activo').reduce((s,p)=>s+p.jornal,0);
-  const expH=state.explosivos.historial.filter(e=>e.fecha===ts).reduce((s,e)=>s+(e.cantidad*(e.precio||0)),0);
+  const pH=(state.compresorista||[]).filter(c=>c.fecha===ts).reduce((s,c)=>s+(c.petroleo||[]).reduce((ss,p)=>ss+(p.gln||0),0),0);
+  const cH=state.tareas.filter(t=>t.fecha===ts).reduce((s,t)=>{const p=state.personal.find(x=>x.id===t.trabajadorId);return s+((t.jornal??p?.jornal??0)*(t.mult||1));},0)||state.personal.filter(p=>p.estado==='activo').reduce((s,p)=>s+p.jornal,0);
+  const expH=(()=>{try{const pr=(typeof paramsGetExp==='function'&&paramsGetExp())||COMP_PRECIOS_EXP_DEFAULT||{};return ((state.almacen&&state.almacen.explosivos&&state.almacen.explosivos.salidas)||[]).filter(s=>s.fecha===ts).reduce((s,r)=>s+(Number(r.totalUnidades||r.unidades||0))*(Number(pr[r.producto]||0)),0);}catch(e){return 0;}})();
   const ocP=state.ordenes.filter(o=>o.estado==='pendiente').length;
 
   const card=(icon,label,valor,sub,col)=>`
@@ -5427,7 +5427,10 @@ function seedModulosDemo(){
         {id:'EXS002',fecha:'2026-06-03',vale:'ES-1101',producto:'CARMEX18',cajas:0,unidades:42,totalUnidades:42,destino:'NV2820',fotoBase64:null},
         {id:'EXS003',fecha:'2026-06-15',vale:'ES-1102',producto:'M1000',cajas:0,unidades:30,totalUnidades:30,destino:'NV2820',fotoBase64:null},
         {id:'EXS004',fecha:'2026-06-15',vale:'ES-1102',producto:'M3000',cajas:0,unidades:12,totalUnidades:12,destino:'NV2820',fotoBase64:null},
-        {id:'EXS005',fecha:'2026-06-15',vale:'ES-1102',producto:'CARMEX18',cajas:0,unidades:42,totalUnidades:42,destino:'NV2820',fotoBase64:null}
+        {id:'EXS005',fecha:'2026-06-15',vale:'ES-1102',producto:'CARMEX18',cajas:0,unidades:42,totalUnidades:42,destino:'NV2820',fotoBase64:null},
+        {id:'EXS006',fecha:DIA,vale:'ES-1103',producto:'M1000',cajas:0,unidades:30,totalUnidades:30,destino:'NV2820',fotoBase64:null},
+        {id:'EXS007',fecha:DIA,vale:'ES-1103',producto:'CARMEX18',cajas:0,unidades:42,totalUnidades:42,destino:'NV2820',fotoBase64:null},
+        {id:'EXS008',fecha:DIA,vale:'ES-1103',producto:'FAMECORTE',cajas:0,unidades:4,totalUnidades:4,destino:'NV2820',fotoBase64:null}
       ];
     }
     almacenSave();
@@ -5448,6 +5451,8 @@ function seedModulosDemo(){
         subtotal:116390,descuento:5819.50,total:110570.50,rubros:[],importadoEn:0
       }];
       localStorage.setItem(VALLAB_KEY,JSON.stringify(state.valorizacionesLabor));
+    } else {
+      state.valorizacionesLabor=vl;
     }
   }catch(e){}
 
@@ -5480,17 +5485,17 @@ function seedModulosDemo(){
   // ── 11. PLANILLA / TAREO del día (jornal embebido) ──
   if(!(state.tareas&&state.tareas.length)){
     const peonsDia=[
-      ['T01','Maestro Perforista',1.0],['T02','Ayudante Perforista',1.0],
-      ['T03','Maestro Sostenimiento',1.0],['T04','Ayudante Sostenimiento',1.0],
-      ['T05','Operador Scoop',1.5],['T06','Bodeguero',1.0],
-      ['T07','Maestro Perforista',1.0],['T08','Ayudante Perforista',1.0],
-      ['T09','Maestro Sostenimiento',1.0],['T10','Operador Scoop',1.5],
-      ['T11','Cargador Anfo',1.0],['T12','Tubería y Servicios',1.0]
+      ['T01','Carlos Mamani Quispe','Maestro Perforista',1.0],['T02','Juan Ccallo Flores','Ayudante Perforista',1.0],
+      ['T03','Roberto Díaz Huanca','Maestro Sostenimiento',1.0],['T04','Pedro Quispe Ramos','Ayudante Sostenimiento',1.0],
+      ['T05','Miguel Torres Vega','Operador Scoop',1.5],['T06','Anibal Poma Cruz','Bodeguero',1.0],
+      ['T07','Luis Torres Flores','Maestro Perforista',1.0],['T08','Félix Condori Apaza','Ayudante Perforista',1.0],
+      ['T09','Walter Huanca Lima','Maestro Sostenimiento',1.0],['T10','César Lazo Ruiz','Operador Scoop',1.5],
+      ['T11','Elmer Quispe Soto','Cargador Anfo',1.0],['T12','David Ccolque Puma','Tubería y Servicios',1.0]
     ];
     state.tareas=peonsDia.map((p,i)=>({
-      fecha:DIA,trabajadorId:p[0],tarea:'Tareo diario',rol:p[1],
+      fecha:DIA,trabajadorId:p[0],nombre:p[1],tarea:'Tareo diario',rol:p[2],
       frente:i<6?1:2,detalle:'Guardia operativa',estadoTarea:'completado',
-      mult:p[2],jornal:80,turno:i<6?'DIA':'NOCHE'
+      mult:p[3],jornal:80,turno:i<6?'DIA':'NOCHE'
     }));
   }
 }
@@ -7296,8 +7301,8 @@ function actualizarKpisTareo(fecha){
   const activos=state.personal.filter(p=>p.estado!=='baja');
   const hoyT=state.tareas.filter(t=>t.fecha===f);
   const mesT=state.tareas.filter(t=>t.fecha.startsWith(mes));
-  const costHoy=hoyT.reduce((s,t)=>{const p=state.personal.find(x=>x.id==t.trabajadorId);return s+(p?p.jornal*(t.mult||1):0);},0);
-  const costMes=mesT.reduce((s,t)=>{const p=state.personal.find(x=>x.id==t.trabajadorId);return s+(p?p.jornal*(t.mult||1):0);},0);
+  const costHoy=hoyT.reduce((s,t)=>{const p=state.personal.find(x=>x.id==t.trabajadorId);return s+((t.jornal??p?.jornal??0)*(t.mult||1));},0);
+  const costMes=mesT.reduce((s,t)=>{const p=state.personal.find(x=>x.id==t.trabajadorId);return s+((t.jornal??p?.jornal??0)*(t.mult||1));},0);
   const g=id=>document.getElementById(id);
   if(g('rr-activo')) g('rr-activo').textContent=hoyT.length;
   if(g('rr-ausente')) g('rr-ausente').textContent=activos.length-hoyT.length;
@@ -7488,7 +7493,7 @@ function renderTareas(){
   const cont=document.getElementById('tareos-archivados');if(!cont)return;
   if(!hojasArr.length){cont.innerHTML='<div style="text-align:center;color:var(--text3);padding:40px;font-size:13px">Sin tareos registrados</div>';return;}
   cont.innerHTML=hojasArr.map((h,hi)=>{
-    const total=h.tareas.reduce((s,t)=>{const p=state.personal.find(x=>String(x.id)===String(t.trabajadorId));return s+(p?p.jornal*(t.mult||1):0);},0);
+    const total=h.tareas.reduce((s,t)=>{const p=state.personal.find(x=>String(x.id)===String(t.trabajadorId));return s+((t.jornal??p?.jornal??0)*(t.mult||1));},0);
     const key=`${h.fecha}__${h.turno}`;
     const rows=h.tareas.map(t=>{
       const p=state.personal.find(x=>String(x.id)===String(t.trabajadorId));
@@ -7498,8 +7503,8 @@ function renderTareas(){
       const uid=t.id||t._uid||Math.random().toString(36).slice(2);
       if(!t._uid) t._uid=uid;
       return`<tr>
-        <td style="padding:6px 10px;border:1px solid #e5e7eb;font-size:12px;color:#111">${p?p.nombre:'—'}</td>
-        <td style="padding:6px 10px;border:1px solid #e5e7eb;font-size:11px;color:#555">${p?p.rol:'—'}</td>
+        <td style="padding:6px 10px;border:1px solid #e5e7eb;font-size:12px;color:#111">${p?p.nombre:(t.nombre||t.trabajadorId||'—')}</td>
+        <td style="padding:6px 10px;border:1px solid #e5e7eb;font-size:11px;color:#555">${p?p.rol:(t.rol||'—')}</td>
         <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:center">
           <div style="display:flex;gap:3px;justify-content:center" id="mult-btns-${uid}">
             ${['1','1.5','2'].map(v=>`<button onclick="editarMultTareo('${uid}','${v}')" class="mult-edit-btn-${hi}" style="padding:3px 8px;border-radius:5px;border:1px solid ${String(mult)===v?'#1a2744':'#ccc'};font-size:11px;font-weight:700;background:${String(mult)===v?'#1a2744':'#fff'};color:${String(mult)===v?'#fff':'#444'};cursor:not-allowed;pointer-events:none;opacity:0.6">×${v}</button>`).join('')}
