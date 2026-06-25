@@ -4953,9 +4953,9 @@ function renderProductos(){
 
   const expRows=COMP_EXPLOSIVOS.map(c=>`
     <tr>
-      <td style="padding:6px 10px;font-size:12px;color:var(--text2)">${c}</td>
+      <td style="padding:6px 10px;font-size:12px;color:var(--text2)">${COMP_EXPLO_LABEL[c]||c} <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">(${c})</span></td>
       <td style="padding:6px 10px">
-        <input type="number" step="0.01" min="0" id="mp-exp-${c.replace(/\./g,'_')}" value="${(exp[c]||0).toFixed(2)}"
+        <input type="number" step="0.01" min="0" id="mp-exp-${c}" value="${(exp[c]||0).toFixed(2)}"
           style="width:80px;background:var(--coal4);border:1px solid var(--border);border-radius:5px;padding:3px 8px;color:var(--text);font-size:12px">
       </td>
     </tr>`).join('');
@@ -5041,8 +5041,7 @@ function mpGuardarCombustibles(){
 function mpGuardarExplosivos(){
   const exp={};
   COMP_EXPLOSIVOS.forEach(c=>{
-    const id=c.replace(/\./g,'_');
-    exp[c]=parseFloat(document.getElementById('mp-exp-'+id)?.value)||COMP_PRECIOS_EXP_DEFAULT[c]||0;
+    exp[c]=parseFloat(document.getElementById('mp-exp-'+c)?.value)||COMP_PRECIOS_EXP_DEFAULT[c]||0;
   });
   paramsSetExp(exp);
   showNotif('Precios de explosivos guardados','ok');
@@ -5245,19 +5244,19 @@ function seedModulosDemo(){
          {desc:'Grasa multiusos SKF',cant:'1',unidad:'KG'}
        ],
        explosivos:[
-         {codigo:'E.1000',I:50,E:0,C:30,F:20},
-         {codigo:'E.3000',I:20,E:0,C:12,F:8},
-         {codigo:'E.5000',I:0,E:0,C:0,F:0},
-         {codigo:'CX.1.80',I:60,E:0,C:42,F:18},
-         {codigo:'CX.2.40',I:0,E:0,C:0,F:0},
-         {codigo:'FM',I:5,E:0,C:4,F:1},
-         {codigo:'Neiter',I:10,E:0,C:0,F:10}
+         {codigo:'M1000',I:50,E:0,C:30,F:20},
+         {codigo:'M3000',I:20,E:0,C:12,F:8},
+         {codigo:'M5000',I:0,E:0,C:0,F:0},
+         {codigo:'CARMEX18',I:60,E:0,C:42,F:18},
+         {codigo:'CARMEX240',I:0,E:0,C:0,F:0},
+         {codigo:'FAMECORTE',I:5,E:0,C:4,F:1},
+         {codigo:'NEITHER',I:10,E:0,C:0,F:10}
        ],
        expFrente:[
-         {codigo:'E.1000',rampa:18,galeria:12},
-         {codigo:'E.3000',rampa:7,galeria:5},
-         {codigo:'CX.1.80',rampa:25,galeria:17},
-         {codigo:'FM',rampa:2,galeria:2}
+         {codigo:'M1000',rampa:18,galeria:12},
+         {codigo:'M3000',rampa:7,galeria:5},
+         {codigo:'CARMEX18',rampa:25,galeria:17},
+         {codigo:'FAMECORTE',rampa:2,galeria:2}
        ],
        aceros:[
          {codigo:'BARRA CONICA 4\' X 7/8"',rampa:2,galeria:1},
@@ -13846,8 +13845,10 @@ function compCargarLocal() {
 }
 compCargarLocal();
 
-const COMP_EXPLOSIVOS = ['E.1000','E.3000','E.5000','CX.1.80','CX.2.40','FM','Neiter'];
-const COMP_PRECIOS_EXP_DEFAULT = {'E.1000':1.36,'E.3000':1.54,'E.5000':2.34,'CX.1.80':3.81,'CX.2.40':4.10,'FM':4.00,'Neiter':2.00};
+// Códigos alineados con EXPLO_CATALOGO para cruce correcto de stock
+const COMP_EXPLOSIVOS = ['M1000','M3000','M5000','CARMEX18','CARMEX240','FAMECORTE','NEITHER'];
+const COMP_EXPLO_LABEL = {'M1000':'M-1000','M3000':'M-3000','M5000':'M-5000','CARMEX18':'Carmex 1.8"','CARMEX240':'Carmex 2.40"','FAMECORTE':'Famecorte','NEITHER':'Neither/Cordón'};
+const COMP_PRECIOS_EXP_DEFAULT = {'M1000':1.36,'M3000':1.54,'M5000':2.34,'CARMEX18':3.81,'CARMEX240':4.10,'FAMECORTE':4.00,'NEITHER':2.00};
 const COMP_ACEROS = ['BARRA CONICA 4\' X 7/8"','BARRA CONICA 6\' X 7/8"','BARRA CONICA 8\' X 7/8"','BROCA DESCARTABLE DE BOTONES 36 MM','BROCA DESCARTABLE DE BOTONES 32 MM','BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'','BARRA DE ALUMINIO PARA ACUÑAR 1" X 10\'','BARRA DE ALUMINIO PARA ACUÑAR 1" X 12'];
 const COMP_PRECIOS_ACEROS_DEFAULT = {'BARRA CONICA 4\' X 7/8"':249.17,'BARRA CONICA 6\' X 7/8"':330.29,'BARRA CONICA 8\' X 7/8"':411.41,'BROCA DESCARTABLE DE BOTONES 36 MM':76.88,'BROCA DESCARTABLE DE BOTONES 32 MM':74.91,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'':102.6,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 10\'':118.35,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 12':141.9};
 
@@ -13940,8 +13941,8 @@ function abrirModalCompresorista() {
   // explosivos
   document.getElementById('comp-exp-body').innerHTML = COMP_EXPLOSIVOS.map(c => `
     <tr style="border-top:1px solid var(--border2)">
-      <td style="padding:6px 8px;font-family:'DM Mono',monospace;font-size:12px;color:var(--text)">${c}</td>
-      ${['I','E','C','F'].map(f => `<td style="padding:4px 6px"><input type="number" min="0" step="any" id="cexp-${c.replace(/\./g,'_')}-${f}" placeholder="0" oninput="compCalcF('${c}')" style="width:100%;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>`).join('')}
+      <td style="padding:6px 8px;font-size:12px;color:var(--text)">${COMP_EXPLO_LABEL[c]||c}<br><span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${c}</span></td>
+      ${['I','E','C','F'].map(f => `<td style="padding:4px 6px"><input type="number" min="0" step="any" id="cexp-${c}-${f}" placeholder="0" oninput="compCalcF('${c}')" style="width:100%;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>`).join('')}
     </tr>`).join('');
   // consumo
   document.getElementById('comp-cons-rampa-rows').innerHTML = '';
@@ -13950,9 +13951,9 @@ function abrirModalCompresorista() {
   // explosivos por frente
   document.getElementById('comp-expf-body').innerHTML = COMP_EXPLOSIVOS.map(c => `
     <tr style="border-top:1px solid var(--border2)">
-      <td style="padding:6px 8px;font-family:'DM Mono',monospace;font-size:12px;color:var(--text)">${c}</td>
-      <td style="padding:4px 6px"><input type="number" min="0" step="any" id="cexpf-${c.replace(/\./g,'_')}-R" placeholder="0" style="width:100%;background:var(--coal4);border:1px solid rgba(248,113,113,0.3);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>
-      <td style="padding:4px 6px"><input type="number" min="0" step="any" id="cexpf-${c.replace(/\./g,'_')}-G" placeholder="0" style="width:100%;background:var(--coal4);border:1px solid rgba(96,165,250,0.3);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>
+      <td style="padding:6px 8px;font-size:12px;color:var(--text)">${COMP_EXPLO_LABEL[c]||c}<br><span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${c}</span></td>
+      <td style="padding:4px 6px"><input type="number" min="0" step="any" id="cexpf-${c}-R" placeholder="0" style="width:100%;background:var(--coal4);border:1px solid rgba(248,113,113,0.3);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>
+      <td style="padding:4px 6px"><input type="number" min="0" step="any" id="cexpf-${c}-G" placeholder="0" style="width:100%;background:var(--coal4);border:1px solid rgba(96,165,250,0.3);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>
     </tr>`).join('');
   // aceros por frente
   document.getElementById('comp-acerosf-body').innerHTML = COMP_ACEROS.map(c => {
@@ -14038,11 +14039,10 @@ function compConsSelChange(sel){
 }
 
 function compCalcF(codigo) {
-  const id = codigo.replace(/\./g,'_');
-  const i = parseFloat(document.getElementById('cexp-'+id+'-I')?.value)||0;
-  const e = parseFloat(document.getElementById('cexp-'+id+'-E')?.value)||0;
-  const c = parseFloat(document.getElementById('cexp-'+id+'-C')?.value)||0;
-  const fEl = document.getElementById('cexp-'+id+'-F');
+  const i = parseFloat(document.getElementById('cexp-'+codigo+'-I')?.value)||0;
+  const e = parseFloat(document.getElementById('cexp-'+codigo+'-E')?.value)||0;
+  const c = parseFloat(document.getElementById('cexp-'+codigo+'-C')?.value)||0;
+  const fEl = document.getElementById('cexp-'+codigo+'-F');
   if(fEl) fEl.value = i - e - c;
 }
 
@@ -14080,15 +14080,17 @@ function guardarReporteComp() {
   });
 
   // explosivos
-  const explosivos = COMP_EXPLOSIVOS.map(c => {
-    const id = c.replace(/\./g,'_');
-    return {codigo:c, I:parseFloat(document.getElementById('cexp-'+id+'-I')?.value)||0, E:parseFloat(document.getElementById('cexp-'+id+'-E')?.value)||0, C:parseFloat(document.getElementById('cexp-'+id+'-C')?.value)||0, F:parseFloat(document.getElementById('cexp-'+id+'-F')?.value)||0};
-  });
+  const explosivos = COMP_EXPLOSIVOS.map(c => ({
+    codigo:c, I:parseFloat(document.getElementById('cexp-'+c+'-I')?.value)||0,
+    E:parseFloat(document.getElementById('cexp-'+c+'-E')?.value)||0,
+    C:parseFloat(document.getElementById('cexp-'+c+'-C')?.value)||0,
+    F:parseFloat(document.getElementById('cexp-'+c+'-F')?.value)||0
+  }));
   // explosivos por frente
-  const expFrente = COMP_EXPLOSIVOS.map(c => {
-    const id = c.replace(/\./g,'_');
-    return {codigo:c, rampa:parseFloat(document.getElementById('cexpf-'+id+'-R')?.value)||0, galeria:parseFloat(document.getElementById('cexpf-'+id+'-G')?.value)||0};
-  });
+  const expFrente = COMP_EXPLOSIVOS.map(c => ({
+    codigo:c, rampa:parseFloat(document.getElementById('cexpf-'+c+'-R')?.value)||0,
+    galeria:parseFloat(document.getElementById('cexpf-'+c+'-G')?.value)||0
+  }));
 
   // aceros por frente
   const aceros = COMP_ACEROS.map(c => {
