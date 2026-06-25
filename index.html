@@ -13023,10 +13023,23 @@ function finCostoPlanilla(mesYM){
     return s+j*(t.mult||1);
   },0);
 }
-// Explosivos: gasto SEPARADO — NO se suma al costo operativo total
+// Explosivos: gasto SEPARADO — NO se suma al costo operativo total.
+// Modelo nuevo: salidas de explosivos del almacén NV3190 (totalUnidades) × precio unitario.
 function finCostoExplosivos(mesYM){
   let b=0;
-  try{ b=((state.explosivos&&state.explosivos.historial)||[]).filter(e=>(e.fecha||'').startsWith(mesYM)).reduce((s,e)=>s+((e.cantidad||0)*(e.precio||0)),0); }catch(e){}
+  try{
+    const precios=(typeof paramsGetExp==='function'&&paramsGetExp())||(typeof COMP_PRECIOS_EXP_DEFAULT!=='undefined'?COMP_PRECIOS_EXP_DEFAULT:{});
+    const sal=((state.almacen&&state.almacen.explosivos&&state.almacen.explosivos.salidas)||[]);
+    b=sal.filter(s=>(s.fecha||'').startsWith(mesYM)).reduce((acc,s)=>{
+      const u=Number(s.totalUnidades||s.unidades||0);
+      const p=Number(precios[s.producto]||0);
+      return acc+u*p;
+    },0);
+    // Respaldo: modelo antiguo si no hay salidas en el nuevo
+    if(b===0){
+      b=((state.explosivos&&state.explosivos.historial)||[]).filter(e=>(e.fecha||'').startsWith(mesYM)).reduce((s,e)=>s+((e.cantidad||0)*(e.precio||0)),0);
+    }
+  }catch(e){}
   return b;
 }
 function finValorizacionMes(mesYM){
