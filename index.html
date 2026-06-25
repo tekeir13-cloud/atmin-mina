@@ -3758,7 +3758,11 @@ select option{background:var(--coal3);}
       <div style="font-size:12px;color:var(--text3);margin-top:10px;text-align:right">Costo de piezas: <strong id="kit-costo-piezas" style="color:var(--text)">S/ 0.00</strong></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-      <div class="form-group" style="margin:0"><label>Mano de obra / otros (S/)</label><input type="number" id="kit-manoobra" placeholder="0" min="0" step="0.01" oninput="kitRecalcCosto()"></div>
+      <div class="form-group" style="margin:0">
+        <label>Tiempo de mantenimiento estimado (horas)</label>
+        <input type="number" id="kit-manoobra" placeholder="0" min="0" step="0.5" oninput="kitRecalcCosto()">
+        <div id="kit-manoobra-calc" style="font-size:10px;color:var(--text3);margin-top:4px"></div>
+      </div>
       <div class="form-group" style="margin:0"><label>Estado</label><select id="kit-estado" style="width:100%"><option value="ok">Completado</option><option value="pendiente">Pendiente</option><option value="parcial">Parcial</option></select></div>
     </div>
     <div style="font-size:13px;color:var(--text2);margin-bottom:12px;text-align:right">Costo total estimado: <strong id="kit-costo-total" style="color:#fbbf24;font-size:15px">S/ 0.00</strong></div>
@@ -9147,6 +9151,7 @@ function kitAddPiezaRow(id,cant){
     <button class="btn btn-outline" style="font-size:11px;padding:4px 10px;color:#f87171;border-color:#f87171" onclick="this.parentElement.remove();kitRecalcCosto()">✕</button>`;
   wrap.appendChild(div);
 }
+const KIT_TARIFA_HORA = 37.5; // S/ por hora jefe de mantenimiento
 function kitRecalcCosto(){
   const prods=typeof calcStock==='function'?calcStock():[];
   let piezas=0;
@@ -9156,7 +9161,10 @@ function kitRecalcCosto(){
     const r=prods.find(x=>x.key===key);
     if(r&&cant>0)piezas+=cant*(r.precio||0);
   });
-  const mo=parseFloat(document.getElementById('kit-manoobra')?.value)||0;
+  const horas=parseFloat(document.getElementById('kit-manoobra')?.value)||0;
+  const mo=horas*KIT_TARIFA_HORA;
+  const calcEl=document.getElementById('kit-manoobra-calc');
+  if(calcEl) calcEl.textContent=horas>0?`${horas}h × S/${KIT_TARIFA_HORA}/h = S/ ${mo.toFixed(2)}`:'';
   const cp=document.getElementById('kit-costo-piezas');if(cp)cp.textContent=fmtS(piezas);
   const ct=document.getElementById('kit-costo-total');if(ct)ct.textContent=fmtS(piezas+mo);
 }
@@ -9186,7 +9194,7 @@ function editarKitMant(id){
   const m=(state.mantenimiento||[]).find(x=>x.id===id);if(!m)return;
   const g=i=>document.getElementById(i);
   g('kit-id').value=m.id;g('kit-fecha').value=m.fecha||hoy();g('kit-equipo').value=m.equipo||'Compresora';g('kit-tipo').value=m.tipo||'Preventivo';
-  g('kit-resp').value=m.resp||'';g('kit-desc').value=m.desc||'';g('kit-manoobra').value=m.manoobra||'';g('kit-estado').value=m.estado||'ok';
+  g('kit-resp').value=m.resp||'';g('kit-desc').value=m.desc||'';g('kit-manoobra').value=m.horasMant||'';g('kit-estado').value=m.estado||'ok';
   kitPoblarNiveles(); g('kit-nivel-mant').value=m.nivelMant||'';
   g('kit-piezas-rows').innerHTML='';
   (m.repuestos&&m.repuestos.length?m.repuestos:[{}]).forEach(p=>kitAddPiezaRow(p.id,p.cant));
@@ -9214,7 +9222,8 @@ function guardarKitMant(){
     const r=prods.find(x=>x.key===key);
     if(r&&cant>0)piezas.push({key,nombre:r.producto||r.descripcion,unidad:r.unidad,cant,costo:r.precio||0});
   });
-  const mo=parseFloat(g('kit-manoobra').value)||0;
+  const horasMant=parseFloat(g('kit-manoobra').value)||0;
+  const mo=horasMant*KIT_TARIFA_HORA;
   const costo=piezas.reduce((s,p)=>s+p.cant*p.costo,0)+mo;
   const estado=g('kit-estado').value;
   const editId=g('kit-id').value;
@@ -9243,7 +9252,7 @@ function guardarKitMant(){
   const nivelMant=(g('kit-nivel-mant')?g('kit-nivel-mant').value:'')||'';
   const equipo=g('kit-equipo').value;
   const rec={id:editId||'KM'+Date.now(),fecha:g('kit-fecha').value,equipo,tipo:g('kit-tipo').value,
-    resp,responsable:resp,desc,descripcion:desc,repuestos:piezas,manoobra:mo,costo,estado,nivelMant,
+    resp,responsable:resp,desc,descripcion:desc,repuestos:piezas,horasMant,manoobra:mo,costo,estado,nivelMant,
     aprobOps:(prev&&prev.aprobOps)||{ok:false,resp:'',fecha:''},
     aprobLog:(prev&&prev.aprobLog)||{ok:false,resp:'',fecha:''}};
   if(prev){Object.assign(prev,rec);}else{state.mantenimiento.push(rec);}
@@ -9588,8 +9597,13 @@ function renderSolicitudMantLog(){
         <div style="text-align:right"><div style="font-size:15px;font-weight:700;color:#fbbf24">${fmtS(m.costo)}</div></div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;border-top:1px solid var(--border);padding-top:8px">
-        <button class="btn" style="font-size:12px;padding:5px 12px;background:#15803d;color:#fff;border:1px solid #15803d" onclick="aprobarLogKitLog('${m.id}')">✅ Aprobar despacho</button>
-        <button class="btn btn-outline" style="font-size:12px;padding:5px 12px;color:#f87171;border-color:#f87171" onclick="rechazarLogKitLog('${m.id}')">❌ Rechazar</button>
+        ${ops.ok
+          ?`<button class="btn" style="font-size:12px;padding:5px 12px;background:#15803d;color:#fff;border:1px solid #15803d" onclick="aprobarLogKitLog('${m.id}')">✅ Aprobar despacho</button>
+             <button class="btn btn-outline" style="font-size:12px;padding:5px 12px;color:#f87171;border-color:#f87171" onclick="rechazarLogKitLog('${m.id}')">❌ Rechazar</button>`
+          :`<div style="font-size:11px;color:#f87171;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:8px;padding:8px 12px;width:100%">
+              🔒 Bloqueado — esperando aprobación de <strong>Operaciones</strong> para poder despachar
+            </div>`
+        }
       </div>
     </div>`;
   }).join('')
@@ -9619,6 +9633,9 @@ function renderSolicitudMantLog(){
 function aprobarLogKitLog(id){
   mantRepLoad();mantKitLoad();
   const m=(state.mantenimiento||[]).find(x=>x.id===id);if(!m)return;
+  if(!m.aprobOps||!m.aprobOps.ok){
+    showNotif('⛔ Requiere aprobación de Operaciones primero','error');return;
+  }
   if(!m.aprobLog)m.aprobLog={ok:false,resp:'',fecha:''};
   // Guarda de stock
   for(const p of (m.repuestos||[])){
@@ -9706,9 +9723,10 @@ function generarValeDespacho(id){
     R++;
   });
   const mo=m.manoobra||0;
+  const horasLabel=m.horasMant?`Tiempo Mant. (${m.horasMant}h × S/${KIT_TARIFA_HORA}/h)`:'Tiempo de Mantenimiento';
   const sub=(c,v)=>{ws.mergeCells(`A${R}:E${R}`);const a=ws.getCell(`A${R}`);a.value=c;a.font={bold:true};a.alignment={horizontal:'right'};const b=ws.getCell(`F${R}`);b.value=v;b.numFmt='#,##0.00';b.font={bold:true};b.alignment={horizontal:'center'};b.border=allB;R++;};
   sub('Sub Total Repuestos (S/)',totPiezas);
-  sub('Mano de Obra (S/)',mo);
+  sub(horasLabel,mo);
   ws.mergeCells(`A${R}:E${R}`);const tg=ws.getCell(`A${R}`);tg.value='TOTAL GENERAL (S/)';tg.font={bold:true,size:12,color:{argb:C_GOLD}};tg.alignment={horizontal:'right'};tg.fill={type:'pattern',pattern:'solid',fgColor:{argb:C_GOLDBG}};
   const tgv=ws.getCell(`F${R}`);tgv.value=totPiezas+mo;tgv.numFmt='#,##0.00';tgv.font={bold:true,size:12,color:{argb:C_GOLD}};tgv.alignment={horizontal:'center'};tgv.fill={type:'pattern',pattern:'solid',fgColor:{argb:C_GOLDBG}};tgv.border=allB;R++;
   R+=2;
