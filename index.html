@@ -2853,7 +2853,7 @@ select option{background:var(--coal3);}
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <input type="file" id="val-file" accept=".xlsx,.xls" style="display:none" onchange="importarValorizacion(this)">
         <button class="btn btn-gold" onclick="document.getElementById('val-file').click()">📥 Importar Excel</button>
-        <button class="btn btn-outline" id="val-btn-export" onclick="exportarValorizacion()" style="display:none">📤 Exportar</button>
+        <button class="btn btn-outline" id="val-btn-save" onclick="guardarValorizacion()" style="display:none;color:#22c55e;border-color:#22c55e">💾 Guardar</button>
         <button class="btn btn-outline" id="val-btn-del" onclick="eliminarValorizacion()" style="display:none;color:#f87171;border-color:#f87171">🗑 Eliminar</button>
       </div>
     </div>
@@ -4227,6 +4227,17 @@ async function cargarAlmacenCombustibleSB(){
         const local=combCargar(tipo);
         if(local.length) await sbSyncModulo('comb_'+tipo, local);
       }
+    }
+    // ── VALORIZACIONES (compra de labor) — vinculadas al dashboard ──
+    const valNube = await sbLoadModulo('val_labor');
+    if(Array.isArray(valNube) && valNube.length){
+      // La nube manda: reemplaza el estado local y persiste
+      state.valorizacionesLabor=valNube;
+      try{localStorage.setItem(VALLAB_KEY,JSON.stringify(valNube));}catch(e){}
+    }else{
+      // Nube vacía: subir lo que tenga este dispositivo
+      try{valLaborLoad();}catch(e){}
+      if((state.valorizacionesLabor||[]).length) await sbSyncModulo('val_labor', state.valorizacionesLabor);
     }
     if(typeof renderAlmacen==='function' && document.getElementById('log-almacen')) renderAlmacen();
     if(typeof renderDashboard==='function') renderDashboard();
@@ -9272,7 +9283,11 @@ function renderTableroOp(){
 // ════════════════════════════════════════════════════
 const VALLAB_KEY='atmin_valorizaciones_labor';
 function valLaborLoad(){try{const d=localStorage.getItem(VALLAB_KEY);if(d)state.valorizacionesLabor=JSON.parse(d)||[];}catch(e){}}
-function valLaborSave(){try{localStorage.setItem(VALLAB_KEY,JSON.stringify(state.valorizacionesLabor||[]));}catch(e){}}
+function valLaborSave(){
+  try{localStorage.setItem(VALLAB_KEY,JSON.stringify(state.valorizacionesLabor||[]));}catch(e){}
+  // Sincronizar a la nube para que la valorización quede vinculada al dashboard en todos los dispositivos
+  try{ sbSyncModulo('val_labor', state.valorizacionesLabor||[]); }catch(e){}
+}
 
 // Clasificación de subactividades en rubros para análisis gerencial
 function valRubro(sact){
@@ -9408,21 +9423,14 @@ function eliminarValorizacion(){
   valLaborSave();renderValorizacionOp();showNotif('✓ Valorización eliminada');
 }
 
-function exportarValorizacion(){
+function guardarValorizacion(){
   const sel=document.getElementById('val-periodo');const id=sel&&sel.value;
   const v=(state.valorizacionesLabor||[]).find(x=>x.id===id);if(!v)return;
-  if(typeof ExcelJS==='undefined'){showNotif('Error: librería Excel no cargada','error');return;}
-  const wb=new ExcelJS.Workbook();const ws=wb.addWorksheet('Valorizacion');
-  ws.addRow([v.titulo]);ws.addRow([]);
-  ws.addRow(['ITEM','CONCESION','VETA','LABOR','ETAPA','ACTIVIDAD','S.ACT.','UND','CANT.','PRECIO','IMPORTE','%CUMPL','RUBRO','OBSERVACIONES']);
-  v.rows.forEach(r=>ws.addRow([r.item,r.concesion,r.veta,r.labor,r.etapa,r.actividad,r.sact,r.und,r.cant,r.precio,r.importe,r.cumpl,valRubro(r.sact),r.obs]));
-  ws.addRow([]);ws.addRow(['','','','','','','','','','SUB TOTAL',v.subtotal]);
-  ws.addRow(['','','','','','','','','','DESCUENTO',v.descuento]);
-  ws.addRow(['','','','','','','','','','TOTAL',v.total]);
-  wb.xlsx.writeBuffer().then(buf=>{
-    const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Valorizacion_'+(v.periodo||'').replace(/\s+/g,'_')+'.xlsx';a.click();
-  });
+  // Persistir local + nube; queda vinculada al dashboard de forma permanente
+  valLaborSave();
+  // Si tiene mes/año, asegurar que el dashboard apunte a ese mes
+  if(v.mesNum&&v.anio){_ejecMes=v.anio+'-'+String(v.mesNum).padStart(2,'0');try{renderDashboard();}catch(e){}}
+  showNotif(`💾 Valorización de ${v.periodo||v.titulo} guardada y vinculada al dashboard (S/ ${Math.round(v.total||0).toLocaleString('es-PE')})`,'ok');
 }
 
 function renderValorizacionOp(forceId){
@@ -9433,7 +9441,7 @@ function renderValorizacionOp(forceId){
   const selWrap=document.getElementById('val-selector');
   const anioWrap=document.getElementById('val-anio-selector');
   const toggle=document.getElementById('val-viewtoggle');
-  const btnExp=document.getElementById('val-btn-export'),btnDel=document.getElementById('val-btn-del');
+  const btnExp=document.getElementById('val-btn-save'),btnDel=document.getElementById('val-btn-del');
   if(anioWrap)anioWrap.style.display='none';
   if(!lista.length){
     if(selWrap)selWrap.style.display='none';
@@ -9555,7 +9563,7 @@ function renderValorizacionAnual(){
   const selWrap=document.getElementById('val-selector');
   const anioWrap=document.getElementById('val-anio-selector');
   const toggle=document.getElementById('val-viewtoggle');
-  const btnExp=document.getElementById('val-btn-export'),btnDel=document.getElementById('val-btn-del');
+  const btnExp=document.getElementById('val-btn-save'),btnDel=document.getElementById('val-btn-del');
   if(selWrap)selWrap.style.display='none';
   if(btnExp)btnExp.style.display='none';if(btnDel)btnDel.style.display='none';
   if(toggle)toggle.style.display='flex';
@@ -9653,7 +9661,7 @@ function renderValorizacionHistorial(){
   const cont=document.getElementById('val-contenido');if(!cont)return;
   const selWrap=document.getElementById('val-selector'),anioWrap=document.getElementById('val-anio-selector');
   const toggle=document.getElementById('val-viewtoggle');
-  const btnExp=document.getElementById('val-btn-export'),btnDel=document.getElementById('val-btn-del');
+  const btnExp=document.getElementById('val-btn-save'),btnDel=document.getElementById('val-btn-del');
   if(selWrap)selWrap.style.display='none';
   if(anioWrap)anioWrap.style.display='none';
   if(btnExp)btnExp.style.display='none';if(btnDel)btnDel.style.display='none';
