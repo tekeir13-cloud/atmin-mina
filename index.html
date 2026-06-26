@@ -3607,20 +3607,17 @@ select option{background:var(--coal3);}
 
 <!-- ════ MODAL: PRODUCTO ════ -->
 <div class="modal-overlay" id="modal-producto" onclick="if(event.target===this)cerrarModal('modal-producto')">
-  <div class="modal" style="width:min(500px,95vw)">
+  <div class="modal" style="width:min(480px,95vw)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
       <div class="modal-title" style="margin-bottom:0">📦 <span id="modal-prod-titulo">Nuevo Producto</span></div>
       <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-producto')">✕</button>
     </div>
     <input type="hidden" id="prod-edit-id">
     <div class="form-grid">
-      <div class="form-group"><label>Código</label><input type="text" id="prod-codigo" style="font-family:'DM Mono',monospace" placeholder="Ej: PRD-001 / MAT-05"></div>
-      <div class="form-group"><label>Unidad de medida</label><select id="prod-unidad"><option>UND</option><option>KG</option><option>BOL</option><option>ROLL</option><option>JGO</option><option>PZA</option><option>M</option><option>LT</option><option>GLN</option></select></div>
-      <div class="form-group" style="grid-column:1/-1"><label>Nombre corto</label><input type="text" id="prod-nombre" placeholder="Ej: Aleta / Cemento / Aceite"></div>
-      <div class="form-group" style="grid-column:1/-1"><label>Descripción completa</label><input type="text" id="prod-descripcion" placeholder="Ej: CEMENTO GRIS ANTISALITRE TIPO MS x 42.5 KG"></div>
-        <label class="form-label">Precio Unitario (S/)
-          <input id="prod-precio" type="number" step="0.01" min="0" class="form-input" placeholder="0.00">
-        </label>
+      <div class="form-group"><label>Código</label><input type="text" id="prod-codigo" style="font-family:'DM Mono',monospace" placeholder="Ej: 1300000036"></div>
+      <div class="form-group"><label>Unidad</label><input type="text" id="prod-unidad" placeholder="PZA / KG / M / BOL"></div>
+      <div class="form-group" style="grid-column:1/-1"><label>Nombre del Producto</label><input type="text" id="prod-nombre" placeholder="Ej: CEMENTO GRIS ANTISALITRE PORTL. TIPO MS"></div>
+      <div class="form-group" style="grid-column:1/-1"><label>Precio Unitario (S/)</label><input id="prod-precio" type="number" step="0.01" min="0" placeholder="0.00" style="width:140px"></div>
     </div>
     <div class="btn-row" style="margin-top:16px">
       <button class="btn btn-gold" onclick="guardarProductoCatalogo()">✓ Guardar</button>
@@ -5153,7 +5150,7 @@ function almacenLoad(){
     // Migrar catálogo antiguo al nuevo catálogo clasificado (CLASE-SCLAS-FAMIL-NUCOR)
     const prods=state.almacen.productos||[];
     const esGenerico=prods.length<=7&&prods.every(p=>['P1','P2','P3','P4','P5','P6','P7'].includes(p.id));
-    const esPRDAntiguo=prods.length>0&&prods.every(p=>(p.codigo||'').startsWith('PRD-'));
+    const esPRDAntiguo=prods.length>0&&(prods.every(p=>(p.codigo||'').startsWith('PRD-'))||prods.every(p=>(p.codigo||'').startsWith('0')||((p.codigo||'').startsWith('P') && (p.id||'').startsWith('P0'))));
     if(esGenerico||esPRDAntiguo){
       // Reemplazar catálogo con los 63 materiales reales clasificados
       almacenSeedProductos();
@@ -5194,17 +5191,15 @@ function abrirModalProducto(id){
     g('prod-edit-id').value=p.id;
     g('prod-codigo').value=p.codigo;
     g('prod-nombre').value=p.nombre;
-    g('prod-descripcion').value=p.descripcion||'';
-    g('prod-unidad').value=p.unidad;
-    document.getElementById('prod-precio').value = p.precio||'';
+    g('prod-unidad').value=p.unidad||'PZA';
+    g('prod-precio').value=p.precio||'';
   }else{
     g('modal-prod-titulo').textContent='Nuevo Producto';
     g('prod-edit-id').value='';
     g('prod-codigo').value='';
     g('prod-nombre').value='';
-    g('prod-descripcion').value='';
-    g('prod-unidad').value='UND';
-    document.getElementById('prod-precio').value = '';
+    g('prod-unidad').value='PZA';
+    g('prod-precio').value='';
   }
   abrirModal('modal-producto');
 }
@@ -5215,46 +5210,57 @@ function guardarProductoCatalogo(){
   if(!nombre){showNotif('⚠ El nombre es requerido','error');return;}
   if(!codigo){showNotif('⚠ El código es requerido','error');return;}
   const editId=g('prod-edit-id').value;
-  const precio=parseFloat(document.getElementById('prod-precio')?.value)||0;
+  const precio=parseFloat(g('prod-precio')?.value)||0;
+  const unidad=g('prod-unidad').value.trim()||'PZA';
   if(!state.almacen.productos)state.almacen.productos=[];
-  // Validar código único (salvo en edición del mismo ítem)
   const duplicado=state.almacen.productos.find(x=>x.codigo===codigo&&x.id!==editId);
   if(duplicado){showNotif('⚠ Ya existe un producto con ese código','error');return;}
   if(editId){
     const p=state.almacen.productos.find(x=>x.id===editId);
-    if(p){p.codigo=codigo;p.nombre=nombre;p.descripcion=g('prod-descripcion').value.trim();p.unidad=g('prod-unidad').value;p.precio=precio;}
+    if(p){p.codigo=codigo;p.nombre=nombre;p.unidad=unidad;p.precio=precio;}
   }else{
-    state.almacen.productos.push({id:'P'+Date.now(),codigo,nombre,descripcion:g('prod-descripcion').value.trim(),unidad:g('prod-unidad').value,precio});
+    state.almacen.productos.push({id:'P'+Date.now(),codigo,nombre,unidad,precio});
   }
   almacenSave();cerrarModal('modal-producto');renderProductos();
-  showNotif('Producto guardado','success');
+  showNotif('Producto guardado','ok');
 }
 function eliminarProducto(id){
   if(!confirm('¿Eliminar este producto del catálogo?'))return;
   state.almacen.productos=(state.almacen.productos||[]).filter(p=>p.id!==id);
   almacenSave();renderProductos();
 }
+function guardarPrecioInline(id,val){
+  const p=(state.almacen.productos||[]).find(x=>x.id===id);
+  if(!p)return;
+  p.precio=parseFloat(val)||0;
+  almacenSave();
+  showNotif('Precio actualizado','ok');
+}
 function renderProductos(){
   const el=document.getElementById('log-productos');
   if(!el)return;
   const allProds=(state.almacen&&state.almacen.productos)||[];
   const busq=(document.getElementById('prod-buscar')?.value||'').toLowerCase().trim();
-  const prods=busq?allProds.filter(p=>(p.codigo||'').toLowerCase().includes(busq)||(p.nombre||'').toLowerCase().includes(busq)||(p.descripcion||'').toLowerCase().includes(busq)):allProds;
+  const prods=busq?allProds.filter(p=>(p.codigo||'').toLowerCase().includes(busq)||(p.nombre||'').toLowerCase().includes(busq)):allProds;
   const comb=paramsGetComb()||{pet:24.5,gas:21.0};
   const exp=paramsGetExp()||{...COMP_PRECIOS_EXP_DEFAULT};
 
-  const rows=prods.map(p=>`
-    <tr>
-      <td style="padding:8px 10px;font-size:12px;color:var(--text3)">${p.codigo||''}</td>
-      <td style="padding:8px 10px;font-size:13px;color:var(--text)">${p.nombre||''}</td>
-      <td style="padding:8px 10px;font-size:12px;color:var(--text2)">${p.descripcion||''}</td>
-      <td style="padding:8px 10px;font-size:12px;color:var(--text2);text-align:center">${p.unidad||''}</td>
-      <td style="padding:8px 10px;font-size:13px;color:var(--gold);text-align:right">S/ ${(p.precio||0).toFixed(2)}</td>
-      <td style="padding:8px 10px;text-align:center">
-        <button class="btn btn-outline" style="padding:3px 10px;font-size:11px" onclick="abrirModalProducto('${p.id}')">✏️</button>
-        <button class="btn btn-outline" style="padding:3px 10px;font-size:11px;color:#ef4444;border-color:#ef4444" onclick="eliminarProducto('${p.id}')">🗑</button>
+  const rows=prods.map(p=>{
+    const sinPrecio=!p.precio||p.precio===0;
+    const precioCell=sinPrecio
+      ? `<td style="padding:6px 10px;text-align:right"><input type="number" step="0.01" min="0" placeholder="0.00" onchange="guardarPrecioInline('${p.id}',this.value)" style="width:80px;background:var(--coal4);border:1px solid var(--gold);border-radius:5px;padding:3px 6px;color:var(--gold);font-size:12px;text-align:right" title="Sin precio — ingresa el valor"></td>`
+      : `<td style="padding:6px 10px;font-size:13px;color:var(--gold);text-align:right">S/ ${p.precio.toFixed(2)}</td>`;
+    return `<tr>
+      <td style="padding:6px 10px;font-size:11px;font-family:'DM Mono',monospace;color:var(--text3)">${p.codigo||''}</td>
+      <td style="padding:6px 10px;font-size:13px;color:var(--text)">${p.nombre||''}</td>
+      <td style="padding:6px 10px;font-size:12px;color:var(--text2);text-align:center">${p.unidad||''}</td>
+      ${precioCell}
+      <td style="padding:6px 10px;text-align:center">
+        <button class="btn btn-outline" style="padding:3px 8px;font-size:11px" onclick="abrirModalProducto('${p.id}')">✏️</button>
+        <button class="btn btn-outline" style="padding:3px 8px;font-size:11px;color:#ef4444;border-color:#ef4444" onclick="eliminarProducto('${p.id}')">🗑</button>
       </td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 
   const expRows=COMP_EXPLOSIVOS.map(c=>`
     <tr>
@@ -5269,35 +5275,28 @@ function renderProductos(){
     <!-- HEADER -->
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
       <div style="font-size:16px;font-weight:700;color:var(--text)">📦 Maestro de Productos</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <label class="btn btn-outline" style="cursor:pointer;padding:6px 14px;font-size:12px">
-          📥 Importar Excel
-          <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarMaestroExcel(this)">
-        </label>
-        <button class="btn btn-outline" style="font-size:12px" onclick="descargarPlantillaMaestro()">📄 Plantilla</button>
-        <button class="btn btn-gold" style="font-size:12px" onclick="abrirModalProducto()">+ Nuevo Producto</button>
-      </div>
+      <button class="btn btn-gold" style="font-size:12px" onclick="abrirModalProducto()">+ Nuevo Producto</button>
     </div>
-    <div style="margin-bottom:14px">
-      <input type="text" id="prod-buscar" placeholder="🔍 Buscar por código, nombre o descripción..." oninput="renderProductos()"
-        style="width:100%;max-width:420px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--coal4);color:var(--text1);font-size:13px">
-      <span style="margin-left:10px;font-size:11px;color:var(--text3)">${prods.length}${busq?' encontrados de '+allProds.length:' productos'}</span>
+    <div style="margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <input type="text" id="prod-buscar" placeholder="🔍 Buscar por código o nombre..." oninput="renderProductos()"
+        style="width:100%;max-width:380px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--coal4);color:var(--text1);font-size:13px">
+      <span style="font-size:11px;color:var(--text3)">${prods.length}${busq?' encontrados de '+allProds.length:' productos'}</span>
+      ${allProds.filter(p=>!p.precio||p.precio===0).length>0?`<span style="font-size:11px;color:var(--gold)">⚠ ${allProds.filter(p=>!p.precio||p.precio===0).length} sin precio — edita el campo dorado</span>`:''}
     </div>
 
-    <!-- TABLA PRODUCTOS GENERALES -->
+    <!-- TABLA PRODUCTOS -->
     <div class="card" style="margin-bottom:18px;padding:0;overflow:hidden">
       <table style="width:100%;border-collapse:collapse">
         <thead>
           <tr style="background:var(--coal3)">
             <th style="padding:9px 10px;font-size:11px;color:var(--text3);text-align:left;font-weight:600">CÓDIGO</th>
-            <th style="padding:9px 10px;font-size:11px;color:var(--text3);text-align:left;font-weight:600">NOMBRE</th>
-            <th style="padding:9px 10px;font-size:11px;color:var(--text3);text-align:left;font-weight:600">DESCRIPCIÓN</th>
+            <th style="padding:9px 10px;font-size:11px;color:var(--text3);text-align:left;font-weight:600">PRODUCTO</th>
             <th style="padding:9px 10px;font-size:11px;color:var(--text3);text-align:center;font-weight:600">UNIDAD</th>
             <th style="padding:9px 10px;font-size:11px;color:var(--text3);text-align:right;font-weight:600">PRECIO S/</th>
             <th style="padding:9px 10px;font-size:11px;color:var(--text3);text-align:center;font-weight:600">ACCIONES</th>
           </tr>
         </thead>
-        <tbody>${rows||'<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--text3)">Sin productos registrados</td></tr>'}</tbody>
+        <tbody>${rows||'<tr><td colspan="5" style="padding:20px;text-align:center;color:var(--text3)">Sin productos registrados</td></tr>'}</tbody>
       </table>
     </div>
 
@@ -5608,549 +5607,285 @@ function almacenSeedDemo_stock(){
 }
 function almacenSeedProductos(){
   state.almacen.productos=[
-    {id:'P001',codigo:'02-02-10-0001',nombre:'Aceite Air Tool Oil S2 A 100',descripcion:'ACEITE AIR TOOL OIL S2 A 100',unidad:'CIL',precio:0},
-    {id:'P002',codigo:'16-02-90-0001',nombre:'Acople Vitaulic HDPE 4" 305',descripcion:'ACOPLE VITAULIC P/TUBERIA HDPE 4" 305',unidad:'PZA',precio:0},
-    {id:'P003',codigo:'11-01-05-0001',nombre:'Adaptador Perno Helicoidal 22mm',descripcion:'ADAPTADOR DE PERNO HELICOIDAL 22MM',unidad:'PZA',precio:0},
-    {id:'P004',codigo:'10-02-90-0001',nombre:'Alambre Negro N° 16',descripcion:'ALAMBRE NEGRO N° 16',unidad:'KG',precio:0},
-    {id:'P005',codigo:'08-02-01-0001',nombre:'Alcayata Fe Corrugado 3/8" x 35cm',descripcion:'ALCAYATA DE FE CORRUGADO 3/8" X 35 CM',unidad:'PZA',precio:0},
-    {id:'P006',codigo:'08-02-01-0002',nombre:'Alcayata Fe Corrugado T-G 5/8" x 29cm',descripcion:'ALCAYATA DE FE CORRUGADO T-G 5/8"X29 CM',unidad:'PZA',precio:0},
-    {id:'P007',codigo:'08-02-01-0003',nombre:'Alcayata Fe Corrugado T-L 3/4" x 70cm',descripcion:'ALCAYATA DE FE CORRUGADO T-L 3/4"X70CM',unidad:'PZA',precio:0},
-    {id:'P008',codigo:'07-02-01-0001',nombre:'Atacadores de Madera 1" x 2.5 Mtr',descripcion:'ATACADORES DE MADERA 1" X 2.5 MTR',unidad:'PZA',precio:0},
-    {id:'P009',codigo:'01-02-10-0001',nombre:'Barra Cónica 4\' x 7/8\'\'',descripcion:'BARRA CONICA 4\' X 7/8\'\'',unidad:'PZA',precio:0},
-    {id:'P010',codigo:'01-02-10-0002',nombre:'Barra Cónica 6\' x 7/8\'\'',descripcion:'BARRA CONICA 6\' X 7/8\'\'',unidad:'PZA',precio:0},
-    {id:'P011',codigo:'01-02-10-0003',nombre:'Barra Cónica 8\' x 7/8\'\'',descripcion:'BARRA CONICA 8\' X 7/8\'\'',unidad:'PZA',precio:0},
-    {id:'P012',codigo:'01-02-30-0001',nombre:'Barra Aluminio Acuñar 1" x 10\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" x 10\'',unidad:'PZA',precio:0},
-    {id:'P013',codigo:'01-02-30-0002',nombre:'Barra Aluminio Acuñar 1" x 12\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 12\'',unidad:'PZA',precio:0},
-    {id:'P014',codigo:'01-02-30-0003',nombre:'Barra Aluminio Acuñar 1" x 4\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 4\'',unidad:'PZA',precio:0},
-    {id:'P015',codigo:'01-02-30-0004',nombre:'Barra Aluminio Acuñar 1" x 6\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 6\'',unidad:'PZA',precio:0},
-    {id:'P016',codigo:'01-02-30-0005',nombre:'Barra Aluminio Acuñar 1" x 8\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'',unidad:'PZA',precio:0},
-    {id:'P017',codigo:'01-02-20-0001',nombre:'Broca Descartable Botones 32mm',descripcion:'BROCA DESCARTABLE DE BOTONES 32 MM',unidad:'PZA',precio:0},
-    {id:'P018',codigo:'01-02-20-0002',nombre:'Broca Descartable Botones 36mm',descripcion:'BROCA DESCARTABLE DE BOTONES 36 MM',unidad:'PZA',precio:0},
-    {id:'P019',codigo:'10-02-90-0002',nombre:'Cable Acero Alma D/Acero 1/2" x 250Mtr',descripcion:'CABLE DE ACERO ALMA D/ACERO 1/2"X250MTR',unidad:'M',precio:0},
-    {id:'P020',codigo:'10-02-90-0003',nombre:'Cable Acero Galvanizado 5/32" (6x19)',descripcion:'CABLE DE ACERO GALVANIZADO 5/32" (6X19)',unidad:'M',precio:0},
-    {id:'P021',codigo:'40-01-90-0001',nombre:'Carretilla C/Ruedas de Jebe 4 P3',descripcion:'CARRETILLA C/RUEDAS DE JEBE 4 P3',unidad:'PZA',precio:0},
-    {id:'P022',codigo:'01-03-90-0001',nombre:'Cartucho de Cemento 30mm x 305mm',descripcion:'CARTUCHO DE CEMENTO 30MM X 305MM',unidad:'PZA',precio:0},
-    {id:'P023',codigo:'08-06-90-0001',nombre:'Cemento Gris Antisalitre Portl. MS',descripcion:'CEMENTO GRIS ANTISALITRE PORTL. TIPO MS',unidad:'PZA',precio:0},
-    {id:'P024',codigo:'10-02-09-0001',nombre:'Cimbra AC (2C) 3.5x3.5 Mtr W6" x20 Lb',descripcion:'CIMBRA AC (2C) 3.5X3.5 MTR W6" X20 LB/FT',unidad:'JGO',precio:0},
-    {id:'P025',codigo:'10-02-09-0002',nombre:'Cimbra AC (2C) 3x3 Mtr W6\' x 20Lb',descripcion:'CIMBRA AC (2C) 3 X 3M W6\' X 20LB/FT',unidad:'JGO',precio:0},
-    {id:'P026',codigo:'10-02-90-0004',nombre:'Cinta Acero Inox 1/2" x 0.76mm L=30.5m',descripcion:'CINTA DE ACERO INOX.1/2"X0.76MM L=30.5MT',unidad:'CJA',precio:0},
-    {id:'P027',codigo:'10-02-90-0005',nombre:'Cinta Acero Inox 3/4" x 0.76mm L=30.5m',descripcion:'CINTA DE ACERO INOX.3/4"X0.76MM L=30.5MT',unidad:'CJA',precio:0},
-    {id:'P028',codigo:'07-01-90-0001',nombre:'Escalera Madera 3.60 Mtr x 11 Peld.',descripcion:'ESCALERA DE MADERA 3.60 MTRX 11 PELD.',unidad:'PZA',precio:0},
-    {id:'P029',codigo:'08-02-01-0004',nombre:'Grapa Acero para Cable 3/16"',descripcion:'GRAPA DE ACERO PARA CABLE 3/16"',unidad:'PZA',precio:0},
-    {id:'P030',codigo:'08-02-01-0005',nombre:'Grapa Galvanizada p/Cable 1/2"',descripcion:'GRAPA GALVANIZADA P/CABLE 1/2"',unidad:'PZA',precio:0},
-    {id:'P031',codigo:'08-02-01-0006',nombre:'Grapa (Hebilla) Serie 201SS 1/2" C-254',descripcion:'GRAPA (HEBILLA) SERIE 201SS 1/2" C-254',unidad:'CJA',precio:0},
-    {id:'P032',codigo:'08-02-01-0007',nombre:'Grapa (Hebilla) Serie 201SS 3/4" C-256',descripcion:'GRAPA (HEBILLA) SERIE 201SS 3/4" C-256',unidad:'CJA',precio:0},
-    {id:'P033',codigo:'08-90-90-0001',nombre:'Guiadores de Madera 1" x 1.30 Mtr',descripcion:'GUIADORES DE MADERA 1" X 1.30 MTR',unidad:'PZA',precio:0},
-    {id:'P034',codigo:'07-01-04-0001',nombre:'Listón 2" x 3" x 10\'',descripcion:'LISTON 2" X 3" X 10\'',unidad:'PZA',precio:0},
-    {id:'P035',codigo:'10-02-90-0006',nombre:'Malla Electrosoldada 4"x4"-2.42 x 25Mtr',descripcion:'MALLA ELECTROSOLDADA 4"X4"-2.42 X 25 MTR',unidad:'JGO',precio:0},
-    {id:'P036',codigo:'19-01-02-0001',nombre:'Manga Ventilación 12" x 10 Mtr',descripcion:'MANGA DE VENT. 12" X 10 MTR',unidad:'M',precio:0},
-    {id:'P037',codigo:'19-01-02-0002',nombre:'Manga Ventilación 30" x 100 Mtr 600gr/m2',descripcion:'MANGA DE VENT. 30" X 100 MTR 600 GR/M2',unidad:'M',precio:0},
-    {id:'P038',codigo:'19-01-02-0003',nombre:'Manga Ventilación 30" x 20 Mtr',descripcion:'MANGA DE VENT. 30" X 20 MTR',unidad:'M',precio:0},
-    {id:'P039',codigo:'03-02-90-0001',nombre:'Manguera Jebe y Lona 1" 300 PSI',descripcion:'MANGUERA DE JEBE Y LONA 1" 300 PSI',unidad:'ROLL',precio:0},
-    {id:'P040',codigo:'03-02-90-0002',nombre:'Manguera Jebe y Lona 1/2"',descripcion:'MANGUERA DE JEBE Y LONA 1/2"',unidad:'ROLL',precio:0},
-    {id:'P041',codigo:'11-01-05-0002',nombre:'Perno Helicoidal 19mm x 5\' (1.52Mtr)',descripcion:'PERNO HELICOIDAL 19 MM X 5\'(1.52MTR)',unidad:'PZA',precio:0},
-    {id:'P042',codigo:'11-01-05-0003',nombre:'Perno Helicoidal 19mm x 6\' (1.83Mtr)',descripcion:'PERNO HELICOIDAL 19 MM X 6\'(1.83MTR)',unidad:'PZA',precio:0},
-    {id:'P043',codigo:'11-01-05-0004',nombre:'Perno Helicoidal 19mm x 7\' (2.13Mtr)',descripcion:'PERNO HELICOIDAL 19 MM X 7\'(2.13MTR)',unidad:'PZA',precio:0},
-    {id:'P044',codigo:'10-02-05-0001',nombre:'Plancha Acanalada Ondul. 2x1100x1700mm',descripcion:'PLANCHA ACANALADA T/ONDUL. 2X1100X1700MM',unidad:'PZA',precio:0},
-    {id:'P045',codigo:'16-04-05-0001',nombre:'Reducción Polip. C/Rosca 110 a 63mm',descripcion:'REDUCCION POLIP.C/ROSCA 110 A 63 MM',unidad:'PZA',precio:0},
-    {id:'P046',codigo:'16-04-05-0002',nombre:'Reducción Polip. C/Rosca 63 a 32mm',descripcion:'REDUCCION POLIP.C/ROSCA 63 A 32 MM',unidad:'PZA',precio:0},
-    {id:'P047',codigo:'01-03-90-0002',nombre:'Resina 28mm x 305mm 0-60 Second Set',descripcion:'RESINA 28 MM X 305 MM 0-60 SECOND SET',unidad:'PZA',precio:0},
-    {id:'P048',codigo:'29-01-90-0001',nombre:'Saco Metalero Polipropileno 20" x 30"',descripcion:'SACO METALERO POLIPROPILENO 20" X 30"',unidad:'PZA',precio:0},
-    {id:'P049',codigo:'11-01-05-0005',nombre:'Split Set con Platina 5\' x 39mm',descripcion:'SPLIT SET CON PLATINA 5\' X 39MM',unidad:'PZA',precio:0},
-    {id:'P050',codigo:'07-01-90-0002',nombre:'Tabla Aserrada 2" x 8" x 10\'',descripcion:'TABLA ASERRADA 2" X 8" X 10\'',unidad:'PZA',precio:0},
-    {id:'P051',codigo:'16-03-05-0001',nombre:'Tee Poliprop. C/Rosca 110mm',descripcion:'TEE DE POLIPROP. C/ROSCA 110MM',unidad:'PZA',precio:0},
-    {id:'P052',codigo:'16-03-05-0002',nombre:'Tee Poliprop. C/Rosca 63mm',descripcion:'TEE DE POLIPROP. C/ROSCA 63MM',unidad:'PZA',precio:0},
-    {id:'P053',codigo:'16-01-04-0001',nombre:'Tubo Polietileno Azul 1" PE 80 PN-10',descripcion:'TUBO POLIETILENO AZUL 1" PE 80 PN-10',unidad:'M',precio:0},
-    {id:'P054',codigo:'16-01-04-0002',nombre:'Tubo Polietileno Azul 2" PE 80 PN-10',descripcion:'TUBO POLIETILENO AZUL 2" PE 80 PN-10',unidad:'M',precio:0},
-    {id:'P055',codigo:'16-01-04-0003',nombre:'Tubo Polietileno Azul 4" PE 80 PN-10',descripcion:'TUBO POLIETILENO AZUL 4" PE 80 PN-10',unidad:'M',precio:0},
-    {id:'P056',codigo:'16-01-04-0004',nombre:'Tubo Polietileno Negro 1" PE 80 PN-10',descripcion:'TUBO POLIETILENO NEGRO 1" PE 80 PN-10',unidad:'M',precio:0},
-    {id:'P057',codigo:'16-01-04-0005',nombre:'Tubo Polietileno Verde 2" PE 80 PN-10',descripcion:'TUBO POLIETILENO VERDE 2" PE 80 PN-10',unidad:'M',precio:0},
-    {id:'P058',codigo:'16-01-04-0006',nombre:'Tubo Polietileno Negro 4" PE 80 PN-10',descripcion:'TUBO POLIETILENO NEGRO 4" PE 80 PN-10',unidad:'M',precio:0},
-    {id:'P059',codigo:'16-03-05-0003',nombre:'Unión Poliprop. C/Rosca 63mm',descripcion:'UNION DE POLIPROPI. C/ROSCA 63 MM',unidad:'PZA',precio:0},
-    {id:'P060',codigo:'16-03-05-0004',nombre:'Unión Polipropileno C/Rosca 32mm',descripcion:'UNION DE POLIPROPILENO C/ROSCA 32 MM',unidad:'PZA',precio:0},
-    {id:'P061',codigo:'16-06-01-0001',nombre:'Válvula Bola PVC Doble Acop PP 110mm',descripcion:'VALVULA BOLA PVC DOBLE ACOP PP 110MM',unidad:'PZA',precio:0},
-    {id:'P062',codigo:'16-06-01-0002',nombre:'Válvula Bola PVC Doble Acop PP 32mm',descripcion:'VALVULA BOLA PVC DOBLE ACOP PP 32MM',unidad:'PZA',precio:0},
-    {id:'P063',codigo:'16-06-01-0003',nombre:'Válvula Bola PVC Doble Acop PP 63mm',descripcion:'VALVULA BOLA PVC DOBLE ACOP PP 63MM',unidad:'PZA',precio:0},
+    {id:'MP0001',codigo:"1300000036",nombre:"BARRA CONICA 6' X 7/8''",unidad:"PZA",precio:330.29},
+    {id:'MP0002',codigo:"1300000037",nombre:"BARRA CONICA 4' X 7/8''",unidad:"PZA",precio:249.17},
+    {id:'MP0003',codigo:"1300000023",nombre:"BROCA DESCARTABLE DE BOTONES 32 MM",unidad:"PZA",precio:74.91},
+    {id:'MP0004',codigo:"1500003086",nombre:"CEMENTO GRIS ANTISALITRE PORTL. TIPO MS",unidad:"BOL",precio:27.73},
+    {id:'MP0005',codigo:"2100000012",nombre:"MANGA DE VENT. 12\" X 10 MTR",unidad:"M",precio:21.3},
+    {id:'MP0006',codigo:"1500001454",nombre:"ALCAYATA DE FE CORRUGADO 3/8\" X 35 CM",unidad:"PZA",precio:4.92},
+    {id:'MP0007',codigo:"1500002859",nombre:"SACO METALERO POLIPROPILENO 20\" X 30\"",unidad:"PZA",precio:1.02},
+    {id:'MP0008',codigo:"1900000205",nombre:"TUBO POLIETILENO AZUL 1\" PE 80 PN-10",unidad:"M",precio:1},
+    {id:'MP0009',codigo:"1900000201",nombre:"TUBO POLIETILENO AZUL 4\" PE 80 PN-10",unidad:"M",precio:1},
+    {id:'MP0010',codigo:"1900000200",nombre:"TUBO POLIETILENO VERDE 2\" PE 80 PN-10",unidad:"M",precio:1},
+    {id:'MP0011',codigo:"1900000107",nombre:"VALVULA BOLA PVC DOBLE ACOP PP 63MM",unidad:"PZA",precio:1},
+    {id:'MP0012',codigo:"1900000088",nombre:"UNION DE POLIPROPILENO C/ROSCA 32 MM",unidad:"PZA",precio:1},
+    {id:'MP0013',codigo:"1900000069",nombre:"UNION DE POLIPROPI. C/ROSCA 63 MM",unidad:"PZA",precio:1},
+    {id:'MP0014',codigo:"1600000006",nombre:"ESCALERA DE MADERA  3.60 MTRX 11 PELD.",unidad:"PZA",precio:68.52},
+    {id:'MP0015',codigo:"1600000009",nombre:"TABLA ASERRADA  2\" X 8\" X 10´",unidad:"PZA",precio:25.43},
+    {id:'MP0016',codigo:"1700000144",nombre:"CIMBRA AC (2C) 3.5X3.5 MTR W6\" X20 LB/FT",unidad:"JGO",precio:2034},
+    {id:'MP0017',codigo:"1500001491",nombre:"PLANCHA ACANALADA T/ONDUL. 2X1100X1700MM",unidad:"PZA",precio:164.38},
+    {id:'MP0018',codigo:"1300000026",nombre:"BROCA DESCARTABLE DE BOTONES 36 MM",unidad:"PZA",precio:76.88},
+    {id:'MP0019',codigo:"1900000106",nombre:"VALVULA BOLA PVC DOBLE ACOP PP 32MM",unidad:"PZA",precio:65.41},
+    {id:'MP0020',codigo:"2100000014",nombre:"MANGA DE VENT. 30\" X 20 MTR",unidad:"M",precio:36.14},
+    {id:'MP0021',codigo:"1500001438",nombre:"ALCAYATA DE FE CORRUGADO T-L 3/4\"X70CM",unidad:"PZA",precio:14.4},
+    {id:'MP0022',codigo:"1600000008",nombre:"LISTON  2\" X 3\" X 10´",unidad:"PZA",precio:13.92},
+    {id:'MP0023',codigo:"1500001437",nombre:"ALCAYATA DE FE CORRUGADO T-G 5/8\"X29 CM",unidad:"PZA",precio:9.23},
+    {id:'MP0024',codigo:"1500003358",nombre:"ALAMBRE NEGRO N° 16",unidad:"KG",precio:4.67},
+    {id:'MP0025',codigo:"1500003149",nombre:"CARRETILLA C/RUEDAS DE JEBE 4 P3",unidad:"PZA",precio:203.67},
+    {id:'MP0026',codigo:"1500003165",nombre:"CINTA DE ACERO INOX.3/4\"X0.76MM L=30.5MT",unidad:"CJ",precio:176.59},
+    {id:'MP0027',codigo:"1500003164",nombre:"CINTA DE ACERO INOX.1/2\"X0.76MM L=30.5MT",unidad:"CJ",precio:136.34},
+    {id:'MP0028',codigo:"1200000022",nombre:"ACEITE AIR TOOL OIL S2 A 100",unidad:"GLN",precio:48.69},
+    {id:'MP0029',codigo:"1900000184",nombre:"TUBO POLIETILENO NEGRO 1\" PE 80 PN-10",unidad:"M",precio:1},
+    {id:'MP0030',codigo:"1900000108",nombre:"VALVULA BOLA PVC DOBLE ACOP PP 110MM",unidad:"PZA",precio:1},
+    {id:'MP0031',codigo:"1500003424",nombre:"MALLA ELECTROSOLDADA 4\"X4\"-2.42 X 25 MTR",unidad:"ROLL",precio:374.91},
+    {id:'MP0032',codigo:"1500001441",nombre:"PERNO HELICOIDAL 19 MM X 7´(2.13MTR)",unidad:"JGO",precio:29.52},
+    {id:'MP0033',codigo:"1500003208",nombre:"RESINA 28 MM X 305 MM 0-60 SECOND SET",unidad:"PZA",precio:3.22},
+    {id:'MP0034',codigo:"1500003087",nombre:"CARTUCHO DE CEMENTO 30MM X 305MM",unidad:"PZA",precio:1.85},
+    {id:'MP0035',codigo:"1500003378",nombre:"CABLE DE ACERO GALVANIZADO 5/32\" (6X19)",unidad:"M",precio:1.07},
+    {id:'MP0036',codigo:"1500000032",nombre:"GUIADORES  DE MADERA 1\" X 1.30 MTR",unidad:"PZA",precio:7.67},
+    {id:'MP0037',codigo:"1900000203",nombre:"TUBO POLIETILENO AZUL 2\" PE 80 PN-10",unidad:"PZA",precio:1},
+    {id:'MP0038',codigo:"1500001443",nombre:"PERNO HELICOIDAL 19 MM X 6´(1.83MTR)",unidad:"JGO",precio:0},
+    {id:'MP0039',codigo:"1500003182",nombre:"ADAPTADOR DE PERNO HELICOIDAL 22MM",unidad:"PZA",precio:0},
+    {id:'MP0040',codigo:"1500001431",nombre:"SPLIT SET CON PLATINA 5´ X 39MM",unidad:"JGO",precio:0},
+    {id:'MP0041',codigo:"1500002650",nombre:"MANGUERA DE JEBE Y LONA 1\" 300 PSI",unidad:"M",precio:0},
+    {id:'MP0042',codigo:"1500002649",nombre:"MANGUERA DE JEBE Y LONA 1/2\"",unidad:"M",precio:0},
+    {id:'MP0043',codigo:"1500000031",nombre:"ATACADORES DE MADERA 1\" X 2.5 MTR",unidad:"PZA",precio:0},
+    {id:'MP0044',codigo:"1300000039",nombre:"BARRA CONICA 8' X 7/8''",unidad:"PZA",precio:249.17},
+    {id:'MP0045',codigo:"1500003379",nombre:"GRAPA DE ACERO PARA CABLE 3/16\"",unidad:"PZA",precio:0},
+    {id:'MP0046',codigo:"1500002765",nombre:"BARRA DE ALUMINIO PARA ACUÑAR 1\" X 6´",unidad:"PZA",precio:0},
+    {id:'MP0047',codigo:"1500003013",nombre:"BARRA DE ALUMINIO PARA ACUÑAR 1\" X 8´",unidad:"PZA",precio:0},
+    {id:'MP0048',codigo:"1500003022",nombre:"BARRA DE ALUMINIO PARA ACUÑAR 1\" x 10´",unidad:"PZA",precio:0},
+    {id:'MP0049',codigo:"1500002745",nombre:"BARRA DE ALUMINIO PARA ACUÑAR 1\" X 12",unidad:"PZA",precio:0},
+    {id:'MP0050',codigo:"1500001442",nombre:"PERNO HELICOIDAL 19 MM X 5´(1.52MTR)",unidad:"JGO",precio:0},
+    {id:'MP0051',codigo:"1900000296",nombre:"REDUCCION POLIP.C/ROSCA 110 A 63 MM",unidad:"PZA",precio:0},
+    {id:'MP0052',codigo:"1900000295",nombre:"REDUCCION POLIP.C/ROSCA 63 A 32 MM",unidad:"PZA",precio:0},
+    {id:'MP0053',codigo:"1500003364",nombre:"CABLE DE ACERO ALMA D/ACERO 1/2\"X250MTR",unidad:"M",precio:0},
+    {id:'MP0054',codigo:"1500003363",nombre:"GRAPA GALVANIZADA P/CABLE 1/2\"",unidad:"PZA",precio:0},
+    {id:'MP0055',codigo:"1900000265",nombre:"ACOPLE VITAULIC P/TUBERIA HDPE 4\" 305",unidad:"PZA",precio:0},
+    {id:'MP0056',codigo:"1700000170",nombre:"CIMBRA AC (2C) 3 X 3M W6' X 20LB/FT",unidad:"JGO",precio:2034},
+    {id:'MP0057',codigo:"1500002766",nombre:"BARRA DE ALUMINIO PARA ACUÑAR 1\" X 4\"",unidad:"PZA",precio:0},
+    {id:'MP0058',codigo:"2100000018",nombre:"MANGA DE VENT. 30\" X 100 MTR 600 GR/M2",unidad:"M",precio:0},
+    {id:'MP0059',codigo:"1900000253",nombre:"TEE DE POLIPROP. C/ROSCA 63MM",unidad:"PZA",precio:0},
+    {id:'MP0060',codigo:"1900000254",nombre:"TEE DE POLIPROP. C/ROSCA 110MM",unidad:"PZA",precio:0},
+    {id:'MP0061',codigo:"RNS53F-36A",nombre:"Freno 7/8 Hexágonal",unidad:"PZA",precio:64.177},
+    {id:'MP0062',codigo:"RNS53F-36TA",nombre:"Perno Sujetador",unidad:"PZA",precio:43.279},
+    {id:'MP0063',codigo:"RNORP-214B",nombre:"Anillos (2)",unidad:"PZA",precio:1.101},
+    {id:'MP0064',codigo:"RNS53F-36N",nombre:"Tuerca del Freno (2)",unidad:"PZA",precio:5.935},
+    {id:'MP0065',codigo:"RNS58F-17FC",nombre:"Parte Delantera (Trompa)",unidad:"PZA",precio:0},
+    {id:'MP0066',codigo:"RNS58F-36K",nombre:"Perno Pasador",unidad:"PZA",precio:5.372},
+    {id:'MP0067',codigo:"RNS58-3N",nombre:"Tuerca Tornillo Lateral",unidad:"PZA",precio:15.11},
+    {id:'MP0068',codigo:"RND73-3S",nombre:"Arandela (2)",unidad:"PZA",precio:4.033},
+    {id:'MP0069',codigo:"RNS53F-36P",nombre:"Perno Guía",unidad:"PZA",precio:13.127},
+    {id:'MP0070',codigo:"RNS58F-36N",nombre:"Resorte Sujetador",unidad:"PZA",precio:7},
+    {id:'MP0071',codigo:"RNORP-210B",nombre:"Anillo",unidad:"PZA",precio:1.101},
+    {id:'MP0072',codigo:"RNS58F-36RA",nombre:"Candado",unidad:"PZA",precio:28.542},
+    {id:'MP0073',codigo:"RNZ1",nombre:"Grasera",unidad:"PZA",precio:1.669},
+    {id:'MP0074',codigo:"RNS58F-7TLB",nombre:"Broquero Bocina 7/8\"",unidad:"PZA",precio:34.94},
+    {id:'MP0075',codigo:"RNS58F-7DA",nombre:"Portabroquero",unidad:"PZA",precio:112.11},
+    {id:'MP0076',codigo:"RNS63F-7N",nombre:"Tuerca Chuck",unidad:"PZA",precio:53.728},
+    {id:'MP0077',codigo:"RNS83F-1B",nombre:"Parte Intermedia",unidad:"PZA",precio:0},
+    {id:'MP0078',codigo:"RNS53F-1L",nombre:"Buje Bronce",unidad:"PZA",precio:49.737},
+    {id:'MP0079',codigo:"RNS83F-9A",nombre:"Pistón",unidad:"PZA",precio:144.728},
+    {id:'MP0080',codigo:"RNS83F-25-28",nombre:"Tuerca Rifle",unidad:"PZA",precio:44.898},
+    {id:'MP0081',codigo:"RNS83F-1T",nombre:"Cilindro",unidad:"PZA",precio:0},
+    {id:'MP0082',codigo:"RNS83F-715H",nombre:"Empaque tapon (2)",unidad:"PZA",precio:8.203},
+    {id:'MP0083',codigo:"RNS83F-15B",nombre:"Tapa de Válvula",unidad:"PZA",precio:119.898},
+    {id:'MP0084',codigo:"RNS83F-16",nombre:"Válvula Automática",unidad:"PZA",precio:78.406},
+    {id:'MP0085',codigo:"RNS83F-15",nombre:"Caja de Válvula",unidad:"PZA",precio:0},
+    {id:'MP0086',codigo:"RNS83F-15D",nombre:"Perno de Caja Válvula",unidad:"PZA",precio:0},
+    {id:'MP0087',codigo:"RNS83F-26-28",nombre:"Barra de Rotación",unidad:"PZA",precio:119.423},
+    {id:'MP0088',codigo:"RN711C",nombre:"Resorte Aleta (4)",unidad:"PZA",precio:1.5},
+    {id:'MP0089',codigo:"RN711B",nombre:"Perno Aleta (4)",unidad:"PZA",precio:2.322},
+    {id:'MP0090',codigo:"RNR91-11A",nombre:"Aleta",unidad:"PZA",precio:6.186},
+    {id:'MP0091',codigo:"RNS83F-3335",nombre:"Trinquete",unidad:"PZA",precio:0},
+    {id:'MP0092',codigo:"RNS63F-2",nombre:"Cabeza",unidad:"PZA",precio:0},
+    {id:'MP0093',codigo:"RNS58F-12K",nombre:"Cuña de Manija",unidad:"PZA",precio:2.686},
+    {id:'MP0094',codigo:"RNS58F-12E",nombre:"Manija de Control",unidad:"PZA",precio:65.567},
+    {id:'MP0095',codigo:"RNWP-31",nombre:"Rondana de Presión",unidad:"PZA",precio:2.686},
+    {id:'MP0096',codigo:"RNS48F-12N",nombre:"Tuerca Cabeza",unidad:"PZA",precio:8.957},
+    {id:'MP0097',codigo:"RN72ES",nombre:"Resorte",unidad:"PZA",precio:2.559},
+    {id:'MP0098',codigo:"RN72A",nombre:"Retén",unidad:"PZA",precio:5.228},
+    {id:'MP0099',codigo:"RN729B",nombre:"Empaque del tubo de agua",unidad:"PZA",precio:0},
+    {id:'MP0100',codigo:"RN1739A",nombre:"Rondana Glándula de Agua",unidad:"PZA",precio:0},
+    {id:'MP0101',codigo:"RNS63F-27B",nombre:"Tubo del Agua",unidad:"PZA",precio:12.262},
+    {id:'MP0102',codigo:"RND83N-44",nombre:"Retén de Asiento",unidad:"PZA",precio:0},
+    {id:'MP0103',codigo:"RNDBN83-45",nombre:"Empaque de Asiento de valvula",unidad:"PZA",precio:2.093},
+    {id:'MP0104',codigo:"RND83-40",nombre:"Arandela Glándula de Agua",unidad:"PZA",precio:3.372},
+    {id:'MP0105',codigo:"RNOR-18",nombre:"Anillos (2)",unidad:"PZA",precio:1.101},
+    {id:'MP0106',codigo:"RND83N-40",nombre:"Glándula de Agua",unidad:"PZA",precio:67.898},
+    {id:'MP0107',codigo:"RNOR-03",nombre:"Anillo",unidad:"PZA",precio:1.101},
+    {id:'MP0108',codigo:"RND83N-41",nombre:"Válvula de Glándula de Agua",unidad:"PZA",precio:12.991},
+    {id:'MP0109',codigo:"RND83N-43",nombre:"Resorte de Glándula de Agua",unidad:"PZA",precio:4.627},
+    {id:'MP0110',codigo:"RND83N-42",nombre:"Reten de Glándula de Agua",unidad:"PZA",precio:10.593},
+    {id:'MP0111',codigo:"RNTRR5",nombre:"Candado",unidad:"PZA",precio:1.338},
+    {id:'MP0112',codigo:"RNS83F-3D",nombre:"Tornillo Lateral (2)",unidad:"PZA",precio:57.067},
+    {id:'MP0113',codigo:"RNS83F-113",nombre:"Perno Maneral (112AB)",unidad:"PZA",precio:2.686},
+    {id:'MP0114',codigo:"RNS83F-112",nombre:"Maneral izquierdo completo",unidad:"PZA",precio:0},
+    {id:'MP0115',codigo:"RNS83F-116C",nombre:"valvula de control maneral (112 ab)",unidad:"PZA",precio:0},
+    {id:'MP0116',codigo:"RNS83F-117",nombre:"Resorte Maneral (112 ab)",unidad:"PZA",precio:0},
+    {id:'MP0117',codigo:"RNPP2",nombre:"Tornillo Allen Maneral (112 ab)",unidad:"PZA",precio:0},
+    {id:'MP0118',codigo:"RNORP-116A",nombre:"Anillos (2)",unidad:"PZA",precio:1.101},
+    {id:'MP0119',codigo:"RNS83F-215H",nombre:"Manivela",unidad:"PZA",precio:58.864},
+    {id:'MP0120',codigo:"RNERP-6",nombre:"Perno Espiral maneral (114 ab)",unidad:"PZA",precio:1.491},
+    {id:'MP0121',codigo:"RNORP-6",nombre:"Anillos (4)",unidad:"PZA",precio:1},
+    {id:'MP0122',codigo:"RNS83F-114",nombre:"Maneral Derecho (RNS83F - 114AB)",unidad:"PZA",precio:0},
+    {id:'MP0123',codigo:"RNOR-7",nombre:"Anillo",unidad:"PZA",precio:1},
+    {id:'MP0124',codigo:"RNCL5-324P",nombre:"Anillo",unidad:"PZA",precio:0},
+    {id:'MP0125',codigo:"RNS83F-118B",nombre:"Válvula Control DE Maneral (114ab)",unidad:"PZA",precio:0},
+    {id:'MP0126',codigo:"RNOR-9",nombre:"Anillo",unidad:"PZA",precio:0},
+    {id:'MP0127',codigo:"RNS83F-119B",nombre:"Resorte Maneral (114ab)",unidad:"PZA",precio:0},
+    {id:'MP0128',codigo:"RNS83F-120",nombre:"Retén Maneral (114ab)",unidad:"PZA",precio:0},
+    {id:'MP0129',codigo:"RNS83F-12BM",nombre:"Válvula de Aceleración",unidad:"PZA",precio:0},
+    {id:'MP0130',codigo:"RN2062234",nombre:"Filtro",unidad:"PZA",precio:0},
+    {id:'MP0131',codigo:"RNRB83-147",nombre:"Codo de Aire",unidad:"PZA",precio:39.254},
+    {id:'MP0132',codigo:"RND73H-146W",nombre:"Rondana",unidad:"PZA",precio:3.279},
+    {id:'MP0133',codigo:"RNRB83-146",nombre:"Tuerca del Codo de Aire",unidad:"PZA",precio:0},
+    {id:'MP0134',codigo:"RNOR-21",nombre:"Anillo",unidad:"PZA",precio:1},
+    {id:'MP0135',codigo:"RNS48F-1W",nombre:"Arandela",unidad:"PZA",precio:4.991},
+    {id:'MP0136',codigo:"RNS48F-13E",nombre:"Tuerca Conexión de Agua",unidad:"PZA",precio:23.279},
+    {id:'MP0137',codigo:"RNS48-13S",nombre:"Filtro de Agua",unidad:"PZA",precio:13.44},
+    {id:'MP0138',codigo:"RNOR-10",nombre:"Anillos (2)",unidad:"PZA",precio:1.101},
+    {id:'MP0139',codigo:"RNS48F-13T1",nombre:"Conexión de Agua",unidad:"PZA",precio:40.296},
+    {id:'MP0140',codigo:"RN760",nombre:"distribuidora de agua (gamarrilla)",unidad:"PZA",precio:40.737},
+    {id:'MP0141',codigo:"RNFL7-202",nombre:"tuerca superior",unidad:"PZA",precio:37.322},
+    {id:'MP0142',codigo:"RN-1045660",nombre:"buje empujador (RNFL7 - 210)",unidad:"PZA",precio:0},
+    {id:'MP0143',codigo:"RNCL5-441",nombre:"Anillos",unidad:"PZA",precio:1.101},
+    {id:'MP0144',codigo:"RNFL7-211",nombre:"SEGURO Empujador",unidad:"PZA",precio:0},
+    {id:'MP0145',codigo:"RNFL7-203",nombre:"buje empujador",unidad:"PZA",precio:0},
+    {id:'MP0146',codigo:"RNFL7-29",nombre:"TAPA SUPERIOR (CAPUCHON)",unidad:"PZA",precio:0},
+    {id:'MP0147',codigo:"RNFL7-21",nombre:"TUERCA EMPUJADOR F17",unidad:"PZA",precio:0},
+    {id:'MP0148',codigo:"RNFL7-206",nombre:"ARO RANURADO",unidad:"PZA",precio:0},
+    {id:'MP0149',codigo:"RNFL7-207",nombre:"ESPACIDOR DE EMPUJADOR (F17)",unidad:"PZA",precio:0},
+    {id:'MP0150',codigo:"RN1FL7-27B",nombre:"TUBO DE AIRE",unidad:"PZA",precio:31.983},
+    {id:'MP0151',codigo:"RNFL7-208",nombre:"Buje Empujador",unidad:"PZA",precio:0},
+    {id:'MP0152',codigo:"RNRB94-20PA",nombre:"EMPAQUE IR8320D",unidad:"PZA",precio:7.322},
+    {id:'MP0153',codigo:"RNFL7-38A",nombre:"PORTAEMPAQUE",unidad:"PZA",precio:11.48},
+    {id:'MP0154',codigo:"RNFL7-209",nombre:"Buje Empujador",unidad:"PZA",precio:0},
+    {id:'MP0155',codigo:"RNFL7-33ES",nombre:"FEED PISTON COMPLETO",unidad:"PZA",precio:0},
+    {id:'MP0156',codigo:"RNORP-34",nombre:"ANILLO",unidad:"PZA",precio:0.99},
+    {id:'MP0157',codigo:"RN-1029902",nombre:"BUJE EMPUJADOR (RNFL7 - 31)",unidad:"PZA",precio:0},
+    {id:'MP0158',codigo:"RNFL7-27A",nombre:"TAPA DE CILINDRO",unidad:"PZA",precio:0},
+    {id:'MP0159',codigo:"RNUCP-1",nombre:"EMPAQUE",unidad:"PZA",precio:6.355},
+    {id:'MP0160',codigo:"RN1029906",nombre:"EMPAQUE",unidad:"PZA",precio:8.966},
+    {id:'MP0161',codigo:"RNFL7-39S",nombre:"Pico de Apoyo",unidad:"PZA",precio:0},
+    {id:'MP0162',codigo:"RNFL7-25E",nombre:"Cilindro de Aluminio",unidad:"PZA",precio:192.71},
+    {id:'MP0163',codigo:"RNFL7-468",nombre:"AGARRADERA",unidad:"PZA",precio:0},
+    {id:'MP0164',codigo:"RNSH-75",nombre:"Tornillo Empujador",unidad:"PZA",precio:0},
+    {id:'MP0165',codigo:"RNWP-10",nombre:"Arandela",unidad:"PZA",precio:0},
+    {id:'MP0166',codigo:"RNNH-10",nombre:"Tuerca Empujador",unidad:"PZA",precio:0},
+    {id:'MP0167',codigo:"RNFL7-90",nombre:"Swivel FL7",unidad:"PZA",precio:174.483},
+    {id:'MP0168',codigo:"RNOR-11",nombre:"Anillo",unidad:"PZA",precio:1.101},
+    {id:'MP0169',codigo:"RNFL7-91A",nombre:"Pivote",unidad:"PZA",precio:92.661},
+    {id:'MP0170',codigo:"RNFL7-200",nombre:"Perno Swivel FL7",unidad:"PZA",precio:1.932},
+    {id:'MP0171',codigo:"RN-NH-108",nombre:"Tuerca Swivel FL7 (RNNH 108-FL7)",unidad:"PZA",precio:12.364},
+    {id:'MP0172',codigo:"RNS58F-35W",nombre:"RONDANA",unidad:"PZA",precio:0},
+    {id:'MP0173',codigo:"RNFL5-97",nombre:"RESORTE",unidad:"PZA",precio:16.177},
+    {id:'MP0174',codigo:"RNFL7-99",nombre:"Tuerca Swivel FL9",unidad:"PZA",precio:16.762},
+    {id:'MP0175',codigo:"RNFL7-201",nombre:"CoNo del Swivel",unidad:"PZA",precio:0},
+    {id:'MP0176',codigo:"RN760-01",nombre:"Conexión de Agua",unidad:"PZA",precio:8.5},
+    {id:'MP0177',codigo:"RNRB83-147-0",nombre:"Adaptador de Codo DE AIRE",unidad:"PZA",precio:15.398},
+    {id:'MP0178',codigo:"RNFL-05",nombre:"Conexión de Aire",unidad:"PZA",precio:10.898},
+    {id:'MP0179',codigo:"RNL-06",nombre:"Adaptador Lubricador",unidad:"PZA",precio:12.254},
+    {id:'MP0180',codigo:"RNRB-114",nombre:"Tuerca Lubricador",unidad:"PZA",precio:0},
+    {id:'MP0181',codigo:"RNFIL-L07",nombre:"Filtro Lubricador",unidad:"PZA",precio:0},
+    {id:'MP0182',codigo:"RN164731",nombre:"Anillo Lubricadora",unidad:"PZA",precio:0},
+    {id:'MP0183',codigo:"RNL-07",nombre:"Lubricadora",unidad:"PZA",precio:385},
+    {id:'MP0184',codigo:"RNL-08",nombre:"Conexión de salida Lubricadora",unidad:"PZA",precio:0},
+    {id:'MP0185',codigo:"RN-JM1820",nombre:"Jebe para Maneral",unidad:"PZA",precio:0},
+    {id:'MP0186',codigo:"RN-8325",nombre:"Anillo de Gamarilla (2)",unidad:"PZA",precio:1.101},
+    {id:'MP0187',codigo:"RNTRR3",nombre:"Candado de Gamarilla",unidad:"PZA",precio:1.042},
+    {id:'MP0188',codigo:"RN-GAGE",nombre:"Calibrador de Bocina",unidad:"PZA",precio:0},
+    {id:'MP0189',codigo:"MAN-01",nombre:"Manómetro Completo",unidad:"PZA",precio:78.754},
+    {id:'MP0190',codigo:"EPP-001",nombre:"CASCO TIPO SOMBRERO V-GARD C/PORTALAMP. - VERDE",unidad:"PZA",precio:0},
+    {id:'MP0191',codigo:"EPP-002",nombre:"CASCO TIPO SOMBRERO V-GARD C/PORTALAMP. - BLANCO",unidad:"PZA",precio:0},
+    {id:'MP0192',codigo:"EPP-003",nombre:"BARBIQUEJO PARA CASCO",unidad:"PZA",precio:0},
+    {id:'MP0193',codigo:"EPP-004",nombre:"TAFILETE P/CASCO MINERO 1-06-00286266",unidad:"PZA",precio:0},
+    {id:'MP0194',codigo:"EPP-005",nombre:"TAPON AUDITIVO T/COPA EP01AS",unidad:"PAA",precio:0},
+    {id:'MP0195',codigo:"EPP-006",nombre:"LENTE CON MALLA FORESTER NORTH",unidad:"PZA",precio:0},
+    {id:'MP0196',codigo:"EPP-007",nombre:"RESPIRADOR 3M",unidad:"PZA",precio:0},
+    {id:'MP0197',codigo:"EPP-008",nombre:"FILTRO CONTRA POLVO",unidad:"PZA",precio:0},
+    {id:'MP0198',codigo:"EPP-009",nombre:"FILTRO CONTRA GASES",unidad:"PZA",precio:0},
+    {id:'MP0199',codigo:"EPP-010",nombre:"LAMPARA MINERA",unidad:"PZA",precio:0},
+    {id:'MP0200',codigo:"EPP-011",nombre:"CARGADOR DE LAMPARA",unidad:"PZA",precio:0},
+    {id:'MP0201',codigo:"EPP-012",nombre:"UNIFORME CAMISA TALLA M",unidad:"PZA",precio:0},
+    {id:'MP0202',codigo:"EPP-013",nombre:"UNIFORME CAMISA TALLA L",unidad:"PZA",precio:0},
+    {id:'MP0203',codigo:"EPP-014",nombre:"UNIFORME CAMISA TALLA XL",unidad:"PZA",precio:0},
+    {id:'MP0204',codigo:"EPP-015",nombre:"UNIFORME CAMISA TALLA XXL",unidad:"PZA",precio:0},
+    {id:'MP0205',codigo:"EPP-016",nombre:"UNIFORME PANTALON TALLA M",unidad:"PZA",precio:0},
+    {id:'MP0206',codigo:"EPP-017",nombre:"UNIFORME PANTALON TALLA L",unidad:"PZA",precio:0},
+    {id:'MP0207',codigo:"EPP-018",nombre:"UNIFORME PANTALON TALLA XL",unidad:"PZA",precio:0},
+    {id:'MP0208',codigo:"EPP-019",nombre:"UNIFORME PANTALON TALLA XXL",unidad:"PZA",precio:0},
+    {id:'MP0209',codigo:"EPP-020",nombre:"UNIFORME PANTALON TALLA XXXL",unidad:"PZA",precio:0},
+    {id:'MP0210',codigo:"EPP-021",nombre:"POLO DE MAYA M",unidad:"PZA",precio:0},
+    {id:'MP0211',codigo:"EPP-022",nombre:"POLO DE MAYA L",unidad:"PZA",precio:0},
+    {id:'MP0212',codigo:"EPP-023",nombre:"POLO DE MAYA XL",unidad:"PZA",precio:0},
+    {id:'MP0213',codigo:"EPP-024",nombre:"POLO DE MAYA XXL",unidad:"PZA",precio:0},
+    {id:'MP0214',codigo:"EPP-025",nombre:"CAMISA DE JEBE TALLA 40",unidad:"PZA",precio:0},
+    {id:'MP0215',codigo:"EPP-026",nombre:"CAMISA DE JEBE TALLA 41",unidad:"PZA",precio:0},
+    {id:'MP0216',codigo:"EPP-027",nombre:"CAMISA DE JEBE TALLA 42",unidad:"PZA",precio:0},
+    {id:'MP0217',codigo:"EPP-028",nombre:"CAMISA DE JEBE TALLA 43",unidad:"PZA",precio:0},
+    {id:'MP0218',codigo:"EPP-029",nombre:"CAMISA DE JEBE TALLA 44",unidad:"PZA",precio:0},
+    {id:'MP0219',codigo:"EPP-030",nombre:"PANTALON DE JEBE TALLA 40",unidad:"PZA",precio:0},
+    {id:'MP0220',codigo:"EPP-031",nombre:"PANTALON DE JEBE TALLA 41",unidad:"PZA",precio:0},
+    {id:'MP0221',codigo:"EPP-032",nombre:"PANTALON DE JEBE TALLA 42",unidad:"PZA",precio:0},
+    {id:'MP0222',codigo:"EPP-033",nombre:"PANTALON DE JEBE TALLA 43",unidad:"PZA",precio:0},
+    {id:'MP0223',codigo:"EPP-034",nombre:"PANTALON DE JEBE TALLA 44",unidad:"PZA",precio:0},
+    {id:'MP0224',codigo:"EPP-035",nombre:"CHALECO VERDE TALLA M",unidad:"PZA",precio:0},
+    {id:'MP0225',codigo:"EPP-036",nombre:"CHALECO VERDE TALLA L",unidad:"PZA",precio:0},
+    {id:'MP0226',codigo:"EPP-037",nombre:"CHALECO VERDE TALLA XL",unidad:"PZA",precio:0},
+    {id:'MP0227',codigo:"EPP-038",nombre:"CHALECO VERDE TALLA XXL",unidad:"PZA",precio:0},
+    {id:'MP0228',codigo:"EPP-039",nombre:"CORREA PORTA LAMPARA",unidad:"PZA",precio:0},
+    {id:'MP0229',codigo:"EPP-040",nombre:"GUANTE BADANA",unidad:"PZA",precio:0},
+    {id:'MP0230',codigo:"EPP-041",nombre:"GUANTES HYCRON",unidad:"PZA",precio:0},
+    {id:'MP0231',codigo:"EPP-042",nombre:"BOTAS DE JEBE TALLA 38",unidad:"PZA",precio:0},
+    {id:'MP0232',codigo:"EPP-043",nombre:"BOTAS DE JEBE TALLA 39",unidad:"PZA",precio:0},
+    {id:'MP0233',codigo:"EPP-044",nombre:"BOTAS DE JEBE TALLA 40",unidad:"PZA",precio:0},
+    {id:'MP0234',codigo:"EPP-045",nombre:"BOTAS DE JEBE TALLA 41",unidad:"PZA",precio:0},
+    {id:'MP0235',codigo:"EPP-046",nombre:"BOTAS DE JEBE TALLA 42",unidad:"PZA",precio:0},
+    {id:'MP0236',codigo:"EPP-047",nombre:"BOTAS DE JEBE TALLA 43",unidad:"PZA",precio:0},
+    {id:'MP0237',codigo:"EPP-048",nombre:"OREJERAS PARA CASCO",unidad:"PZA",precio:0},
+    {id:'MP0238',codigo:"EPP-049",nombre:"PINTURA SPRAY",unidad:"PZA",precio:0},
+    {id:'MP0239',codigo:"EPP-050",nombre:"INTERRUPTOR SIMPLE",unidad:"PZA",precio:0},
+    {id:'MP0240',codigo:"EPP-051",nombre:"TOMA CORRIENTE DOBLE",unidad:"PZA",precio:0},
+    {id:'MP0241',codigo:"EPP-052",nombre:"CERRADURA CANTOL - 1880",unidad:"PZA",precio:0},
+    {id:'MP0242',codigo:"EPP-053",nombre:"BROCA MAKITA 3/8",unidad:"PZA",precio:0},
+    {id:'MP0243',codigo:"EPP-054",nombre:"VALVULA BOLA PVC DOBLE ACOPP PP 63MM",unidad:"PZA",precio:0},
+    {id:'MP0244',codigo:"EPP-055",nombre:"UNION DE POLIPROPILENO C/ROSCA 32 MM",unidad:"PZA",precio:0},
+    {id:'MP0245',codigo:"EPP-056",nombre:"UNION DE POLIPROPILENO C/ROSCA 63 MM",unidad:"PZA",precio:0},
+    {id:'MP0246',codigo:"EPP-057",nombre:"UNION DE POLIPROPILENO DE 2.5 SALIDAS",unidad:"PZA",precio:0},
+    {id:'MP0247',codigo:"EPP-058",nombre:"ROTOMARTILLO MAKITA",unidad:"PZA",precio:0},
+    {id:'MP0248',codigo:"EPP-059",nombre:"CARGADOR MAKITA 18V + BATERIA",unidad:"PZA",precio:0},
+    {id:'MP0249',codigo:"EPP-060",nombre:"AGUA MINERAL",unidad:"PZA",precio:0},
+    {id:'MP0250',codigo:"EPP-061",nombre:"BROCA DESCARTABLE DE BOTONES 32",unidad:"PZA",precio:0},
+    {id:'MP0251',codigo:"EPP-062",nombre:"BROCA DESCARTABLE DE BOTONES 36",unidad:"PZA",precio:0},
+    {id:'MP0252',codigo:"EPP-063",nombre:"BROCA DESCARTABLE DE BOTONES 36 DORADAS",unidad:"PZA",precio:0},
+    {id:'MP0253',codigo:"EPP-064",nombre:"CARMEX 2.40",unidad:"PZA",precio:0},
+    {id:'MP0254',codigo:"EPP-065",nombre:"EMULNOR 5000 1\"X8\"",unidad:"PZA",precio:0},
+    {id:'MP0255',codigo:"EPP-066",nombre:"EMULNOR 3000 1\"X8\"",unidad:"PZA",precio:0},
+    {id:'MP0256',codigo:"EPP-067",nombre:"EMULNOR 1000 1\"X7\"",unidad:"PZA",precio:0},
+    {id:'MP0257',codigo:"EPP-068",nombre:"CARTUCHO DE RESINA",unidad:"PZA",precio:0},
+    {id:'MP0258',codigo:"EPP-069",nombre:"CARTUCHO DE CEMENTO CEMCON",unidad:"PZA",precio:0},
+    {id:'MP0259',codigo:"EPP-070",nombre:"MECHA RAPIDA",unidad:"PZA",precio:0},
+    {id:'MP0260',codigo:"EPP-071",nombre:"BARRA CONICA DE 4' X 7/8\"",unidad:"PZA",precio:0},
+    {id:'MP0261',codigo:"EPP-072",nombre:"BARRA CONICA DE 6' X 7/8\"",unidad:"PZA",precio:0},
+    {id:'MP0262',codigo:"EPP-073",nombre:"BARRA CONICA DE 8' X 7/8\"",unidad:"PZA",precio:0},
+    {id:'MP0263',codigo:"EPP-074",nombre:"MANIFUL DE AIRE",unidad:"PZA",precio:0},
+    {id:'MP0264',codigo:"EPP-075",nombre:"MANIFUL DE AGUA",unidad:"PZA",precio:0},
+    {id:'MP0265',codigo:"EPP-076",nombre:"CINTA ISLANTE AZUL",unidad:"PZA",precio:0},
+    {id:'MP0266',codigo:"EPP-077",nombre:"LAMPARA INALAMBRICA",unidad:"PZA",precio:0},
+    {id:'MP0267',codigo:"EPP-078",nombre:"WINCHAS",unidad:"PZA",precio:0},
+    {id:'MP0268',codigo:"EPP-079",nombre:"TRAPO INDUSTRIAL",unidad:"PZA",precio:0},
+    {id:'MP0269',codigo:"EPP-080",nombre:"PALAS",unidad:"PZA",precio:0},
+    {id:'MP0270',codigo:"EPP-081",nombre:"CAMARAS DE 5 X 12",unidad:"PZA",precio:0},
+    {id:'MP0271',codigo:"EPP-082",nombre:"MANGA DE VENT. 12´X10 MTR",unidad:"PZA",precio:0},
+    {id:'MP0272',codigo:"EPP-083",nombre:"CIMBRA AC (2C) 3.5X3.5 MTR W6\" X20 LB/FT",unidad:"PZA",precio:0},
+    {id:'MP0273',codigo:"EPP-084",nombre:"PLANCHA ACANALADA T/ONDUL. 2X1100X1700",unidad:"PZA",precio:0},
+    {id:'MP0274',codigo:"EPP-085",nombre:"ALCAYATA DE FORRUGADO 3/8\" X 35 CM",unidad:"PZA",precio:0},
+    {id:'MP0275',codigo:"EPP-086",nombre:"MANGUERA DE JEBE Y LONA 1/2\"",unidad:"PZA",precio:0},
+    {id:'MP0276',codigo:"EPP-087",nombre:"CEMENTO GRIS ANTISALITRE PORTL. TIPO MS",unidad:"PZA",precio:0},
+    {id:'MP0277',codigo:"EPP-088",nombre:"ESCALERA DE MADERA 3.60 MTR X 11 PELD.",unidad:"PZA",precio:0},
+    {id:'MP0278',codigo:"EPP-089",nombre:"TABLA ASERRADA 2\" X 8\" X 10'",unidad:"PZA",precio:0}
   ];
-}
-// ══════════════════════════════════════════════════════════════
-//  SEED — datos de demostración para un día completo (2026-06-25)
-//  Se ejecuta UNA VEZ si cada módulo está vacío
-// ══════════════════════════════════════════════════════════════
-// Reconstruye el avance lineal (state.perforacion) a partir de los reportes de guardia.
-// Necesario porque state.perforacion no se persiste en localStorage; se deriva en cada carga.
-// Conserva las entradas de otras fuentes (con _id) y reemplaza solo las derivadas de reportes (_rg).
-function sincronizarPerforacionReportes(){
-  let perf=(state.perforacion||[]).filter(p=>!p._rg);
-  (state.reportesGuardia||[]).forEach(rep=>{
-    const fecha=rep.fecha, jefe=rep.jefe||'';
-    const br=(rep.brenda&&rep.brenda.metros)||0;
-    const cr=(rep.crne&&rep.crne.metros)||0;
-    if(br>0)perf.push({_rg:rep.id,fecha,frente:1,metros:br,personas:1,roca:'—',obs:'RA Brenda — '+jefe});
-    if(cr>0)perf.push({_rg:rep.id,fecha,frente:2,metros:cr,personas:1,roca:'—',obs:'CRNE — '+jefe});
-    (rep.frentesExtra||[]).forEach((f,i)=>{if(f.metros>0)perf.push({_rg:rep.id+'_fx'+(i+1),fecha,frente:3+i,metros:f.metros,personas:1,roca:'—',obs:(f.nombre||'Frente extra '+(i+1))+' — '+jefe});});
-  });
-  state.perforacion=perf;
-}
-
-function seedModulosDemo(){
-  // Anclar el demo al mes/día REAL de hoy para que todos los dashboards
-  // (tarjetas "hoy", avance mensual, P&L por equipo) siempre tengan datos.
-  const DIA=hoy();
-  const MES=DIA.slice(0,7);
-  const dM=(dd)=>MES+'-'+String(dd).padStart(2,'0');  // día dd del mes actual
-  const _yy=+MES.slice(0,4), _mm=+MES.slice(5,7);
-  const MES_NOMBRE=['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][_mm]+' '+_yy;
-
-  // ── 1. REPORTES DE GUARDIA (Operaciones) ──
-  if(!(state.reportesGuardia&&state.reportesGuardia.length)){
-    state.reportesGuardia=[
-      {id:'RG2001',fecha:DIA,turno:'dia',jefe:'Carlos Mamani Quispe',
-       brenda:{metros:2.4,trabajos:'Avance',sost:1,cimbra:0,perno:6,malla:1,tperf:10,tcarg:8,masas:[{id:'M1000',cant:30},{id:'M3000',cant:12},{id:'CARMEX18',cant:42},{id:'FAMECORTE',cant:4}]},
-       crne:{metros:1.8,trabajos:'Avance',sost:1,cimbra:0,perno:4,malla:1,tperf:8,tcarg:6,masas:[{id:'M1000',cant:20},{id:'CARMEX18',cant:28},{id:'FAMECORTE',cant:3}]},
-       frentesExtra:[],creadoEn:DIA+'T08:10:00'},
-      {id:'RG2002',fecha:DIA,turno:'noche',jefe:'Luis Torres Flores',
-       brenda:{metros:2.1,trabajos:'Avance',sost:1,cimbra:0,perno:5,malla:1,tperf:9,tcarg:7,masas:[{id:'M1000',cant:26},{id:'M3000',cant:10},{id:'CARMEX18',cant:36}]},
-       crne:{metros:1.6,trabajos:'Avance',sost:0,cimbra:0,perno:4,malla:1,tperf:7,tcarg:5,masas:[{id:'M1000',cant:18},{id:'CARMEX18',cant:24}]},
-       frentesExtra:[],creadoEn:DIA+'T20:05:00'}
-    ];
-    try{localStorage.setItem(RG_KEY,JSON.stringify(state.reportesGuardia));}catch(e){}
-  }
-
-  // ── 2. REPORTE COMPRESORISTA ──
-  if(!(state.compresorista&&state.compresorista.length)){
-    state.compresorista=[
-      {fecha:DIA,turno:'Día',nombre:'Juan Quispe Mamani',dni:'42156789',
-       materialesAlmacen:[
-         {desc:'Aceite hidráulico Mobil DTE 46',cant:'2',unidad:'GLN'},
-         {desc:'Grasa multiusos SKF',cant:'1',unidad:'KG'}
-       ],
-       explosivos:[
-         {codigo:'M1000',I:50,E:0,C:30,F:20},
-         {codigo:'M3000',I:20,E:0,C:12,F:8},
-         {codigo:'M5000',I:0,E:0,C:0,F:0},
-         {codigo:'CARMEX18',I:60,E:0,C:42,F:18},
-         {codigo:'CARMEX240',I:0,E:0,C:0,F:0},
-         {codigo:'FAMECORTE',I:5,E:0,C:4,F:1},
-         {codigo:'NEITHER',I:10,E:0,C:0,F:10}
-       ],
-       expFrente:[
-         {codigo:'M1000',rampa:18,galeria:12},
-         {codigo:'M3000',rampa:7,galeria:5},
-         {codigo:'CARMEX18',rampa:25,galeria:17},
-         {codigo:'FAMECORTE',rampa:2,galeria:2}
-       ],
-       aceros:[
-         {codigo:'BARRA CONICA 4\' X 7/8"',rampa:2,galeria:1},
-         {codigo:'BROCA DESCARTABLE DE BOTONES 36 MM',rampa:1,galeria:1}
-       ],
-       consumoRampa:[
-         {codigo:'ANILLO',desc:'ANILLO RNORP-214B',cant:2,unidad:'UND'},
-         {codigo:'PERNO',desc:'PERNO PASADOR RNS58F-36K',cant:1,unidad:'UND'}
-       ],
-       consumoGaleria:[
-         {codigo:'ANILLO',desc:'ANILLO RNORP-214B',cant:1,unidad:'UND'}
-       ],
-       petroleo:[
-         {equipo:'Grupo Electrógeno',gln:8},
-         {equipo:'Compresora M135',gln:20},
-         {equipo:'Compresora M122',gln:15},
-         {equipo:'Scoop Epiroc',gln:12},
-         {equipo:'Scoop Monte',gln:10},
-         {equipo:'Dumper',gln:6},
-         {equipo:'Excavadora',gln:18},
-         {equipo:'Cargador Frontal',gln:14}
-       ],
-       gasolina:[
-         {equipo:'Camioneta Blanca',gln:3},
-         {equipo:'Camioneta Roja',gln:2},
-         {equipo:'Cuatrimoto C',gln:1},
-         {equipo:'Cuatrimoto N',gln:0}
-       ],
-       horometros:[
-         {equipo:'Grupo Electrógeno',HI:8420,HF:8432,HT:12},
-         {equipo:'Compresora M135',HI:12350,HF:12362,HT:12},
-         {equipo:'Compresora M122',HI:9870,HF:9882,HT:12},
-         {equipo:'Scoop Epiroc',HI:6240,HF:6250,HT:10},
-         {equipo:'Scoop Monte',HI:4180,HF:4190,HT:10},
-         {equipo:'Dumper',HI:3320,HF:3328,HT:8},
-         {equipo:'Excavadora',HI:5510,HF:5520,HT:10},
-         {equipo:'Cargador Frontal',HI:2890,HF:2898,HT:8}
-       ],
-       obs:'Turno sin incidentes. Compresoras operando al 100%. Avance satisfactorio en ambos frentes. Se realizó engrase preventivo de Scoop Epiroc.',
-       _precios:{petroleo:14.5,gasolina:16.2}}
-    ];
-    try{localStorage.setItem(COMP_STORAGE_KEY,JSON.stringify(state.compresorista));}catch(e){}
-  }
-
-  // ── 3. REPUESTOS DE MANTENIMIENTO ──
-  if(!(state.mantRepuestos&&state.mantRepuestos.length)){
-    state.mantRepuestos=[
-      {id:'R001',codigo:'FIL-001',nombre:'Filtro de aceite Compresora',unidad:'UND',stock:8,costo:35.00,min:3},
-      {id:'R002',codigo:'FAJ-001',nombre:'Faja trapezoidal B-65',unidad:'UND',stock:4,costo:85.00,min:2},
-      {id:'R003',codigo:'ACE-001',nombre:'Aceite hidráulico ISO 46',unidad:'GLN',stock:20,costo:42.00,min:5},
-      {id:'R004',codigo:'EMP-001',nombre:'Empaque de culata JL-500',unidad:'UND',stock:2,costo:120.00,min:1},
-      {id:'R005',codigo:'ROD-001',nombre:'Rodaje 6205-2RS',unidad:'UND',stock:3,costo:65.00,min:2},
-      {id:'R006',codigo:'MAN-001',nombre:'Manguera hidráulica 1/2" x 1m',unidad:'UND',stock:3,costo:48.00,min:2},
-      {id:'R007',codigo:'SEL-001',nombre:'Sello mecánico bomba agua',unidad:'UND',stock:1,costo:95.00,min:1}
-    ];
-    try{localStorage.setItem(MANTREP_KEY,JSON.stringify(state.mantRepuestos));}catch(e){}
-  }
-
-  // ── 4. KITS DE MANTENIMIENTO ──
-  if(!(state.mantenimiento&&state.mantenimiento.length)){
-    state.mantenimiento=[
-      {id:'KM2001',fecha:DIA,equipo:'Compresora M135',tipo:'Preventivo',
-       resp:'Roberto Díaz Huanca',desc:'Cambio de filtro de aceite y revisión de fajas — mantenimiento programado 250h',
-       repuestos:[
-         {id:'R001',key:'R001',nombre:'Filtro de aceite Compresora',unidad:'UND',cant:2,costo:35.00},
-         {id:'R002',key:'R002',nombre:'Faja trapezoidal B-65',unidad:'UND',cant:1,costo:85.00}
-       ],
-       horasMant:3,manoobra:112.50,costo:267.50,estado:'pendiente',
-       aprobOps:null,aprobLog:null},
-      {id:'KM2002',fecha:dM(24),equipo:'Scoop Epiroc',tipo:'Correctivo',
-       resp:'Roberto Díaz Huanca',desc:'Reparación de manguera hidráulica rota — parada de emergencia en Rampa',
-       repuestos:[
-         {id:'R006',key:'R006',nombre:'Manguera hidráulica 1/2" x 1m',unidad:'UND',cant:2,costo:48.00}
-       ],
-       horasMant:2,manoobra:75.00,costo:171.00,estado:'ok',
-       aprobOps:{ok:true,resp:'Percy Alcántara',fecha:dM(24)},
-       aprobLog:{ok:true,resp:'Ana Puma Ccama',fecha:dM(24)}}
-    ];
-    try{localStorage.setItem(MANTKIT_KEY,JSON.stringify(state.mantenimiento));}catch(e){}
-  }
-
-  // ── 5. METAS MENSUALES ──
-  try{
-    const metasRaw=localStorage.getItem(METAS_KEY);
-    if(!metasRaw||JSON.stringify(JSON.parse(metasRaw))==='{}'){
-      state.metas={dias:25,f1:3.5,f2:3.0,mensualF1:87.5,mensualF2:75.0};
-      localStorage.setItem(METAS_KEY,JSON.stringify(state.metas));
-    }
-  }catch(e){}
-
-  // ── 6. REUNIONES ──
-  try{
-    const reuRaw=localStorage.getItem(REU_KEY);
-    if(!reuRaw||!JSON.parse(reuRaw).length){
-      state.reuniones=[
-        {id:'REU2001',fecha:DIA,tipo:'Guardia',participantes:'Percy Alcántara, Carlos Mamani, Juan Quispe, Roberto Díaz',
-         acuerdos:'1. Mantener ritmo de avance de 2.4m/guardia en RA Brenda.\n2. Revisar desgaste de brocas al inicio de cada turno.\n3. Reporte de horómetros obligatorio al cierre de turno.',
-         observaciones:'Se detectó vibración inusual en Compresora M122 — programar revisión preventiva.',
-         creadoEn:DIA+'T07:00:00'}
-      ];
-      localStorage.setItem(REU_KEY,JSON.stringify(state.reuniones));
-    }
-  }catch(e){}
-
-  // ── 7. INGRESOS JUNIO en ALMACÉN (si el mes actual no tiene registros) ──
-  const tieneIngMes=(state.almacen.ingresos||[]).some(i=>(i.fecha||'').startsWith(MES));
-  const tieneSalMes=(state.almacen.salidas||[]).some(s=>(s.fecha||'').startsWith(MES));
-  if(!tieneIngMes||!tieneSalMes){
-    const ingJun=[
-      {id:'I101',fecha:dM(2),vale:'120100',detalle:'Almacen Poderosa',almacen:'General',
-       producto:'PERNO',descripcion:'PERNO SPLIT SET 33 X 5 PIES CON PLATINA',unidad:'UND',cantidad:300,precio:12.50,total:3750.00},
-      {id:'I102',fecha:dM(2),vale:'120100',detalle:'Almacen Poderosa',almacen:'General',
-       producto:'RESINA',descripcion:'RESINA POLESTER RAPIDA 330CC',unidad:'UND',cantidad:150,precio:8.90,total:1335.00},
-      {id:'I103',fecha:dM(10),vale:'120450',detalle:'Logistica Trujillo',almacen:'General',
-       producto:'MALLA',descripcion:'MALLA ELECTROSOLDADA Nº 10',unidad:'ROLL',cantidad:8,precio:374.91,total:2999.28},
-      {id:'I104',fecha:dM(10),vale:'120450',detalle:'Logistica Trujillo',almacen:'General',
-       producto:'CEMENTO',descripcion:'CEMENTO GRIS ANTISALITRE PORTL. TIPO MS',unidad:'BOL',cantidad:80,precio:27.73,total:2218.40},
-      {id:'I105',fecha:dM(18),vale:'120890',detalle:'Almacen Poderosa',almacen:'Mantenimiento',
-       producto:'FILTRO',descripcion:'FILTRO DE ACEITE COMPRESORA M135',unidad:'UND',cantidad:10,precio:35.00,total:350.00},
-      {id:'I106',fecha:dM(18),vale:'120890',detalle:'Almacen Poderosa',almacen:'Mantenimiento',
-       producto:'RODAJE',descripcion:'RODAJE 6205-2RS',unidad:'UND',cantidad:5,precio:65.00,total:325.00},
-      {id:'I107',fecha:DIA,vale:'121200',detalle:'Almacen Poderosa',almacen:'General',
-       producto:'BROCA',descripcion:'BROCA DESCARTABLE DE BOTONES 36 MM',unidad:'UND',cantidad:30,precio:76.88,total:2306.40},
-      {id:'I108',fecha:DIA,vale:'121200',detalle:'Almacen Poderosa',almacen:'General',
-       producto:'BROCA',descripcion:'BROCA DESCARTABLE DE BOTONES 32 MM',unidad:'UND',cantidad:20,precio:74.91,total:1498.20}
-    ];
-    const salJun=[
-      {id:'SJ01',fecha:dM(5),destino:'2820',almacen:'General',maquina:'',solicitante:'Juan Quispe',
-       codigo:'PERNO',producto:'PERNO',descripcion:'PERNO SPLIT SET 33 X 5 PIES CON PLATINA',unidad:'UND',precio:12.50,cantidad:100,importe:1250.00},
-      {id:'SJ02',fecha:dM(5),destino:'2820',almacen:'General',maquina:'',solicitante:'Juan Quispe',
-       codigo:'RESINA',producto:'RESINA',descripcion:'RESINA POLESTER RAPIDA 330CC',unidad:'UND',precio:8.90,cantidad:60,importe:534.00},
-      {id:'SJ03',fecha:dM(12),destino:'2830',almacen:'General',maquina:'',solicitante:'Carlos Mamani',
-       codigo:'MALLA',producto:'MALLA',descripcion:'MALLA ELECTROSOLDADA Nº 10',unidad:'ROLL',precio:374.91,cantidad:4,importe:1499.64},
-      {id:'SJ04',fecha:dM(20),destino:'2820',almacen:'General',maquina:'',solicitante:'Juan Quispe',
-       codigo:'BROCA',producto:'BROCA',descripcion:'BROCA DESCARTABLE DE BOTONES 36 MM',unidad:'UND',precio:76.88,cantidad:10,importe:768.80},
-      // Despacho del kit de mantenimiento KM2002 (aprobado por Logística) — consistente con aprobarLogKitLog
-      {id:'SMKM2002',grupo:'KIT-KM2002',fecha:dM(24),destino:'mantenimiento',almacen:'Mantenimiento',maquina:'Scoop Epiroc',solicitante:'Roberto Díaz Huanca',
-       codigo:'R006',producto:'Manguera hidráulica 1/2" x 1m',descripcion:'Manguera hidráulica 1/2" x 1m',unidad:'UND',precio:48.00,cantidad:2,importe:96.00}
-    ];
-    ingJun.forEach(i=>{i.grupo='GI|'+i.fecha+'|'+i.detalle+'|'+i.almacen;});
-    salJun.forEach(s=>{s.grupo='GS|'+s.fecha+'|'+s.destino+'|GEN';});
-    if(!tieneIngMes) state.almacen.ingresos=[...(state.almacen.ingresos||[]),...ingJun];
-    if(!tieneSalMes) state.almacen.salidas=[...(state.almacen.salidas||[]),...salJun];
-    // Explosivos junio
-    if(!(state.almacen.explosivos.ingresos||[]).length){
-      state.almacen.explosivos.ingresos=[
-        {id:'EXI001',fecha:dM(1),vale:'E-8821',producto:'M1000',cajas:2,unidades:0,totalUnidades:100,origen:'Almacén Poderosa',fotoBase64:null},
-        {id:'EXI002',fecha:dM(1),vale:'E-8821',producto:'M3000',cajas:1,unidades:0,totalUnidades:40,origen:'Almacén Poderosa',fotoBase64:null},
-        {id:'EXI003',fecha:dM(1),vale:'E-8821',producto:'CARMEX18',cajas:3,unidades:0,totalUnidades:150,origen:'Almacén Poderosa',fotoBase64:null},
-        {id:'EXI004',fecha:dM(1),vale:'E-8821',producto:'FAMECORTE',cajas:0,unidades:5,totalUnidades:5,origen:'Almacén Poderosa',fotoBase64:null}
-      ];
-      state.almacen.explosivos.salidas=[
-        {id:'EXS001',fecha:dM(3),vale:'ES-1101',producto:'M1000',cajas:0,unidades:30,totalUnidades:30,destino:'NV2820',fotoBase64:null},
-        {id:'EXS002',fecha:dM(3),vale:'ES-1101',producto:'CARMEX18',cajas:0,unidades:42,totalUnidades:42,destino:'NV2820',fotoBase64:null},
-        {id:'EXS003',fecha:dM(15),vale:'ES-1102',producto:'M1000',cajas:0,unidades:30,totalUnidades:30,destino:'NV2820',fotoBase64:null},
-        {id:'EXS004',fecha:dM(15),vale:'ES-1102',producto:'M3000',cajas:0,unidades:12,totalUnidades:12,destino:'NV2820',fotoBase64:null},
-        {id:'EXS005',fecha:dM(15),vale:'ES-1102',producto:'CARMEX18',cajas:0,unidades:42,totalUnidades:42,destino:'NV2820',fotoBase64:null},
-        {id:'EXS006',fecha:DIA,vale:'ES-1103',producto:'M1000',cajas:0,unidades:30,totalUnidades:30,destino:'NV2820',fotoBase64:null},
-        {id:'EXS007',fecha:DIA,vale:'ES-1103',producto:'CARMEX18',cajas:0,unidades:42,totalUnidades:42,destino:'NV2820',fotoBase64:null},
-        {id:'EXS008',fecha:DIA,vale:'ES-1103',producto:'FAMECORTE',cajas:0,unidades:4,totalUnidades:4,destino:'NV2820',fotoBase64:null}
-      ];
-    }
-    almacenSave();
-  }
-
-  // ── 8. VALORIZACIÓN (ingreso de la contrata) — junio 2026 ──
-  try{
-    const vlRaw=localStorage.getItem(VALLAB_KEY);
-    const vl=vlRaw?JSON.parse(vlRaw):[];
-    if(!vl.length){
-      state.valorizacionesLabor=[{
-        id:'VL'+MES.replace('-',''),titulo:'Valorización '+MES_NOMBRE,periodo:MES,mesNum:_mm,anio:_yy,
-        rows:[
-          {sact:'Avance lineal RA Brenda',cant:62.5,pu:980,parcial:61250},
-          {sact:'Avance lineal CRNE',cant:48.0,pu:980,parcial:47040},
-          {sact:'Sostenimiento con perno',cant:180,pu:45,parcial:8100}
-        ],
-        subtotal:116390,descuento:5819.50,total:110570.50,rubros:[],importadoEn:0
-      }];
-      localStorage.setItem(VALLAB_KEY,JSON.stringify(state.valorizacionesLabor));
-    } else {
-      state.valorizacionesLabor=vl;
-    }
-  }catch(e){}
-
-  // ── 9. COMBUSTIBLE (ingreso a cisterna Logística) — junio 2026 ──
-  try{
-    if(!combCargar('pet').length){
-      combGuardar('pet',[
-        {fecha:dM(8),hora:'07:30',placa:'XAB-123',chofer:'Transp. Andino',cantidad:1500,precio:14.50,obs:'Abastecimiento cisterna'},
-        {fecha:dM(22),hora:'08:00',placa:'XAB-123',chofer:'Transp. Andino',cantidad:1200,precio:14.80,obs:'Abastecimiento cisterna'}
-      ]);
-    }
-    if(!combCargar('gas').length){
-      combGuardar('gas',[
-        {fecha:dM(8),hora:'07:45',placa:'XAB-123',chofer:'Transp. Andino',cantidad:100,precio:16.20,obs:'Abastecimiento cisterna'}
-      ]);
-    }
-  }catch(e){}
-
-  // ── 10. INGRESO POR MÁQUINA (parámetro Finanzas) — junio 2026 ──
-  try{
-    const mesJun=MES;
-    if(!Object.keys(finIngMaqGet(mesJun)).length){
-      // Las llaves DEBEN ser los labels del P&L: Scoop, Dumper, Compresora, Excavadora, Cargador Frontal
-      finIngMaqSet(mesJun,{
-        'Scoop':56000,'Dumper':35000,'Compresora':12000,
-        'Excavadora':35000,'Cargador Frontal':21000
-      });
-    }
-  }catch(e){}
-
-  // ── 11. PLANILLA / TAREO del día (jornal embebido) ──
-  if(!(state.tareas&&state.tareas.length)){
-    const peonsDia=[
-      ['T01','Carlos Mamani Quispe','Maestro Perforista',1.0],['T02','Juan Ccallo Flores','Ayudante Perforista',1.0],
-      ['T03','Roberto Díaz Huanca','Maestro Sostenimiento',1.0],['T04','Pedro Quispe Ramos','Ayudante Sostenimiento',1.0],
-      ['T05','Miguel Torres Vega','Operador Scoop',1.5],['T06','Anibal Poma Cruz','Bodeguero',1.0],
-      ['T07','Luis Torres Flores','Maestro Perforista',1.0],['T08','Félix Condori Apaza','Ayudante Perforista',1.0],
-      ['T09','Walter Huanca Lima','Maestro Sostenimiento',1.0],['T10','César Lazo Ruiz','Operador Scoop',1.5],
-      ['T11','Elmer Quispe Soto','Cargador Anfo',1.0],['T12','David Ccolque Puma','Tubería y Servicios',1.0]
-    ];
-    state.tareas=peonsDia.map((p,i)=>({
-      fecha:DIA,trabajadorId:p[0],nombre:p[1],tarea:'Tareo diario',rol:p[2],
-      frente:i<6?1:2,detalle:'Guardia operativa',estadoTarea:'completado',
-      mult:p[3],jornal:80,turno:i<6?'DIA':'NOCHE'
-    }));
-  }
-}
-
-function almMesActual(){return hoy().slice(0,7);}
-// Mes con datos más reciente (para que el selector no quede vacío al abrir)
-function almMesConDatos(){
-  const meses=[];
-  (state.almacen.ingresos||[]).forEach(i=>{if(i.fecha)meses.push(i.fecha.slice(0,7));});
-  (state.almacen.salidas||[]).forEach(s=>{if(s.fecha)meses.push(s.fecha.slice(0,7));});
-  if(!meses.length)return almMesActual();
-  return meses.sort().reverse()[0];
-}
-function prodKey(almacen,codigo,desc){return (almacen||'')+'|'+String(desc||'').trim().toUpperCase();}
-function nivelLabel(d){return d?('NV'+d):'—';}
-
-// Stock = inventario inicial + ingresos - salidas (acumulado histórico, no por mes)
-function calcStock(){
-  const map={};
-  function ensure(almacen,codigo,producto,desc,unidad,precio){
-    const k=prodKey(almacen,codigo,desc);
-    if(!map[k]) map[k]={key:k,almacen:almacen||'General',codigo:String(codigo||''),producto:producto||'',descripcion:desc||'',unidad:unidad||'UND',precio:Number(precio)||0,ingreso:0,salida:0,stock:0};
-    return map[k];
-  }
-  (state.almacen.inventarioInicial||[]).forEach(it=>{const r=ensure(it.almacen,it.codigo,it.producto,it.descripcion,it.unidad,it.precio);r.ingreso+=Number(it.cantidad)||0;if(it.precio)r.precio=Number(it.precio);});
-  (state.almacen.ingresos||[]).forEach(it=>{const r=ensure(it.almacen,it.codigo,it.producto,it.descripcion,it.unidad,it.precio);r.ingreso+=Number(it.cantidad)||0;if(it.precio)r.precio=Number(it.precio);if(it.producto&&!r.producto)r.producto=it.producto;});
-  (state.almacen.salidas||[]).forEach(it=>{const r=ensure(it.almacen,it.codigo,it.producto,it.descripcion,it.unidad,it.precio);r.salida+=Number(it.cantidad)||0;});
-  Object.values(map).forEach(r=>r.stock=r.ingreso-r.salida);
-  return Object.values(map);
-}
-function fmt3(n){return (Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:0,maximumFractionDigits:3});}
-function fmtS2(n){return 'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2});}
-
-// ── STOCK VIGENTE CON GRÁFICA ──
-function renderStockVigente(){
-  const wrap=document.getElementById('stock-vigente-wrap');if(!wrap)return;
-  const q=(document.getElementById('stock-buscar')?.value||'').toLowerCase();
-  const almFil=document.getElementById('stock-alm-fil')?.value||'';
-  const soloCon=document.getElementById('stock-solo-con')?.checked||false;
-
-  let stock=calcStock();
-  if(almFil) stock=stock.filter(r=>r.almacen===almFil);
-  if(q) stock=stock.filter(r=>(r.producto||r.descripcion||'').toLowerCase().includes(q)||(r.descripcion||'').toLowerCase().includes(q));
-  if(soloCon) stock=stock.filter(r=>r.stock>0);
-  stock.sort((a,b)=>b.stock-a.stock);
-
-  if(!stock.length){wrap.innerHTML='<div style="text-align:center;color:var(--text3);padding:24px">Sin productos con movimientos aún.</div>';return;}
-
-  const maxStock=Math.max(...stock.map(r=>Math.abs(r.stock)),1);
-
-  // KPI resumen rápido
-  const conStock=stock.filter(r=>r.stock>0);
-  const sinStock=stock.filter(r=>r.stock<=0);
-  const valorTotal=conStock.reduce((a,r)=>a+r.stock*r.precio,0);
-
-  const kpiHtml=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px">
-    <div class="kpi-card" style="padding:12px 14px">
-      <div class="kpi-label" style="font-size:10px">Productos con stock</div>
-      <div class="kpi-value" style="font-size:22px;color:#22c55e">${conStock.length}</div>
-    </div>
-    <div class="kpi-card" style="padding:12px 14px">
-      <div class="kpi-label" style="font-size:10px">Productos agotados / sin mov.</div>
-      <div class="kpi-value" style="font-size:22px;color:#f87171">${sinStock.length}</div>
-    </div>
-    <div class="kpi-card" style="padding:12px 14px">
-      <div class="kpi-label" style="font-size:10px">Valor total en stock</div>
-      <div class="kpi-value" style="font-size:18px;color:var(--gold-light)">${fmtS2(valorTotal)}</div>
-    </div>
-    <div class="kpi-card" style="padding:12px 14px">
-      <div class="kpi-label" style="font-size:10px">Total ítems en stock</div>
-      <div class="kpi-value" style="font-size:22px;color:#60a5fa">${conStock.reduce((a,r)=>a+r.stock,0).toLocaleString('es-PE',{maximumFractionDigits:1})}</div>
-    </div>
-  </div>`;
-
-  // Gráfica de barras horizontales
-  const bars=stock.slice(0,40).map(r=>{
-    const pct=Math.max(0,(r.stock/maxStock)*100);
-    const color=r.stock>10?'#22c55e':r.stock>0?'#f59e0b':'#ef4444';
-    const almBadge=r.almacen==='Mantenimiento'?'<span style="font-size:9px;background:rgba(201,168,76,0.2);color:#d4b75e;border-radius:4px;padding:1px 5px;margin-left:4px">MANT</span>':'<span style="font-size:9px;background:rgba(96,165,250,0.2);color:#60a5fa;border-radius:4px;padding:1px 5px;margin-left:4px">GEN</span>';
-    return `<div style="margin-bottom:8px">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px">
-        <div style="font-size:12px;font-weight:600;color:var(--text1)">${r.producto||r.descripcion.slice(0,35)}${almBadge}</div>
-        <div style="font-size:12px;font-family:'DM Mono',monospace;color:${color};font-weight:700;white-space:nowrap;margin-left:8px">${fmt3(r.stock)} ${r.unidad}</div>
-      </div>
-      <div style="background:var(--coal4);border-radius:4px;height:8px;overflow:hidden">
-        <div style="height:100%;width:${pct}%;background:${color};border-radius:4px;transition:width .3s"></div>
-      </div>
-      <div style="font-size:10px;color:var(--text3);margin-top:2px">${r.descripcion.slice(0,60)}${r.descripcion.length>60?'…':''} · Valor: ${fmtS2(r.stock*r.precio)}</div>
-    </div>`;
-  }).join('');
-
-  wrap.innerHTML=kpiHtml+`<div class="card" style="padding:16px 18px">${bars}</div>`;
-}
-
-// ── TAB 1: ALMACÉN (solo dispara stock) ──
-function renderAlmacen(){renderStockVigente();}
-
-// ── Modal Ingreso (hoja de registro multi-ítem) ──
-let ingresoCart=[];
-function abrirIngresoModal(){
-  const g=id=>document.getElementById(id);
-  g('in-fecha').value=hoy();g('in-vale').value='';g('in-detalle').value='Almacen Poderosa';
-  g('in-almacen').value='General';g('in-producto').value='';
-  g('in-descripcion').value='';g('in-unidad').value='UND';g('in-cantidad').value='';g('in-precio').value='';
-  g('in-total').textContent='S/ 0.00';
-  ingresoCart=[];renderIngresoCart();
-  poblarDatalistProductos();
-  abrirModal('modal-ingreso');
-}
-function calcTotalIngreso(){
-  const c=parseFloat(document.getElementById('in-cantidad').value)||0;
-  const p=parseFloat(document.getElementById('in-precio').value)||0;
-  document.getElementById('in-total').textContent=fmtS2(c*p);
-}
-function agregarItemIngreso(){
-  const g=id=>document.getElementById(id);
-  const desc=g('in-descripcion').value.trim();
-  const cant=parseFloat(g('in-cantidad').value)||0;
-  if(!desc){showNotif('⚠ Ingresa la descripción del producto','error');return;}
-  if(cant<=0){showNotif('⚠ Ingresa una cantidad válida','error');return;}
-  const precio=parseFloat(g('in-precio').value)||0;
-  ingresoCart.push({vale:g('in-vale').value.trim(),producto:g('in-producto').value.trim(),descripcion:desc,unidad:g('in-unidad').value,cantidad:cant,precio:precio,total:cant*precio});
-  renderIngresoCart();
-  // Limpiar campos de ítem para el siguiente (mantiene vale por si es el mismo)
-  g('in-producto').value='';g('in-descripcion').value='';g('in-cantidad').value='';g('in-precio').value='';
-  g('in-total').textContent='S/ 0.00';g('in-producto').focus();
-}
-function quitarItemIngreso(idx){ingresoCart.splice(idx,1);renderIngresoCart();}
-function renderIngresoCart(){
-  const tb=document.getElementById('in-cart-tbody');
-  if(tb) tb.innerHTML=ingresoCart.length?ingresoCart.map((i,idx)=>`<tr>
-    <td style="font-size:12px">${i.vale||'—'}</td>
-    <td style="font-size:12px;font-weight:600">${i.producto||''}</td>
-    <td style="font-size:11px;color:var(--text3);max-width:200px;white-space:normal">${i.descripcion||''}</td>
-    <td style="font-size:12px">${i.unidad}</td><td style="font-size:12px">${fmt3(i.cantidad)}</td><td style="font-size:12px">${fmtS2(i.precio)}</td>
-    <td style="color:var(--gold-light);font-weight:700;font-size:12px">${fmtS2(i.total)}</td>
-    <td><button onclick="quitarItemIngreso(${idx})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px">🗑</button></td></tr>`).join('')
-    :`<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:20px;font-size:13px">Agrega productos arriba para armar la hoja de ingreso</td></tr>`;
-  const tot=ingresoCart.reduce((a,i)=>a+i.total,0);
-  const t=document.getElementById('in-cart-total');if(t)t.textContent=fmtS2(tot);
-}
-function guardarIngreso(){
-  const g=id=>document.getElementById(id);
-  if(!ingresoCart.length){showNotif('⚠ Agrega al menos un ítem a la hoja','error');return;}
-  const fecha=g('in-fecha').value||hoy();
-  const detalle=g('in-detalle').value||'Almacen Poderosa';
-  const almacen=g('in-almacen').value;
-  const base=Date.now();const grupo='GI'+base;
-  ingresoCart.forEach((i,idx)=>{
-    state.almacen.ingresos.push({id:'I'+(base+idx),grupo,fecha,vale:i.vale,detalle,almacen,codigo:'',
-      producto:i.producto,descripcion:i.descripcion,unidad:i.unidad,cantidad:i.cantidad,precio:i.precio,total:i.total});
-  });
-  almacenSave();
-  const n=ingresoCart.length;ingresoCart=[];
-  cerrarModal('modal-ingreso');renderAlmacen();renderHistorialAlmacen();renderStockVigente();
-  showNotif(`✓ Ingreso registrado: ${n} ítem${n>1?'s':''}`);
-}
-
-// ── Modal Salida (multi-ítem) ──
-let salidaCart=[];
-function abrirSalidaModal(){
-  const g=id=>document.getElementById(id);
-  g('sa-fecha').value=hoy();g('sa-almacen').value='General';
-  g('sa-solicitante').value='';
-  g('sa-unidad').value='';g('sa-precio').value='';
-  g('sa-maquina').value='';g('sa-cantidad').value='';g('sa-destino').value='2820';
-  g('sa-stock-disp').textContent='—';g('sa-importe').textContent='S/ 0.00';
-  salidaCart=[];renderSalidaCart();
-  poblarProductosSalida();
-  abrirModal('modal-salida');
-}
-function poblarProductosSalida(){
-  const alm=document.getElementById('sa-almacen').value;
-  const stock=calcStock().filter(r=>r.almacen===alm&&r.stock>0).sort((a,b)=>(a.producto||a.descripcion).localeCompare(b.producto||b.descripcion));
-  const sel=document.getElementById('sa-producto');
-  sel.innerHTML='<option value="">— Seleccionar —</option>'+stock.map(r=>`<option value="${r.key}">${r.producto?r.producto+' — ':''}${r.descripcion} (stock: ${fmt3(r.stock)} ${r.unidad})</option>`).join('');
-  document.getElementById('sa-unidad').value='';
-  document.getElementById('sa-precio').value='';document.getElementById('sa-stock-disp').textContent='—';
-  if(!stock.length) sel.innerHTML='<option value="">Sin productos con stock en este almacén</option>';
-}
-// Stock disponible considerando lo que ya está en el carrito
-function stockDisponibleSalida(key){
-  const r=calcStock().find(x=>x.key===key);
-  if(!r)return null;
-  const enCarrito=salidaCart.filter(i=>i.key===key).reduce((a,i)=>a+i.cantidad,0);
-  return {...r,disp:r.stock-enCarrito};
 }
 function autollenarSalida(){
   const key=document.getElementById('sa-producto').value;
