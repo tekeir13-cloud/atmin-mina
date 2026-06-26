@@ -5230,7 +5230,9 @@ function eliminarProducto(id){
 function renderProductos(){
   const el=document.getElementById('log-productos');
   if(!el)return;
-  const prods=(state.almacen&&state.almacen.productos)||[];
+  const allProds=(state.almacen&&state.almacen.productos)||[];
+  const busq=(document.getElementById('prod-buscar')?.value||'').toLowerCase().trim();
+  const prods=busq?allProds.filter(p=>(p.codigo||'').toLowerCase().includes(busq)||(p.nombre||'').toLowerCase().includes(busq)||(p.descripcion||'').toLowerCase().includes(busq)):allProds;
   const comb=paramsGetComb()||{pet:24.5,gas:21.0};
   const exp=paramsGetExp()||{...COMP_PRECIOS_EXP_DEFAULT};
 
@@ -5258,7 +5260,7 @@ function renderProductos(){
 
   el.innerHTML=`
     <!-- HEADER -->
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
       <div style="font-size:16px;font-weight:700;color:var(--text)">📦 Maestro de Productos</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <label class="btn btn-outline" style="cursor:pointer;padding:6px 14px;font-size:12px">
@@ -5269,9 +5271,10 @@ function renderProductos(){
         <button class="btn btn-gold" style="font-size:12px" onclick="abrirModalProducto()">+ Nuevo Producto</button>
       </div>
     </div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:14px">
-      El Excel debe tener 3 columnas: <strong style="color:var(--text2)">Nombre</strong>, <strong style="color:var(--text2)">Unidad</strong>, <strong style="color:var(--text2)">Precio</strong>.
-      Al importar se actualizan todos los precios del sistema (compresorista, guardia, mantenimiento, logístico).
+    <div style="margin-bottom:14px">
+      <input type="text" id="prod-buscar" placeholder="🔍 Buscar por código, nombre o descripción..." oninput="renderProductos()"
+        style="width:100%;max-width:420px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--coal4);color:var(--text1);font-size:13px">
+      <span style="margin-left:10px;font-size:11px;color:var(--text3)">${prods.length}${busq?' encontrados de '+allProds.length:' productos'}</span>
     </div>
 
     <!-- TABLA PRODUCTOS GENERALES -->
@@ -5485,84 +5488,126 @@ function almacenSeedDemo(){
   state.almacen.salidas=sal;
   // Inventario inicial "a full" — stock de arranque realista para todos los productos del catálogo
   state.almacen.inventarioInicial=[
-    {id:'II01',almacen:'General',codigo:'PRD-011',producto:'CEMENTO',descripcion:'CEMENTO GRIS ANTISALITRE PORTL. TIPO MS',unidad:'BOL',precio:27.73,cantidad:400},
-    {id:'II02',almacen:'General',codigo:'PRD-028',producto:'MALLA',descripcion:'MALLA ELECTROSOLDADA Nº 10',unidad:'ROLL',precio:374.91,cantidad:40},
-    {id:'II03',almacen:'General',codigo:'PRD-020',producto:'CIMBRA',descripcion:'CIMBRA AC (2C) 3.5 X 3.5 MTR W6" JGO X20 LB/FT',unidad:'JGO',precio:2034.00,cantidad:25},
-    {id:'II04',almacen:'General',codigo:'PRD-030',producto:'PERNO',descripcion:'PERNO SPLIT SET 33 X 5 PIES CON PLATINA',unidad:'UND',precio:12.50,cantidad:1200},
-    {id:'II05',almacen:'General',codigo:'PRD-029',producto:'RESINA',descripcion:'RESINA POLESTER RAPIDA 330CC',unidad:'UND',precio:8.90,cantidad:800},
-    {id:'II06',almacen:'General',codigo:'PRD-003',producto:'BROCA',descripcion:'BROCA DESCARTABLE DE BOTONES 36 MM',unidad:'UND',precio:76.88,cantidad:120},
-    {id:'II07',almacen:'General',codigo:'PRD-002',producto:'BROCA',descripcion:'BROCA DESCARTABLE DE BOTONES 32 MM',unidad:'UND',precio:74.91,cantidad:90},
-    {id:'II08',almacen:'General',codigo:'PRD-004',producto:'BARRA',descripcion:'BARRA CONICA 6" X 7/8"',unidad:'UND',precio:185.00,cantidad:60},
-    {id:'II09',almacen:'General',codigo:'PRD-005',producto:'BARRA',descripcion:'BARRA CONICA 4" X 7/8"',unidad:'UND',precio:165.00,cantidad:60},
-    {id:'II10',almacen:'General',codigo:'PRD-024',producto:'PERNO HELICOIDAL',descripcion:'PERNO HELICOIDAL 19 MM X7 (2.13MTR)',unidad:'UND',precio:28.50,cantidad:400},
-    {id:'II11',almacen:'General',codigo:'PRD-025',producto:'PERNO HELICOIDAL',descripcion:'PERNO HELICOIDAL 19 MM X7 (1.83MTR)',unidad:'UND',precio:24.80,cantidad:400},
-    {id:'II12',almacen:'General',codigo:'PRD-026',producto:'PERNO HELICOIDAL',descripcion:'PERNO HELICOIDAL 19 MM X6 (1.83MTR)',unidad:'UND',precio:22.40,cantidad:350},
-    {id:'II13',almacen:'General',codigo:'PRD-035',producto:'CARTUCHO',descripcion:'CARTUCHO DE CEMENTO 30MM X 305MM',unidad:'UND',precio:6.20,cantidad:600},
-    {id:'II14',almacen:'General',codigo:'PRD-029b',producto:'RESINA',descripcion:'RESINA 28 MM X305 MM 0-60 SECOND SET',unidad:'UND',precio:9.40,cantidad:500},
-    {id:'II15',almacen:'General',codigo:'PRD-017',producto:'MANGA',descripcion:'MANGA DE VENTILACION 1/2" X 10 MTR',unidad:'M',precio:14.00,cantidad:300},
-    {id:'II16',almacen:'General',codigo:'PRD-018',producto:'MANGA',descripcion:'MANGA DE VENTILACION 12" X 10 MTR',unidad:'M',precio:42.00,cantidad:200},
-    {id:'II17',almacen:'General',codigo:'PRD-019',producto:'MANGA',descripcion:'MANGA DE VENTILACION 30" X 20 MTR',unidad:'M',precio:88.00,cantidad:120},
-    {id:'II18',almacen:'General',codigo:'PRD-021',producto:'ALAMBRE',descripcion:'ALAMBRE NEGRO N° 16',unidad:'KG',precio:6.80,cantidad:250},
-    {id:'II19',almacen:'General',codigo:'PRD-001',producto:'ACEITE',descripcion:'ACEITE AIR TOOL OIL S2-A 100',unidad:'GAL',precio:78.00,cantidad:40},
-    {id:'II20',almacen:'General',codigo:'PRD-006',producto:'ALCAYATA',descripcion:'ALCAYATA DE FE CORRUGADO T-G 5/8"X29 CM',unidad:'UND',precio:9.50,cantidad:200},
-    {id:'II21',almacen:'General',codigo:'PRD-007',producto:'ALCAYATA',descripcion:'ALCAYATA DE FE CORRUGADO T-L 3/4"X30CM',unidad:'UND',precio:12.00,cantidad:180},
-    {id:'II22',almacen:'General',codigo:'PRD-027',producto:'CABLE ACERO',descripcion:'CABLE DE ACERO GALVANIZADO 5/32" (6X19)',unidad:'M',precio:5.40,cantidad:500},
-    {id:'II23',almacen:'General',codigo:'PRD-031',producto:'ATACADOR',descripcion:'ATACADORES DE MADERA 1" X 2.5 MTR',unidad:'UND',precio:8.50,cantidad:150},
-    {id:'II24',almacen:'General',codigo:'PRD-023',producto:'GUIADOR',descripcion:'GUIADORES DE MADERA 1" X 1.30 MTR',unidad:'UND',precio:7.20,cantidad:150},
-    {id:'II25',almacen:'General',codigo:'PRD-033',producto:'MANGUERA',descripcion:'MANGUERA DE JEBE Y LONA 1/2"',unidad:'M',precio:11.00,cantidad:200},
-    {id:'II26',almacen:'General',codigo:'PRD-034',producto:'MANGUERA',descripcion:'MANGUERA DE JEBE Y LONA 1" 300 PSI',unidad:'M',precio:18.50,cantidad:150},
-    {id:'II27',almacen:'General',codigo:'PRD-010',producto:'SACO METALERO',descripcion:'SACO METALERO POLIPROPILENO 20" X 30"',unidad:'UND',precio:1.80,cantidad:1000},
-    {id:'II28',almacen:'General',codigo:'PRD-022',producto:'PLANCHA',descripcion:'PLANCHA ACANALADA T/ONDUL. 2X1100X700MM',unidad:'UND',precio:54.00,cantidad:80},
-    {id:'II29',almacen:'General',codigo:'PRD-015',producto:'CARRETILLA',descripcion:'CARRETILLA RUEDAS DE JEBE 4 P3',unidad:'UND',precio:185.00,cantidad:12},
-    {id:'II30',almacen:'General',codigo:'PRD-016',producto:'ESCALERA',descripcion:'ESCALERA DE MADERA 3.60 MTR X 11 PELDAÑOS',unidad:'UND',precio:120.00,cantidad:15},
-    // Mantenimiento — repuestos a full
-    {id:'II31',almacen:'Mantenimiento',codigo:'M-FILT',producto:'FILTRO',descripcion:'FILTRO DE ACEITE COMPRESORA M135',unidad:'UND',precio:35.00,cantidad:40},
-    {id:'II32',almacen:'Mantenimiento',codigo:'M-ROD',producto:'RODAJE',descripcion:'RODAJE 6205-2RS',unidad:'UND',precio:65.00,cantidad:30},
-    {id:'II33',almacen:'Mantenimiento',codigo:'M-MANG',producto:'MANGUERA HIDRAULICA',descripcion:'Manguera hidráulica 1/2" x 1m',unidad:'UND',precio:48.00,cantidad:50},
-    {id:'II34',almacen:'Mantenimiento',codigo:'M-PERNO',producto:'PERNO',descripcion:'PERNO PASADOR RNS58F-36K',unidad:'UND',precio:5.372,cantidad:80},
-    {id:'II35',almacen:'Mantenimiento',codigo:'M-ALETA',producto:'ALETA',descripcion:'ALETA RNR91-11A',unidad:'UND',precio:6.186,cantidad:100}
+    {id:'II01',almacen:'General',codigo:'02-02-10-0001',producto:'ACEITE AIR TOOL OIL S2 A 100',descripcion:'ACEITE AIR TOOL OIL S2 A 100',unidad:'CIL',precio:0,cantidad:2},
+    {id:'II02',almacen:'General',codigo:'11-01-05-0001',producto:'ADAPTADOR DE PERNO HELICOIDAL 22MM',descripcion:'ADAPTADOR DE PERNO HELICOIDAL 22MM',unidad:'PZA',precio:0,cantidad:1},
+    {id:'II03',almacen:'General',codigo:'08-02-01-0001',producto:'ALCAYATA DE FE CORRUGADO 3/8" X 35 CM',descripcion:'ALCAYATA DE FE CORRUGADO 3/8" X 35 CM',unidad:'PZA',precio:0,cantidad:270},
+    {id:'II04',almacen:'General',codigo:'08-02-01-0002',producto:'ALCAYATA DE FE CORRUGADO T-G 5/8"X29 CM',descripcion:'ALCAYATA DE FE CORRUGADO T-G 5/8"X29 CM',unidad:'PZA',precio:0,cantidad:162},
+    {id:'II05',almacen:'General',codigo:'08-02-01-0003',producto:'ALCAYATA DE FE CORRUGADO T-L 3/4"X70CM',descripcion:'ALCAYATA DE FE CORRUGADO T-L 3/4"X70CM',unidad:'PZA',precio:0,cantidad:119},
+    {id:'II06',almacen:'General',codigo:'07-02-01-0001',producto:'ATACADORES DE MADERA 1" X 2.5 MTR',descripcion:'ATACADORES DE MADERA 1" X 2.5 MTR',unidad:'PZA',precio:0,cantidad:49},
+    {id:'II07',almacen:'General',codigo:'01-02-10-0001',producto:'BARRA CONICA 4\' X 7/8\'\'',descripcion:'BARRA CONICA 4\' X 7/8\'\'',unidad:'PZA',precio:0,cantidad:24},
+    {id:'II08',almacen:'General',codigo:'01-02-10-0002',producto:'BARRA CONICA 6\' X 7/8\'\'',descripcion:'BARRA CONICA 6\' X 7/8\'\'',unidad:'PZA',precio:0,cantidad:15},
+    {id:'II09',almacen:'General',codigo:'01-02-10-0003',producto:'BARRA CONICA 8\' X 7/8\'\'',descripcion:'BARRA CONICA 8\' X 7/8\'\'',unidad:'PZA',precio:0,cantidad:8},
+    {id:'II10',almacen:'General',codigo:'01-02-30-0001',producto:'BARRA DE ALUMINIO PARA ACUÑAR 1" x 10\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" x 10\'',unidad:'PZA',precio:0,cantidad:4},
+    {id:'II11',almacen:'General',codigo:'01-02-30-0002',producto:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 12\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 12\'',unidad:'PZA',precio:0,cantidad:7},
+    {id:'II12',almacen:'General',codigo:'01-02-30-0003',producto:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 4\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 4\'',unidad:'PZA',precio:0,cantidad:3},
+    {id:'II13',almacen:'General',codigo:'01-02-30-0004',producto:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 6\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 6\'',unidad:'PZA',precio:0,cantidad:3},
+    {id:'II14',almacen:'General',codigo:'01-02-30-0005',producto:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'',unidad:'PZA',precio:0,cantidad:9},
+    {id:'II15',almacen:'General',codigo:'01-02-20-0001',producto:'BROCA DESCARTABLE DE BOTONES 32 MM',descripcion:'BROCA DESCARTABLE DE BOTONES 32 MM',unidad:'PZA',precio:0,cantidad:151},
+    {id:'II16',almacen:'General',codigo:'01-02-20-0002',producto:'BROCA DESCARTABLE DE BOTONES 36 MM',descripcion:'BROCA DESCARTABLE DE BOTONES 36 MM',unidad:'PZA',precio:0,cantidad:110},
+    {id:'II17',almacen:'General',codigo:'10-02-90-0003',producto:'CABLE DE ACERO GALVANIZADO 5/32" (6X19)',descripcion:'CABLE DE ACERO GALVANIZADO 5/32" (6X19)',unidad:'M',precio:0,cantidad:800},
+    {id:'II18',almacen:'General',codigo:'01-03-90-0001',producto:'CARTUCHO DE CEMENTO 30MM X 305MM',descripcion:'CARTUCHO DE CEMENTO 30MM X 305MM',unidad:'PZA',precio:0,cantidad:2350},
+    {id:'II19',almacen:'General',codigo:'08-06-90-0001',producto:'CEMENTO GRIS ANTISALITRE PORTL. TIPO MS',descripcion:'CEMENTO GRIS ANTISALITRE PORTL. TIPO MS',unidad:'PZA',precio:0,cantidad:120},
+    {id:'II20',almacen:'General',codigo:'10-02-09-0001',producto:'CIMBRA AC (2C) 3.5X3.5 MTR W6" X20 LB/FT',descripcion:'CIMBRA AC (2C) 3.5X3.5 MTR W6" X20 LB/FT',unidad:'JGO',precio:0,cantidad:2},
+    {id:'II21',almacen:'General',codigo:'10-02-09-0002',producto:'CIMBRA AC (2C) 3 X 3M W6\' X 20LB/FT',descripcion:'CIMBRA AC (2C) 3 X 3M W6\' X 20LB/FT',unidad:'JGO',precio:0,cantidad:1},
+    {id:'II22',almacen:'General',codigo:'10-02-90-0004',producto:'CINTA DE ACERO INOX.1/2"X0.76MM L=30.5MT',descripcion:'CINTA DE ACERO INOX.1/2"X0.76MM L=30.5MT',unidad:'CJA',precio:0,cantidad:3},
+    {id:'II23',almacen:'General',codigo:'10-02-90-0005',producto:'CINTA DE ACERO INOX.3/4"X0.76MM L=30.5MT',descripcion:'CINTA DE ACERO INOX.3/4"X0.76MM L=30.5MT',unidad:'CJA',precio:0,cantidad:3},
+    {id:'II24',almacen:'General',codigo:'08-02-01-0004',producto:'GRAPA DE ACERO PARA CABLE 3/16"',descripcion:'GRAPA DE ACERO PARA CABLE 3/16"',unidad:'PZA',precio:0,cantidad:12},
+    {id:'II25',almacen:'General',codigo:'08-02-01-0006',producto:'GRAPA (HEBILLA) SERIE 201SS 1/2" C-254',descripcion:'GRAPA (HEBILLA) SERIE 201SS 1/2" C-254',unidad:'CJA',precio:0,cantidad:3},
+    {id:'II26',almacen:'General',codigo:'08-02-01-0007',producto:'GRAPA (HEBILLA) SERIE 201SS 3/4" C-256',descripcion:'GRAPA (HEBILLA) SERIE 201SS 3/4" C-256',unidad:'CJA',precio:0,cantidad:3},
+    {id:'II27',almacen:'General',codigo:'08-90-90-0001',producto:'GUIADORES DE MADERA 1" X 1.30 MTR',descripcion:'GUIADORES DE MADERA 1" X 1.30 MTR',unidad:'PZA',precio:0,cantidad:64},
+    {id:'II28',almacen:'General',codigo:'10-02-90-0006',producto:'MALLA ELECTROSOLDADA 4"X4"-2.42 X 25 MTR',descripcion:'MALLA ELECTROSOLDADA 4"X4"-2.42 X 25 MTR',unidad:'JGO',precio:0,cantidad:9},
+    {id:'II29',almacen:'General',codigo:'19-01-02-0001',producto:'MANGA DE VENT. 12" X 10 MTR',descripcion:'MANGA DE VENT. 12" X 10 MTR',unidad:'M',precio:0,cantidad:30},
+    {id:'II30',almacen:'General',codigo:'19-01-02-0002',producto:'MANGA DE VENT. 30" X 100 MTR 600 GR/M2',descripcion:'MANGA DE VENT. 30" X 100 MTR 600 GR/M2',unidad:'M',precio:0,cantidad:200},
+    {id:'II31',almacen:'General',codigo:'19-01-02-0003',producto:'MANGA DE VENT. 30" X 20 MTR',descripcion:'MANGA DE VENT. 30" X 20 MTR',unidad:'M',precio:0,cantidad:140},
+    {id:'II32',almacen:'General',codigo:'03-02-90-0001',producto:'MANGUERA DE JEBE Y LONA 1" 300 PSI',descripcion:'MANGUERA DE JEBE Y LONA 1" 300 PSI',unidad:'ROLL',precio:0,cantidad:2},
+    {id:'II33',almacen:'General',codigo:'03-02-90-0002',producto:'MANGUERA DE JEBE Y LONA 1/2"',descripcion:'MANGUERA DE JEBE Y LONA 1/2"',unidad:'ROLL',precio:0,cantidad:2},
+    {id:'II34',almacen:'General',codigo:'11-01-05-0002',producto:'PERNO HELICOIDAL 19 MM X 5\'(1.52MTR)',descripcion:'PERNO HELICOIDAL 19 MM X 5\'(1.52MTR)',unidad:'PZA',precio:0,cantidad:144},
+    {id:'II35',almacen:'General',codigo:'11-01-05-0003',producto:'PERNO HELICOIDAL 19 MM X 6\'(1.83MTR)',descripcion:'PERNO HELICOIDAL 19 MM X 6\'(1.83MTR)',unidad:'PZA',precio:0,cantidad:278},
+    {id:'II36',almacen:'General',codigo:'11-01-05-0004',producto:'PERNO HELICOIDAL 19 MM X 7\'(2.13MTR)',descripcion:'PERNO HELICOIDAL 19 MM X 7\'(2.13MTR)',unidad:'PZA',precio:0,cantidad:150},
+    {id:'II37',almacen:'General',codigo:'10-02-05-0001',producto:'PLANCHA ACANALADA T/ONDUL. 2X1100X1700MM',descripcion:'PLANCHA ACANALADA T/ONDUL. 2X1100X1700MM',unidad:'PZA',precio:0,cantidad:19},
+    {id:'II38',almacen:'General',codigo:'16-04-05-0001',producto:'REDUCCION POLIP.C/ROSCA 110 A 63 MM',descripcion:'REDUCCION POLIP.C/ROSCA 110 A 63 MM',unidad:'PZA',precio:0,cantidad:2},
+    {id:'II39',almacen:'General',codigo:'16-04-05-0002',producto:'REDUCCION POLIP.C/ROSCA 63 A 32 MM',descripcion:'REDUCCION POLIP.C/ROSCA 63 A 32 MM',unidad:'PZA',precio:0,cantidad:3},
+    {id:'II40',almacen:'General',codigo:'01-03-90-0002',producto:'RESINA 28 MM X 305 MM 0-60 SECOND SET',descripcion:'RESINA 28 MM X 305 MM 0-60 SECOND SET',unidad:'PZA',precio:0,cantidad:1950},
+    {id:'II41',almacen:'General',codigo:'11-01-05-0005',producto:'SPLIT SET CON PLATINA 5\' X 39MM',descripcion:'SPLIT SET CON PLATINA 5\' X 39MM',unidad:'PZA',precio:0,cantidad:19},
+    {id:'II42',almacen:'General',codigo:'16-03-05-0001',producto:'TEE DE POLIPROP. C/ROSCA 110MM',descripcion:'TEE DE POLIPROP. C/ROSCA 110MM',unidad:'PZA',precio:0,cantidad:4},
+    {id:'II43',almacen:'General',codigo:'16-03-05-0002',producto:'TEE DE POLIPROP. C/ROSCA 63MM',descripcion:'TEE DE POLIPROP. C/ROSCA 63MM',unidad:'PZA',precio:0,cantidad:4},
+    {id:'II44',almacen:'General',codigo:'16-01-04-0001',producto:'TUBO POLIETILENO AZUL 1" PE 80 PN-10',descripcion:'TUBO POLIETILENO AZUL 1" PE 80 PN-10',unidad:'M',precio:0,cantidad:100},
+    {id:'II45',almacen:'General',codigo:'16-01-04-0002',producto:'TUBO POLIETILENO AZUL 2" PE 80 PN-10',descripcion:'TUBO POLIETILENO AZUL 2" PE 80 PN-10',unidad:'M',precio:0,cantidad:200},
+    {id:'II46',almacen:'General',codigo:'16-01-04-0003',producto:'TUBO POLIETILENO AZUL 4" PE 80 PN-10',descripcion:'TUBO POLIETILENO AZUL 4" PE 80 PN-10',unidad:'M',precio:0,cantidad:100},
+    {id:'II47',almacen:'General',codigo:'16-01-04-0004',producto:'TUBO POLIETILENO NEGRO 1" PE 80 PN-10',descripcion:'TUBO POLIETILENO NEGRO 1" PE 80 PN-10',unidad:'M',precio:0,cantidad:100},
+    {id:'II48',almacen:'General',codigo:'16-01-04-0006',producto:'TUBO POLIETILENO NEGRO 4" PE 80 PN-10',descripcion:'TUBO POLIETILENO NEGRO 4" PE 80 PN-10',unidad:'M',precio:0,cantidad:100},
+    {id:'II49',almacen:'General',codigo:'16-06-01-0001',producto:'VALVULA BOLA PVC DOBLE ACOP PP 110MM',descripcion:'VALVULA BOLA PVC DOBLE ACOP PP 110MM',unidad:'PZA',precio:0,cantidad:2},
+    {id:'II50',almacen:'General',codigo:'16-06-01-0002',producto:'VALVULA BOLA PVC DOBLE ACOP PP 32MM',descripcion:'VALVULA BOLA PVC DOBLE ACOP PP 32MM',unidad:'PZA',precio:0,cantidad:6},
+    {id:'II51',almacen:'General',codigo:'16-06-01-0003',producto:'VALVULA BOLA PVC DOBLE ACOP PP 63MM',descripcion:'VALVULA BOLA PVC DOBLE ACOP PP 63MM',unidad:'PZA',precio:0,cantidad:3},
   ];
   almacenSeedProductos();
   almacenSave();
 }
 function almacenSeedProductos(){
   state.almacen.productos=[
-    {id:'P001',codigo:'PRD-001',nombre:'Aceite Air Tool',descripcion:'ACEITE AIR TOOL OIL S2-A 100',unidad:'GAL'},
-    {id:'P002',codigo:'PRD-002',nombre:'Broca 32mm',descripcion:'BROCA DESCARTABLE DE BOTONES 32 MM',unidad:'UND'},
-    {id:'P003',codigo:'PRD-003',nombre:'Broca 36mm',descripcion:'BROCA DESCARTABLE DE BOTONES 36 MM',unidad:'UND'},
-    {id:'P004',codigo:'PRD-004',nombre:'Barra Cónica 6"',descripcion:'BARRA CONICA 6" X 7/8"',unidad:'UND'},
-    {id:'P005',codigo:'PRD-005',nombre:'Barra Cónica 4"',descripcion:'BARRA CONICA 4" X 7/8"',unidad:'UND'},
-    {id:'P006',codigo:'PRD-006',nombre:'Alcayata 5/8"x29cm',descripcion:'ALCAYATA DE FE CORRUGADO T-G 5/8"X29 CM',unidad:'UND'},
-    {id:'P007',codigo:'PRD-007',nombre:'Alcayata 3/4"x30cm',descripcion:'ALCAYATA DE FE CORRUGADO T-L 3/4"X30CM',unidad:'UND'},
-    {id:'P008',codigo:'PRD-008',nombre:'Alcayata 3/8"x35cm',descripcion:'ALCAYATA DE FE CORRUGADO 3/8" X 35 CM',unidad:'UND'},
-    {id:'P009',codigo:'PRD-009',nombre:'Cinta Reflectante',descripcion:'CINTA VINILO REFLECTANTE VERDE T4-105',unidad:'UND'},
-    {id:'P010',codigo:'PRD-010',nombre:'Saco Metalero',descripcion:'SACO METALERO POLIPROPILENO 20" X 30"',unidad:'UND'},
-    {id:'P011',codigo:'PRD-011',nombre:'Cemento MS',descripcion:'CEMENTO GRIS ANTISALITRE PORTL. TIPO MS x 42.5KG',unidad:'BLS'},
-    {id:'P012',codigo:'PRD-012',nombre:'Cinta Acero 1/2"',descripcion:'CINTA DE ACERO INOX 1/2"X0.76MM L=30.5MT',unidad:'UND'},
-    {id:'P013',codigo:'PRD-013',nombre:'Cinta Acero 3/4"',descripcion:'CINTA DE ACERO INOX 3/4"X0.76MM L=30.5MT',unidad:'UND'},
-    {id:'P014',codigo:'PRD-014',nombre:'Válvula Bola PVC 32mm',descripcion:'VALVULA BOLA PVC DOBLE ACOP PP 32MM',unidad:'UND'},
-    {id:'P015',codigo:'PRD-015',nombre:'Carretilla',descripcion:'CARRETILLA RUEDAS DE JEBE 4 P3',unidad:'UND'},
-    {id:'P016',codigo:'PRD-016',nombre:'Escalera 3.60m',descripcion:'ESCALERA DE MADERA 3.60 MTR X 11 PELDAÑOS',unidad:'UND'},
-    {id:'P017',codigo:'PRD-017',nombre:'Manga Vent 1/2"x10m',descripcion:'MANGA DE VENTILACION 1/2" X 10 MTR',unidad:'M'},
-    {id:'P018',codigo:'PRD-018',nombre:'Manga Vent 12"x10m',descripcion:'MANGA DE VENTILACION 12" X 10 MTR',unidad:'M'},
-    {id:'P019',codigo:'PRD-019',nombre:'Manga Vent 30"x20m',descripcion:'MANGA DE VENTILACION 30" X 20 MTR',unidad:'M'},
-    {id:'P020',codigo:'PRD-020',nombre:'Cimbra AC',descripcion:'CIMBRA AC (2C) 3.5X0.5 MTR W6" X20 LB/FT',unidad:'M'},
-    {id:'P021',codigo:'PRD-021',nombre:'Alambre Negro N°16',descripcion:'ALAMBRE NEGRO N° 16',unidad:'KG'},
-    {id:'P022',codigo:'PRD-022',nombre:'Plancha Acanalada',descripcion:'PLANCHA ACANALADA T/ONDUL. 2X1100X700MM',unidad:'UND'},
-    {id:'P023',codigo:'PRD-023',nombre:'Guiadores Madera',descripcion:'GUIADORES DE MADERA 1" X 1.30 MTR',unidad:'UND'},
-    {id:'P024',codigo:'PRD-024',nombre:'Perno Helicoidal 7p 2.13m',descripcion:'PERNO HELICOIDAL 19 MM X7 (2.13MTR)',unidad:'UND'},
-    {id:'P025',codigo:'PRD-025',nombre:'Perno Helicoidal 7p 1.83m',descripcion:'PERNO HELICOIDAL 19 MM X7 (1.83MTR)',unidad:'UND'},
-    {id:'P026',codigo:'PRD-026',nombre:'Perno Helicoidal 6p 1.83m',descripcion:'PERNO HELICOIDAL 19 MM X6 (1.83MTR)',unidad:'UND'},
-    {id:'P027',codigo:'PRD-027',nombre:'Cable Acero 5/32"',descripcion:'CABLE DE ACERO GALVANIZADO 5/32" (6X19)',unidad:'M'},
-    {id:'P028',codigo:'PRD-028',nombre:'Malla Electro N°10',descripcion:'MALLA ELECTRO. N°10 4"X4"-2.42 X25 MTS',unidad:'UND'},
-    {id:'P029',codigo:'PRD-029',nombre:'Resina 28mm',descripcion:'RESINA 28 MM X305 MM 0-60 SECOND SET',unidad:'UND'},
-    {id:'P030',codigo:'PRD-030',nombre:'Split Set 5"x39mm',descripcion:'SPLIT SET CON PLATINA 5" X39MM',unidad:'UND'},
-    {id:'P031',codigo:'PRD-031',nombre:'Atacadores Madera',descripcion:'ATACADORES DE MADERA 1" X 2.5 MTR',unidad:'UND'},
-    {id:'P032',codigo:'PRD-032',nombre:'Adaptador Perno 22mm',descripcion:'ADAPTADOR DE PERNO HELICOIDAL 22MM',unidad:'UND'},
-    {id:'P033',codigo:'PRD-033',nombre:'Manguera Jebe 1/2"',descripcion:'MANGUERA DE JEBE Y LONA 1/2"',unidad:'M'},
-    {id:'P034',codigo:'PRD-034',nombre:'Manguera Jebe 1" 300PSI',descripcion:'MANGUERA DE JEBE Y LONA 1" 300 PSI',unidad:'M'},
-    {id:'P035',codigo:'PRD-035',nombre:'Cartucho Cemento 30mm',descripcion:'CARTUCHO DE CEMENTO 30MM X 305MM',unidad:'UND'},
-    {id:'P036',codigo:'PRD-036',nombre:'Grapa Acero 3/16"',descripcion:'GRAPA DE ACERO PARA CABLE 3/16"',unidad:'UND'},
+    {id:'P001',codigo:'02-02-10-0001',nombre:'Aceite Air Tool Oil S2 A 100',descripcion:'ACEITE AIR TOOL OIL S2 A 100',unidad:'CIL',precio:0},
+    {id:'P002',codigo:'16-02-90-0001',nombre:'Acople Vitaulic HDPE 4" 305',descripcion:'ACOPLE VITAULIC P/TUBERIA HDPE 4" 305',unidad:'PZA',precio:0},
+    {id:'P003',codigo:'11-01-05-0001',nombre:'Adaptador Perno Helicoidal 22mm',descripcion:'ADAPTADOR DE PERNO HELICOIDAL 22MM',unidad:'PZA',precio:0},
+    {id:'P004',codigo:'10-02-90-0001',nombre:'Alambre Negro N° 16',descripcion:'ALAMBRE NEGRO N° 16',unidad:'KG',precio:0},
+    {id:'P005',codigo:'08-02-01-0001',nombre:'Alcayata Fe Corrugado 3/8" x 35cm',descripcion:'ALCAYATA DE FE CORRUGADO 3/8" X 35 CM',unidad:'PZA',precio:0},
+    {id:'P006',codigo:'08-02-01-0002',nombre:'Alcayata Fe Corrugado T-G 5/8" x 29cm',descripcion:'ALCAYATA DE FE CORRUGADO T-G 5/8"X29 CM',unidad:'PZA',precio:0},
+    {id:'P007',codigo:'08-02-01-0003',nombre:'Alcayata Fe Corrugado T-L 3/4" x 70cm',descripcion:'ALCAYATA DE FE CORRUGADO T-L 3/4"X70CM',unidad:'PZA',precio:0},
+    {id:'P008',codigo:'07-02-01-0001',nombre:'Atacadores de Madera 1" x 2.5 Mtr',descripcion:'ATACADORES DE MADERA 1" X 2.5 MTR',unidad:'PZA',precio:0},
+    {id:'P009',codigo:'01-02-10-0001',nombre:'Barra Cónica 4\' x 7/8\'\'',descripcion:'BARRA CONICA 4\' X 7/8\'\'',unidad:'PZA',precio:0},
+    {id:'P010',codigo:'01-02-10-0002',nombre:'Barra Cónica 6\' x 7/8\'\'',descripcion:'BARRA CONICA 6\' X 7/8\'\'',unidad:'PZA',precio:0},
+    {id:'P011',codigo:'01-02-10-0003',nombre:'Barra Cónica 8\' x 7/8\'\'',descripcion:'BARRA CONICA 8\' X 7/8\'\'',unidad:'PZA',precio:0},
+    {id:'P012',codigo:'01-02-30-0001',nombre:'Barra Aluminio Acuñar 1" x 10\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" x 10\'',unidad:'PZA',precio:0},
+    {id:'P013',codigo:'01-02-30-0002',nombre:'Barra Aluminio Acuñar 1" x 12\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 12\'',unidad:'PZA',precio:0},
+    {id:'P014',codigo:'01-02-30-0003',nombre:'Barra Aluminio Acuñar 1" x 4\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 4\'',unidad:'PZA',precio:0},
+    {id:'P015',codigo:'01-02-30-0004',nombre:'Barra Aluminio Acuñar 1" x 6\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 6\'',unidad:'PZA',precio:0},
+    {id:'P016',codigo:'01-02-30-0005',nombre:'Barra Aluminio Acuñar 1" x 8\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'',unidad:'PZA',precio:0},
+    {id:'P017',codigo:'01-02-20-0001',nombre:'Broca Descartable Botones 32mm',descripcion:'BROCA DESCARTABLE DE BOTONES 32 MM',unidad:'PZA',precio:0},
+    {id:'P018',codigo:'01-02-20-0002',nombre:'Broca Descartable Botones 36mm',descripcion:'BROCA DESCARTABLE DE BOTONES 36 MM',unidad:'PZA',precio:0},
+    {id:'P019',codigo:'10-02-90-0002',nombre:'Cable Acero Alma D/Acero 1/2" x 250Mtr',descripcion:'CABLE DE ACERO ALMA D/ACERO 1/2"X250MTR',unidad:'M',precio:0},
+    {id:'P020',codigo:'10-02-90-0003',nombre:'Cable Acero Galvanizado 5/32" (6x19)',descripcion:'CABLE DE ACERO GALVANIZADO 5/32" (6X19)',unidad:'M',precio:0},
+    {id:'P021',codigo:'40-01-90-0001',nombre:'Carretilla C/Ruedas de Jebe 4 P3',descripcion:'CARRETILLA C/RUEDAS DE JEBE 4 P3',unidad:'PZA',precio:0},
+    {id:'P022',codigo:'01-03-90-0001',nombre:'Cartucho de Cemento 30mm x 305mm',descripcion:'CARTUCHO DE CEMENTO 30MM X 305MM',unidad:'PZA',precio:0},
+    {id:'P023',codigo:'08-06-90-0001',nombre:'Cemento Gris Antisalitre Portl. MS',descripcion:'CEMENTO GRIS ANTISALITRE PORTL. TIPO MS',unidad:'PZA',precio:0},
+    {id:'P024',codigo:'10-02-09-0001',nombre:'Cimbra AC (2C) 3.5x3.5 Mtr W6" x20 Lb',descripcion:'CIMBRA AC (2C) 3.5X3.5 MTR W6" X20 LB/FT',unidad:'JGO',precio:0},
+    {id:'P025',codigo:'10-02-09-0002',nombre:'Cimbra AC (2C) 3x3 Mtr W6\' x 20Lb',descripcion:'CIMBRA AC (2C) 3 X 3M W6\' X 20LB/FT',unidad:'JGO',precio:0},
+    {id:'P026',codigo:'10-02-90-0004',nombre:'Cinta Acero Inox 1/2" x 0.76mm L=30.5m',descripcion:'CINTA DE ACERO INOX.1/2"X0.76MM L=30.5MT',unidad:'CJA',precio:0},
+    {id:'P027',codigo:'10-02-90-0005',nombre:'Cinta Acero Inox 3/4" x 0.76mm L=30.5m',descripcion:'CINTA DE ACERO INOX.3/4"X0.76MM L=30.5MT',unidad:'CJA',precio:0},
+    {id:'P028',codigo:'07-01-90-0001',nombre:'Escalera Madera 3.60 Mtr x 11 Peld.',descripcion:'ESCALERA DE MADERA 3.60 MTRX 11 PELD.',unidad:'PZA',precio:0},
+    {id:'P029',codigo:'08-02-01-0004',nombre:'Grapa Acero para Cable 3/16"',descripcion:'GRAPA DE ACERO PARA CABLE 3/16"',unidad:'PZA',precio:0},
+    {id:'P030',codigo:'08-02-01-0005',nombre:'Grapa Galvanizada p/Cable 1/2"',descripcion:'GRAPA GALVANIZADA P/CABLE 1/2"',unidad:'PZA',precio:0},
+    {id:'P031',codigo:'08-02-01-0006',nombre:'Grapa (Hebilla) Serie 201SS 1/2" C-254',descripcion:'GRAPA (HEBILLA) SERIE 201SS 1/2" C-254',unidad:'CJA',precio:0},
+    {id:'P032',codigo:'08-02-01-0007',nombre:'Grapa (Hebilla) Serie 201SS 3/4" C-256',descripcion:'GRAPA (HEBILLA) SERIE 201SS 3/4" C-256',unidad:'CJA',precio:0},
+    {id:'P033',codigo:'08-90-90-0001',nombre:'Guiadores de Madera 1" x 1.30 Mtr',descripcion:'GUIADORES DE MADERA 1" X 1.30 MTR',unidad:'PZA',precio:0},
+    {id:'P034',codigo:'07-01-04-0001',nombre:'Listón 2" x 3" x 10\'',descripcion:'LISTON 2" X 3" X 10\'',unidad:'PZA',precio:0},
+    {id:'P035',codigo:'10-02-90-0006',nombre:'Malla Electrosoldada 4"x4"-2.42 x 25Mtr',descripcion:'MALLA ELECTROSOLDADA 4"X4"-2.42 X 25 MTR',unidad:'JGO',precio:0},
+    {id:'P036',codigo:'19-01-02-0001',nombre:'Manga Ventilación 12" x 10 Mtr',descripcion:'MANGA DE VENT. 12" X 10 MTR',unidad:'M',precio:0},
+    {id:'P037',codigo:'19-01-02-0002',nombre:'Manga Ventilación 30" x 100 Mtr 600gr/m2',descripcion:'MANGA DE VENT. 30" X 100 MTR 600 GR/M2',unidad:'M',precio:0},
+    {id:'P038',codigo:'19-01-02-0003',nombre:'Manga Ventilación 30" x 20 Mtr',descripcion:'MANGA DE VENT. 30" X 20 MTR',unidad:'M',precio:0},
+    {id:'P039',codigo:'03-02-90-0001',nombre:'Manguera Jebe y Lona 1" 300 PSI',descripcion:'MANGUERA DE JEBE Y LONA 1" 300 PSI',unidad:'ROLL',precio:0},
+    {id:'P040',codigo:'03-02-90-0002',nombre:'Manguera Jebe y Lona 1/2"',descripcion:'MANGUERA DE JEBE Y LONA 1/2"',unidad:'ROLL',precio:0},
+    {id:'P041',codigo:'11-01-05-0002',nombre:'Perno Helicoidal 19mm x 5\' (1.52Mtr)',descripcion:'PERNO HELICOIDAL 19 MM X 5\'(1.52MTR)',unidad:'PZA',precio:0},
+    {id:'P042',codigo:'11-01-05-0003',nombre:'Perno Helicoidal 19mm x 6\' (1.83Mtr)',descripcion:'PERNO HELICOIDAL 19 MM X 6\'(1.83MTR)',unidad:'PZA',precio:0},
+    {id:'P043',codigo:'11-01-05-0004',nombre:'Perno Helicoidal 19mm x 7\' (2.13Mtr)',descripcion:'PERNO HELICOIDAL 19 MM X 7\'(2.13MTR)',unidad:'PZA',precio:0},
+    {id:'P044',codigo:'10-02-05-0001',nombre:'Plancha Acanalada Ondul. 2x1100x1700mm',descripcion:'PLANCHA ACANALADA T/ONDUL. 2X1100X1700MM',unidad:'PZA',precio:0},
+    {id:'P045',codigo:'16-04-05-0001',nombre:'Reducción Polip. C/Rosca 110 a 63mm',descripcion:'REDUCCION POLIP.C/ROSCA 110 A 63 MM',unidad:'PZA',precio:0},
+    {id:'P046',codigo:'16-04-05-0002',nombre:'Reducción Polip. C/Rosca 63 a 32mm',descripcion:'REDUCCION POLIP.C/ROSCA 63 A 32 MM',unidad:'PZA',precio:0},
+    {id:'P047',codigo:'01-03-90-0002',nombre:'Resina 28mm x 305mm 0-60 Second Set',descripcion:'RESINA 28 MM X 305 MM 0-60 SECOND SET',unidad:'PZA',precio:0},
+    {id:'P048',codigo:'29-01-90-0001',nombre:'Saco Metalero Polipropileno 20" x 30"',descripcion:'SACO METALERO POLIPROPILENO 20" X 30"',unidad:'PZA',precio:0},
+    {id:'P049',codigo:'11-01-05-0005',nombre:'Split Set con Platina 5\' x 39mm',descripcion:'SPLIT SET CON PLATINA 5\' X 39MM',unidad:'PZA',precio:0},
+    {id:'P050',codigo:'07-01-90-0002',nombre:'Tabla Aserrada 2" x 8" x 10\'',descripcion:'TABLA ASERRADA 2" X 8" X 10\'',unidad:'PZA',precio:0},
+    {id:'P051',codigo:'16-03-05-0001',nombre:'Tee Poliprop. C/Rosca 110mm',descripcion:'TEE DE POLIPROP. C/ROSCA 110MM',unidad:'PZA',precio:0},
+    {id:'P052',codigo:'16-03-05-0002',nombre:'Tee Poliprop. C/Rosca 63mm',descripcion:'TEE DE POLIPROP. C/ROSCA 63MM',unidad:'PZA',precio:0},
+    {id:'P053',codigo:'16-01-04-0001',nombre:'Tubo Polietileno Azul 1" PE 80 PN-10',descripcion:'TUBO POLIETILENO AZUL 1" PE 80 PN-10',unidad:'M',precio:0},
+    {id:'P054',codigo:'16-01-04-0002',nombre:'Tubo Polietileno Azul 2" PE 80 PN-10',descripcion:'TUBO POLIETILENO AZUL 2" PE 80 PN-10',unidad:'M',precio:0},
+    {id:'P055',codigo:'16-01-04-0003',nombre:'Tubo Polietileno Azul 4" PE 80 PN-10',descripcion:'TUBO POLIETILENO AZUL 4" PE 80 PN-10',unidad:'M',precio:0},
+    {id:'P056',codigo:'16-01-04-0004',nombre:'Tubo Polietileno Negro 1" PE 80 PN-10',descripcion:'TUBO POLIETILENO NEGRO 1" PE 80 PN-10',unidad:'M',precio:0},
+    {id:'P057',codigo:'16-01-04-0005',nombre:'Tubo Polietileno Verde 2" PE 80 PN-10',descripcion:'TUBO POLIETILENO VERDE 2" PE 80 PN-10',unidad:'M',precio:0},
+    {id:'P058',codigo:'16-01-04-0006',nombre:'Tubo Polietileno Negro 4" PE 80 PN-10',descripcion:'TUBO POLIETILENO NEGRO 4" PE 80 PN-10',unidad:'M',precio:0},
+    {id:'P059',codigo:'16-03-05-0003',nombre:'Unión Poliprop. C/Rosca 63mm',descripcion:'UNION DE POLIPROPI. C/ROSCA 63 MM',unidad:'PZA',precio:0},
+    {id:'P060',codigo:'16-03-05-0004',nombre:'Unión Polipropileno C/Rosca 32mm',descripcion:'UNION DE POLIPROPILENO C/ROSCA 32 MM',unidad:'PZA',precio:0},
+    {id:'P061',codigo:'16-06-01-0001',nombre:'Válvula Bola PVC Doble Acop PP 110mm',descripcion:'VALVULA BOLA PVC DOBLE ACOP PP 110MM',unidad:'PZA',precio:0},
+    {id:'P062',codigo:'16-06-01-0002',nombre:'Válvula Bola PVC Doble Acop PP 32mm',descripcion:'VALVULA BOLA PVC DOBLE ACOP PP 32MM',unidad:'PZA',precio:0},
+    {id:'P063',codigo:'16-06-01-0003',nombre:'Válvula Bola PVC Doble Acop PP 63mm',descripcion:'VALVULA BOLA PVC DOBLE ACOP PP 63MM',unidad:'PZA',precio:0},
   ];
 }
 // ══════════════════════════════════════════════════════════════
