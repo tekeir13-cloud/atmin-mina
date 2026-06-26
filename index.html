@@ -4646,7 +4646,21 @@ function eqSvg(id,col,size){
 // al recargar vuelve al mes en curso; al importar una valorización salta a su mes.
 let _ejecMes = null;
 function ejecMesActual(){
-  return _ejecMes || ((typeof finMesActual==='function')?finMesActual():new Date().toISOString().slice(0,7));
+  if(_ejecMes) return _ejecMes;
+  const actual=(typeof finMesActual==='function')?finMesActual():new Date().toISOString().slice(0,7);
+  // Si el mes en curso aún no tiene valorización pero hay alguna guardada,
+  // mostrar automáticamente la más reciente para que el ingreso no se vea "borrado".
+  try{
+    const tieneActual=(typeof finValorizacionMes==='function')&&finValorizacionMes(actual).total>0;
+    if(!tieneActual){
+      const vals=(state.valorizacionesLabor||[]).filter(v=>v.mesNum&&v.anio);
+      if(vals.length){
+        vals.sort((a,b)=>(b.anio*100+b.mesNum)-(a.anio*100+a.mesNum));
+        return vals[0].anio+'-'+String(vals[0].mesNum).padStart(2,'0');
+      }
+    }
+  }catch(e){}
+  return actual;
 }
 function ejecCambiarMes(delta){
   const base=ejecMesActual();
@@ -9430,7 +9444,8 @@ function guardarValorizacion(){
   valLaborSave();
   // Si tiene mes/año, asegurar que el dashboard apunte a ese mes
   if(v.mesNum&&v.anio){_ejecMes=v.anio+'-'+String(v.mesNum).padStart(2,'0');try{renderDashboard();}catch(e){}}
-  showNotif(`💾 Valorización de ${v.periodo||v.titulo} guardada y vinculada al dashboard (S/ ${Math.round(v.total||0).toLocaleString('es-PE')})`,'ok');
+  showNotif(`✓ Reporte guardado — ${v.periodo||v.titulo} (S/ ${Math.round(v.total||0).toLocaleString('es-PE')}) vinculado al dashboard`,'ok');
+  alert(`✓ Reporte guardado correctamente\n\nValorización de ${v.periodo||v.titulo}\nTotal: S/ ${Math.round(v.total||0).toLocaleString('es-PE')}\n\nQuedó vinculada al dashboard de forma permanente. No necesitas volver a subirla.`);
 }
 
 function renderValorizacionOp(forceId){
@@ -11895,6 +11910,7 @@ async function initSistema(){
   if(fb) fb.textContent = now.toLocaleDateString('es-PE',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
   document.querySelectorAll('input[type=date]').forEach(i=>i.value=hoy());
   showNotif('⏳ Cargando datos...','warn');
+  try{ valLaborLoad(); }catch(e){}  // valorizaciones desde localStorage (también si la nube está offline)
   await cargarDesdeSB();
   poblarSelects();
   if(state.maquinas) poblarSelectMaquinas();
