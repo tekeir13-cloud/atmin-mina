@@ -4202,13 +4202,20 @@ async function cargarAlmacenCombustibleSB(){
     CLOUD_SYNC_READY = true;
     if(almNube && (((almNube.ingresos||[]).length)||((almNube.salidas||[]).length)||((almNube.inventarioInicial||[]).length))){
       // La nube manda: reemplaza el estado local y persiste
+      // Verificar si el catálogo en nube es viejo (PRD- o sin versión) → usar catálogo nuevo
+      const nubeProds=almNube.productos||[];
+      const catalogoObsoleto=almNube.catalogVersion!==3||(nubeProds.length>0&&nubeProds.every(p=>(p.codigo||'').startsWith('PRD-')||(p.id||'').startsWith('P0')));
+      const productosFinales=catalogoObsoleto?(()=>{almacenSeedProductos();return state.almacen.productos;})():nubeProds;
       state.almacen={
         ingresos:almNube.ingresos||[], salidas:almNube.salidas||[],
         inventarioInicial:almNube.inventarioInicial||[], historialMeses:almNube.historialMeses||[],
-        productos:almNube.productos||state.almacen.productos||[], solicitudesCompra:almNube.solicitudesCompra||[],
-        explosivos:almNube.explosivos||{ingresos:[],salidas:[]}
+        productos:productosFinales, solicitudesCompra:almNube.solicitudesCompra||[],
+        explosivos:almNube.explosivos||{ingresos:[],salidas:[]},
+        catalogVersion:3
       };
       try{localStorage.setItem(ALM_KEY,JSON.stringify(state.almacen));}catch(e){}
+      // Si el catálogo era obsoleto, forzar subida a nube con catálogo nuevo
+      if(catalogoObsoleto) await sbSyncModulo('almacen',{...state.almacen});
     }else{
       // Nube vacía: subir lo que tiene este dispositivo (ya sembrado a full)
       await sbSyncModulo('almacen', {...state.almacen, productos:state.almacen.productos||[]});
@@ -5149,13 +5156,10 @@ function almacenLoad(){
     if(!state.almacen.ingresos.length && !state.almacen.salidas.length && !(state.almacen.historialMeses||[]).length){almacenSeedDemo();}
     // Migrar catálogo antiguo al nuevo catálogo clasificado (CLASE-SCLAS-FAMIL-NUCOR)
     const prods=state.almacen.productos||[];
-    const esGenerico=prods.length<=7&&prods.every(p=>['P1','P2','P3','P4','P5','P6','P7'].includes(p.id));
-    const esPRDAntiguo=prods.length>0&&(prods.every(p=>(p.codigo||'').startsWith('PRD-'))||prods.every(p=>(p.codigo||'').startsWith('0')||((p.codigo||'').startsWith('P') && (p.id||'').startsWith('P0'))));
-    if(esGenerico||esPRDAntiguo){
-      // Reemplazar catálogo con los 63 materiales reales clasificados
+    const catalogoObsoletoLocal=(state.almacen.catalogVersion||0)<3;
+    if(catalogoObsoletoLocal){
       almacenSeedProductos();
-      // Reemplazar inventario inicial con stock real del Excel
-      almacenSeedDemo_stock();
+      state.almacen.catalogVersion=3;
       almacenSave();
     }
   }catch(e){}
