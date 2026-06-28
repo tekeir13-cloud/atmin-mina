@@ -3651,8 +3651,9 @@ select option{background:var(--coal3);}
     <!-- Agregar producto -->
     <div style="background:var(--coal4);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
       <div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Agregar producto a la solicitud</div>
+      <div class="form-group" style="margin:0 0 8px"><label style="font-size:11px">Producto (Maestro de Productos)</label><select id="sc-prod-sel" onchange="autoFillSolicitudProdSel()" style="font-size:13px;width:100%"><option value="">— Seleccionar producto del maestro —</option></select></div>
       <div style="display:grid;grid-template-columns:120px 1fr 70px 90px 110px auto;gap:8px;align-items:flex-end">
-        <div class="form-group" style="margin:0"><label style="font-size:11px">Código</label><input type="text" id="sc-prod-cod" list="sc-prod-datalist" oninput="autoFillSolicitudProd()" placeholder="PRD-001" style="font-size:13px"><datalist id="sc-prod-datalist"></datalist></div>
+        <div class="form-group" style="margin:0"><label style="font-size:11px">Código</label><input type="text" id="sc-prod-cod" list="sc-prod-datalist" oninput="autoFillSolicitudProd()" placeholder="auto" style="font-size:13px"><datalist id="sc-prod-datalist"></datalist></div>
         <div class="form-group" style="margin:0"><label style="font-size:11px">Descripción</label><input type="text" id="sc-prod-desc" placeholder="Descripción del producto" style="font-size:13px"></div>
         <div class="form-group" style="margin:0"><label style="font-size:11px">U.M.</label><select id="sc-prod-um" style="font-size:13px"><option>UND</option><option>KG</option><option>BOL</option><option>ROLL</option><option>JGO</option><option>PZA</option><option>M</option><option>GAL</option><option>LT</option><option>GLN</option></select></div>
         <div class="form-group" style="margin:0"><label style="font-size:11px">Cantidad</label><input type="number" id="sc-prod-cant" min="1" step="any" placeholder="Ej: 10" style="font-size:13px"></div>
@@ -6777,18 +6778,33 @@ function abrirModalSolicitud(){
   g('sc-prod-cod').value='';g('sc-prod-desc').value='';g('sc-prod-um').value='UND';
   g('sc-prod-cant').value='';g('sc-prod-precio').value='';
   solicitudCart=[];renderSolicitudCart();
-  // poblar datalist de productos
+  // poblar selector y datalist de productos desde el MAESTRO DE PRODUCTOS
+  const prods=(state.almacen.productos||[]).slice().sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+  const sel=g('sc-prod-sel');
+  if(sel)sel.innerHTML='<option value="">— Seleccionar producto del maestro —</option>'+prods.map(p=>`<option value="${p.id}">${p.nombre} (${p.codigo})${p.unidad?' · '+p.unidad:''}</option>`).join('');
   const dl=g('sc-prod-datalist');
-  if(dl)dl.innerHTML=(state.almacen.productos||[]).map(p=>`<option value="${p.codigo}">${p.codigo} · ${p.nombre}</option>`).join('');
+  if(dl)dl.innerHTML=prods.map(p=>`<option value="${p.codigo}">${p.codigo} · ${p.nombre}</option>`).join('');
   abrirModal('modal-solicitud');
+}
+
+// Selección desde el dropdown del maestro → autocompleta código, descripción, unidad y precio
+function autoFillSolicitudProdSel(){
+  const id=document.getElementById('sc-prod-sel')?.value||'';
+  const p=(state.almacen.productos||[]).find(x=>x.id===id);
+  if(!p)return;
+  const c=document.getElementById('sc-prod-cod');if(c)c.value=p.codigo||'';
+  const d=document.getElementById('sc-prod-desc');if(d)d.value=p.descripcion||p.nombre||'';
+  const u=document.getElementById('sc-prod-um');if(u)u.value=p.unidad||'UND';
+  const pr=document.getElementById('sc-prod-precio');if(pr&&!pr.value&&p.precio)pr.value=p.precio;
 }
 
 function autoFillSolicitudProd(){
   const val=(document.getElementById('sc-prod-cod')?.value||'').trim().toLowerCase();
-  const p=(state.almacen.productos||[]).find(x=>x.codigo.toLowerCase()===val||x.nombre.toLowerCase()===val);
+  const p=(state.almacen.productos||[]).find(x=>(x.codigo||'').toLowerCase()===val||(x.nombre||'').toLowerCase()===val);
   if(p){
     const d=document.getElementById('sc-prod-desc');if(d)d.value=p.descripcion||p.nombre;
     const u=document.getElementById('sc-prod-um');if(u)u.value=p.unidad;
+    const pr=document.getElementById('sc-prod-precio');if(pr&&!pr.value&&p.precio)pr.value=p.precio;
   }
 }
 
@@ -6801,8 +6817,9 @@ function agregarItemSolicitud(){
   const precio=parseFloat(g('sc-prod-precio').value)||0;
   solicitudCart.push({codigo:g('sc-prod-cod').value.trim(),descripcion:desc,unidad:g('sc-prod-um').value,cantidad:cant,precio,total:cant*precio});
   renderSolicitudCart();
+  const s=g('sc-prod-sel');if(s)s.value='';
   g('sc-prod-cod').value='';g('sc-prod-desc').value='';g('sc-prod-cant').value='';g('sc-prod-precio').value='';
-  g('sc-prod-cod').focus();
+  g('sc-prod-sel').focus();
 }
 
 function renderSolicitudCart(){
