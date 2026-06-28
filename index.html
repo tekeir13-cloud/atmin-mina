@@ -4888,6 +4888,10 @@ function renderDashResumenHoy(){
   const fExplos = pre => (typeof finCostoExplosivos==='function') ? finCostoExplosivos(pre) : 0;
   // Mantenimiento → kits de mantenimiento aprobados por logística
   const fMant = pre => (typeof finCostoMantenimiento==='function') ? finCostoMantenimiento(pre) : 0;
+  // Petróleo en S/ (costo) → pestaña Combustible
+  const fCombS = pre => (typeof finCostoCombustible==='function') ? finCostoCombustible(pre) : 0;
+  // COSTO OPERATIVO = Almacén General (Insumos=Logística + Mantenimiento) + Planillas + Petróleo + Explosivos
+  const fOperativo = pre => fLogistica(pre)+fMant(pre)+fPlanilla(pre)+fCombS(pre)+fExplos(pre);
 
   const card=(icon,label,valor,sub,col)=>`
     <div style="flex:1;min-width:150px;background:var(--coal4);border:1px solid var(--border);border-radius:16px;padding:16px 18px;display:flex;align-items:center;gap:14px">
@@ -4905,7 +4909,7 @@ function renderDashResumenHoy(){
     <div style="display:flex;flex-wrap:wrap;gap:12px">
       ${card('👷','Personal en mina',activos,`de ${totReg} registrados`,'#fbbf24')}
       ${card('⛏','Metros hoy',fMetros(ts)+' m',fMetros(ts)>0?'avance del día':'sin avance aún','#5b6ef5')}
-      ${card('💵','Costo operativo hoy',S(fPlanilla(ts)),'planilla del día','#ef4444')}
+      ${card('💵','Costo operativo hoy',S(fOperativo(ts)),'almacén+planilla+petróleo+expl.','#ef4444')}
       ${card('📦','Logística hoy',S(fLogistica(ts)),'salidas de almacén','#22c55e')}
       ${card('🛢️','Petróleo hoy',fPetroleo(ts)+' gl','consumo del día','#f59e0b')}
       ${card('💥','Explosivos hoy',S(fExplos(ts)),'valor consumido','#a855f7')}
@@ -4917,7 +4921,7 @@ function renderDashResumenHoy(){
     <div style="font-size:13px;font-weight:800;color:var(--text);margin:0 2px 11px">📆 Acumulado del Mes · ${nombreMes}</div>
     <div style="display:flex;flex-wrap:wrap;gap:12px">
       ${card('⛏','Metros del mes',fMetros(mesYM)+' m','avance acumulado','#5b6ef5')}
-      ${card('💵','Costo operativo del mes',S(fPlanilla(mesYM)),'planilla acumulada','#ef4444')}
+      ${card('💵','Costo operativo del mes',S(fOperativo(mesYM)),'almacén+planilla+petróleo+expl.','#ef4444')}
       ${card('📦','Logística del mes',S(fLogistica(mesYM)),'salidas de almacén','#22c55e')}
       ${card('🛢️','Petróleo del mes',fPetroleo(mesYM)+' gl','consumo acumulado','#f59e0b')}
       ${card('💥','Explosivos del mes',S(fExplos(mesYM)),'valor consumido','#a855f7')}
