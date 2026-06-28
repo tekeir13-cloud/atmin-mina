@@ -3878,13 +3878,9 @@ select option{background:var(--coal3);}
       </div>
     </div>
 
-    <!-- ─── FRENTES EXTRA (dinámicos) ─── -->
-    <div id="rg-extra-frentes"></div>
-
-    <!-- ─── BOTÓN NUEVO FRENTE ─── -->
-    <button class="btn btn-outline" style="width:100%;margin-bottom:16px;border-style:dashed;font-size:13px;padding:10px" onclick="rgAgregarFrente()">
-      ➕ Habilitar nuevo frente
-    </button>
+    <!-- Frentes fijos: solo Brenda (Frente 1) y Cortada Noroeste (Frente 2).
+         La habilitación de nuevos frentes la gestiona el administrador. -->
+    <div id="rg-extra-frentes" style="display:none"></div>
 
     <div class="btn-row">
       <button class="btn btn-gold" onclick="guardarReporteGuardia()">✓ Guardar Reporte</button>
@@ -4692,8 +4688,8 @@ function renderDashEjecutivo(){
   const margen=val.total-costoTot;
   const pctMargen=val.total>0?Math.round(margen/val.total*100):0;
 
-  // ── METROS POR FRENTE (mes en curso) ──
-  const perfMes=(state.perforacion||[]).filter(p=>(p.fecha||'').startsWith(mes));
+  // ── METROS POR FRENTE (mes en curso) — solo Frente 1 (Brenda) y Frente 2 (Cortada) ──
+  const perfMes=(state.perforacion||[]).filter(p=>(p.fecha||'').startsWith(mes)&&(p.frente===1||p.frente===2));
   const frentes=[...new Set(perfMes.map(p=>p.frente))].sort();
   const metrosTot=perfMes.reduce((s,p)=>s+(p.metros||0),0);
   const maxFr=Math.max(1,...frentes.map(f=>perfMes.filter(p=>p.frente===f).reduce((s,p)=>s+(p.metros||0),0)));
@@ -9097,18 +9093,22 @@ function renderAvance(){
     const b=r.brenda||{},c=r.crne||{};
     const mt=((b.metros||0)+(c.metros||0)).toFixed(1);
     const cell=(lbl,val)=>`<div style="font-size:11px;color:var(--text3)">${lbl}</div><div style="font-size:13px;color:var(--text);font-weight:600">${val}</div>`;
+    const rgid='rgd-'+r.id;
     return`<div class="card" style="margin-bottom:12px">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px">
-        <div>
-          <div style="font-size:14px;font-weight:700;color:var(--text)">${fmtF(r.fecha)} · Turno ${r.turno||'—'}</div>
-          <div style="font-size:12px;color:var(--text3)">Jefe de Guardia: <strong style="color:var(--text2)">${r.jefe||'—'}</strong> · Avance total: <strong style="color:#fbbf24">${mt} m</strong></div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:0">
+        <div onclick="rgToggleReporte('${rgid}')" style="cursor:pointer;display:flex;align-items:flex-start;gap:10px;flex:1;min-width:0">
+          <span id="${rgid}-arrow" style="color:var(--text3);font-size:13px;margin-top:2px">▸</span>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--text)">${fmtF(r.fecha)} · Turno ${r.turno||'—'}</div>
+            <div style="font-size:12px;color:var(--text3)">Jefe de Guardia: <strong style="color:var(--text2)">${r.jefe||'—'}</strong> · Avance total: <strong style="color:#fbbf24">${mt} m</strong></div>
+          </div>
         </div>
         <div style="display:flex;gap:6px">
           <button class="btn btn-outline" style="font-size:11px;padding:5px 12px" onclick="editarReporteGuardia('${r.id}')">✎ Editar</button>
           <button class="btn btn-outline" style="font-size:11px;padding:5px 12px;color:#f87171;border-color:#f87171" onclick="eliminarReporteGuardia('${r.id}')">🗑</button>
         </div>
       </div>
-      <div class="two-col">
+      <div id="${rgid}" class="two-col" style="display:none;margin-top:12px">
         <div style="border-left:3px solid #60a5fa;padding-left:10px">
           <div style="font-size:12px;font-weight:700;color:#60a5fa;margin-bottom:6px">🟦 RA Brenda</div>
           <div style="font-size:12px;color:var(--text2);margin-bottom:8px;white-space:pre-wrap">${b.trabajos||'<span style="color:var(--text3)">Sin detalle de trabajos</span>'}</div>
@@ -9126,6 +9126,13 @@ function renderAvance(){
       </div>
     </div>`;
   }).join('');
+}
+
+function rgToggleReporte(gid){
+  const el=document.getElementById(gid);if(!el)return;
+  const open=el.style.display!=='none';
+  el.style.display=open?'none':'';
+  const ar=document.getElementById(gid+'-arrow');if(ar)ar.textContent=open?'▸':'▾';
 }
 
 function abrirModalReporteGuardia(){
@@ -12154,6 +12161,14 @@ async function initSistema(){
   showNotif('⏳ Cargando datos...','warn');
   try{ valLaborLoad(); }catch(e){}  // valorizaciones desde localStorage (también si la nube está offline)
   await cargarDesdeSB();
+  // Eliminar Frente 3 / frentes extra: solo se permiten Frente 1 (Brenda) y Frente 2 (Cortada).
+  // Se filtra en memoria en cada carga, así no reaparece aunque venga de la nube.
+  try{
+    state.perforacion=(state.perforacion||[]).filter(p=>p.frente===1||p.frente===2);
+    let cambioRep=false;
+    (state.reportesGuardia||[]).forEach(r=>{ if(r.frentesExtra&&r.frentesExtra.length){r.frentesExtra=[];cambioRep=true;} });
+    if(cambioRep){ try{reportesGuardiaSave();}catch(e){} }
+  }catch(e){}
   // Anclar el panel ejecutivo a la valorización más reciente guardada, para que
   // el ingreso no aparezca vacío al entrar (sin tener que ir a Guardar de nuevo).
   try{
