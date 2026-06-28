@@ -3515,7 +3515,7 @@ select option{background:var(--coal3);}
     <div class="form-grid">
       <div class="form-group"><label>Fecha</label><input type="date" id="sa-fecha"></div>
       <div class="form-group"><label>Solicitante</label><input type="text" id="sa-solicitante" placeholder="Ej: Juan Pérez"></div>
-      <div class="form-group"><label>Destino / Nivel</label><select id="sa-destino"><option value="2820">NV2820</option><option value="2830">NV2830</option></select></div>
+      <div class="form-group"><label>Destino / Nivel</label><select id="sa-destino"><option value="2820">NV2820</option></select></div>
       <div class="form-group"><label>Código de Máquina <span style="color:var(--text3);font-size:10px">(opcional)</span></label><input type="text" id="sa-maquina" placeholder="Ej: AN20B11197"></div>
     </div>
     <!-- Agregar ítem -->
@@ -10529,10 +10529,13 @@ function aprobarLogKitLog(id){
     showNotif('⛔ Requiere aprobación de Operaciones primero','error');return;
   }
   if(!m.aprobLog)m.aprobLog={ok:false,resp:'',fecha:''};
-  // Guarda de stock
+  // Guarda de stock: validar contra el stock real del almacén de Mantenimiento (calcStock por key)
+  const stkMant=(typeof calcStock==='function')?calcStock().filter(r=>r.almacen==='Mantenimiento'):[];
   for(const p of (m.repuestos||[])){
-    const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);
-    if(r&&p.cant>(r.stock||0)){showNotif(`⚠ Stock insuficiente de ${r.nombre} (disp. ${r.stock||0}) — no se puede aprobar el despacho`,'error');return;}
+    if(!p.key||!p.cant) continue;
+    const r=stkMant.find(x=>x.key===p.key);
+    const disp=r?(r.stock||0):0;
+    if(p.cant>disp){showNotif(`⚠ Stock insuficiente de ${p.nombre} en Almacén Mantenimiento (disp. ${disp}) — no se puede aprobar el despacho`,'error');return;}
   }
   const def=(typeof usuarioActivo!=='undefined'&&usuarioActivo&&usuarioActivo.nombre)?usuarioActivo.nombre:'';
   const resp=(prompt('Responsable que aprueba el despacho (Logística):',def)||'').trim();
@@ -10568,10 +10571,11 @@ function rechazarLogKitLog(id){
   const motivo=(prompt('Motivo del rechazo:')||'').trim();
   const resp=(prompt('Responsable (Logística):')||'').trim();
   if(!resp){showNotif('Cancelado — se requiere nombre','error');return;}
-  // Si ya estaba aprobado, reponer stock
+  // Si ya estaba aprobado, reponer stock: quitar las salidas de almacén generadas por este kit
   if(m.aprobLog&&m.aprobLog.ok){
-    (m.repuestos||[]).forEach(p=>{const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);if(r)r.stock=(r.stock||0)+p.cant;});
-    mantRepSave();
+    state.almacen=state.almacen||{};
+    state.almacen.salidas=(state.almacen.salidas||[]).filter(s=>s.grupo!=='KIT-'+id);
+    almacenSave();
   }
   m.aprobLog={ok:false,rechazado:true,resp,fecha:hoy(),motivo};
   mantKitSave();renderSolicitudMantLog();showNotif('Solicitud rechazada por Logística');
