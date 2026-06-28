@@ -5191,8 +5191,12 @@ function autoFillProductoIngreso(){
   const val=document.getElementById('in-producto').value.trim().toLowerCase();
   const p=(state.almacen.productos||[]).find(x=>x.codigo.toLowerCase()===val||x.nombre.toLowerCase()===val);
   if(p){
-    document.getElementById('in-descripcion').value=p.descripcion||'';
-    document.getElementById('in-unidad').value=p.unidad;
+    // Vincular con el maestro de productos: autocompletar descripción, unidad y precio
+    document.getElementById('in-descripcion').value=p.descripcion||p.nombre||'';
+    document.getElementById('in-unidad').value=p.unidad||'UND';
+    const pr=document.getElementById('in-precio');
+    if(pr && !pr.value && p.precio) pr.value=p.precio;
+    if(typeof calcTotalIngreso==='function') calcTotalIngreso();
   }
   // rebuild datalist
   const dl=document.getElementById('prod-datalist');
@@ -5910,6 +5914,160 @@ function almacenSeedProductos(){
     {id:'MP0278',codigo:"EPP-089",nombre:"TABLA ASERRADA 2\" X 8\" X 10'",unidad:"PZA",precio:0}
   ];
 }
+function renderStockVigente(){
+  const wrap=document.getElementById('stock-vigente-wrap');if(!wrap)return;
+  const q=(document.getElementById('stock-buscar')?.value||'').toLowerCase();
+  const almFil=document.getElementById('stock-alm-fil')?.value||'';
+  const soloCon=document.getElementById('stock-solo-con')?.checked||false;
+
+  let stock=calcStock();
+  if(almFil) stock=stock.filter(r=>r.almacen===almFil);
+  if(q) stock=stock.filter(r=>(r.producto||r.descripcion||'').toLowerCase().includes(q)||(r.descripcion||'').toLowerCase().includes(q));
+  if(soloCon) stock=stock.filter(r=>r.stock>0);
+  stock.sort((a,b)=>b.stock-a.stock);
+
+  if(!stock.length){wrap.innerHTML='<div style="text-align:center;color:var(--text3);padding:24px">Sin productos con movimientos aún.</div>';return;}
+
+  const maxStock=Math.max(...stock.map(r=>Math.abs(r.stock)),1);
+
+  // KPI resumen rápido
+  const conStock=stock.filter(r=>r.stock>0);
+  const sinStock=stock.filter(r=>r.stock<=0);
+  const valorTotal=conStock.reduce((a,r)=>a+r.stock*r.precio,0);
+
+  const kpiHtml=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px">
+    <div class="kpi-card" style="padding:12px 14px">
+      <div class="kpi-label" style="font-size:10px">Productos con stock</div>
+      <div class="kpi-value" style="font-size:22px;color:#22c55e">${conStock.length}</div>
+    </div>
+    <div class="kpi-card" style="padding:12px 14px">
+      <div class="kpi-label" style="font-size:10px">Productos agotados / sin mov.</div>
+      <div class="kpi-value" style="font-size:22px;color:#f87171">${sinStock.length}</div>
+    </div>
+    <div class="kpi-card" style="padding:12px 14px">
+      <div class="kpi-label" style="font-size:10px">Valor total en stock</div>
+      <div class="kpi-value" style="font-size:18px;color:var(--gold-light)">${fmtS2(valorTotal)}</div>
+    </div>
+    <div class="kpi-card" style="padding:12px 14px">
+      <div class="kpi-label" style="font-size:10px">Total ítems en stock</div>
+      <div class="kpi-value" style="font-size:22px;color:#60a5fa">${conStock.reduce((a,r)=>a+r.stock,0).toLocaleString('es-PE',{maximumFractionDigits:1})}</div>
+    </div>
+  </div>`;
+
+  // Gráfica de barras horizontales
+  const bars=stock.slice(0,40).map(r=>{
+    const pct=Math.max(0,(r.stock/maxStock)*100);
+    const color=r.stock>10?'#22c55e':r.stock>0?'#f59e0b':'#ef4444';
+    const almBadge=r.almacen==='Mantenimiento'?'<span style="font-size:9px;background:rgba(201,168,76,0.2);color:#d4b75e;border-radius:4px;padding:1px 5px;margin-left:4px">MANT</span>':'<span style="font-size:9px;background:rgba(96,165,250,0.2);color:#60a5fa;border-radius:4px;padding:1px 5px;margin-left:4px">GEN</span>';
+    return `<div style="margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px">
+        <div style="font-size:12px;font-weight:600;color:var(--text1)">${r.producto||r.descripcion.slice(0,35)}${almBadge}</div>
+        <div style="font-size:12px;font-family:'DM Mono',monospace;color:${color};font-weight:700;white-space:nowrap;margin-left:8px">${fmt3(r.stock)} ${r.unidad}</div>
+      </div>
+      <div style="background:var(--coal4);border-radius:4px;height:8px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${color};border-radius:4px;transition:width .3s"></div>
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-top:2px">${r.descripcion.slice(0,60)}${r.descripcion.length>60?'…':''} · Valor: ${fmtS2(r.stock*r.precio)}</div>
+    </div>`;
+  }).join('');
+
+  wrap.innerHTML=kpiHtml+`<div class="card" style="padding:16px 18px">${bars}</div>`;
+}
+
+// ── TAB 1: ALMACÉN (solo dispara stock) ──
+function renderAlmacen(){renderStockVigente();}
+
+// ── Modal Ingreso (hoja de registro multi-ítem) ──
+let ingresoCart=[];
+function abrirIngresoModal(){
+  const g=id=>document.getElementById(id);
+  g('in-fecha').value=hoy();g('in-vale').value='';g('in-detalle').value='Almacen Poderosa';
+  g('in-almacen').value='General';g('in-producto').value='';
+  g('in-descripcion').value='';g('in-unidad').value='UND';g('in-cantidad').value='';g('in-precio').value='';
+  g('in-total').textContent='S/ 0.00';
+  ingresoCart=[];renderIngresoCart();
+  poblarDatalistProductos();
+  abrirModal('modal-ingreso');
+}
+function calcTotalIngreso(){
+  const c=parseFloat(document.getElementById('in-cantidad').value)||0;
+  const p=parseFloat(document.getElementById('in-precio').value)||0;
+  document.getElementById('in-total').textContent=fmtS2(c*p);
+}
+function agregarItemIngreso(){
+  const g=id=>document.getElementById(id);
+  const desc=g('in-descripcion').value.trim();
+  const cant=parseFloat(g('in-cantidad').value)||0;
+  if(!desc){showNotif('⚠ Ingresa la descripción del producto','error');return;}
+  if(cant<=0){showNotif('⚠ Ingresa una cantidad válida','error');return;}
+  const precio=parseFloat(g('in-precio').value)||0;
+  ingresoCart.push({vale:g('in-vale').value.trim(),producto:g('in-producto').value.trim(),descripcion:desc,unidad:g('in-unidad').value,cantidad:cant,precio:precio,total:cant*precio});
+  renderIngresoCart();
+  // Limpiar campos de ítem para el siguiente (mantiene vale por si es el mismo)
+  g('in-producto').value='';g('in-descripcion').value='';g('in-cantidad').value='';g('in-precio').value='';
+  g('in-total').textContent='S/ 0.00';g('in-producto').focus();
+}
+function quitarItemIngreso(idx){ingresoCart.splice(idx,1);renderIngresoCart();}
+function renderIngresoCart(){
+  const tb=document.getElementById('in-cart-tbody');
+  if(tb) tb.innerHTML=ingresoCart.length?ingresoCart.map((i,idx)=>`<tr>
+    <td style="font-size:12px">${i.vale||'—'}</td>
+    <td style="font-size:12px;font-weight:600">${i.producto||''}</td>
+    <td style="font-size:11px;color:var(--text3);max-width:200px;white-space:normal">${i.descripcion||''}</td>
+    <td style="font-size:12px">${i.unidad}</td><td style="font-size:12px">${fmt3(i.cantidad)}</td><td style="font-size:12px">${fmtS2(i.precio)}</td>
+    <td style="color:var(--gold-light);font-weight:700;font-size:12px">${fmtS2(i.total)}</td>
+    <td><button onclick="quitarItemIngreso(${idx})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px">🗑</button></td></tr>`).join('')
+    :`<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:20px;font-size:13px">Agrega productos arriba para armar la hoja de ingreso</td></tr>`;
+  const tot=ingresoCart.reduce((a,i)=>a+i.total,0);
+  const t=document.getElementById('in-cart-total');if(t)t.textContent=fmtS2(tot);
+}
+function guardarIngreso(){
+  const g=id=>document.getElementById(id);
+  if(!ingresoCart.length){showNotif('⚠ Agrega al menos un ítem a la hoja','error');return;}
+  const fecha=g('in-fecha').value||hoy();
+  const detalle=g('in-detalle').value||'Almacen Poderosa';
+  const almacen=g('in-almacen').value;
+  const base=Date.now();const grupo='GI'+base;
+  ingresoCart.forEach((i,idx)=>{
+    state.almacen.ingresos.push({id:'I'+(base+idx),grupo,fecha,vale:i.vale,detalle,almacen,codigo:'',
+      producto:i.producto,descripcion:i.descripcion,unidad:i.unidad,cantidad:i.cantidad,precio:i.precio,total:i.total});
+  });
+  almacenSave();
+  const n=ingresoCart.length;ingresoCart=[];
+  cerrarModal('modal-ingreso');renderAlmacen();renderHistorialAlmacen();renderStockVigente();
+  showNotif(`✓ Ingreso registrado: ${n} ítem${n>1?'s':''}`);
+}
+
+// ── Modal Salida (multi-ítem) ──
+let salidaCart=[];
+function abrirSalidaModal(){
+  const g=id=>document.getElementById(id);
+  g('sa-fecha').value=hoy();g('sa-almacen').value='General';
+  g('sa-solicitante').value='';
+  g('sa-unidad').value='';g('sa-precio').value='';
+  g('sa-maquina').value='';g('sa-cantidad').value='';g('sa-destino').value='2820';
+  g('sa-stock-disp').textContent='—';g('sa-importe').textContent='S/ 0.00';
+  salidaCart=[];renderSalidaCart();
+  poblarProductosSalida();
+  abrirModal('modal-salida');
+}
+function poblarProductosSalida(){
+  const alm=document.getElementById('sa-almacen').value;
+  const stock=calcStock().filter(r=>r.almacen===alm&&r.stock>0).sort((a,b)=>(a.producto||a.descripcion).localeCompare(b.producto||b.descripcion));
+  const sel=document.getElementById('sa-producto');
+  sel.innerHTML='<option value="">— Seleccionar —</option>'+stock.map(r=>`<option value="${r.key}">${r.producto?r.producto+' — ':''}${r.descripcion} (stock: ${fmt3(r.stock)} ${r.unidad})</option>`).join('');
+  document.getElementById('sa-unidad').value='';
+  document.getElementById('sa-precio').value='';document.getElementById('sa-stock-disp').textContent='—';
+  if(!stock.length) sel.innerHTML='<option value="">Sin productos con stock en este almacén</option>';
+}
+// Stock disponible considerando lo que ya está en el carrito
+function stockDisponibleSalida(key){
+  const r=calcStock().find(x=>x.key===key);
+  if(!r)return null;
+  const enCarrito=salidaCart.filter(i=>i.key===key).reduce((a,i)=>a+i.cantidad,0);
+  return {...r,disp:r.stock-enCarrito};
+}
+
 function autollenarSalida(){
   const key=document.getElementById('sa-producto').value;
   const r=stockDisponibleSalida(key);
@@ -11912,6 +12070,15 @@ async function initSistema(){
   showNotif('⏳ Cargando datos...','warn');
   try{ valLaborLoad(); }catch(e){}  // valorizaciones desde localStorage (también si la nube está offline)
   await cargarDesdeSB();
+  // Anclar el panel ejecutivo a la valorización más reciente guardada, para que
+  // el ingreso no aparezca vacío al entrar (sin tener que ir a Guardar de nuevo).
+  try{
+    const vals=(state.valorizacionesLabor||[]).filter(v=>v.mesNum&&v.anio);
+    if(vals.length){
+      vals.sort((a,b)=>(b.anio*100+b.mesNum)-(a.anio*100+a.mesNum));
+      _ejecMes=vals[0].anio+'-'+String(vals[0].mesNum).padStart(2,'0');
+    }
+  }catch(e){}
   poblarSelects();
   if(state.maquinas) poblarSelectMaquinas();
   actualizarBadgeMes();
