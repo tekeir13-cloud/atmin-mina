@@ -5914,6 +5914,35 @@ function almacenSeedProductos(){
     {id:'MP0278',codigo:"EPP-089",nombre:"TABLA ASERRADA 2\" X 8\" X 10'",unidad:"PZA",precio:0}
   ];
 }
+function almMesActual(){return hoy().slice(0,7);}
+// Mes con datos más reciente (para que el selector no quede vacío al abrir)
+function almMesConDatos(){
+  const meses=[];
+  (state.almacen.ingresos||[]).forEach(i=>{if(i.fecha)meses.push(i.fecha.slice(0,7));});
+  (state.almacen.salidas||[]).forEach(s=>{if(s.fecha)meses.push(s.fecha.slice(0,7));});
+  if(!meses.length)return almMesActual();
+  return meses.sort().reverse()[0];
+}
+function prodKey(almacen,codigo,desc){return (almacen||'')+'|'+String(desc||'').trim().toUpperCase();}
+function nivelLabel(d){return d?('NV'+d):'—';}
+
+// Stock = inventario inicial + ingresos - salidas (acumulado histórico, no por mes)
+function calcStock(){
+  const map={};
+  function ensure(almacen,codigo,producto,desc,unidad,precio){
+    const k=prodKey(almacen,codigo,desc);
+    if(!map[k]) map[k]={key:k,almacen:almacen||'General',codigo:String(codigo||''),producto:producto||'',descripcion:desc||'',unidad:unidad||'UND',precio:Number(precio)||0,ingreso:0,salida:0,stock:0};
+    return map[k];
+  }
+  (state.almacen.inventarioInicial||[]).forEach(it=>{const r=ensure(it.almacen,it.codigo,it.producto,it.descripcion,it.unidad,it.precio);r.ingreso+=Number(it.cantidad)||0;if(it.precio)r.precio=Number(it.precio);});
+  (state.almacen.ingresos||[]).forEach(it=>{const r=ensure(it.almacen,it.codigo,it.producto,it.descripcion,it.unidad,it.precio);r.ingreso+=Number(it.cantidad)||0;if(it.precio)r.precio=Number(it.precio);if(it.producto&&!r.producto)r.producto=it.producto;});
+  (state.almacen.salidas||[]).forEach(it=>{const r=ensure(it.almacen,it.codigo,it.producto,it.descripcion,it.unidad,it.precio);r.salida+=Number(it.cantidad)||0;});
+  Object.values(map).forEach(r=>r.stock=r.ingreso-r.salida);
+  return Object.values(map);
+}
+function fmt3(n){return (Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:0,maximumFractionDigits:3});}
+function fmtS2(n){return 'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
 function renderStockVigente(){
   const wrap=document.getElementById('stock-vigente-wrap');if(!wrap)return;
   const q=(document.getElementById('stock-buscar')?.value||'').toLowerCase();
