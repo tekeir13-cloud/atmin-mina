@@ -4863,18 +4863,31 @@ function renderDashboard(){
   renderDashAlertas();
 }
 
-// Resumen del día — tarjetas grandes y claras (no la grilla apretada)
+// Resumen del día + acumulado del mes — tarjetas grandes y claras
 function renderDashResumenHoy(){
   const cont=document.getElementById('d-resumen-hoy'); if(!cont)return;
   const S=n=>'S/ '+Math.round(n||0).toLocaleString('es-PE');
   const ts=hoy();
+  const mesYM=(typeof finMesActual==='function')?finMesActual():ts.slice(0,7);
+  const nombreMes=(typeof finNombreMes==='function')?finNombreMes(mesYM):mesYM;
   const activos=state.personal.filter(p=>p.estado==='activo').length;
   const totReg=state.personal.length;
-  const mH=state.perforacion.filter(p=>p.fecha===ts).reduce((s,p)=>s+p.metros,0);
-  const pH=(state.compresorista||[]).filter(c=>c.fecha===ts).reduce((s,c)=>s+(c.petroleo||[]).reduce((ss,p)=>ss+(p.gln||0),0),0);
-  const cH=state.tareas.filter(t=>t.fecha===ts).reduce((s,t)=>{const p=state.personal.find(x=>x.id===t.trabajadorId);return s+((t.jornal??p?.jornal??0)*(t.mult||1));},0)||state.personal.filter(p=>p.estado==='activo').reduce((s,p)=>s+p.jornal,0);
-  const expH=(()=>{try{const pr=(typeof paramsGetExp==='function'&&paramsGetExp())||COMP_PRECIOS_EXP_DEFAULT||{};return ((state.almacen&&state.almacen.explosivos&&state.almacen.explosivos.salidas)||[]).filter(s=>s.fecha===ts).reduce((s,r)=>s+(Number(r.totalUnidades||r.unidades||0))*(Number(pr[r.producto]||0)),0);}catch(e){return 0;}})();
   const ocP=state.ordenes.filter(o=>o.estado==='pendiente').length;
+
+  // ── Fuentes vinculadas (pre = prefijo de fecha: día YYYY-MM-DD o mes YYYY-MM) ──
+  // Metros → perforación (reporte de jefe de guardia + tablero de operaciones)
+  const fMetros = pre => (typeof finAvanceMes==='function') ? finAvanceMes(pre) : 0;
+  // Costo operativo → planilla (tareo)
+  const fPlanilla = pre => (typeof finCostoPlanilla==='function') ? finCostoPlanilla(pre)
+      : state.tareas.filter(t=>(t.fecha||'').startsWith(pre)).reduce((s,t)=>{const p=state.personal.find(x=>x.id===t.trabajadorId);return s+((t.jornal??p?.jornal??0)*(t.mult||1));},0);
+  // Logística → salidas de almacén general
+  const fLogistica = pre => (typeof finCostoLogistica==='function') ? finCostoLogistica(pre) : 0;
+  // Petróleo → salidas de combustible (pestaña Combustible)
+  const fPetroleo = pre => { try{ return (combCargar('pet')||[]).filter(r=>(r.fecha||'').startsWith(pre)).reduce((s,r)=>s+(Number(r.cantidad)||0),0); }catch(e){ return 0; } };
+  // Explosivos → salidas de explosivos NV3190
+  const fExplos = pre => (typeof finCostoExplosivos==='function') ? finCostoExplosivos(pre) : 0;
+  // Mantenimiento → kits de mantenimiento aprobados por logística
+  const fMant = pre => (typeof finCostoMantenimiento==='function') ? finCostoMantenimiento(pre) : 0;
 
   const card=(icon,label,valor,sub,col)=>`
     <div style="flex:1;min-width:150px;background:var(--coal4);border:1px solid var(--border);border-radius:16px;padding:16px 18px;display:flex;align-items:center;gap:14px">
@@ -4887,15 +4900,28 @@ function renderDashResumenHoy(){
     </div>`;
 
   cont.innerHTML=`
-  <div style="margin:4px 0 18px">
+  <div style="margin:4px 0 16px">
     <div style="font-size:13px;font-weight:800;color:var(--text);margin:0 2px 11px">📅 Actividad de Hoy</div>
     <div style="display:flex;flex-wrap:wrap;gap:12px">
       ${card('👷','Personal en mina',activos,`de ${totReg} registrados`,'#fbbf24')}
-      ${card('⛏','Metros hoy',mH+' m',mH>0?'ambos frentes':'sin avance aún','#5b6ef5')}
-      ${card('💵','Costo operativo hoy',S(cH),'planilla activa',mH>0?'#ef4444':'#94a3b8')}
-      ${card('🛢️','Petróleo hoy',pH+' gl','consumo del día','#f59e0b')}
-      ${card('💥','Explosivos hoy',S(expH),'valor consumido','#a855f7')}
+      ${card('⛏','Metros hoy',fMetros(ts)+' m',fMetros(ts)>0?'avance del día':'sin avance aún','#5b6ef5')}
+      ${card('💵','Costo operativo hoy',S(fPlanilla(ts)),'planilla del día','#ef4444')}
+      ${card('📦','Logística hoy',S(fLogistica(ts)),'salidas de almacén','#22c55e')}
+      ${card('🛢️','Petróleo hoy',fPetroleo(ts)+' gl','consumo del día','#f59e0b')}
+      ${card('💥','Explosivos hoy',S(fExplos(ts)),'valor consumido','#a855f7')}
+      ${card('🔧','Mantenimiento hoy',S(fMant(ts)),'kits despachados','#e67e22')}
       ${card('📄','OC pendientes',ocP,ocP>0?'por aprobar':'todo al día',ocP>0?'#ef4444':'#10b981')}
+    </div>
+  </div>
+  <div style="margin:4px 0 18px">
+    <div style="font-size:13px;font-weight:800;color:var(--text);margin:0 2px 11px">📆 Acumulado del Mes · ${nombreMes}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px">
+      ${card('⛏','Metros del mes',fMetros(mesYM)+' m','avance acumulado','#5b6ef5')}
+      ${card('💵','Costo operativo del mes',S(fPlanilla(mesYM)),'planilla acumulada','#ef4444')}
+      ${card('📦','Logística del mes',S(fLogistica(mesYM)),'salidas de almacén','#22c55e')}
+      ${card('🛢️','Petróleo del mes',fPetroleo(mesYM)+' gl','consumo acumulado','#f59e0b')}
+      ${card('💥','Explosivos del mes',S(fExplos(mesYM)),'valor consumido','#a855f7')}
+      ${card('🔧','Mantenimiento del mes',S(fMant(mesYM)),'costo acumulado','#e67e22')}
     </div>
   </div>`;
 }
