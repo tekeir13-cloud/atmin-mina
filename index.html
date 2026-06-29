@@ -4032,6 +4032,12 @@ function fmtF(d){if(!d)return'—';const[y,m,dia]=d.split('-');return`${dia}/${m
 function sortRegistros(arr){return[...(arr||[])].sort((a,b)=>{const fa=(a&&a.fecha)||'',fb=(b&&b.fecha)||'';if(fa!==fb)return fb.localeCompare(fa);return String((b&&b.id)||'').localeCompare(String((a&&a.id)||''));});}
 function fmt(n){return(Math.round(n||0)).toLocaleString('es-PE');}
 function fmtS(n){return'S/ '+fmt(n);}
+// Galones de combustible: redondea a 1 decimal y quita el .0 (evita 83.333333)
+function fmtGl(n){return (Math.round((Number(n)||0)*10)/10).toString();}
+// Sueldos reservados: cargos cuyo monto NO se muestra (los agrega Finanzas manualmente en el Excel)
+function _normCargo(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();}
+const SUELDOS_RESERVADOS=['jefe de operaciones','ingeniero residente','asistente de residente','jefe de guardia','capataz','administrador','logistico','supervisor de materiales'];
+function esSueldoReservado(rol){const r=_normCargo(rol);return SUELDOS_RESERVADOS.some(c=>r===c||r.includes(c));}
 function showNotif(msg,type){
   const n=document.getElementById('notif');n.textContent=msg;
   n.style.borderColor=type==='error'?'var(--text3)':'var(--accent)';
@@ -4956,7 +4962,7 @@ function renderDashResumenHoy(){
       ${card('⛏','Metros hoy',fMetros(ts)+' m',fMetros(ts)>0?'avance del día':'sin avance aún','#5b6ef5')}
       ${card('💵','Costo operativo hoy',S(fOperativo(ts)),'almacén+planilla+petróleo+expl.','#ef4444')}
       ${card('📦','Logística hoy',S(fLogistica(ts)),'salidas de almacén','#22c55e')}
-      ${card('🛢️','Petróleo hoy',fPetroleo(ts)+' gl','consumo del día','#f59e0b')}
+      ${card('🛢️','Petróleo hoy',fmtGl(fPetroleo(ts))+' gl','consumo del día','#f59e0b')}
       ${card('💥','Explosivos hoy',S(fExplos(ts)),'valor consumido','#a855f7')}
       ${card('🔧','Mantenimiento hoy',S(fMant(ts)),'kits despachados','#e67e22')}
       ${card('📄','OC pendientes',ocP,ocP>0?'por aprobar':'todo al día',ocP>0?'#ef4444':'#10b981')}
@@ -4968,7 +4974,7 @@ function renderDashResumenHoy(){
       ${card('⛏','Metros del mes',fMetros(mesYM)+' m','avance acumulado','#5b6ef5')}
       ${card('💵','Costo operativo del mes',S(fOperativo(mesYM)),'almacén+planilla+petróleo+expl.','#ef4444')}
       ${card('📦','Logística del mes',S(fLogistica(mesYM)),'salidas de almacén','#22c55e')}
-      ${card('🛢️','Petróleo del mes',fPetroleo(mesYM)+' gl','consumo acumulado','#f59e0b')}
+      ${card('🛢️','Petróleo del mes',fmtGl(fPetroleo(mesYM))+' gl','consumo acumulado','#f59e0b')}
       ${card('💥','Explosivos del mes',S(fExplos(mesYM)),'valor consumido','#a855f7')}
       ${card('🔧','Mantenimiento del mes',S(fMant(mesYM)),'costo acumulado','#e67e22')}
     </div>
@@ -5518,7 +5524,7 @@ function importarMaestroExcel(input){
         }
         if(!nombre)continue;
 
-        const nom_low=nombre.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+        const nom_low=nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 
         // combustibles — van a params, no al catálogo general
         if(nom_low.includes('petroleo')||nom_low.includes('diesel')||nom_low.includes('gasoil')){
@@ -8393,24 +8399,27 @@ function renderCostoRRHH(){
     const n15=pts.filter(t=>Number(t.mult||1)===1.5).length;
     const n2=pts.filter(t=>Number(t.mult||1)===2).length;
     const total=pts.reduce((s,t)=>{const j=t.jornal??p.jornal;return s+j*(t.mult||1);},0);
-    totTotal+=total;totTareas+=pts.length;totDias+=dias;
-    return{p,pts:pts.length,dias,n1,n15,n2,total,idx:i+1};
+    const reservado=esSueldoReservado(p.rol);
+    if(!reservado) totTotal+=total;  // el total visible excluye sueldos reservados
+    totTareas+=pts.length;totDias+=dias;
+    return{p,pts:pts.length,dias,n1,n15,n2,total,reservado,idx:i+1};
   }).sort((a,b)=>b.total-a.total||a.p.nombre.localeCompare(b.p.nombre));
-  tbody.innerHTML=filas.map(({p,pts,dias,n1,n15,n2,total},i)=>{
+  tbody.innerHTML=filas.map(({p,pts,dias,n1,n15,n2,total,reservado},i)=>{
     const baja=p.estado==='baja';
     const rowStyle=baja?'opacity:0.5':'';
     const totalColor=total>0?'color:var(--gold-light);font-weight:800':'color:var(--text3)';
+    const lock='<span title="Sueldo reservado — lo gestiona Finanzas" style="color:var(--text3)">🔒</span>';
     return`<tr style="${rowStyle}${i%2===1?';background:rgba(255,255,255,0.02)':''}">
       <td style="text-align:center;color:var(--text3);font-size:11px">${i+1}</td>
       <td><strong style="font-size:13px">${p.nombre}</strong>${baja?'<span style="font-size:9px;color:#f87171;margin-left:6px">BAJA</span>':''}</td>
       <td style="font-size:11px;color:var(--text3)">${p.rol}</td>
-      <td style="text-align:center;font-family:'DM Mono',monospace;font-size:12px">${fmtS(p.jornal)}</td>
+      <td style="text-align:center;font-family:'DM Mono',monospace;font-size:12px">${reservado?lock:fmtS(p.jornal)}</td>
       <td style="text-align:center;font-weight:700;color:${pts>0?'#a78bfa':'var(--text3)'}">${pts||'—'}</td>
       <td style="text-align:center;font-weight:700;color:${dias>0?'var(--positive)':'var(--text3)'}">${dias||'—'}</td>
       <td style="text-align:center;color:#60a5fa">${n1||'—'}</td>
       <td style="text-align:center;color:#f59e0b">${n15||'—'}</td>
       <td style="text-align:center;color:#f87171">${n2||'—'}</td>
-      <td style="text-align:right;font-family:'DM Mono',monospace;font-size:13px;${totalColor}">${total>0?fmtS(total):'—'}</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;font-size:13px;${totalColor}">${reservado?lock:(total>0?fmtS(total):'—')}</td>
     </tr>`;
   }).join('')+`<tr style="background:rgba(201,168,76,0.1);border-top:2px solid rgba(201,168,76,0.4)">
     <td colspan="4" style="font-weight:800;color:var(--gold);padding:10px 12px">TOTAL MES ${mes}</td>
@@ -8983,9 +8992,11 @@ async function servReporteMensual(){
     const p=(state.personal||[]).find(x=>String(x.id)===String(t.trabajadorId))||{};
     const jornal=(t.jornal!=null?t.jornal:(p.jornal||0))||0;
     const mult=t.mult||1;
-    const monto=jornal*mult; totalPlanilla+=monto;
+    const reservado=esSueldoReservado(p.rol);
+    const monto=jornal*mult; if(!reservado) totalPlanilla+=monto;
     const isAlt=i%2===0; const rowFill=fill(isAlt?fondoClaro:'FFFFFF');
-    const vals=[i+1,t.fecha||'',(t.turno||'—'),p.nombre||t.trabajadorId||'—',p.rol||'—',jornal,mult,monto];
+    // Sueldos reservados: se deja el Jornal y Monto EN BLANCO para que Finanzas los complete manualmente
+    const vals=[i+1,t.fecha||'',(t.turno||'—'),p.nombre||t.trabajadorId||'—',p.rol||'—',reservado?'':jornal,mult,reservado?'':monto];
     vals.forEach((v,ci)=>{ const c=wp.getCell(rp,ci+1); c.value=v;
       c.style={font:f({size:10}),fill:rowFill,border:bordeAll,
         alignment:{horizontal:(ci===5||ci===6||ci===7)?'right':ci===0?'center':'left'},
@@ -10702,7 +10713,7 @@ function combHistorialHtml(tipo){
       <td style="padding:7px 10px;color:var(--text2)">${r.hora||'—'}</td>
       <td style="padding:7px 10px;color:#fbbf24;font-weight:700">${r.placa||'—'}</td>
       <td style="padding:7px 10px;color:var(--text)">${r.chofer||'—'}</td>
-      <td style="padding:7px 10px;text-align:right;font-weight:700;color:${color}">+${r.cantidad} gln</td>
+      <td style="padding:7px 10px;text-align:right;font-weight:700;color:${color}">+${fmtGl(r.cantidad)} gln</td>
       <td style="padding:7px 10px;color:var(--text3);font-size:11px">${r.obs||'—'}</td>
       <td style="padding:7px 10px"><button onclick="combEliminar('${tipo}',${arr.length-1-i})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:12px;padding:2px 6px">✕</button></td>
     </tr>`).join('')}</tbody>
