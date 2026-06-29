@@ -9986,9 +9986,30 @@ function rgAddDisparo(pfx,d){
       +'<div style="font-size:11px;font-weight:700;color:#f87171;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">💣 Masas / Explosivos</div>'
       +'<div class="rgd-masas"></div>'
       +'<button class="btn btn-outline" style="font-size:11px;padding:5px 12px;margin-top:6px" onclick="rgDispAddMasa(this)">+ Agregar explosivo</button>'
+    +'</div>'
+    // ── DESQUICHE ADICIONAL (opcional, sin sostenimiento ni metros) ──
+    +'<div style="margin-top:8px">'
+      +'<button type="button" class="rgd-dq-btn btn btn-outline" style="font-size:11px;padding:6px 12px;width:100%;border-style:dashed;color:#fb923c;border-color:#fb923c" onclick="rgDispToggleDesquiche(this)">⛏ Agregar desquiche adicional</button>'
+      +'<div class="rgd-desquiche" style="display:none;margin-top:8px;background:var(--coal4);border:1px dashed #fb923c;border-radius:8px;padding:10px">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="font-size:11px;font-weight:700;color:#fb923c;text-transform:uppercase;letter-spacing:.5px">⛏ Desquiche adicional (sin sostenimiento)</div><button type="button" onclick="rgDispRemoveDesquiche(this)" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:12px;font-weight:600">✕ Quitar</button></div>'
+        +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">'
+          +'<div class="form-group" style="margin:0"><label>Taladros perforados</label><input type="number" class="rgd-dq-tperf" min="0" step="1" value="'+((d.desquiche&&d.desquiche.tperf)||'')+'" placeholder="0" oninput="rgCalcTotales(\''+pfx+'\')"></div>'
+          +'<div class="form-group" style="margin:0"><label>Taladros cargados</label><input type="number" class="rgd-dq-tcarg" min="0" step="1" value="'+((d.desquiche&&d.desquiche.tcarg)||'')+'" placeholder="0" oninput="rgCalcTotales(\''+pfx+'\')"></div>'
+        +'</div>'
+        +'<div style="background:var(--coal3);border-radius:8px;padding:10px">'
+          +'<div style="font-size:11px;font-weight:700;color:#f87171;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">💣 Explosivos del desquiche</div>'
+          +'<div class="rgd-dq-masas"></div>'
+          +'<button type="button" class="btn btn-outline" style="font-size:11px;padding:5px 12px;margin-top:6px" onclick="rgDispAddDqMasa(this)">+ Agregar explosivo</button>'
+        +'</div>'
+      +'</div>'
     +'</div>';
   wrap.appendChild(div);
   (d.masas||[]).forEach(m=>rgDispAddMasaTo(div.querySelector('.rgd-masas'),m.id,m.cant,pfx));
+  if(d.desquiche){
+    const dq=div.querySelector('.rgd-desquiche');if(dq)dq.style.display='block';
+    const btn=div.querySelector('.rgd-dq-btn');if(btn)btn.style.display='none';
+    (d.desquiche.masas||[]).forEach(m=>rgDispAddMasaTo(div.querySelector('.rgd-dq-masas'),m.id,m.cant,pfx));
+  }
   rgRenumberDisparos(pfx);
   rgCalcTotales(pfx);
 }
@@ -10005,6 +10026,23 @@ function rgDispAddMasa(btn){
   const disp=btn.closest('.rg-disparo');if(!disp)return;
   const pfx=disp.dataset.pfx;
   rgDispAddMasaTo(disp.querySelector('.rgd-masas'),'',0,pfx);
+}
+function rgDispAddDqMasa(btn){
+  const disp=btn.closest('.rg-disparo');if(!disp)return;
+  const pfx=disp.dataset.pfx;
+  rgDispAddMasaTo(disp.querySelector('.rgd-dq-masas'),'',0,pfx);
+}
+function rgDispToggleDesquiche(btn){
+  const disp=btn.closest('.rg-disparo');if(!disp)return;
+  const dq=disp.querySelector('.rgd-desquiche');if(dq)dq.style.display='block';
+  btn.style.display='none';
+}
+function rgDispRemoveDesquiche(btn){
+  const disp=btn.closest('.rg-disparo');if(!disp)return;
+  const dq=disp.querySelector('.rgd-desquiche');
+  if(dq){ dq.style.display='none'; const m=dq.querySelector('.rgd-dq-masas'); if(m)m.innerHTML=''; dq.querySelectorAll('.rgd-dq-tperf,.rgd-dq-tcarg').forEach(i=>i.value=''); }
+  const b=disp.querySelector('.rgd-dq-btn');if(b)b.style.display='';
+  rgCalcTotales(disp.dataset.pfx);
 }
 function rgDisparoToggleSost(sel){
   const disp=sel.closest('.rg-disparo');if(!disp)return;
@@ -10025,9 +10063,15 @@ function rgGetDisparos(pfx){
   document.querySelectorAll('#rg-'+pfx+'-disparos .rg-disparo').forEach(disp=>{
     const q=c=>disp.querySelector(c);
     const num=c=>parseFloat(q(c)?.value)||0;
-    const masas=[];
-    disp.querySelectorAll('.rgd-masa-id').forEach(sel=>{const cant=parseFloat(sel.parentElement.querySelector('.rgd-masa-cant')?.value)||0;if(sel.value&&cant>0)masas.push({id:sel.value,cant});});
-    arr.push({metros:num('.rgd-metros'),sost:q('.rgd-sost')?.value||'',cimbra:num('.rgd-ncimbra'),perno:num('.rgd-nperno'),malla:num('.rgd-nmalla'),tperf:num('.rgd-tperf'),tcarg:num('.rgd-tcarg'),masas});
+    const readMasas=cont=>{const out=[];if(!cont)return out;cont.querySelectorAll('.rgd-masa-id').forEach(sel=>{const cant=parseFloat(sel.parentElement.querySelector('.rgd-masa-cant')?.value)||0;if(sel.value&&cant>0)out.push({id:sel.value,cant});});return out;};
+    const masas=readMasas(disp.querySelector('.rgd-masas'));
+    const item={metros:num('.rgd-metros'),sost:q('.rgd-sost')?.value||'',cimbra:num('.rgd-ncimbra'),perno:num('.rgd-nperno'),malla:num('.rgd-nmalla'),tperf:num('.rgd-tperf'),tcarg:num('.rgd-tcarg'),masas,desquiche:null};
+    // Desquiche solo si el bloque está visible
+    const dq=disp.querySelector('.rgd-desquiche');
+    if(dq && dq.style.display!=='none'){
+      item.desquiche={tperf:parseFloat(dq.querySelector('.rgd-dq-tperf')?.value)||0,tcarg:parseFloat(dq.querySelector('.rgd-dq-tcarg')?.value)||0,masas:readMasas(disp.querySelector('.rgd-dq-masas'))};
+    }
+    arr.push(item);
   });
   return arr;
 }
@@ -10039,6 +10083,11 @@ function rgComputeFrenteTotals(disparos){
     t.cimbra+=d.cimbra||0;t.perno+=d.perno||0;t.malla+=d.malla||0;
     if(d.sost&&!t.sost)t.sost=d.sost;
     (d.masas||[]).forEach(m=>{masaMap[m.id]=(masaMap[m.id]||0)+(m.cant||0);});
+    // Desquiche adicional: suma taladros y explosivo (no aporta metros ni sostenimiento)
+    if(d.desquiche){
+      t.tperf+=d.desquiche.tperf||0;t.tcarg+=d.desquiche.tcarg||0;
+      (d.desquiche.masas||[]).forEach(m=>{masaMap[m.id]=(masaMap[m.id]||0)+(m.cant||0);});
+    }
   });
   t.metros=Math.round(t.metros*100)/100;
   t.masas=Object.entries(masaMap).map(([id,cant])=>({id,cant}));
@@ -10048,7 +10097,7 @@ function rgComputeFrenteTotals(disparos){
 // Convierte un frente antiguo (sin disparos) a un disparo único, para editar reportes viejos
 function rgLegacyDisparo(f){
   f=f||{};
-  return {metros:f.metros||0,sost:f.sost||'',cimbra:f.cimbra||0,perno:f.perno||0,malla:f.malla||0,tperf:f.tperf||0,tcarg:f.tcarg||0,masas:f.masas||[]};
+  return {metros:f.metros||0,sost:f.sost||'',cimbra:f.cimbra||0,perno:f.perno||0,malla:f.malla||0,tperf:f.tperf||0,tcarg:f.tcarg||0,masas:f.masas||[],desquiche:null};
 }
 function rgCalcTotales(pfx){
   const disparos=rgGetDisparos(pfx);
@@ -10068,14 +10117,27 @@ function rgFrenteDetalleHTML(f,color,nombre){
   f=f||{};
   const disp=(f.disparos&&f.disparos.length)?f.disparos:[rgLegacyDisparo(f)];
   const sostTxt=d=>d.sost==='cimbra'?('Cimbra '+(d.cimbra||0)):d.sost==='malla_perno'?('Malla '+(d.malla||0)+'/Perno '+(d.perno||0)):'—';
-  const expTxt=d=>{const ms=(d.masas||[]).filter(m=>m.cant>0);return ms.length?ms.map(m=>exploNombre(m.id)+' ×'+rgFmtN(m.cant)).join(', '):'—';};
-  const rows=disp.map((d,i)=>'<tr>'
-    +'<td style="padding:4px 6px;font-weight:700;color:'+color+'">D'+(i+1)+'</td>'
-    +'<td style="padding:4px 6px;text-align:right">'+rgFmtN(d.metros||0)+' m</td>'
-    +'<td style="padding:4px 6px">'+sostTxt(d)+'</td>'
-    +'<td style="padding:4px 6px;text-align:center">'+(d.tperf||0)+' / '+(d.tcarg||0)+'</td>'
-    +'<td style="padding:4px 6px">'+expTxt(d)+'</td>'
-  +'</tr>').join('');
+  const masasTxt=ms=>{ms=(ms||[]).filter(m=>m.cant>0);return ms.length?ms.map(m=>exploNombre(m.id)+' ×'+rgFmtN(m.cant)).join(', '):'—';};
+  const expTxt=d=>masasTxt(d.masas);
+  const rows=disp.map((d,i)=>{
+    let r='<tr>'
+      +'<td style="padding:4px 6px;font-weight:700;color:'+color+'">D'+(i+1)+'</td>'
+      +'<td style="padding:4px 6px;text-align:right">'+rgFmtN(d.metros||0)+' m</td>'
+      +'<td style="padding:4px 6px">'+sostTxt(d)+'</td>'
+      +'<td style="padding:4px 6px;text-align:center">'+(d.tperf||0)+' / '+(d.tcarg||0)+'</td>'
+      +'<td style="padding:4px 6px">'+expTxt(d)+'</td>'
+    +'</tr>';
+    if(d.desquiche){
+      r+='<tr style="color:#fb923c">'
+        +'<td style="padding:2px 6px 4px 16px;font-style:italic">⛏ desquiche</td>'
+        +'<td style="padding:2px 6px;text-align:right">—</td>'
+        +'<td style="padding:2px 6px">—</td>'
+        +'<td style="padding:2px 6px;text-align:center">'+(d.desquiche.tperf||0)+' / '+(d.desquiche.tcarg||0)+'</td>'
+        +'<td style="padding:2px 6px">'+masasTxt(d.desquiche.masas)+'</td>'
+      +'</tr>';
+    }
+    return r;
+  }).join('');
   const t=rgComputeFrenteTotals(disp);
   const totExp=(t.masas||[]).length?t.masas.map(m=>exploNombre(m.id)+' ×'+rgFmtN(m.cant)).join(', '):'—';
   return '<div style="border-left:3px solid '+color+';padding-left:10px">'
