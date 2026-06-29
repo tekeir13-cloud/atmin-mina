@@ -4230,6 +4230,34 @@ async function cargarAlmacenCombustibleSB(){
       }
       try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){}
     }
+    // ── INGENIERO RESIDENTE: distribución de personal, metas y reuniones ──
+    {
+      const dNube=await sbLoadModulo('distribucion');
+      if(dNube&&typeof dNube==='object'&&Object.keys(dNube).length){
+        state.distribucion=dNube;
+        try{localStorage.setItem(DIST_KEY,JSON.stringify(dNube));}catch(e){}
+      }else{
+        try{distribLoad();}catch(e){}
+        if(state.distribucion&&Object.keys(state.distribucion).length) await sbSyncModulo('distribucion', state.distribucion);
+      }
+      const mNube=await sbLoadModulo('metas');
+      if(mNube&&typeof mNube==='object'&&Object.keys(mNube).length){
+        state.metas=Object.assign(state.metas||{},mNube);
+        try{localStorage.setItem(METAS_KEY,JSON.stringify(state.metas));}catch(e){}
+      }else{
+        try{metasLoad();}catch(e){}
+        if(state.metas&&Object.keys(state.metas).length) await sbSyncModulo('metas', state.metas);
+      }
+      const ruNube=await sbLoadModulo('reuniones');
+      if(Array.isArray(ruNube)&&ruNube.length){
+        state.reuniones=mergeSnapById(state.reuniones||[], ruNube);
+        try{localStorage.setItem(REU_KEY,JSON.stringify(state.reuniones));}catch(e){}
+        await sbSyncModulo('reuniones', state.reuniones);
+      }else{
+        try{reunionesLoad();}catch(e){}
+        if((state.reuniones||[]).length) await sbSyncModulo('reuniones', state.reuniones);
+      }
+    }
     if(typeof renderAlmacen==='function' && document.getElementById('log-almacen')) renderAlmacen();
     if(typeof renderDashboard==='function') renderDashboard();
   }catch(e){ console.error('cargarAlmacenCombustibleSB:',e); }
@@ -9336,11 +9364,11 @@ function guardarReporteGuardia(){
 // ── Persistencia local (sin DB por ahora) ──
 const DIST_KEY='atmin_distribucion',REU_KEY='atmin_reuniones',METAS_KEY='atmin_metas';
 function distribLoad(){try{const d=localStorage.getItem(DIST_KEY);if(d)state.distribucion=JSON.parse(d)||{};}catch(e){}}
-function distribSave(){try{localStorage.setItem(DIST_KEY,JSON.stringify(state.distribucion||{}));}catch(e){}}
+function distribSave(){try{localStorage.setItem(DIST_KEY,JSON.stringify(state.distribucion||{}));}catch(e){} try{ sbSyncModulo('distribucion', state.distribucion||{}); }catch(e){}}
 function reunionesLoad(){try{const d=localStorage.getItem(REU_KEY);if(d)state.reuniones=JSON.parse(d)||[];}catch(e){}}
-function reunionesSave(){try{localStorage.setItem(REU_KEY,JSON.stringify(state.reuniones||[]));}catch(e){}}
+function reunionesSave(){try{localStorage.setItem(REU_KEY,JSON.stringify(state.reuniones||[]));}catch(e){} try{ sbSyncModulo('reuniones', state.reuniones||[]); }catch(e){}}
 function metasLoad(){try{const d=localStorage.getItem(METAS_KEY);if(d)Object.assign(state.metas,JSON.parse(d)||{});}catch(e){}}
-function metasSave(){try{localStorage.setItem(METAS_KEY,JSON.stringify(state.metas));}catch(e){}}
+function metasSave(){try{localStorage.setItem(METAS_KEY,JSON.stringify(state.metas));}catch(e){} try{ sbSyncModulo('metas', state.metas||{}); }catch(e){}}
 
 function renderResidente(){
   metasLoad();reunionesLoad();distribLoad();
