@@ -4191,6 +4191,41 @@ async function cargarAlmacenCombustibleSB(){
       try{valLaborLoad();}catch(e){}
       if((state.valorizacionesLabor||[]).length) await sbSyncModulo('val_labor', state.valorizacionesLabor);
     }
+    // ── PERSONAL (RRHH) — snapshot confiable (localStorage + nube), independiente de la tabla ──
+    {
+      const pNube=await sbLoadModulo('personal');
+      if(Array.isArray(pNube)&&pNube.length){
+        state.personal=pNube;
+        try{localStorage.setItem(PERSONAL_KEY,JSON.stringify(pNube));}catch(e){}
+      }else{
+        let pLocal=[]; try{pLocal=JSON.parse(localStorage.getItem(PERSONAL_KEY)||'[]')||[];}catch(e){}
+        if(pLocal.length) state.personal=pLocal;
+        if((state.personal||[]).length) await sbSyncModulo('personal', state.personal);
+      }
+    }
+    // ── TAREOS — snapshot confiable (todos los meses), independiente del mes_id de la tabla ──
+    {
+      const tNube=await sbLoadModulo('tareas');
+      if(Array.isArray(tNube)&&tNube.length){
+        state.tareas=tNube;
+        try{localStorage.setItem(TAREAS_KEY,JSON.stringify(tNube));}catch(e){}
+      }else{
+        let tLocal=[]; try{tLocal=JSON.parse(localStorage.getItem(TAREAS_KEY)||'[]')||[];}catch(e){}
+        if(tLocal.length) state.tareas=tLocal;
+        else if((state.tareas||[]).length) await sbSyncModulo('tareas', state.tareas);
+      }
+    }
+    // ── REPORTES JEFE DE GUARDIA — snapshot confiable para todos los dispositivos ──
+    {
+      const rNube=await sbLoadModulo('reportes_guardia');
+      if(Array.isArray(rNube)&&rNube.length){
+        state.reportesGuardia=rNube;
+        try{localStorage.setItem(RG_KEY,JSON.stringify(rNube));}catch(e){}
+      }else if((state.reportesGuardia||[]).length){
+        await sbSyncModulo('reportes_guardia', state.reportesGuardia);
+      }
+      try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){}
+    }
     if(typeof renderAlmacen==='function' && document.getElementById('log-almacen')) renderAlmacen();
     if(typeof renderDashboard==='function') renderDashboard();
   }catch(e){ console.error('cargarAlmacenCombustibleSB:',e); }
@@ -7790,6 +7825,7 @@ async function guardarTareo(){
     setTimeout(()=>{ exitoMsg.style.opacity='0'; }, 3000);
     setTimeout(()=>{ exitoMsg.style.display='none'; exitoMsg.style.opacity='1'; }, 3600);
   }
+  try{ tareasSave(); }catch(e){}
   showNotif(`✓ Tareo ${turno} registrado — ${guardados} trabajadores`);
   try{ actualizarKpisTareo(fecha); }catch(e){}
   try{ renderCostoRRHH(); }catch(e){}
@@ -7882,6 +7918,7 @@ function guardarTareoHoy(btn){
     else{state.tareas.push({fecha,trabajadorId:p.id,tarea:'Tareo diario',frente:p.frente||1,detalle:'',estadoTarea:'completado',mult,turno,jornal:p.jornal||0,id:'T'+Date.now()+Math.random().toString(36).slice(2)});count++;}
   });
   guardarEstado();
+  try{ tareasSave(); }catch(e){}
   renderTareas();
   if(typeof renderCostoRRHH==='function')renderCostoRRHH();
   if(overlay)overlay.remove();
@@ -7997,6 +8034,7 @@ async function editarMultTareo(uid, multStr){
   const monto=j*mult;
   const cells=btns?.closest('tr')?.cells;
   if(cells&&cells[4]) cells[4].textContent=fmtS(monto);
+  try{ tareasSave(); }catch(e){}
   renderCostoRRHH();actualizarKpisTareo(hoy());
   showNotif('✓ Tarea actualizada');
 }
@@ -8018,6 +8056,7 @@ async function eliminarTareoArch(fecha,turno){
   if(!confirm(`¿Eliminar el tareo completo del ${fmtF(fecha)} (turno ${turno})?\n\nSe borrarán ${items.length} registro(s). Esta acción no se puede deshacer.`))return;
   for(const t of items){ if(t.id){ try{ await sb.from('tareas').delete().eq('id',t.id); }catch(e){} } }
   state.tareas=(state.tareas||[]).filter(t=>!match(t));
+  try{ tareasSave(); }catch(e){}
   try{ renderTareas(); }catch(e){}
   try{ if(typeof renderCostoRRHH==='function') renderCostoRRHH(); }catch(e){}
   try{ if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
@@ -8155,7 +8194,7 @@ async function confirmarBaja(){
   try{
     await sb.from('personal').update({estado:'baja',motivoBaja:motivo,fechaBaja:fecha,obsBaja:obs}).eq('id',id);
   }catch(e){}
-  cerrarModal('modal-baja');poblarSelects();renderPersonal();renderCostoRRHH();
+  personalSave();cerrarModal('modal-baja');poblarSelects();renderPersonal();renderCostoRRHH();
   showNotif(`${p.nombre} dado de baja: ${motivo}`,'warn');
 }
 
@@ -8218,7 +8257,7 @@ async function confirmarBajaDyn(pid){
   p.estado='baja';p.motivoBaja=motivo;p.fechaBaja=fecha;p.obsBaja=obs;
   try{await sb.from('personal').update({estado:'baja',motivoBaja:motivo,fechaBaja:fecha,obsBaja:obs}).eq('id',p.id);}catch(e){}
   document.getElementById('modal-baja-dyn')?.remove();
-  poblarSelects();renderPersonal();renderCostoRRHH();
+  personalSave();poblarSelects();renderPersonal();renderCostoRRHH();
   showNotif(`${p.nombre} dado de baja: ${motivo}`,'warn');
 }
 
@@ -8231,7 +8270,7 @@ async function agregarPersonal(){
   try{const{data}=await sb.from('personal').insert([nv]).select().single();state.personal.push({...nv,jefe,id:data.id});}
   catch(e){state.personal.push({...nv,jefe,id:Date.now()});}
   if(jefe&&nv.dni) pJefeSet(nv.dni,jefe);
-  limpiarFormPersonal();poblarSelects();renderPersonal();renderCostoRRHH();showNotif('✓ Personal agregado');
+  personalSave();limpiarFormPersonal();poblarSelects();renderPersonal();renderCostoRRHH();showNotif('✓ Personal agregado');
 }
 function limpiarFormPersonal(){['p-nombre','p-dni','p-jornal','p-ingreso'].forEach(id=>document.getElementById(id).value='');const j=document.getElementById('p-jefe');if(j)j.value='';}
 
@@ -8262,7 +8301,7 @@ async function guardarEditarPersonal(){
   p.ingreso=document.getElementById('edit-p-ingreso').value;
   try{ await sb.from('personal').update({nombre:p.nombre,dni:p.dni,rol:p.rol,frente:p.frente,jornal:p.jornal,ingreso:p.ingreso}).eq('id',id); }catch(e){}
   cerrarModal('modal-editar-personal');
-  poblarSelects();renderPersonal();renderCostoRRHH();
+  personalSave();poblarSelects();renderPersonal();renderCostoRRHH();
   showNotif(`✓ ${p.nombre} actualizado`);
 }
 
@@ -8272,7 +8311,7 @@ async function eliminarPersonal(id){
   if(!confirm(`¿Eliminar a ${p.nombre}? Esta acción no se puede deshacer.`)) return;
   state.personal=state.personal.filter(x=>String(x.id)!==String(id));
   try{ await sb.from('personal').delete().eq('id',id); }catch(e){}
-  poblarSelects();renderPersonal();renderCostoRRHH();
+  personalSave();poblarSelects();renderPersonal();renderCostoRRHH();
   showNotif(`🗑 ${p.nombre} eliminado`,'warn');
 }
 
@@ -9053,8 +9092,14 @@ function exportarPlanillaExcel(){
 }
 // ── OPERACIONES ──
 const RG_KEY='atmin_reportes_guardia';
-function reportesGuardiaSave(){try{localStorage.setItem(RG_KEY,JSON.stringify(state.reportesGuardia||[]));}catch(e){}}
+function reportesGuardiaSave(){try{localStorage.setItem(RG_KEY,JSON.stringify(state.reportesGuardia||[]));}catch(e){} try{ sbSyncModulo('reportes_guardia', state.reportesGuardia||[]); }catch(e){}}
 function reportesGuardiaLoad(){try{const d=localStorage.getItem(RG_KEY);if(d)state.reportesGuardia=JSON.parse(d)||[];}catch(e){}}
+// Persistencia confiable de PERSONAL y TAREOS (localStorage + snapshot en la nube),
+// para que no se pierdan al recargar aunque falle la escritura en las tablas de Supabase.
+const PERSONAL_KEY='atmin_personal_snap';
+const TAREAS_KEY='atmin_tareas_snap';
+function personalSave(){try{localStorage.setItem(PERSONAL_KEY,JSON.stringify(state.personal||[]));}catch(e){} try{ sbSyncModulo('personal', state.personal||[]); }catch(e){}}
+function tareasSave(){try{localStorage.setItem(TAREAS_KEY,JSON.stringify(state.tareas||[]));}catch(e){} try{ sbSyncModulo('tareas', state.tareas||[]); }catch(e){}}
 // Deriva el avance lineal (metros) desde los reportes de Jefe de Guardia hacia state.perforacion,
 // para que el avance aparezca SIEMPRE en el dashboard general y el tablero de operaciones,
 // incluso al recargar (los reportes se persisten en localStorage + nube; la perforación de la
@@ -12330,6 +12375,9 @@ async function initSistema(){
   document.querySelectorAll('input[type=date]').forEach(i=>i.value=hoy());
   showNotif('⏳ Cargando datos...','warn');
   try{ valLaborLoad(); }catch(e){}  // valorizaciones desde localStorage (también si la nube está offline)
+  // Personal y tareos desde localStorage (para que persistan también offline o si falla la tabla)
+  try{ const p=JSON.parse(localStorage.getItem(PERSONAL_KEY)||'[]'); if(Array.isArray(p)&&p.length) state.personal=p; }catch(e){}
+  try{ const t=JSON.parse(localStorage.getItem(TAREAS_KEY)||'[]'); if(Array.isArray(t)&&t.length) state.tareas=t; }catch(e){}
   await cargarDesdeSB();
   // Eliminar Frente 3 / frentes extra: solo se permiten Frente 1 (Brenda) y Frente 2 (Cortada).
   // Se filtra en memoria en cada carga, así no reaparece aunque venga de la nube.
