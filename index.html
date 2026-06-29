@@ -9015,6 +9015,21 @@ function exportarPlanillaExcel(){
 const RG_KEY='atmin_reportes_guardia';
 function reportesGuardiaSave(){try{localStorage.setItem(RG_KEY,JSON.stringify(state.reportesGuardia||[]));}catch(e){}}
 function reportesGuardiaLoad(){try{const d=localStorage.getItem(RG_KEY);if(d)state.reportesGuardia=JSON.parse(d)||[];}catch(e){}}
+// Deriva el avance lineal (metros) desde los reportes de Jefe de Guardia hacia state.perforacion,
+// para que el avance aparezca SIEMPRE en el dashboard general y el tablero de operaciones,
+// incluso al recargar (los reportes se persisten en localStorage + nube; la perforación de la
+// tabla se conserva y solo se reemplazan los registros derivados de reportes _rg).
+function sincronizarPerforacionReportes(){
+  let perf=(state.perforacion||[]).filter(p=>!p._rg);
+  (state.reportesGuardia||[]).forEach(rep=>{
+    const fecha=rep.fecha, jefe=rep.jefe||'';
+    const br=(rep.brenda&&rep.brenda.metros)||0;
+    const cr=(rep.crne&&rep.crne.metros)||0;
+    if(br>0)perf.push({_rg:rep.id,fecha,frente:1,metros:br,personas:1,roca:'—',obs:'RA Brenda — '+jefe});
+    if(cr>0)perf.push({_rg:rep.id,fecha,frente:2,metros:cr,personas:1,roca:'—',obs:'CRNE — '+jefe});
+  });
+  state.perforacion=perf;
+}
 
 function renderAvance(){
   reportesGuardiaLoad();
