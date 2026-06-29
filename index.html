@@ -2728,6 +2728,7 @@ select option{background:var(--coal3);}
         <div class="form-group"><label>Rol / Cargo</label><select id="p-rol"><option>Jefe de Operaciones</option><option>Ingeniero Residente</option><option>Asistente de Residente</option><option>Jefe de Guardia</option><option>Capataz</option><option>Jefe de Mantenimiento</option><option>Logístico</option><option>Administrador</option><option>Supervisor de Proyecto</option><option>Maestro Perforista 1</option><option>Maestro Perforista 2</option><option>Ayudante</option><option>Compresorista</option><option>Operador de Scoop</option><option>Operador de Dumper</option><option>Operador Múltiple</option><option>Operador de Línea Amarilla</option><option>Conductor</option><option>Ayudante Mecánico</option></select></div>
         <div class="form-group"><label>Jornal diario (S/)</label><input type="number" id="p-jornal" placeholder="80"></div>
         <div class="form-group"><label>Fecha de ingreso</label><input type="date" id="p-ingreso"></div>
+        <div class="form-group"><label>Jefe de Guardia <span style="color:var(--text3);font-size:10px">(hoja a la que pertenece)</span></label><select id="p-jefe"><option value="">— Seleccionar —</option></select></div>
       </div>
       <div class="btn-row">
         <button class="btn btn-gold" onclick="agregarPersonal()">+ Agregar trabajador</button>
@@ -3807,7 +3808,7 @@ select option{background:var(--coal3);}
     </div>
     <input type="hidden" id="rg-id">
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
-      <div class="form-group" style="margin:0"><label>Jefe de Guardia</label><input type="text" id="rg-jefe" placeholder="Nombre"></div>
+      <div class="form-group" style="margin:0"><label>Jefe de Guardia</label><select id="rg-jefe" style="width:100%"><option value="">— Seleccionar —</option></select></div>
       <div class="form-group" style="margin:0"><label>Turno</label><select id="rg-turno" style="width:100%"><option value="Día">Día</option><option value="Noche">Noche</option></select></div>
       <div class="form-group" style="margin:0"><label>Fecha</label><input type="date" id="rg-fecha"></div>
     </div>
@@ -7575,6 +7576,30 @@ function initTareoFecha(){
 
 // Cargos válidos que pueden ser Jefe de Turno
 const JEFES_TURNO_CARGOS = ['Capataz','Jefe de Guardia','Asistente de Residente'];
+// Persistencia de la "hoja" (Jefe de Guardia) al que pertenece cada trabajador.
+// Se guarda por DNI en localStorage porque la tabla de personal en la nube no tiene esa columna.
+const PJEFE_KEY='atmin_personal_jefe';
+let _pJefeMap=null;
+function pJefeLoad(){ if(_pJefeMap)return _pJefeMap; try{_pJefeMap=JSON.parse(localStorage.getItem(PJEFE_KEY)||'{}')||{};}catch(e){_pJefeMap={};} return _pJefeMap; }
+function pJefeSet(dni,jefe){ const m=pJefeLoad(); m[String(dni)]=jefe; try{localStorage.setItem(PJEFE_KEY,JSON.stringify(m));}catch(e){} }
+function pJefeApply(){ const m=pJefeLoad(); (state.personal||[]).forEach(p=>{ if(p.dni&&m[String(p.dni)]!=null) p.jefe=m[String(p.dni)]; }); }
+// Lista de personal (RRHH) que puede actuar como Jefe de Guardia/Turno
+function jefesTurnoLista(){
+  const norm=s=>String(s||'').toLowerCase();
+  const cargos=JEFES_TURNO_CARGOS.map(norm);
+  return (state.personal||[]).filter(p=>cargos.includes(norm(p.rol))&&(p.estado==='activo'||!p.estado))
+    .sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+}
+// Rellena un <select> con los jefes de turno; conserva el valor actual si se pasa
+function poblarSelectJefes(selId, valorActual){
+  const sel=document.getElementById(selId);if(!sel)return;
+  const lista=jefesTurnoLista();
+  const cur=valorActual!=null?valorActual:sel.value;
+  sel.innerHTML='<option value="">— Seleccionar —</option>'+lista.map(p=>`<option value="${p.nombre}">${p.nombre} · ${p.rol}</option>`).join('');
+  // Si el valor guardado no está en la lista (cargo cambiado/baja), agregarlo igual para no perderlo
+  if(cur && !lista.some(p=>p.nombre===cur)) sel.insertAdjacentHTML('beforeend',`<option value="${cur}">${cur}</option>`);
+  if(cur) sel.value=cur;
+}
 
 // Paso 0 → abrir asistente de configuración
 function abrirSetupTareo(){
@@ -8016,6 +8041,8 @@ async function registrarTarea(){
 }
 
 function renderPersonal(){
+  try{ pJefeApply(); }catch(e){}
+  try{ poblarSelectJefes('p-jefe'); }catch(e){}
   const activos=state.personal.filter(p=>p.estado!=='baja');
   const bajas=state.personal.filter(p=>p.estado==='baja');
   const g=id=>document.getElementById(id);
@@ -8188,12 +8215,15 @@ async function confirmarBajaDyn(pid){
 async function agregarPersonal(){
   const nombre=document.getElementById('p-nombre').value.trim();
   if(!nombre){showNotif('⚠ Ingresa el nombre','error');return;}
+  const jefe=document.getElementById('p-jefe')?.value||'';
   const nv={nombre,dni:document.getElementById('p-dni').value,rol:document.getElementById('p-rol').value,frente:null,estado:'activo',jornal:parseFloat(document.getElementById('p-jornal').value)||80,ingreso:document.getElementById('p-ingreso').value||hoy()};
-  try{const{data}=await sb.from('personal').insert([nv]).select().single();state.personal.push({...nv,id:data.id});}
-  catch(e){state.personal.push({...nv,id:Date.now()});}
+  // 'jefe' (hoja del Jefe de Guardia) se guarda localmente; no se envía al insert para no romper si la columna no existe en la BD
+  try{const{data}=await sb.from('personal').insert([nv]).select().single();state.personal.push({...nv,jefe,id:data.id});}
+  catch(e){state.personal.push({...nv,jefe,id:Date.now()});}
+  if(jefe&&nv.dni) pJefeSet(nv.dni,jefe);
   limpiarFormPersonal();poblarSelects();renderPersonal();renderCostoRRHH();showNotif('✓ Personal agregado');
 }
-function limpiarFormPersonal(){['p-nombre','p-dni','p-jornal','p-ingreso'].forEach(id=>document.getElementById(id).value='');}
+function limpiarFormPersonal(){['p-nombre','p-dni','p-jornal','p-ingreso'].forEach(id=>document.getElementById(id).value='');const j=document.getElementById('p-jefe');if(j)j.value='';}
 
 function abrirEditarPersonal(id){
   const p=state.personal.find(x=>String(x.id)===String(id));
@@ -9093,7 +9123,8 @@ function rgToggleReporte(gid){
 function abrirModalReporteGuardia(){
   const g=id=>document.getElementById(id);
   g('rg-id').value='';
-  g('rg-jefe').value='';g('rg-turno').value='Día';g('rg-fecha').value=hoy();
+  g('rg-turno').value='Día';g('rg-fecha').value=hoy();
+  poblarSelectJefes('rg-jefe','');
   g('rg-br-trabajos').value='';g('rg-cr-trabajos').value='';
   // Iniciar cada frente con un disparo vacío
   g('rg-br-disparos').innerHTML='';rgAddDisparo('br');
@@ -9104,7 +9135,8 @@ function abrirModalReporteGuardia(){
 function editarReporteGuardia(id){
   const r=(state.reportesGuardia||[]).find(x=>x.id===id);if(!r)return;
   const g=i=>document.getElementById(i);const b=r.brenda||{},c=r.crne||{};
-  g('rg-id').value=r.id;g('rg-jefe').value=r.jefe||'';g('rg-turno').value=r.turno||'Día';g('rg-fecha').value=r.fecha||hoy();
+  g('rg-id').value=r.id;g('rg-turno').value=r.turno||'Día';g('rg-fecha').value=r.fecha||hoy();
+  poblarSelectJefes('rg-jefe',r.jefe||'');
   g('rg-br-trabajos').value=b.trabajos||'';
   g('rg-cr-trabajos').value=c.trabajos||'';
   // Reconstruir disparos (si el reporte es antiguo y no tiene disparos, convertir a uno solo)
