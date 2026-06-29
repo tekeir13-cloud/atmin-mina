@@ -4258,6 +4258,24 @@ async function cargarAlmacenCombustibleSB(){
         if((state.reuniones||[]).length) await sbSyncModulo('reuniones', state.reuniones);
       }
     }
+    // ── MANTENIMIENTO: kits (solicitudes/aprobaciones) y repuestos — UNIÓN por id ──
+    {
+      try{ if(typeof mantKitLoad==='function') mantKitLoad(); }catch(e){}
+      const kNube=await sbLoadModulo('mant_kits');
+      const kMerged=mergeSnapById(state.mantenimiento||[], Array.isArray(kNube)?kNube:[]);
+      if(kMerged.length){
+        state.mantenimiento=kMerged;
+        try{localStorage.setItem(MANTKIT_KEY,JSON.stringify(kMerged));}catch(e){}
+        await sbSyncModulo('mant_kits', kMerged);
+      }
+      const repNube=await sbLoadModulo('mant_repuestos');
+      if(Array.isArray(repNube)&&repNube.length){
+        state.mantRepuestos=repNube;
+        try{localStorage.setItem(MANTREP_KEY,JSON.stringify(repNube));}catch(e){}
+      }else if((state.mantRepuestos||[]).length){
+        await sbSyncModulo('mant_repuestos', state.mantRepuestos);
+      }
+    }
     if(typeof renderAlmacen==='function' && document.getElementById('log-almacen')) renderAlmacen();
     if(typeof renderDashboard==='function') renderDashboard();
   }catch(e){ console.error('cargarAlmacenCombustibleSB:',e); }
@@ -10291,11 +10309,11 @@ function renderRendimiento(){
 // ── ALMACÉN DE MANTENIMIENTO (repuestos) ──
 const MANTREP_KEY='atmin_mant_repuestos';
 function mantRepLoad(){try{const d=localStorage.getItem(MANTREP_KEY);if(d)state.mantRepuestos=JSON.parse(d)||[];}catch(e){}}
-function mantRepSave(){try{localStorage.setItem(MANTREP_KEY,JSON.stringify(state.mantRepuestos||[]));}catch(e){}}
+function mantRepSave(){try{localStorage.setItem(MANTREP_KEY,JSON.stringify(state.mantRepuestos||[]));}catch(e){} try{ sbSyncModulo('mant_repuestos', state.mantRepuestos||[]); }catch(e){}}
 // ── SOLICITUDES DE KIT (mantenimiento) — persistencia local de aprobaciones ──
 const MANTKIT_KEY='atmin_mant_kits';
 function mantKitLoad(){try{const d=localStorage.getItem(MANTKIT_KEY);if(d){const arr=JSON.parse(d);if(Array.isArray(arr)&&arr.length)state.mantenimiento=arr;}}catch(e){}}
-function mantKitSave(){try{localStorage.setItem(MANTKIT_KEY,JSON.stringify(state.mantenimiento||[]));}catch(e){}}
+function mantKitSave(){try{localStorage.setItem(MANTKIT_KEY,JSON.stringify(state.mantenimiento||[]));}catch(e){} try{ sbSyncModulo('mant_kits', state.mantenimiento||[]); }catch(e){}}
 function mantRepSeed(){
   if(state.mantRepuestos&&state.mantRepuestos.length)return;
   state.mantRepuestos=[
@@ -10874,7 +10892,7 @@ function aprobarLogKitLog(id){
   mantRepSave();
   almacenSave();
   m.aprobLog={ok:true,resp,fecha:hoy()};
-  mantKitSave();renderSolicitudMantLog();showNotif('✓ Aprobado por Logística · stock despachado');
+  mantKitSave();renderSolicitudMantLog();try{if(typeof renderDashboard==='function')renderDashboard();}catch(e){}showNotif('✓ Aprobado por Logística · stock despachado');
 }
 function rechazarLogKitLog(id){
   mantRepLoad();mantKitLoad();
@@ -10889,7 +10907,7 @@ function rechazarLogKitLog(id){
     almacenSave();
   }
   m.aprobLog={ok:false,rechazado:true,resp,fecha:hoy(),motivo};
-  mantKitSave();renderSolicitudMantLog();showNotif('Solicitud rechazada por Logística');
+  mantKitSave();renderSolicitudMantLog();try{if(typeof renderDashboard==='function')renderDashboard();}catch(e){}showNotif('Solicitud rechazada por Logística');
 }
 // ── Vale de costeo y despacho (Excel) ──
 function generarValeDespacho(id){
