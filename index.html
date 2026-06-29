@@ -4215,14 +4215,18 @@ async function cargarAlmacenCombustibleSB(){
         else if((state.tareas||[]).length) await sbSyncModulo('tareas', state.tareas);
       }
     }
-    // ── REPORTES JEFE DE GUARDIA — snapshot confiable para todos los dispositivos ──
+    // ── REPORTES JEFE DE GUARDIA — UNIÓN por id de nube + local: nunca se pierde un reporte ──
     {
       const rNube=await sbLoadModulo('reportes_guardia');
-      if(Array.isArray(rNube)&&rNube.length){
-        state.reportesGuardia=rNube;
-        try{localStorage.setItem(RG_KEY,JSON.stringify(rNube));}catch(e){}
-      }else if((state.reportesGuardia||[]).length){
-        await sbSyncModulo('reportes_guardia', state.reportesGuardia);
+      let rLocal=[]; try{rLocal=JSON.parse(localStorage.getItem(RG_KEY)||'[]')||[];}catch(e){}
+      // Combina lo que ya hay en memoria + localStorage + nube, sin duplicar (por id).
+      // Prioriza la versión local en conflicto (ediciones de este dispositivo aún no subidas).
+      const merged=mergeSnapById(mergeSnapById(state.reportesGuardia||[], rLocal), Array.isArray(rNube)?rNube:[]);
+      if(merged.length){
+        state.reportesGuardia=merged;
+        try{localStorage.setItem(RG_KEY,JSON.stringify(merged));}catch(e){}
+        // Re-sube el conjunto COMPLETO para que la nube tenga todos los reportes
+        await sbSyncModulo('reportes_guardia', merged);
       }
       try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){}
     }
@@ -9098,6 +9102,13 @@ function reportesGuardiaLoad(){try{const d=localStorage.getItem(RG_KEY);if(d)sta
 // para que no se pierdan al recargar aunque falle la escritura en las tablas de Supabase.
 const PERSONAL_KEY='atmin_personal_snap';
 const TAREAS_KEY='atmin_tareas_snap';
+// Une dos listas por 'id' sin duplicar; los elementos de 'a' ganan en conflicto.
+function mergeSnapById(a,b){
+  const out=[],seen=new Set();
+  const add=r=>{ if(!r)return; const k=(r.id!=null)?('id:'+r.id):('j:'+JSON.stringify(r)); if(seen.has(k))return; seen.add(k); out.push(r); };
+  (a||[]).forEach(add); (b||[]).forEach(add);
+  return out;
+}
 function personalSave(){try{localStorage.setItem(PERSONAL_KEY,JSON.stringify(state.personal||[]));}catch(e){} try{ sbSyncModulo('personal', state.personal||[]); }catch(e){}}
 function tareasSave(){try{localStorage.setItem(TAREAS_KEY,JSON.stringify(state.tareas||[]));}catch(e){} try{ sbSyncModulo('tareas', state.tareas||[]); }catch(e){}}
 // Deriva el avance lineal (metros) desde los reportes de Jefe de Guardia hacia state.perforacion,
