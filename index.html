@@ -4276,6 +4276,19 @@ async function cargarAlmacenCombustibleSB(){
         await sbSyncModulo('mant_repuestos', state.mantRepuestos);
       }
     }
+    // ── SERVICIOS / PAGOS A TERCEROS — unión por id (las fotos quedan locales) ──
+    {
+      const sNube=await sbLoadModulo('servicios_terceros');
+      let sLocal=[]; try{sLocal=JSON.parse(localStorage.getItem(SERV_KEY)||'[]')||[];}catch(e){}
+      if(Array.isArray(sNube)&&sNube.length){
+        // Conserva las fotos locales (por id) y trae registros de otros dispositivos
+        const merged=mergeSnapById(sLocal, sNube);
+        try{localStorage.setItem(SERV_KEY,JSON.stringify(merged));}catch(e){}
+      }else if(sLocal.length){
+        const light=sLocal.map(r=>{const{foto,fotoImpreso,...rest}=r;return rest;});
+        await sbSyncModulo('servicios_terceros', light);
+      }
+    }
     if(typeof renderAlmacen==='function' && document.getElementById('log-almacen')) renderAlmacen();
     if(typeof renderDashboard==='function') renderDashboard();
   }catch(e){ console.error('cargarAlmacenCombustibleSB:',e); }
@@ -8457,7 +8470,7 @@ const SERV_TIPOS=[
   {id:'generales',label:'Liquidación Pagos Generales (Internet, Tienda Almendra, Botica, Adicionales)', placa:false}
 ];
 function servCargar(){try{return JSON.parse(localStorage.getItem(SERV_KEY)||'[]');}catch{return[];}}
-function servGuardar(arr){localStorage.setItem(SERV_KEY,JSON.stringify(arr));}
+function servGuardar(arr){localStorage.setItem(SERV_KEY,JSON.stringify(arr)); try{ const light=(arr||[]).map(r=>{const{foto,fotoImpreso,...rest}=r;return rest;}); sbSyncModulo('servicios_terceros', light); }catch(e){}}
 function finCostoServicios(ym){
   return servCargar().filter(r=>r.fecha&&r.fecha.startsWith(ym)).reduce((s,r)=>s+(parseFloat(r.monto)||0),0);
 }
@@ -8947,13 +8960,52 @@ async function servReporteMensual(){
   [6,7,8].forEach(c=>{ws.getCell(r,c).style={fill:fill(fondoMedio),border:bordeAll};});
   ws.getRow(r).height=24;
 
+  // ── HOJA ANEXA: PLANILLA COMPLETA del mismo período (tareos × jornal) ──
+  const tareosMes=(state.tareas||[]).filter(t=>mesSelec?(t.fecha||'').startsWith(mesSelec):true)
+    .sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  const wp=wb.addWorksheet('Planilla',{pageSetup:{paperSize:9,orientation:'landscape',fitToPage:true,fitToWidth:1}});
+  wp.columns=[{width:5},{width:14},{width:10},{width:34},{width:22},{width:12},{width:8},{width:14}];
+  let rp=1;
+  wp.mergeCells(rp,1,rp,8);
+  wp.getCell(rp,1).value=`${proyecto} — PLANILLA${mesSelec?' — '+mesSelec:''}`;
+  wp.getCell(rp,1).style={font:f({bold:true,size:14,color:{argb:blanco}}),fill:fill(azul),alignment:{horizontal:'center',vertical:'middle'}};
+  wp.getRow(rp).height=28; rp++;
+  wp.mergeCells(rp,1,rp,8);
+  wp.getCell(rp,1).value=`Generado: ${fmtF(hoy())} · Registros de tareo: ${tareosMes.length}`;
+  wp.getCell(rp,1).style={font:f({size:10,italic:true,color:{argb:'666666'}}),alignment:{horizontal:'center'}};
+  wp.getRow(rp).height=18; rp++;
+  wp.getRow(rp).height=8; rp++;
+  const hp=['#','Fecha','Turno','Trabajador','Cargo','Jornal','Mult','Monto S/'];
+  hp.forEach((h,ci)=>{ wp.getCell(rp,ci+1).value=h; wp.getCell(rp,ci+1).style={font:f({bold:true,size:10,color:{argb:blanco}}),fill:fill(azul),border:bordeAll,alignment:{horizontal:'center'}}; });
+  wp.getRow(rp).height=20; rp++;
+  let totalPlanilla=0;
+  tareosMes.forEach((t,i)=>{
+    const p=(state.personal||[]).find(x=>String(x.id)===String(t.trabajadorId))||{};
+    const jornal=(t.jornal!=null?t.jornal:(p.jornal||0))||0;
+    const mult=t.mult||1;
+    const monto=jornal*mult; totalPlanilla+=monto;
+    const isAlt=i%2===0; const rowFill=fill(isAlt?fondoClaro:'FFFFFF');
+    const vals=[i+1,t.fecha||'',(t.turno||'—'),p.nombre||t.trabajadorId||'—',p.rol||'—',jornal,mult,monto];
+    vals.forEach((v,ci)=>{ const c=wp.getCell(rp,ci+1); c.value=v;
+      c.style={font:f({size:10}),fill:rowFill,border:bordeAll,
+        alignment:{horizontal:(ci===5||ci===6||ci===7)?'right':ci===0?'center':'left'},
+        numFmt:(ci===5||ci===7)?'"S/ "#,##0.00':''}; });
+    wp.getRow(rp).height=18; rp++;
+  });
+  wp.mergeCells(rp,1,rp,7);
+  wp.getCell(rp,1).value='TOTAL PLANILLA';
+  wp.getCell(rp,1).style={font:f({bold:true,size:11,color:{argb:blanco}}),fill:fill(azul),border:bordeAll,alignment:{horizontal:'right',indent:1}};
+  wp.getCell(rp,8).value=totalPlanilla;
+  wp.getCell(rp,8).style={font:f({bold:true,size:12,color:{argb:'27AE60'}}),fill:fill('E8F8F0'),border:bordeAll,alignment:{horizontal:'right'},numFmt:'"S/ "#,##0.00'};
+  wp.getRow(rp).height=24;
+
   const buf=await wb.xlsx.writeBuffer();
   const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
   a.download=`reporte_terceros${mesSelec?'_'+mesSelec:''}.xlsx`;
   a.click();
-  showNotif(`📊 Reporte generado — ${filtrados.length} liquidaciones · S/ ${total.toLocaleString('es-PE',{minimumFractionDigits:2})} total`,'ok');
+  showNotif(`📊 Reporte generado — ${filtrados.length} liquidaciones (S/ ${total.toLocaleString('es-PE',{minimumFractionDigits:2})}) + hoja de Planilla anexa`,'ok');
 }
 
 function setAdelanto(pid,mes,tipo,val){
