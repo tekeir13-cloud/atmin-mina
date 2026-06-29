@@ -4490,10 +4490,16 @@ function renderModPane(mod,pane){
 // NO entra en la fórmula Almacén General = Insumos + Mantenimiento (es un sub-almacén de control).
 function nv2820Stock(){
   const map={};
+  const prods=(state.almacen&&state.almacen.productos)||[];
+  // Busca el producto en el MAESTRO por código (o por nombre) para usar su nombre/unidad oficial
+  const findProd=(cod,nom)=>prods.find(p=>String(p.codigo)===String(cod))||prods.find(p=>(p.nombre||'').toLowerCase()===String(nom||'').toLowerCase());
   const ensure=(cod,nombre,unidad)=>{
     const k=String(cod||nombre||'').trim();
     if(!k)return null;
-    if(!map[k])map[k]={codigo:k,nombre:nombre||cod,unidad:unidad||'UND',ingreso:0,egreso:0,stock:0};
+    if(!map[k]){
+      const mp=findProd(cod,nombre);
+      map[k]={codigo:k,nombre:(mp&&mp.nombre)||nombre||cod,unidad:(mp&&mp.unidad)||unidad||'UND',ingreso:0,egreso:0,stock:0};
+    }
     return map[k];
   };
   // INGRESO: Logística → NV2820
@@ -4707,7 +4713,7 @@ function renderSubalmacen2820(){
   const rows=items.map(r=>{
     const col=r.stock>0?'#22c55e':(r.stock<0?'#ef4444':'var(--text3)');
     return `<tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:9px 12px;font-weight:600;color:var(--text)">${r.nombre}</td>
+      <td style="padding:9px 12px;font-weight:600;color:var(--text)">${r.nombre}<br><span style="font-size:10px;color:var(--text3);font-family:monospace">${r.codigo}</span></td>
       <td style="padding:9px 12px;text-align:center;color:var(--text3);font-size:11px">${r.unidad}</td>
       <td style="padding:9px 12px;text-align:right;color:#60a5fa;font-weight:600">${fmtN(r.ingreso)}</td>
       <td style="padding:9px 12px;text-align:right;color:#f87171;font-weight:600">${fmtN(r.egreso)}</td>
@@ -15063,7 +15069,7 @@ function compAddCons(frente) {
   // Productos disponibles en el subalmacén NV2820 (con stock)
   const stock=(typeof nv2820Stock==='function')?nv2820Stock().filter(p=>p.stock>0):[];
   const opts=stock.length
-    ?stock.map(p=>`<option value="${p.codigo}" data-unidad="${p.unidad}" data-desc="${(p.nombre||'').replace(/"/g,'&quot;')}">${p.nombre} (disp: ${p.stock} ${p.unidad})</option>`).join('')
+    ?stock.map(p=>`<option value="${p.codigo}" data-unidad="${p.unidad}" data-desc="${(p.nombre||'').replace(/"/g,'&quot;')}">${p.codigo} · ${p.nombre} (disp: ${p.stock} ${p.unidad})</option>`).join('')
     :'<option value="">Sin stock en NV2820</option>';
   row.innerHTML = `
     <select class="comp-cons-sel" onchange="compConsSelChange(this)" style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 10px;font-size:12px">
