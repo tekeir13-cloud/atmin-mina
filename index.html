@@ -4329,6 +4329,21 @@ async function cargarAlmacenCombustibleSB(){
       try{localStorage.setItem(REMSAL_KEY,JSON.stringify(rsMerged));}catch(e){}
       if(rsMerged.length) await sbSyncModulo('remanente_salidas', rsMerged);
     }
+    // ── REPORTES DEL COMPRESORISTA — unión por fecha+turno (alimenta NV2820 y combustible) ──
+    {
+      try{ if(typeof compCargarLocal==='function') compCargarLocal(); }catch(e){}
+      const cNube=await sbLoadModulo('compresorista');
+      const keyOf=r=>(r.fecha||'')+'|'+(r.turno||'');
+      const byKey={};
+      (Array.isArray(cNube)?cNube:[]).forEach(r=>{ if(r&&r.fecha) byKey[keyOf(r)]=r; });
+      (state.compresorista||[]).forEach(r=>{ if(r&&r.fecha) byKey[keyOf(r)]=r; }); // local gana en conflicto
+      const cMerged=Object.values(byKey).sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+      if(cMerged.length){
+        state.compresorista=cMerged;
+        try{localStorage.setItem(COMP_STORAGE_KEY,JSON.stringify(cMerged));}catch(e){}
+        await sbSyncModulo('compresorista', cMerged);
+      }
+    }
     if(typeof renderAlmacen==='function' && document.getElementById('log-almacen')) renderAlmacen();
     if(typeof renderDashboard==='function') renderDashboard();
   }catch(e){ console.error('cargarAlmacenCombustibleSB:',e); }
@@ -14918,6 +14933,7 @@ let _compTurnoSeleccionado = '';
 const COMP_STORAGE_KEY = 'atmin_compresorista';
 function compGuardarLocal() {
   try { localStorage.setItem(COMP_STORAGE_KEY, JSON.stringify(state.compresorista)); } catch(e){}
+  try { sbSyncModulo('compresorista', state.compresorista||[]); } catch(e){}  // nube: trazabilidad NV2820 + combustible
 }
 function compCargarLocal() {
   try {
