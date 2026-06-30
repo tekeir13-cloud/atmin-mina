@@ -3056,48 +3056,13 @@ select option{background:var(--coal3);}
   <!-- Qué puedo responder -->
   <div class="card" style="padding:14px">
     <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;font-weight:700">💡 Qué tipo de preguntas puedo responder</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">
-      ${[
-        {ico:'⛏',tema:'Avance y producción',ejemplos:['¿Cuántos metros hicimos hoy?','¿Cómo va la Brenda vs Cortada?','¿Cuál es nuestro promedio diario?','¿Vamos a cumplir la meta?']},
-        {ico:'👷',tema:'Personal y tareo',ejemplos:['¿Quiénes están ausentes?','¿Cuántos trabajadores hay en mina?','¿Cuántos tareados hay hoy?','¿Hay personal en sobretiempo?']},
-        {ico:'💵',tema:'Costos y finanzas',ejemplos:['¿Cuánto costó la planilla?','¿Cuál es el costo por metro?','¿Cómo va el margen?','¿Cuánto ingresamos este mes?']},
-        {ico:'🛢️',tema:'Combustible',ejemplos:['¿Cuánto queda en la cisterna?','¿Cuánto gastamos en petróleo?','¿Hay riesgo de quedarse sin diésel?']},
-        {ico:'💥',tema:'Explosivos',ejemplos:['¿Cuánto hay en el polvorín?','¿Cuántos disparos hubo hoy?','¿Cuánto gastamos en explosivos?']},
-        {ico:'🔧',tema:'Equipos y mantenimiento',ejemplos:['¿Cuánto ganó el Scoop DALI?','¿Cuánto costó el mantenimiento?','¿Cuántos kits salieron este mes?','Ganancia por equipo']},
-        {ico:'📦',tema:'Almacén y logística',ejemplos:['¿Cuántos productos hay en stock?','¿Hay órdenes de compra pendientes?','¿Qué productos están agotados?']},
-        {ico:'⚡',tema:'Recomendaciones',ejemplos:['¿Qué recomendaciones tienes hoy?','¿Hay alguna alerta crítica?','¿Qué debo priorizar?','¿Qué está en riesgo?']},
-      ].map(cat=>`
-        <div style="background:var(--coal3);border:1px solid var(--border);border-radius:10px;padding:12px">
-          <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px">${cat.ico} ${cat.tema}</div>
-          <div style="display:flex;flex-direction:column;gap:4px">
-            ${cat.ejemplos.map(e=>`<button onclick="preguntaRapidaIA('${e}')"
-              style="text-align:left;background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;padding:2px 0;font-family:'DM Sans',sans-serif;line-height:1.5;transition:color .15s"
-              onmouseover="this.style.color='var(--gold-light)'" onmouseout="this.style.color='var(--text3)'"
-              >→ ${e}</button>`).join('')}
-          </div>
-        </div>`).join('')}
-    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px" id="ia-categorias-panel"></div>
   </div>
 
   <!-- Sugerencias rápidas -->
   <div class="card" style="padding:14px">
     <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;font-weight:700">Preguntas rápidas</div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px" id="ia-sugerencias">
-      ${['¿Qué recomendaciones tienes para hoy?','Dame un resumen ejecutivo','¿Cómo vamos con la meta?','¿Cuántos metros hicimos hoy?',
-         '¿Qué proyección tenemos al final del mes?','¿Cuánto costó la planilla este mes?',
-         '¿Cuánto queda en la cisterna?','¿Cuánto hay de explosivos en el polvorín?',
-         '¿Cuál es el costo por metro?','Ganancia por equipo','¿Cuánto gastamos en mantenimiento?',
-         '¿Hay órdenes de compra pendientes?','¿Quiénes están ausentes hoy?',
-         '¿Cómo va la utilidad del mes?','¿Cuántos productos hay en stock?',
-         '¿Hubo incidentes de seguridad este mes?'].map(q=>
-        `<button onclick="preguntaRapidaIA('${q}')"
-          style="background:var(--coal4);border:1px solid var(--border);color:var(--text2);
-                 border-radius:8px;padding:7px 12px;font-size:11px;cursor:pointer;
-                 font-family:'DM Sans',sans-serif;transition:all 0.15s"
-          onmouseover="this.style.borderColor='var(--accent-border)';this.style.color='var(--text)'"
-          onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text2)'">${q}</button>`
-      ).join('')}
-    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px" id="ia-sugerencias"></div>
   </div>
 </div>
 
@@ -14191,6 +14156,7 @@ function renderIA(){
     _iaHablar(IA_SALUDO);
   }, 350);
   setTimeout(()=>renderIARecomendaciones(), 500);
+  _iaRenderPaneles();
 }
 
 // ── Recomendaciones automáticas basadas en datos reales ──
@@ -14873,6 +14839,48 @@ function toggleMicIA(){
 }
 
 // ── Pregunta rápida ──
+function _iaRenderPaneles(){
+  // Panel categorías
+  const catEl=document.getElementById('ia-categorias-panel');
+  if(catEl && !catEl.dataset.built){
+    catEl.dataset.built='1';
+    const cats=[
+      {ico:'⛏',tema:'Avance y producción',ejemplos:['¿Cuántos metros hicimos hoy?','¿Cómo va la Brenda vs Cortada?','¿Cuál es nuestro promedio diario?','¿Vamos a cumplir la meta?']},
+      {ico:'👷',tema:'Personal y tareo',ejemplos:['¿Quiénes están ausentes?','¿Cuántos trabajadores hay en mina?','¿Cuántos tareados hay hoy?']},
+      {ico:'💵',tema:'Costos y finanzas',ejemplos:['¿Cuánto costó la planilla?','¿Cuál es el costo por metro?','¿Cómo va el margen?','¿Cuánto ingresamos este mes?']},
+      {ico:'🛢️',tema:'Combustible',ejemplos:['¿Cuánto queda en la cisterna?','¿Cuánto gastamos en petróleo?','¿Hay riesgo de quedarse sin diésel?']},
+      {ico:'💥',tema:'Explosivos',ejemplos:['¿Cuánto hay en el polvorín?','¿Cuántos disparos hubo hoy?','¿Cuánto gastamos en explosivos?']},
+      {ico:'🔧',tema:'Equipos y mantenimiento',ejemplos:['¿Cuánto ganó el Scoop DALI?','¿Cuánto costó el mantenimiento?','Ganancia por equipo']},
+      {ico:'📦',tema:'Almacén y logística',ejemplos:['¿Cuántos productos hay en stock?','¿Hay órdenes de compra pendientes?','¿Qué productos están agotados?']},
+      {ico:'⚡',tema:'Recomendaciones',ejemplos:['¿Qué recomendaciones tienes hoy?','¿Hay alguna alerta crítica?','¿Qué debo priorizar?']},
+    ];
+    catEl.innerHTML=cats.map(cat=>`
+      <div style="background:var(--coal3);border:1px solid var(--border);border-radius:10px;padding:12px">
+        <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px">${cat.ico} ${cat.tema}</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          ${cat.ejemplos.map(e=>`<button onclick="preguntaRapidaIA(this.dataset.q)" data-q="${e.replace(/"/g,'&quot;')}"
+            style="text-align:left;background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;padding:2px 0;font-family:'DM Sans',sans-serif;line-height:1.5;transition:color .15s"
+            onmouseover="this.style.color='var(--gold-light)'" onmouseout="this.style.color='var(--text3)'">→ ${e}</button>`).join('')}
+        </div>
+      </div>`).join('');
+  }
+  // Sugerencias rápidas
+  const sugEl=document.getElementById('ia-sugerencias');
+  if(sugEl && !sugEl.dataset.built){
+    sugEl.dataset.built='1';
+    const sugs=['¿Qué recomendaciones tienes para hoy?','Dame un resumen ejecutivo','¿Cómo vamos con la meta?','¿Cuántos metros hicimos hoy?',
+      '¿Qué proyección tenemos al final del mes?','¿Cuánto costó la planilla este mes?',
+      '¿Cuánto queda en la cisterna?','¿Cuánto hay de explosivos en el polvorín?',
+      '¿Cuál es el costo por metro?','Ganancia por equipo','¿Cuánto gastamos en mantenimiento?',
+      '¿Hay órdenes de compra pendientes?','¿Quiénes están ausentes hoy?',
+      '¿Cómo va la utilidad del mes?','¿Cuántos productos hay en stock?',
+      '¿Hubo incidentes de seguridad este mes?'];
+    sugEl.innerHTML=sugs.map(q=>`<button onclick="preguntaRapidaIA(this.dataset.q)" data-q="${q.replace(/"/g,'&quot;')}"
+      style="background:var(--coal4);border:1px solid var(--border);color:var(--text2);border-radius:8px;padding:7px 12px;font-size:11px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.15s"
+      onmouseover="this.style.borderColor='var(--accent-border)';this.style.color='var(--text)'"
+      onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text2)'">${q}</button>`).join('');
+  }
+}
 function preguntaRapidaIA(pregunta){
   const input = document.getElementById('ia-input');
   if(input) input.value = pregunta;
