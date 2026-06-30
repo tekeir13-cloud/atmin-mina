@@ -2966,13 +2966,11 @@ select option{background:var(--coal3);}
 <div class="page" id="page-finanzas">
   <div class="mod-tabs">
     <button class="mod-tab active" onclick="modTab('fin','dashboard',this)">📊 Dashboard</button>
-    <button class="mod-tab" onclick="modTab('fin','proyeccion',this)">📅 Proyección</button>
     <button class="mod-tab" onclick="modTab('fin','informe',this)">🧾 Informe Mensual</button>
     <button class="mod-tab" onclick="modTab('fin','costocentro',this)">💸 Costos por Centro</button>
     <button class="mod-tab" onclick="modTab('fin','ingmaq',this);renderFinIngresosMaq()">🚧 Ingresos x Máq.</button>
   </div>
   <div id="fin-dashboard" class="mod-pane active" style="display:block"></div>
-  <div id="fin-proyeccion" class="mod-pane" style="display:none"></div>
   <div id="fin-informe" class="mod-pane" style="display:none"></div>
   <div id="fin-costocentro" class="mod-pane" style="display:none"></div>
   <div id="fin-ingmaq" class="mod-pane" style="display:none"></div>
@@ -3957,7 +3955,7 @@ const state={
   epp:{historial:[]},
   petroleo:{stock:200,historial:[]},
   almacen:{ingresos:[],salidas:[],inventarioInicial:[],historialMeses:[],productos:[],solicitudesCompra:[],explosivos:{ingresos:[],salidas:[]}},
-  perforacion:[],reportesGuardia:[],mantenimiento:[],mantRepuestos:[],horometros:[],tareas:[],mantPrograma:[],
+  perforacion:[],reportesGuardia:[],mantenimiento:[],mantRepuestos:[],horometros:[],tareas:[],
   ordenes:[],valorizaciones:[],valorizacionesLabor:[],
   compresorista:[],
   metas:{f1:20,f2:20,dias:26,mensualF1:520,mensualF2:520},frenteActivo:1,
@@ -4041,7 +4039,7 @@ const MODULE_PANES = {
   'rrhh': ['planilla','tareas','personal','costorrhh','servicios'],
   'op': ['tablero','avance','solicitudes','vsproyectado','valorizaciones'],
   'mant': ['registro','costosmant'],
-  'fin': ['dashboard','proyeccion','informe','costocentro']
+  'fin': ['dashboard','informe','costocentro']
 };
 
 function modTab(mod, pane, btn){
@@ -4520,7 +4518,6 @@ function renderModPane(mod,pane){
   else if(k==='mant-registro')renderMantenimiento();
   else if(k==='mant-costosmant')renderCostosMant();
   else if(k==='fin-dashboard') renderFinDashboard();
-  else if(k==='fin-proyeccion') renderFinProyeccion();
   else if(k==='fin-informe') renderFinInforme();
   else if(k==='fin-costocentro') renderFinCostoCentro();
   else if(k==='fin-ingmaq') renderFinIngresosMaq();
@@ -5434,7 +5431,7 @@ function almacenLoad(){
       state.almacen.catalogVersion=5;
       almacenSave();
     } else if(!state.almacen.ingresos.length && !state.almacen.salidas.length && !(state.almacen.inventarioInicial||[]).length && !(state.almacen.historialMeses||[]).length){
-      almacenSeedDemo();
+      almacenSeedInventarioInicial();
     }
   }catch(e){}
 }
@@ -5727,163 +5724,7 @@ function importarMaestroExcel(input){
   reader.readAsArrayBuffer(file);
 }
 
-function almacenSeedDemo(){
-  const ing=[
-    {id:'I001',fecha:'2026-03-23',vale:'112437',detalle:'Almacen Poderosa',almacen:'General',producto:'CEMENTO',descripcion:'CEMENTO GRIS ANTISALITRE PORTL. TIPO MS',unidad:'BOL',cantidad:100,precio:27.73,total:2773.00},
-    {id:'I002',fecha:'2026-03-28',vale:'114715',detalle:'Logistica Trujillo',almacen:'General',producto:'MALLA',descripcion:'MALLA ELECTROSOLDADA Nº 10',unidad:'ROLL',cantidad:10,precio:374.91,total:3749.10},
-    {id:'I003',fecha:'2026-03-28',vale:'114715',detalle:'Logistica Trujillo',almacen:'General',producto:'CIMBRA',descripcion:'CIMBRA AC (2C) 3.5 X 3.5 MTR W6" JGO X20 LB/FT',unidad:'JGO',cantidad:7,precio:2034.00,total:14238.00},
-    {id:'I004',fecha:'2026-03-28',vale:'114720',detalle:'Logistica Trujillo',almacen:'General',producto:'PERNO',descripcion:'PERNO SPLIT SET 33 X 5 PIES CON PLATINA',unidad:'UND',cantidad:200,precio:12.50,total:2500.00},
-    {id:'I005',fecha:'2026-03-28',vale:'114720',detalle:'Logistica Trujillo',almacen:'General',producto:'RESINA',descripcion:'RESINA POLESTER RAPIDA 330CC',unidad:'UND',cantidad:100,precio:8.90,total:890.00},
-    {id:'I006',fecha:'2026-03-28',vale:'114721',detalle:'Almacen Poderosa',almacen:'General',producto:'BROCA',descripcion:'BROCA TIPO BOART DE 38MM X 4 PIES',unidad:'UND',cantidad:20,precio:45.00,total:900.00},
-    {id:'I007',fecha:'2026-03-28',vale:'114721',detalle:'Almacen Poderosa',almacen:'General',producto:'BROCA',descripcion:'BROCA TIPO BOART DE 38MM X 2 PIES',unidad:'UND',cantidad:15,precio:32.00,total:480.00},
-    {id:'I008',fecha:'2026-03-30',vale:'115003',detalle:'Almacen Poderosa',almacen:'Mantenimiento',producto:'ANILLO',descripcion:'ANILLO RNORP-214B',unidad:'UND',cantidad:20,precio:1.101,total:22.02},
-    {id:'I009',fecha:'2026-03-30',vale:'115003',detalle:'Almacen Poderosa',almacen:'Mantenimiento',producto:'PERNO',descripcion:'PERNO PASADOR RNS58F-36K',unidad:'UND',cantidad:10,precio:5.372,total:53.72},
-    {id:'I010',fecha:'2026-03-30',vale:'115003',detalle:'Almacen Poderosa',almacen:'Mantenimiento',producto:'PERNO',descripcion:'PERNO GUIA RNS53F-36P',unidad:'UND',cantidad:10,precio:13.127,total:131.27},
-    {id:'I011',fecha:'2026-03-30',vale:'115003',detalle:'Almacen Poderosa',almacen:'Mantenimiento',producto:'RESORTE',descripcion:'RESORTE SUJETADOR RNS58F-36N',unidad:'UND',cantidad:10,precio:7.00,total:70.00},
-    {id:'I012',fecha:'2026-03-30',vale:'115003',detalle:'Almacen Poderosa',almacen:'Mantenimiento',producto:'RESORTE',descripcion:'RESORTE ALETA RN711C',unidad:'UND',cantidad:20,precio:1.50,total:30.00},
-    {id:'I013',fecha:'2026-03-30',vale:'115003',detalle:'Almacen Poderosa',almacen:'Mantenimiento',producto:'ALETA',descripcion:'ALETA RNR91-11A',unidad:'UND',cantidad:20,precio:6.186,total:123.72},
-  ];
-  const sal=[
-    {id:'S001',fecha:'2026-03-22',destino:'2820',almacen:'Mantenimiento',maquina:'AN20B11197',producto:'ANILLO',descripcion:'ANILLO RNORP-214B',unidad:'UND',precio:1.101,cantidad:2,importe:2.202},
-    {id:'S002',fecha:'2026-03-22',destino:'2820',almacen:'Mantenimiento',maquina:'AN20B11197',producto:'PERNO',descripcion:'PERNO PASADOR RNS58F-36K',unidad:'UND',precio:5.372,cantidad:1,importe:5.372},
-    {id:'S003',fecha:'2026-03-22',destino:'2820',almacen:'Mantenimiento',maquina:'AN20B11197',producto:'PERNO',descripcion:'PERNO GUIA RNS53F-36P',unidad:'UND',precio:13.127,cantidad:1,importe:13.127},
-    {id:'S004',fecha:'2026-03-22',destino:'2820',almacen:'Mantenimiento',maquina:'AN20B11197',producto:'RESORTE',descripcion:'RESORTE SUJETADOR RNS58F-36N',unidad:'UND',precio:7.00,cantidad:1,importe:7.00},
-    {id:'S005',fecha:'2026-03-22',destino:'2820',almacen:'Mantenimiento',maquina:'AN20B11197',producto:'RESORTE',descripcion:'RESORTE ALETA RN711C',unidad:'UND',precio:1.50,cantidad:4,importe:6.00},
-    {id:'S006',fecha:'2026-03-22',destino:'2820',almacen:'Mantenimiento',maquina:'AN20B11197',producto:'ALETA',descripcion:'ALETA RNR91-11A',unidad:'UND',precio:6.186,cantidad:4,importe:24.744},
-    {id:'S007',fecha:'2026-03-22',destino:'2820',almacen:'Mantenimiento',maquina:'AN21A24189',producto:'ANILLO',descripcion:'ANILLO RNORP-214B',unidad:'UND',precio:1.101,cantidad:2,importe:2.202},
-    {id:'S008',fecha:'2026-03-22',destino:'2820',almacen:'Mantenimiento',maquina:'AN21A24189',producto:'PERNO',descripcion:'PERNO PASADOR RNS58F-36K',unidad:'UND',precio:5.372,cantidad:1,importe:5.372},
-    {id:'S009',fecha:'2026-03-22',destino:'2820',almacen:'Mantenimiento',maquina:'AN21A24189',producto:'PERNO',descripcion:'PERNO GUIA RNS53F-36P',unidad:'UND',precio:13.127,cantidad:1,importe:13.127},
-    {id:'S010',fecha:'2026-03-22',destino:'2820',almacen:'Mantenimiento',maquina:'AN21A24189',producto:'RESORTE',descripcion:'RESORTE SUJETADOR RNS58F-36N',unidad:'UND',precio:7.00,cantidad:1,importe:7.00},
-    {id:'S011',fecha:'2026-03-22',destino:'2820',almacen:'Mantenimiento',maquina:'AN21A24189',producto:'RESORTE',descripcion:'RESORTE ALETA RN711C',unidad:'UND',precio:1.50,cantidad:4,importe:6.00},
-    {id:'S012',fecha:'2026-03-22',destino:'2820',almacen:'Mantenimiento',maquina:'AN21A24189',producto:'ALETA',descripcion:'ALETA RNR91-11A',unidad:'UND',precio:6.186,cantidad:4,importe:24.744},
-    {id:'S013',fecha:'2026-03-25',destino:'2830',almacen:'General',maquina:'',producto:'CEMENTO',descripcion:'CEMENTO GRIS ANTISALITRE PORTL. TIPO MS',unidad:'BOL',precio:27.73,cantidad:30,importe:831.90},
-    {id:'S014',fecha:'2026-03-25',destino:'2830',almacen:'General',maquina:'',producto:'MALLA',descripcion:'MALLA ELECTROSOLDADA Nº 10',unidad:'ROLL',precio:374.91,cantidad:3,importe:1124.73},
-    {id:'S015',fecha:'2026-03-25',destino:'2820',almacen:'General',maquina:'',producto:'PERNO',descripcion:'PERNO SPLIT SET 33 X 5 PIES CON PLATINA',unidad:'UND',precio:12.50,cantidad:80,importe:1000.00},
-    {id:'S016',fecha:'2026-03-25',destino:'2820',almacen:'General',maquina:'',producto:'RESINA',descripcion:'RESINA POLESTER RAPIDA 330CC',unidad:'UND',precio:8.90,cantidad:40,importe:356.00},
-  ];
-  // Agrupar ingresos demo en hojas de registro (por fecha+origen+almacén; una hoja puede tener varios vales)
-  ing.forEach(i=>{i.grupo='GI|'+i.fecha+'|'+i.detalle+'|'+i.almacen;});
-  // Agrupar la demo en formatos de salida y asignar solicitante
-  const solMap={'AN20B11197':'Carlos Mendoza','AN21A24189':'Luis Ramírez'};
-  sal.forEach(s=>{
-    s.grupo='GS|'+s.fecha+'|'+s.destino+'|'+(s.maquina||'GEN');
-    s.solicitante=solMap[s.maquina]||(s.destino==='2830'?'José Torres':'Pedro Castro');
-  });
-  state.almacen.ingresos=ing;
-  state.almacen.salidas=sal;
-  // Inventario inicial "a full" — stock de arranque realista para todos los productos del catálogo
-  state.almacen.inventarioInicial=[
-    {id:'II01',almacen:'General',codigo:'02-02-10-0001',producto:'ACEITE AIR TOOL OIL S2 A 100',descripcion:'ACEITE AIR TOOL OIL S2 A 100',unidad:'CIL',precio:0,cantidad:2},
-    {id:'II02',almacen:'General',codigo:'11-01-05-0001',producto:'ADAPTADOR DE PERNO HELICOIDAL 22MM',descripcion:'ADAPTADOR DE PERNO HELICOIDAL 22MM',unidad:'PZA',precio:0,cantidad:1},
-    {id:'II03',almacen:'General',codigo:'08-02-01-0001',producto:'ALCAYATA DE FE CORRUGADO 3/8" X 35 CM',descripcion:'ALCAYATA DE FE CORRUGADO 3/8" X 35 CM',unidad:'PZA',precio:0,cantidad:270},
-    {id:'II04',almacen:'General',codigo:'08-02-01-0002',producto:'ALCAYATA DE FE CORRUGADO T-G 5/8"X29 CM',descripcion:'ALCAYATA DE FE CORRUGADO T-G 5/8"X29 CM',unidad:'PZA',precio:0,cantidad:162},
-    {id:'II05',almacen:'General',codigo:'08-02-01-0003',producto:'ALCAYATA DE FE CORRUGADO T-L 3/4"X70CM',descripcion:'ALCAYATA DE FE CORRUGADO T-L 3/4"X70CM',unidad:'PZA',precio:0,cantidad:119},
-    {id:'II06',almacen:'General',codigo:'07-02-01-0001',producto:'ATACADORES DE MADERA 1" X 2.5 MTR',descripcion:'ATACADORES DE MADERA 1" X 2.5 MTR',unidad:'PZA',precio:0,cantidad:49},
-    {id:'II07',almacen:'General',codigo:'01-02-10-0001',producto:'BARRA CONICA 4\' X 7/8\'\'',descripcion:'BARRA CONICA 4\' X 7/8\'\'',unidad:'PZA',precio:0,cantidad:24},
-    {id:'II08',almacen:'General',codigo:'01-02-10-0002',producto:'BARRA CONICA 6\' X 7/8\'\'',descripcion:'BARRA CONICA 6\' X 7/8\'\'',unidad:'PZA',precio:0,cantidad:15},
-    {id:'II09',almacen:'General',codigo:'01-02-10-0003',producto:'BARRA CONICA 8\' X 7/8\'\'',descripcion:'BARRA CONICA 8\' X 7/8\'\'',unidad:'PZA',precio:0,cantidad:8},
-    {id:'II10',almacen:'General',codigo:'01-02-30-0001',producto:'BARRA DE ALUMINIO PARA ACUÑAR 1" x 10\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" x 10\'',unidad:'PZA',precio:0,cantidad:4},
-    {id:'II11',almacen:'General',codigo:'01-02-30-0002',producto:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 12\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 12\'',unidad:'PZA',precio:0,cantidad:7},
-    {id:'II12',almacen:'General',codigo:'01-02-30-0003',producto:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 4\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 4\'',unidad:'PZA',precio:0,cantidad:3},
-    {id:'II13',almacen:'General',codigo:'01-02-30-0004',producto:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 6\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 6\'',unidad:'PZA',precio:0,cantidad:3},
-    {id:'II14',almacen:'General',codigo:'01-02-30-0005',producto:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'',unidad:'PZA',precio:0,cantidad:9},
-    {id:'II15',almacen:'General',codigo:'01-02-20-0001',producto:'BROCA DESCARTABLE DE BOTONES 32 MM',descripcion:'BROCA DESCARTABLE DE BOTONES 32 MM',unidad:'PZA',precio:0,cantidad:151},
-    {id:'II16',almacen:'General',codigo:'01-02-20-0002',producto:'BROCA DESCARTABLE DE BOTONES 36 MM',descripcion:'BROCA DESCARTABLE DE BOTONES 36 MM',unidad:'PZA',precio:0,cantidad:110},
-    {id:'II17',almacen:'General',codigo:'10-02-90-0003',producto:'CABLE DE ACERO GALVANIZADO 5/32" (6X19)',descripcion:'CABLE DE ACERO GALVANIZADO 5/32" (6X19)',unidad:'M',precio:0,cantidad:800},
-    {id:'II18',almacen:'General',codigo:'01-03-90-0001',producto:'CARTUCHO DE CEMENTO 30MM X 305MM',descripcion:'CARTUCHO DE CEMENTO 30MM X 305MM',unidad:'PZA',precio:0,cantidad:2350},
-    {id:'II19',almacen:'General',codigo:'08-06-90-0001',producto:'CEMENTO GRIS ANTISALITRE PORTL. TIPO MS',descripcion:'CEMENTO GRIS ANTISALITRE PORTL. TIPO MS',unidad:'PZA',precio:0,cantidad:120},
-    {id:'II20',almacen:'General',codigo:'10-02-09-0001',producto:'CIMBRA AC (2C) 3.5X3.5 MTR W6" X20 LB/FT',descripcion:'CIMBRA AC (2C) 3.5X3.5 MTR W6" X20 LB/FT',unidad:'JGO',precio:0,cantidad:2},
-    {id:'II21',almacen:'General',codigo:'10-02-09-0002',producto:'CIMBRA AC (2C) 3 X 3M W6\' X 20LB/FT',descripcion:'CIMBRA AC (2C) 3 X 3M W6\' X 20LB/FT',unidad:'JGO',precio:0,cantidad:1},
-    {id:'II22',almacen:'General',codigo:'10-02-90-0004',producto:'CINTA DE ACERO INOX.1/2"X0.76MM L=30.5MT',descripcion:'CINTA DE ACERO INOX.1/2"X0.76MM L=30.5MT',unidad:'CJA',precio:0,cantidad:3},
-    {id:'II23',almacen:'General',codigo:'10-02-90-0005',producto:'CINTA DE ACERO INOX.3/4"X0.76MM L=30.5MT',descripcion:'CINTA DE ACERO INOX.3/4"X0.76MM L=30.5MT',unidad:'CJA',precio:0,cantidad:3},
-    {id:'II24',almacen:'General',codigo:'08-02-01-0004',producto:'GRAPA DE ACERO PARA CABLE 3/16"',descripcion:'GRAPA DE ACERO PARA CABLE 3/16"',unidad:'PZA',precio:0,cantidad:12},
-    {id:'II25',almacen:'General',codigo:'08-02-01-0006',producto:'GRAPA (HEBILLA) SERIE 201SS 1/2" C-254',descripcion:'GRAPA (HEBILLA) SERIE 201SS 1/2" C-254',unidad:'CJA',precio:0,cantidad:3},
-    {id:'II26',almacen:'General',codigo:'08-02-01-0007',producto:'GRAPA (HEBILLA) SERIE 201SS 3/4" C-256',descripcion:'GRAPA (HEBILLA) SERIE 201SS 3/4" C-256',unidad:'CJA',precio:0,cantidad:3},
-    {id:'II27',almacen:'General',codigo:'08-90-90-0001',producto:'GUIADORES DE MADERA 1" X 1.30 MTR',descripcion:'GUIADORES DE MADERA 1" X 1.30 MTR',unidad:'PZA',precio:0,cantidad:64},
-    {id:'II28',almacen:'General',codigo:'10-02-90-0006',producto:'MALLA ELECTROSOLDADA 4"X4"-2.42 X 25 MTR',descripcion:'MALLA ELECTROSOLDADA 4"X4"-2.42 X 25 MTR',unidad:'JGO',precio:0,cantidad:9},
-    {id:'II29',almacen:'General',codigo:'19-01-02-0001',producto:'MANGA DE VENT. 12" X 10 MTR',descripcion:'MANGA DE VENT. 12" X 10 MTR',unidad:'M',precio:0,cantidad:30},
-    {id:'II30',almacen:'General',codigo:'19-01-02-0002',producto:'MANGA DE VENT. 30" X 100 MTR 600 GR/M2',descripcion:'MANGA DE VENT. 30" X 100 MTR 600 GR/M2',unidad:'M',precio:0,cantidad:200},
-    {id:'II31',almacen:'General',codigo:'19-01-02-0003',producto:'MANGA DE VENT. 30" X 20 MTR',descripcion:'MANGA DE VENT. 30" X 20 MTR',unidad:'M',precio:0,cantidad:140},
-    {id:'II32',almacen:'General',codigo:'03-02-90-0001',producto:'MANGUERA DE JEBE Y LONA 1" 300 PSI',descripcion:'MANGUERA DE JEBE Y LONA 1" 300 PSI',unidad:'ROLL',precio:0,cantidad:2},
-    {id:'II33',almacen:'General',codigo:'03-02-90-0002',producto:'MANGUERA DE JEBE Y LONA 1/2"',descripcion:'MANGUERA DE JEBE Y LONA 1/2"',unidad:'ROLL',precio:0,cantidad:2},
-    {id:'II34',almacen:'General',codigo:'11-01-05-0002',producto:'PERNO HELICOIDAL 19 MM X 5\'(1.52MTR)',descripcion:'PERNO HELICOIDAL 19 MM X 5\'(1.52MTR)',unidad:'PZA',precio:0,cantidad:144},
-    {id:'II35',almacen:'General',codigo:'11-01-05-0003',producto:'PERNO HELICOIDAL 19 MM X 6\'(1.83MTR)',descripcion:'PERNO HELICOIDAL 19 MM X 6\'(1.83MTR)',unidad:'PZA',precio:0,cantidad:278},
-    {id:'II36',almacen:'General',codigo:'11-01-05-0004',producto:'PERNO HELICOIDAL 19 MM X 7\'(2.13MTR)',descripcion:'PERNO HELICOIDAL 19 MM X 7\'(2.13MTR)',unidad:'PZA',precio:0,cantidad:150},
-    {id:'II37',almacen:'General',codigo:'10-02-05-0001',producto:'PLANCHA ACANALADA T/ONDUL. 2X1100X1700MM',descripcion:'PLANCHA ACANALADA T/ONDUL. 2X1100X1700MM',unidad:'PZA',precio:0,cantidad:19},
-    {id:'II38',almacen:'General',codigo:'16-04-05-0001',producto:'REDUCCION POLIP.C/ROSCA 110 A 63 MM',descripcion:'REDUCCION POLIP.C/ROSCA 110 A 63 MM',unidad:'PZA',precio:0,cantidad:2},
-    {id:'II39',almacen:'General',codigo:'16-04-05-0002',producto:'REDUCCION POLIP.C/ROSCA 63 A 32 MM',descripcion:'REDUCCION POLIP.C/ROSCA 63 A 32 MM',unidad:'PZA',precio:0,cantidad:3},
-    {id:'II40',almacen:'General',codigo:'01-03-90-0002',producto:'RESINA 28 MM X 305 MM 0-60 SECOND SET',descripcion:'RESINA 28 MM X 305 MM 0-60 SECOND SET',unidad:'PZA',precio:0,cantidad:1950},
-    {id:'II41',almacen:'General',codigo:'11-01-05-0005',producto:'SPLIT SET CON PLATINA 5\' X 39MM',descripcion:'SPLIT SET CON PLATINA 5\' X 39MM',unidad:'PZA',precio:0,cantidad:19},
-    {id:'II42',almacen:'General',codigo:'16-03-05-0001',producto:'TEE DE POLIPROP. C/ROSCA 110MM',descripcion:'TEE DE POLIPROP. C/ROSCA 110MM',unidad:'PZA',precio:0,cantidad:4},
-    {id:'II43',almacen:'General',codigo:'16-03-05-0002',producto:'TEE DE POLIPROP. C/ROSCA 63MM',descripcion:'TEE DE POLIPROP. C/ROSCA 63MM',unidad:'PZA',precio:0,cantidad:4},
-    {id:'II44',almacen:'General',codigo:'16-01-04-0001',producto:'TUBO POLIETILENO AZUL 1" PE 80 PN-10',descripcion:'TUBO POLIETILENO AZUL 1" PE 80 PN-10',unidad:'M',precio:0,cantidad:100},
-    {id:'II45',almacen:'General',codigo:'16-01-04-0002',producto:'TUBO POLIETILENO AZUL 2" PE 80 PN-10',descripcion:'TUBO POLIETILENO AZUL 2" PE 80 PN-10',unidad:'M',precio:0,cantidad:200},
-    {id:'II46',almacen:'General',codigo:'16-01-04-0003',producto:'TUBO POLIETILENO AZUL 4" PE 80 PN-10',descripcion:'TUBO POLIETILENO AZUL 4" PE 80 PN-10',unidad:'M',precio:0,cantidad:100},
-    {id:'II47',almacen:'General',codigo:'16-01-04-0004',producto:'TUBO POLIETILENO NEGRO 1" PE 80 PN-10',descripcion:'TUBO POLIETILENO NEGRO 1" PE 80 PN-10',unidad:'M',precio:0,cantidad:100},
-    {id:'II48',almacen:'General',codigo:'16-01-04-0006',producto:'TUBO POLIETILENO NEGRO 4" PE 80 PN-10',descripcion:'TUBO POLIETILENO NEGRO 4" PE 80 PN-10',unidad:'M',precio:0,cantidad:100},
-    {id:'II49',almacen:'General',codigo:'16-06-01-0001',producto:'VALVULA BOLA PVC DOBLE ACOP PP 110MM',descripcion:'VALVULA BOLA PVC DOBLE ACOP PP 110MM',unidad:'PZA',precio:0,cantidad:2},
-    {id:'II50',almacen:'General',codigo:'16-06-01-0002',producto:'VALVULA BOLA PVC DOBLE ACOP PP 32MM',descripcion:'VALVULA BOLA PVC DOBLE ACOP PP 32MM',unidad:'PZA',precio:0,cantidad:6},
-    {id:'II51',almacen:'General',codigo:'16-06-01-0003',producto:'VALVULA BOLA PVC DOBLE ACOP PP 63MM',descripcion:'VALVULA BOLA PVC DOBLE ACOP PP 63MM',unidad:'PZA',precio:0,cantidad:3},
-  ];
-  almacenSeedProductos();
-  almacenSave();
-}
 // Reemplaza solo el inventarioInicial con el stock real del Excel (no toca ingresos/salidas)
-function almacenSeedDemo_stock(){
-  state.almacen.inventarioInicial=[
-    {id:'II01',almacen:'General',codigo:'02-02-10-0001',producto:'ACEITE AIR TOOL OIL S2 A 100',descripcion:'ACEITE AIR TOOL OIL S2 A 100',unidad:'CIL',precio:0,cantidad:2},
-    {id:'II02',almacen:'General',codigo:'11-01-05-0001',producto:'ADAPTADOR DE PERNO HELICOIDAL 22MM',descripcion:'ADAPTADOR DE PERNO HELICOIDAL 22MM',unidad:'PZA',precio:0,cantidad:1},
-    {id:'II03',almacen:'General',codigo:'08-02-01-0001',producto:'ALCAYATA DE FE CORRUGADO 3/8" X 35 CM',descripcion:'ALCAYATA DE FE CORRUGADO 3/8" X 35 CM',unidad:'PZA',precio:0,cantidad:270},
-    {id:'II04',almacen:'General',codigo:'08-02-01-0002',producto:'ALCAYATA DE FE CORRUGADO T-G 5/8"X29 CM',descripcion:'ALCAYATA DE FE CORRUGADO T-G 5/8"X29 CM',unidad:'PZA',precio:0,cantidad:162},
-    {id:'II05',almacen:'General',codigo:'08-02-01-0003',producto:'ALCAYATA DE FE CORRUGADO T-L 3/4"X70CM',descripcion:'ALCAYATA DE FE CORRUGADO T-L 3/4"X70CM',unidad:'PZA',precio:0,cantidad:119},
-    {id:'II06',almacen:'General',codigo:'07-02-01-0001',producto:'ATACADORES DE MADERA 1" X 2.5 MTR',descripcion:'ATACADORES DE MADERA 1" X 2.5 MTR',unidad:'PZA',precio:0,cantidad:49},
-    {id:'II07',almacen:'General',codigo:'01-02-10-0001',producto:'BARRA CONICA 4\' X 7/8\'\'',descripcion:'BARRA CONICA 4\' X 7/8\'\'',unidad:'PZA',precio:0,cantidad:24},
-    {id:'II08',almacen:'General',codigo:'01-02-10-0002',producto:'BARRA CONICA 6\' X 7/8\'\'',descripcion:'BARRA CONICA 6\' X 7/8\'\'',unidad:'PZA',precio:0,cantidad:15},
-    {id:'II09',almacen:'General',codigo:'01-02-10-0003',producto:'BARRA CONICA 8\' X 7/8\'\'',descripcion:'BARRA CONICA 8\' X 7/8\'\'',unidad:'PZA',precio:0,cantidad:8},
-    {id:'II10',almacen:'General',codigo:'01-02-30-0001',producto:'BARRA DE ALUMINIO PARA ACUÑAR 1" x 10\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" x 10\'',unidad:'PZA',precio:0,cantidad:4},
-    {id:'II11',almacen:'General',codigo:'01-02-30-0002',producto:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 12\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 12\'',unidad:'PZA',precio:0,cantidad:7},
-    {id:'II12',almacen:'General',codigo:'01-02-30-0003',producto:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 4\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 4\'',unidad:'PZA',precio:0,cantidad:3},
-    {id:'II13',almacen:'General',codigo:'01-02-30-0004',producto:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 6\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 6\'',unidad:'PZA',precio:0,cantidad:3},
-    {id:'II14',almacen:'General',codigo:'01-02-30-0005',producto:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'',descripcion:'BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'',unidad:'PZA',precio:0,cantidad:9},
-    {id:'II15',almacen:'General',codigo:'01-02-20-0001',producto:'BROCA DESCARTABLE DE BOTONES 32 MM',descripcion:'BROCA DESCARTABLE DE BOTONES 32 MM',unidad:'PZA',precio:0,cantidad:151},
-    {id:'II16',almacen:'General',codigo:'01-02-20-0002',producto:'BROCA DESCARTABLE DE BOTONES 36 MM',descripcion:'BROCA DESCARTABLE DE BOTONES 36 MM',unidad:'PZA',precio:0,cantidad:110},
-    {id:'II17',almacen:'General',codigo:'10-02-90-0003',producto:'CABLE DE ACERO GALVANIZADO 5/32" (6X19)',descripcion:'CABLE DE ACERO GALVANIZADO 5/32" (6X19)',unidad:'M',precio:0,cantidad:800},
-    {id:'II18',almacen:'General',codigo:'01-03-90-0001',producto:'CARTUCHO DE CEMENTO 30MM X 305MM',descripcion:'CARTUCHO DE CEMENTO 30MM X 305MM',unidad:'PZA',precio:0,cantidad:2350},
-    {id:'II19',almacen:'General',codigo:'08-06-90-0001',producto:'CEMENTO GRIS ANTISALITRE PORTL. TIPO MS',descripcion:'CEMENTO GRIS ANTISALITRE PORTL. TIPO MS',unidad:'PZA',precio:0,cantidad:120},
-    {id:'II20',almacen:'General',codigo:'10-02-09-0001',producto:'CIMBRA AC (2C) 3.5X3.5 MTR W6" X20 LB/FT',descripcion:'CIMBRA AC (2C) 3.5X3.5 MTR W6" X20 LB/FT',unidad:'JGO',precio:0,cantidad:2},
-    {id:'II21',almacen:'General',codigo:'10-02-09-0002',producto:'CIMBRA AC (2C) 3 X 3M W6\' X 20LB/FT',descripcion:'CIMBRA AC (2C) 3 X 3M W6\' X 20LB/FT',unidad:'JGO',precio:0,cantidad:1},
-    {id:'II22',almacen:'General',codigo:'10-02-90-0004',producto:'CINTA DE ACERO INOX.1/2"X0.76MM L=30.5MT',descripcion:'CINTA DE ACERO INOX.1/2"X0.76MM L=30.5MT',unidad:'CJA',precio:0,cantidad:3},
-    {id:'II23',almacen:'General',codigo:'10-02-90-0005',producto:'CINTA DE ACERO INOX.3/4"X0.76MM L=30.5MT',descripcion:'CINTA DE ACERO INOX.3/4"X0.76MM L=30.5MT',unidad:'CJA',precio:0,cantidad:3},
-    {id:'II24',almacen:'General',codigo:'08-02-01-0004',producto:'GRAPA DE ACERO PARA CABLE 3/16"',descripcion:'GRAPA DE ACERO PARA CABLE 3/16"',unidad:'PZA',precio:0,cantidad:12},
-    {id:'II25',almacen:'General',codigo:'08-02-01-0006',producto:'GRAPA (HEBILLA) SERIE 201SS 1/2" C-254',descripcion:'GRAPA (HEBILLA) SERIE 201SS 1/2" C-254',unidad:'CJA',precio:0,cantidad:3},
-    {id:'II26',almacen:'General',codigo:'08-02-01-0007',producto:'GRAPA (HEBILLA) SERIE 201SS 3/4" C-256',descripcion:'GRAPA (HEBILLA) SERIE 201SS 3/4" C-256',unidad:'CJA',precio:0,cantidad:3},
-    {id:'II27',almacen:'General',codigo:'08-90-90-0001',producto:'GUIADORES DE MADERA 1" X 1.30 MTR',descripcion:'GUIADORES DE MADERA 1" X 1.30 MTR',unidad:'PZA',precio:0,cantidad:64},
-    {id:'II28',almacen:'General',codigo:'10-02-90-0006',producto:'MALLA ELECTROSOLDADA 4"X4"-2.42 X 25 MTR',descripcion:'MALLA ELECTROSOLDADA 4"X4"-2.42 X 25 MTR',unidad:'JGO',precio:0,cantidad:9},
-    {id:'II29',almacen:'General',codigo:'19-01-02-0001',producto:'MANGA DE VENT. 12" X 10 MTR',descripcion:'MANGA DE VENT. 12" X 10 MTR',unidad:'M',precio:0,cantidad:30},
-    {id:'II30',almacen:'General',codigo:'19-01-02-0002',producto:'MANGA DE VENT. 30" X 100 MTR 600 GR/M2',descripcion:'MANGA DE VENT. 30" X 100 MTR 600 GR/M2',unidad:'M',precio:0,cantidad:200},
-    {id:'II31',almacen:'General',codigo:'19-01-02-0003',producto:'MANGA DE VENT. 30" X 20 MTR',descripcion:'MANGA DE VENT. 30" X 20 MTR',unidad:'M',precio:0,cantidad:140},
-    {id:'II32',almacen:'General',codigo:'03-02-90-0001',producto:'MANGUERA DE JEBE Y LONA 1" 300 PSI',descripcion:'MANGUERA DE JEBE Y LONA 1" 300 PSI',unidad:'ROLL',precio:0,cantidad:2},
-    {id:'II33',almacen:'General',codigo:'03-02-90-0002',producto:'MANGUERA DE JEBE Y LONA 1/2"',descripcion:'MANGUERA DE JEBE Y LONA 1/2"',unidad:'ROLL',precio:0,cantidad:2},
-    {id:'II34',almacen:'General',codigo:'11-01-05-0002',producto:'PERNO HELICOIDAL 19 MM X 5\'(1.52MTR)',descripcion:'PERNO HELICOIDAL 19 MM X 5\'(1.52MTR)',unidad:'PZA',precio:0,cantidad:144},
-    {id:'II35',almacen:'General',codigo:'11-01-05-0003',producto:'PERNO HELICOIDAL 19 MM X 6\'(1.83MTR)',descripcion:'PERNO HELICOIDAL 19 MM X 6\'(1.83MTR)',unidad:'PZA',precio:0,cantidad:278},
-    {id:'II36',almacen:'General',codigo:'11-01-05-0004',producto:'PERNO HELICOIDAL 19 MM X 7\'(2.13MTR)',descripcion:'PERNO HELICOIDAL 19 MM X 7\'(2.13MTR)',unidad:'PZA',precio:0,cantidad:150},
-    {id:'II37',almacen:'General',codigo:'10-02-05-0001',producto:'PLANCHA ACANALADA T/ONDUL. 2X1100X1700MM',descripcion:'PLANCHA ACANALADA T/ONDUL. 2X1100X1700MM',unidad:'PZA',precio:0,cantidad:19},
-    {id:'II38',almacen:'General',codigo:'16-04-05-0001',producto:'REDUCCION POLIP.C/ROSCA 110 A 63 MM',descripcion:'REDUCCION POLIP.C/ROSCA 110 A 63 MM',unidad:'PZA',precio:0,cantidad:2},
-    {id:'II39',almacen:'General',codigo:'16-04-05-0002',producto:'REDUCCION POLIP.C/ROSCA 63 A 32 MM',descripcion:'REDUCCION POLIP.C/ROSCA 63 A 32 MM',unidad:'PZA',precio:0,cantidad:3},
-    {id:'II40',almacen:'General',codigo:'01-03-90-0002',producto:'RESINA 28 MM X 305 MM 0-60 SECOND SET',descripcion:'RESINA 28 MM X 305 MM 0-60 SECOND SET',unidad:'PZA',precio:0,cantidad:1950},
-    {id:'II41',almacen:'General',codigo:'11-01-05-0005',producto:'SPLIT SET CON PLATINA 5\' X 39MM',descripcion:'SPLIT SET CON PLATINA 5\' X 39MM',unidad:'PZA',precio:0,cantidad:19},
-    {id:'II42',almacen:'General',codigo:'16-03-05-0001',producto:'TEE DE POLIPROP. C/ROSCA 110MM',descripcion:'TEE DE POLIPROP. C/ROSCA 110MM',unidad:'PZA',precio:0,cantidad:4},
-    {id:'II43',almacen:'General',codigo:'16-03-05-0002',producto:'TEE DE POLIPROP. C/ROSCA 63MM',descripcion:'TEE DE POLIPROP. C/ROSCA 63MM',unidad:'PZA',precio:0,cantidad:4},
-    {id:'II44',almacen:'General',codigo:'16-01-04-0001',producto:'TUBO POLIETILENO AZUL 1" PE 80 PN-10',descripcion:'TUBO POLIETILENO AZUL 1" PE 80 PN-10',unidad:'M',precio:0,cantidad:100},
-    {id:'II45',almacen:'General',codigo:'16-01-04-0002',producto:'TUBO POLIETILENO AZUL 2" PE 80 PN-10',descripcion:'TUBO POLIETILENO AZUL 2" PE 80 PN-10',unidad:'M',precio:0,cantidad:200},
-    {id:'II46',almacen:'General',codigo:'16-01-04-0003',producto:'TUBO POLIETILENO AZUL 4" PE 80 PN-10',descripcion:'TUBO POLIETILENO AZUL 4" PE 80 PN-10',unidad:'M',precio:0,cantidad:100},
-    {id:'II47',almacen:'General',codigo:'16-01-04-0004',producto:'TUBO POLIETILENO NEGRO 1" PE 80 PN-10',descripcion:'TUBO POLIETILENO NEGRO 1" PE 80 PN-10',unidad:'M',precio:0,cantidad:100},
-    {id:'II48',almacen:'General',codigo:'16-01-04-0006',producto:'TUBO POLIETILENO NEGRO 4" PE 80 PN-10',descripcion:'TUBO POLIETILENO NEGRO 4" PE 80 PN-10',unidad:'M',precio:0,cantidad:100},
-    {id:'II49',almacen:'General',codigo:'16-06-01-0001',producto:'VALVULA BOLA PVC DOBLE ACOP PP 110MM',descripcion:'VALVULA BOLA PVC DOBLE ACOP PP 110MM',unidad:'PZA',precio:0,cantidad:2},
-    {id:'II50',almacen:'General',codigo:'16-06-01-0002',producto:'VALVULA BOLA PVC DOBLE ACOP PP 32MM',descripcion:'VALVULA BOLA PVC DOBLE ACOP PP 32MM',unidad:'PZA',precio:0,cantidad:6},
-    {id:'II51',almacen:'General',codigo:'16-06-01-0003',producto:'VALVULA BOLA PVC DOBLE ACOP PP 63MM',descripcion:'VALVULA BOLA PVC DOBLE ACOP PP 63MM',unidad:'PZA',precio:0,cantidad:3},
-  ];
-}
 function almacenSeedProductos(){
   state.almacen.productos=[
     {id:'MP0001',codigo:"1300000036",nombre:"BARRA CONICA 6' X 7/8''",unidad:"PZA",precio:330.29,almacen:"General"},
@@ -11094,18 +10935,6 @@ function abrirModalKitMant(){
   if(g('kit-jackleg')) g('kit-jackleg').value='';
   kitEquipoChange();
   abrirModal('modal-kit-mant');
-}
-function kitPoblarNiveles(){
-  mantProgLoad();
-  const g=i=>document.getElementById(i);
-  const sel=g('kit-nivel-mant'); if(!sel) return;
-  const equipo=g('kit-equipo').value;
-  const prog=(state.mantPrograma||[]).find(p=>p.maquina===equipo);
-  if(prog&&prog.niveles&&prog.niveles.length){
-    sel.innerHTML='<option value="">— No aplica —</option>'+prog.niveles.map(n=>`<option value="${n.id}">${(n.nombre||'').replace(/"/g,'&quot;')}</option>`).join('');
-  } else {
-    sel.innerHTML='<option value="">— No aplica —</option>';
-  }
 }
 function editarKitMant(id){
   mantRepLoad();
@@ -16515,262 +16344,6 @@ const _origRenderTabla = typeof renderTablaCompresorista === 'function' ? render
 
 // ==================== FIN MÓDULO COMPRESORISTA ====================
 
-// ── Programa de Mantenimiento ──────────────────────────────────────────────
-const MANT_PROG_KEY = 'atmin_mant_programa';
-const MANT_PROG_HIST_KEY = 'atmin_mant_prog_hist';
-const MANT_PROG_MAQUINAS = ['Grupo Electrógeno','Compresora M135','Compresora M122','Scoop DALI','Scoop Monte','Dumper'];
-const MANT_PROG_ICONS = {'Grupo Electrógeno':'⚡','Compresora M135':'🔴','Compresora M122':'🔴','Scoop DALI':'🚜','Scoop Monte':'🚜','Dumper':'🚚'};
-const MANT_PROG_NIVELES_DEF = [
-  {nombre:'Cambio de aceite + filtro', intervalo:250},
-  {nombre:'Filtros aire/combustible', intervalo:500},
-  {nombre:'Revisión mayor / valvulas', intervalo:1000}
-];
-
-function mantProgSeedMaquina(m){
-  return {maquina:m, niveles: MANT_PROG_NIVELES_DEF.map((n,i)=>({id:m+'-'+i, nombre:n.nombre, intervalo:n.intervalo, horomBase:0, fechaBase:''}))};
-}
-function mantProgLoad(){
-  try{ state.mantPrograma = JSON.parse(localStorage.getItem(MANT_PROG_KEY)||'[]'); }catch(e){ state.mantPrograma=[]; }
-  if(!Array.isArray(state.mantPrograma)) state.mantPrograma=[];
-  // Seed / ensure every machine exists
-  let changed=false;
-  MANT_PROG_MAQUINAS.forEach(m=>{
-    if(!state.mantPrograma.find(p=>p.maquina===m)){ state.mantPrograma.push(mantProgSeedMaquina(m)); changed=true; }
-  });
-  if(changed) mantProgSave();
-  try{ state.mantProgHist = JSON.parse(localStorage.getItem(MANT_PROG_HIST_KEY)||'[]'); }catch(e){ state.mantProgHist=[]; }
-  if(!Array.isArray(state.mantProgHist)) state.mantProgHist=[];
-}
-function mantProgSave(){ localStorage.setItem(MANT_PROG_KEY, JSON.stringify(state.mantPrograma||[])); }
-function mantProgHistSave(){ localStorage.setItem(MANT_PROG_HIST_KEY, JSON.stringify(state.mantProgHist||[])); }
-
-function mantProgHorometroActual(maquina){
-  let max = 0;
-  (state.compresorista||[]).forEach(r=>{
-    (r.horometros||[]).forEach(h=>{
-      if(h.equipo===maquina){ const v=parseFloat(h.HF||0); if(v>max) max=v; }
-    });
-  });
-  return max;
-}
-
-function mantProgPromedioHorasDia(maquina){
-  const corte = new Date(); corte.setDate(corte.getDate()-30);
-  const corteStr = corte.toISOString().slice(0,10);
-  let total = 0; const dias = new Set();
-  (state.compresorista||[]).forEach(r=>{
-    if(!r.fecha || r.fecha < corteStr) return;
-    const h = (r.horometros||[]).find(x=>x.equipo===maquina);
-    if(h){ total += parseFloat(h.HT||0); dias.add(r.fecha); }
-  });
-  if(!dias.size) return 0;
-  return total / dias.size;
-}
-
-function mantProgProyeccion(maquina, horasRestantes){
-  const avg = mantProgPromedioHorasDia(maquina);
-  if(avg <= 0) return 'Sin datos de uso';
-  if(horasRestantes <= 0) return '¡Vencido!';
-  const dias = Math.ceil(horasRestantes / avg);
-  const f = new Date(); f.setDate(f.getDate()+dias);
-  return `~${dias} días (${fmtF(f.toISOString().slice(0,10))})`;
-}
-
-function mantProgRegistrar(maquina, nivelId, kitId, resp){
-  mantProgLoad();
-  const prog = state.mantPrograma.find(p=>p.maquina===maquina);
-  if(!prog) return;
-  const niv = prog.niveles.find(n=>n.id===nivelId);
-  if(!niv) return;
-  const horom = mantProgHorometroActual(maquina);
-  niv.horomBase = horom;
-  niv.fechaBase = hoy();
-  state.mantProgHist = state.mantProgHist||[];
-  state.mantProgHist.push({id:'MPH'+Date.now(), maquina, nivel:niv.nombre, fecha:hoy(), horometro:horom, kitId:kitId||null, resp:resp||'—'});
-  mantProgSave(); mantProgHistSave();
-  if(document.getElementById('mant-programamant')) renderProgramaMant();
-}
-
-function mantProgRegistrarPrompt(maquina, nivelId){
-  const def=(typeof usuarioActivo!=='undefined'&&usuarioActivo&&usuarioActivo.nombre)?usuarioActivo.nombre:'';
-  const resp=(prompt('Responsable del mantenimiento:',def)||def||'').trim();
-  if(resp===null) return;
-  mantProgRegistrar(maquina, nivelId, null, resp||'—');
-  showNotif('✓ Mantenimiento registrado');
-}
-
-function mantProgEditNivel(maquina, nivelId, field, value){
-  mantProgLoad();
-  const prog = state.mantPrograma.find(p=>p.maquina===maquina);
-  const niv = prog && prog.niveles.find(n=>n.id===nivelId);
-  if(!niv) return;
-  if(field==='intervalo') niv.intervalo = parseFloat(value)||0;
-  else niv[field] = value;
-  mantProgSave(); renderProgramaMant();
-}
-
-function mantProgAddNivel(maquina){
-  mantProgLoad();
-  const prog = state.mantPrograma.find(p=>p.maquina===maquina);
-  if(!prog) return;
-  prog.niveles.push({id:maquina+'-'+Date.now(), nombre:'Nuevo nivel', intervalo:500, horomBase:0, fechaBase:''});
-  mantProgSave(); renderProgramaMant();
-}
-
-function mantProgDelNivel(maquina, nivelId){
-  if(!confirm('¿Eliminar este nivel de mantenimiento?')) return;
-  mantProgLoad();
-  const prog = state.mantPrograma.find(p=>p.maquina===maquina);
-  if(!prog) return;
-  prog.niveles = prog.niveles.filter(n=>n.id!==nivelId);
-  mantProgSave(); renderProgramaMant();
-}
-
-function mantProgNivelEstado(niv, horom){
-  const desde = Math.max(0, horom - (niv.horomBase||0));
-  const intervalo = niv.intervalo||1;
-  const pct = (desde/intervalo)*100;
-  const restantes = Math.max(0, intervalo - desde);
-  let color = '#22c55e';
-  if(pct >= 100) color = '#ef4444';
-  else if(pct >= 80) color = '#f59e0b';
-  return {desde, intervalo, pct, restantes, color};
-}
-
-function renderProgramaMant(){
-  mantProgLoad();
-  const el = document.getElementById('mant-programamant');
-  if(!el) return;
-
-  // Build alerts
-  const alertas = [];
-  MANT_PROG_MAQUINAS.forEach(maq=>{
-    const prog = state.mantPrograma.find(p=>p.maquina===maq); if(!prog) return;
-    const horom = mantProgHorometroActual(maq);
-    prog.niveles.forEach(niv=>{
-      const e = mantProgNivelEstado(niv, horom);
-      if(e.pct >= 80) alertas.push({maq, nivel:niv.nombre, pct:e.pct, restantes:e.restantes});
-    });
-  });
-  alertas.sort((a,b)=>b.pct-a.pct);
-
-  let html = `<div style="padding:16px">
-    <h3 style="color:var(--accent-light);margin-bottom:8px">📅 Programa de Mantenimiento</h3>
-    <p style="color:var(--text2);font-size:13px;margin-bottom:16px">Horómetros reales tomados de los reportes diarios de compresoristas (lectura acumulada HF). Cada nivel se reinicia automáticamente al registrar su mantenimiento o al completar un kit vinculado.</p>`;
-
-  // Alerts summary
-  html += `<div style="background:var(--coal4);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:18px">
-    <div style="font-weight:700;color:var(--text);margin-bottom:8px">🔔 Alertas</div>`;
-  if(!alertas.length){
-    html += `<div style="color:#22c55e;font-size:13px">✅ Todo al día</div>`;
-  } else {
-    html += `<div style="display:grid;gap:6px">` + alertas.map(a=>{
-      const col = a.pct>=100?'#ef4444':'#f59e0b';
-      return `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2)">
-        <span><span style="color:${col};font-weight:700">${a.pct>=100?'🚨':'⚠️'}</span> ${a.maq} — ${a.nivel}</span>
-        <span style="color:${col};font-weight:700">${a.pct.toFixed(0)}% · faltan ${a.restantes.toFixed(0)}h</span></div>`;
-    }).join('') + `</div>`;
-  }
-  html += `</div>`;
-
-  html += `<div style="display:grid;gap:16px">`;
-
-  MANT_PROG_MAQUINAS.forEach(maq=>{
-    const prog = state.mantPrograma.find(p=>p.maquina===maq); if(!prog) return;
-    const icon = MANT_PROG_ICONS[maq]||'🔧';
-    const horom = mantProgHorometroActual(maq);
-    const avg = mantProgPromedioHorasDia(maq);
-
-    // worst level
-    let worstPct = 0;
-    prog.niveles.forEach(niv=>{ const e=mantProgNivelEstado(niv,horom); if(e.pct>worstPct) worstPct=e.pct; });
-    const cardBorder = worstPct>=100?'#ef4444':worstPct>=80?'#f59e0b':'var(--border)';
-    const cardGlow = worstPct>=100?'box-shadow:0 0 12px rgba(239,68,68,0.3)':worstPct>=80?'box-shadow:0 0 10px rgba(245,158,11,0.2)':'';
-    const sumEstado = worstPct>=100?'🚨 Mantenimiento requerido':worstPct>=80?'⚠️ Próximo mantenimiento':'✅ En operación normal';
-    const sumColor = worstPct>=100?'#ef4444':worstPct>=80?'#f59e0b':'#22c55e';
-
-    html += `<div style="background:var(--coal3);border:1px solid ${cardBorder};border-radius:12px;padding:18px;${cardGlow}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:10px">
-        <div style="display:flex;align-items:center;gap:10px">
-          <span style="font-size:30px">${icon}</span>
-          <div>
-            <div style="font-weight:700;font-size:17px;color:var(--text)">${maq}</div>
-            <div style="font-size:12px;color:${sumColor};font-weight:600">${sumEstado}</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:14px;text-align:right">
-          <div>
-            <div style="font-size:24px;font-weight:800;color:var(--text);line-height:1">${horom.toFixed(1)}h</div>
-            <div style="font-size:11px;color:var(--text3)">Horómetro actual</div>
-          </div>
-          <div>
-            <div style="font-size:24px;font-weight:800;color:var(--accent-light);line-height:1">${avg.toFixed(1)}h</div>
-            <div style="font-size:11px;color:var(--text3)">Prom. horas/día</div>
-          </div>
-        </div>
-      </div>`;
-
-    prog.niveles.forEach(niv=>{
-      const e = mantProgNivelEstado(niv, horom);
-      const proy = mantProgProyeccion(maq, e.restantes);
-      html += `<div style="background:var(--coal4);border-radius:8px;padding:12px;margin-bottom:10px">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-          <input type="text" value="${(niv.nombre||'').replace(/"/g,'&quot;')}" onchange="mantProgEditNivel('${maq}','${niv.id}','nombre',this.value)"
-            style="flex:1;min-width:160px;background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--text);font-weight:600;font-size:14px;padding:2px 0">
-          <div style="display:flex;align-items:center;gap:6px">
-            <span style="font-size:11px;color:var(--text3)">Intervalo</span>
-            <input type="number" value="${niv.intervalo}" min="1" step="10" onchange="mantProgEditNivel('${maq}','${niv.id}','intervalo',this.value)"
-              style="width:70px;background:var(--coal3);border:1px solid var(--border);border-radius:6px;padding:3px 6px;color:var(--text);font-size:13px;font-weight:700;text-align:center">
-            <span style="font-size:11px;color:var(--text3)">h</span>
-            <button onclick="mantProgDelNivel('${maq}','${niv.id}')" title="Eliminar nivel" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px">🗑</button>
-          </div>
-        </div>
-        <div style="background:var(--coal3);border-radius:6px;height:12px;overflow:hidden;margin-bottom:5px">
-          <div style="height:100%;width:${Math.min(100,e.pct)}%;background:${e.color};transition:width .4s"></div>
-        </div>
-        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;font-size:11px;color:var(--text2)">
-          <span><strong style="color:${e.color}">${e.desde.toFixed(1)}h</strong> / ${e.intervalo}h · <strong style="color:${e.color}">${e.pct.toFixed(0)}%</strong></span>
-          <span>Restan <strong style="color:var(--text)">${e.restantes.toFixed(1)}h</strong> · ${proy}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:8px;flex-wrap:wrap">
-          <span style="font-size:11px;color:var(--text3)">${niv.fechaBase?('Último mant.: '+fmtF(niv.fechaBase)+' @ '+(niv.horomBase||0)+'h'):'Sin mantenimiento registrado'}</span>
-          <button onclick="mantProgRegistrarPrompt('${maq}','${niv.id}')" style="background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.35);border-radius:8px;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:600">✓ Registrar mantenimiento</button>
-        </div>
-      </div>`;
-    });
-
-    html += `<button onclick="mantProgAddNivel('${maq}')" style="background:none;border:1px dashed var(--border);color:var(--text2);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;width:100%">+ Agregar nivel</button>`;
-    html += `</div>`;
-  });
-
-  html += `</div>`;
-
-  // History
-  const hist = (state.mantProgHist||[]).slice().reverse();
-  html += `<div style="margin-top:24px">
-    <div style="font-weight:700;color:var(--text);margin-bottom:10px">📋 Historial de mantenimientos</div>`;
-  if(!hist.length){
-    html += `<div style="color:var(--text3);font-size:13px">Aún no hay mantenimientos registrados.</div>`;
-  } else {
-    html += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
-      <thead><tr style="color:var(--text3);text-align:left">
-        <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Fecha</th>
-        <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Máquina</th>
-        <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Nivel</th>
-        <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Horómetro</th>
-        <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Responsable</th>
-      </tr></thead><tbody>` + hist.map(h=>`<tr style="color:var(--text2)">
-        <td style="padding:6px 8px;border-bottom:1px solid var(--border)">${fmtF(h.fecha)}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid var(--border)">${h.maquina}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid var(--border)">${h.nivel}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid var(--border)">${(h.horometro||0)}h</td>
-        <td style="padding:6px 8px;border-bottom:1px solid var(--border)">${h.resp||'—'}</td>
-      </tr>`).join('') + `</tbody></table></div>`;
-  }
-  html += `</div></div>`;
-
-  el.innerHTML = html;
-}
 </script>
 
 </body>
