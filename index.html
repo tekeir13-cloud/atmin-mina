@@ -3792,11 +3792,11 @@ select option{background:var(--coal3);}
     <input type="hidden" id="kit-id">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <div class="form-group" style="margin:0"><label>Fecha</label><input type="date" id="kit-fecha"></div>
-      <div class="form-group" style="margin:0"><label>Máquina / Equipo</label><select id="kit-equipo" style="width:100%" onchange="kitPoblarNiveles()"><optgroup label="Maquinaria con horómetro"><option>Grupo Electrógeno</option><option>Compresora M135</option><option>Compresora M122</option><option>Scoop Epiroc</option><option>Scoop Monte</option><option>Dumper</option></optgroup><optgroup label="Otros equipos"><option>Compresora</option><option>Perforadora Jack Leg</option><option>Perforadora Stopper</option><option>Generador Eléctrico</option><option>Bomba de Agua</option><option>Winche</option><option>Camioneta</option><option>Instalaciones eléctricas</option></optgroup></select></div>
+      <div class="form-group" style="margin:0"><label>Máquina / Equipo</label><select id="kit-equipo" style="width:100%" onchange="kitEquipoChange()"><optgroup label="Maquinaria con horómetro"><option>Grupo Electrógeno</option><option>Compresora M135</option><option>Compresora M122</option><option>DALI</option><option>Scoop Monte</option><option>Dumper</option></optgroup><optgroup label="Otros equipos"><option>Compresora</option><option>Perforadora Jack Leg</option><option>Perforadora Stopper</option><option>Generador Eléctrico</option><option>Bomba de Agua</option><option>Winche</option><option>Camioneta</option><option>Instalaciones eléctricas</option></optgroup></select></div>
     </div>
-    <div class="form-group" style="margin-bottom:12px"><label>Nivel de mantenimiento que cubre (opcional)</label><select id="kit-nivel-mant" style="width:100%"><option value="">— No aplica —</option></select></div>
+    <div class="form-group" id="kit-jackleg-wrap" style="margin-bottom:12px;display:none"><label>Código de la Perforadora Jack Leg</label><select id="kit-jackleg" style="width:100%"><option value="">— Seleccionar máquina —</option></select></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-      <div class="form-group" style="margin:0"><label>Tipo de mantenimiento</label><select id="kit-tipo" style="width:100%"><option>Preventivo</option><option>Correctivo</option><option>Emergencia</option></select></div>
+      <div class="form-group" style="margin:0"><label>Tipo de mantenimiento</label><select id="kit-tipo" style="width:100%"><option>Preventivo</option><option>Correctivo</option><option>Programado</option></select></div>
       <div class="form-group" style="margin:0"><label>Responsable / Mecánico</label><input type="text" id="kit-resp" placeholder="Nombre"></div>
     </div>
     <div class="form-group" style="margin-bottom:12px"><label>Descripción del trabajo</label><textarea id="kit-desc" rows="2" placeholder="Ej: Cambio de aceite, filtros y revisión de fajas..." style="width:100%;resize:vertical"></textarea></div>
@@ -10617,13 +10617,28 @@ function kitRecalcCosto(){
   const cp=document.getElementById('kit-costo-piezas');if(cp)cp.textContent=fmtS(piezas);
   const ct=document.getElementById('kit-costo-total');if(ct)ct.textContent=fmtS(piezas+mo);
 }
+// Códigos de las perforadoras Jack Leg (sin repetir)
+const JACKLEG_CODES=['AN20B11197','AN20B11198','AN21A24151','AN21A24189','AN21A42189','AN22D08013','AN23D03192','AN25D23057','AN25D23065','AN25D23067','AN25D23075','AN25H22023','AN25T22083','AND25D23075'];
+// Al elegir equipo: si es Perforadora Jack Leg, mostrar selector de código de máquina
+function kitEquipoChange(){
+  const g=i=>document.getElementById(i);
+  const equipo=(g('kit-equipo')||{}).value||'';
+  const wrap=g('kit-jackleg-wrap'); const sel=g('kit-jackleg');
+  const esJack=/jack ?leg/i.test(equipo);
+  if(sel && !sel.dataset.poblado){
+    sel.innerHTML='<option value="">— Seleccionar máquina —</option>'+JACKLEG_CODES.map(c=>`<option value="${c}">${c}</option>`).join('');
+    sel.dataset.poblado='1';
+  }
+  if(wrap) wrap.style.display=esJack?'':'none';
+}
 function abrirModalKitMant(){
   mantRepLoad();
   const g=i=>document.getElementById(i);
   g('kit-id').value='';g('kit-fecha').value=hoy();g('kit-equipo').value='Compresora';g('kit-tipo').value='Preventivo';
   g('kit-resp').value='';g('kit-desc').value='';g('kit-manoobra').value='';g('kit-estado').value='ok';
   g('kit-piezas-rows').innerHTML='';kitAddPiezaRow();kitRecalcCosto();
-  kitPoblarNiveles();
+  if(g('kit-jackleg')) g('kit-jackleg').value='';
+  kitEquipoChange();
   abrirModal('modal-kit-mant');
 }
 function kitPoblarNiveles(){
@@ -10642,9 +10657,9 @@ function editarKitMant(id){
   mantRepLoad();
   const m=(state.mantenimiento||[]).find(x=>x.id===id);if(!m)return;
   const g=i=>document.getElementById(i);
-  g('kit-id').value=m.id;g('kit-fecha').value=m.fecha||hoy();g('kit-equipo').value=m.equipo||'Compresora';g('kit-tipo').value=m.tipo||'Preventivo';
+  g('kit-id').value=m.id;g('kit-fecha').value=m.fecha||hoy();g('kit-equipo').value=m.equipoBase||m.equipo||'Compresora';g('kit-tipo').value=m.tipo||'Preventivo';
   g('kit-resp').value=m.resp||'';g('kit-desc').value=m.desc||'';g('kit-manoobra').value=m.horasMant||'';g('kit-estado').value=m.estado||'ok';
-  kitPoblarNiveles(); g('kit-nivel-mant').value=m.nivelMant||'';
+  kitEquipoChange(); if(g('kit-jackleg')) g('kit-jackleg').value=m.maquinaCodigo||'';
   g('kit-piezas-rows').innerHTML='';
   (m.repuestos&&m.repuestos.length?m.repuestos:[{}]).forEach(p=>kitAddPiezaRow(p.id,p.cant));
   kitRecalcCosto();
@@ -10698,18 +10713,16 @@ function guardarKitMant(){
     });
     almacenSave();
   }
-  const nivelMant=(g('kit-nivel-mant')?g('kit-nivel-mant').value:'')||'';
   const equipo=g('kit-equipo').value;
-  const rec={id:editId||'KM'+Date.now(),fecha:g('kit-fecha').value,equipo,tipo:g('kit-tipo').value,
-    resp,responsable:resp,desc,descripcion:desc,repuestos:piezas,horasMant,manoobra:mo,costo,estado,nivelMant,
+  // Código de la perforadora Jack Leg (si aplica)
+  const maquinaCodigo=(/jack ?leg/i.test(equipo) && g('kit-jackleg'))?(g('kit-jackleg').value||''):'';
+  const equipoFull=maquinaCodigo?(equipo+' · '+maquinaCodigo):equipo;
+  const rec={id:editId||'KM'+Date.now(),fecha:g('kit-fecha').value,equipo:equipoFull,equipoBase:equipo,maquinaCodigo,tipo:g('kit-tipo').value,
+    resp,responsable:resp,desc,descripcion:desc,repuestos:piezas,horasMant,manoobra:mo,costo,estado,
     aprobOps:(prev&&prev.aprobOps)||{ok:false,resp:'',fecha:''},
     aprobLog:(prev&&prev.aprobLog)||{ok:false,resp:'',fecha:''}};
   if(prev){Object.assign(prev,rec);}else{state.mantenimiento.push(rec);}
   mantRepSave();mantKitSave();
-  // Auto-reset del nivel de mantenimiento del programa si el kit quedó Completado
-  if(estado==='ok' && nivelMant && nivelMant!=='—'){
-    try{ mantProgLoad(); mantProgRegistrar(equipo, nivelMant, rec.id, resp||'—'); }catch(e){}
-  }
   cerrarModal('modal-kit-mant');renderMantenimiento();
   showNotif('✓ Solicitud de kit guardada');
 }
