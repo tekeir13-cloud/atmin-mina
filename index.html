@@ -14638,6 +14638,28 @@ Pregúnteme con naturalidad, como si conversara con un gerente de operaciones.`;
 }
 
 // ── Enviar mensaje ──
+// ── Ejecuta la solicitud de autorización (botón o confirmación por texto) ──
+window._iaPendienteSolicitud=false;
+window._iaSolicitando=false;
+window._niaEjecutarSolicitud=async function(btnEl){
+  if(window._iaSolicitando) return;
+  window._iaSolicitando=true;
+  window._iaPendienteSolicitud=false;
+  if(btnEl){ btnEl.disabled=true; btnEl.style.opacity='0.5'; btnEl.style.cursor='default'; btnEl.textContent='⏳ Enviando...'; }
+  // Mensaje de carga con puntos animados
+  const loadMsg=_iaAgregarMsg('🛰️ Enviando mensaje al servidor avanzado<span id="nia-load-dots">.</span> Cargando', true, false, true);
+  let n=1;
+  const iv=setInterval(()=>{ n=(n%3)+1; const d=document.getElementById('nia-load-dots'); if(d) d.textContent='.'.repeat(n); },450);
+  await new Promise(r=>setTimeout(r,3200));
+  clearInterval(iv);
+  if(loadMsg) loadMsg.remove();
+  const confirmMsg='Esperamos confirmación del servidor. Mientras tanto, puedo responder cualquier otra pregunta de la operación, Señor Amador.';
+  _iaAgregarMsg(confirmMsg, true);
+  _iaMensajes.push({ role:'assistant', content: confirmMsg });
+  _iaHablar(confirmMsg);
+  window._iaSolicitando=false;
+};
+
 async function enviarMensajeIA(textoDirecto){
   const input = document.getElementById('ia-input');
   const texto = textoDirecto || (input ? input.value.trim() : '');
@@ -14663,31 +14685,38 @@ async function enviarMensajeIA(textoDirecto){
 
   if(typingEl) typingEl.remove();
 
+  // ── Confirmación por texto de una solicitud pendiente ("solicita", "sí", "dale"...) ──
+  if(window._iaPendienteSolicitud){
+    const t=(texto||'').toLowerCase().trim();
+    const afirm=['si','sí','solicita','solicítala','solicitala','solicitar','solicitalo','solicítalo','dale','hazlo','hazla','ok','okay','okey','claro','adelante','procede','procede nomas','envia','envía','enviar','manda','mandala','autoriza','si por favor','sí por favor','por favor','de una','ya','correcto'];
+    const niega=['no','nada','olvidalo','olvídalo','dejalo','déjalo','cancela','mejor no'];
+    if(niega.some(a=>t===a)){
+      window._iaPendienteSolicitud=false;
+      const cancelMsg='Entendido, Señor Amador. No realizaré la solicitud. ¿Puedo ayudarle con algo de la operación?';
+      _iaAgregarMsg(cancelMsg, true);
+      _iaMensajes.push({ role:'assistant', content: cancelMsg });
+      _iaHablar(cancelMsg);
+      if(status) status.innerHTML = '<div style="width:7px;height:7px;border-radius:50%;background:var(--positive);box-shadow:0 0 6px var(--positive)"></div> Listo';
+      return;
+    }
+    if(afirm.some(a=>t===a||t.includes(a))){
+      if(status) status.innerHTML = '<div style="width:7px;height:7px;border-radius:50%;background:var(--positive);box-shadow:0 0 6px var(--positive)"></div> Listo';
+      await window._niaEjecutarSolicitud(null);
+      return;
+    }
+    // Si cambió de tema, se cancela la solicitud pendiente y se procesa normal
+    window._iaPendienteSolicitud=false;
+  }
+
   // ── Flujo especial: pregunta fuera del ámbito de la operación ──
   if(respuesta==='__OFFTOPIC__'){
-    const SR='Señor Amador,';
-    const msgRefusal=`Lo siento, ${SR.replace(',','')}. No estoy autorizada a responder ese tipo de consultas — mi acceso está limitado a los datos de la operación minera de Poderosa. Sin embargo, podría solicitar autorización a mi creador para ampliar ese acceso. ¿Desea que realice la solicitud?`;
-    const btnId='nia-offtopic-btn-'+Date.now();
-    const bubbleHtml=`${msgRefusal}<br><br><button id="${btnId}" onclick="window._niaSolicitarPermiso('${btnId}')" style="margin-top:6px;padding:5px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:0.82rem">📡 Sí, solicitar autorización</button>`;
+    const msgRefusal=`Lo siento, Señor Amador. No estoy autorizada a responder ese tipo de consultas — mi acceso está limitado a los datos de la operación minera de Poderosa. Sin embargo, podría solicitar autorización a mi creador para ampliar ese acceso. ¿Desea que realice la solicitud?`;
+    const btnId='nia-offtopic-btn-'+(_iaMensajes.length);
+    const bubbleHtml=`${msgRefusal}<br><br><button id="${btnId}" onclick="window._niaEjecutarSolicitud(this)" style="margin-top:6px;padding:5px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:0.82rem">📡 Sí, solicitar autorización</button>`;
     _iaAgregarMsg(bubbleHtml, true, false, true);
     _iaMensajes.push({ role:'assistant', content: msgRefusal });
     _iaHablar(msgRefusal);
-    window._niaSolicitarPermiso=async function(bid){
-      const btn=document.getElementById(bid);
-      if(btn){ btn.disabled=true; btn.textContent='Enviando...'; }
-      await new Promise(r=>setTimeout(r,300));
-      _iaAgregarMsg('📡 Solicitando autorización al creador<span id="nia-dots">.</span>', true, true);
-      let dots=1;
-      const iv=setInterval(()=>{ dots=(dots%3)+1; const d=document.getElementById('nia-dots'); if(d) d.textContent='.'.repeat(dots); },500);
-      await new Promise(r=>setTimeout(r,2800));
-      clearInterval(iv);
-      const typing2=document.getElementById('ia-typing-indicator');
-      if(typing2) typing2.remove();
-      const confirmMsg=`✅ El mensaje ha sido enviado, esperando validación del creador. Le informaré cuando reciba respuesta, ${SR.replace(',','')}. Mientras tanto, ¿puedo ayudarle con algo más de la operación?`;
-      _iaAgregarMsg(confirmMsg, true);
-      _iaMensajes.push({ role:'assistant', content: confirmMsg });
-      _iaHablar(confirmMsg);
-    };
+    window._iaPendienteSolicitud=true;
     if(status) status.innerHTML = '<div style="width:7px;height:7px;border-radius:50%;background:var(--positive);box-shadow:0 0 6px var(--positive)"></div> Listo';
     return;
   }
