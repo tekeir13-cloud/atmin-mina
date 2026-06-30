@@ -4326,7 +4326,7 @@ async function cargarAlmacenCombustibleSB(){
     {
       try{ if(typeof mantKitLoad==='function') mantKitLoad(); }catch(e){}
       const kNube=await sbLoadModulo('mant_kits');
-      const kMerged=mergeSnapById(state.mantenimiento||[], Array.isArray(kNube)?kNube:[]);
+      const kMerged=mergeMantKits(state.mantenimiento||[], Array.isArray(kNube)?kNube:[]);
       if(kMerged.length){
         state.mantenimiento=kMerged;
         try{localStorage.setItem(MANTKIT_KEY,JSON.stringify(kMerged));}catch(e){}
@@ -9852,6 +9852,34 @@ function mergeSnapById(a,b){
   const out=[],seen=new Set();
   const add=r=>{ if(!r)return; const k=(r.id!=null)?('id:'+r.id):('j:'+JSON.stringify(r)); if(seen.has(k))return; seen.add(k); out.push(r); };
   (a||[]).forEach(add); (b||[]).forEach(add);
+  return out;
+}
+// Merge específico para kits de mantenimiento: combina aprobaciones por id de modo que
+// una decisión (✅ ok / ❌ rechazado) SIEMPRE gane sobre un estado pendiente, sin importar
+// si vino del local o de la nube. Evita que una copia local vieja "pise" la aprobación que
+// otro usuario (p.ej. Finanzas/Operaciones) ya registró en la nube.
+function mergeMantKits(local,nube){
+  const pickAprob=(x,y)=>{
+    const dx=x&&(x.ok||x.rechazado), dy=y&&(y.ok||y.rechazado);
+    if(dy&&!dx) return y;
+    if(dx&&!dy) return x;
+    if(dx&&dy) return (String(y.fecha||'')>=String(x.fecha||''))?y:x; // ambos decididos → más reciente (empate: nube)
+    return y||x||null;
+  };
+  const map=new Map();
+  (local||[]).forEach(r=>{ if(r&&r.id!=null) map.set(r.id,{...r}); });
+  (nube||[]).forEach(r=>{
+    if(!r||r.id==null) return;
+    if(!map.has(r.id)){ map.set(r.id,{...r}); return; }
+    const x=map.get(r.id);
+    const merged={...x,...r};
+    merged.aprobOps=pickAprob(x.aprobOps,r.aprobOps);
+    merged.aprobLog=pickAprob(x.aprobLog,r.aprobLog);
+    map.set(r.id,merged);
+  });
+  const out=Array.from(map.values());
+  (local||[]).forEach(r=>{ if(r&&r.id==null) out.push(r); });
+  (nube||[]).forEach(r=>{ if(r&&r.id==null) out.push(r); });
   return out;
 }
 function personalSave(){try{localStorage.setItem(PERSONAL_KEY,JSON.stringify(state.personal||[]));}catch(e){} try{ sbSyncModulo('personal', state.personal||[]); }catch(e){}}
