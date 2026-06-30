@@ -3974,6 +3974,17 @@ const state={
 const FC={1:'#60a5fa',2:'#6ee7b7'};
 const FL={1:'Rampa',2:'Cortada'};
 const EI={'Compresora':'🔴','Compresora M135':'🔴','Compresora M122':'🔴','Perforadora Jack Leg':'🔩','Perforadora Stopper':'🔩','Generador Eléctrico':'⚡','Grupo Electrógeno':'⚡','Scoop DALI':'🚜','DALI':'🚜','Scoop Monte':'🚜','Dumper':'🚛','Excavadora':'🚜','Cargador Frontal':'🚜','Bomba de Agua':'💧','Winche':'⚙','Camioneta':'🚗','Instalaciones eléctricas':'💡'};
+// ── Equipos FACTURABLES (única fuente de verdad: dashboard "Ganancia por Equipo" + Finanzas "Ingresos x Máquina") ──
+// Cada máquina por separado. tags = nombre exacto en compresorista (combustible/horómetro). mt = coincidencia por nombre en mantenimiento. op = sueldo operador/mes.
+const EQUIPOS_FACTURABLES=[
+  {label:'Scoop DALI',      fig:'scoop',     col:'#5b6ef5',tags:['scoop dali'],     mt:['scoop dali'],     op:3900,opL:'S/3,900/mes'},
+  {label:'Scoop Monte',     fig:'scoop',     col:'#60a5fa',tags:['scoop monte'],    mt:['scoop monte'],    op:3900,opL:'S/3,900/mes'},
+  {label:'Dumper',          fig:'dumper',    col:'#f59e0b',tags:['dumper'],          mt:['dumper'],         op:3600,opL:'S/3,600/mes'},
+  {label:'Compresora M135', fig:'compresora',col:'#8b5cf6',tags:['compresora m135'], mt:['compresora m135'],op:2500,opL:'S/2,500/mes'},
+  {label:'Compresora M122', fig:'compresora',col:'#a78bfa',tags:['compresora m122'], mt:['compresora m122'],op:2500,opL:'S/2,500/mes'},
+  {label:'Excavadora',      fig:'excavadora',col:'#10b981',tags:['excavadora'],      mt:['excavadora'],     op:5000,opL:'S/5,000/mes'},
+  {label:'Cargador Frontal',fig:'cargador',  col:'#ef4444',tags:['cargador frontal','cargador'],mt:['cargador'],op:5000,opL:'S/5,000/mes'},
+];
 const PT={'dashboard':'Dashboard KPI','logistica':'Módulo Logística','rrhh':'Recursos Humanos','operaciones':'Módulo Operaciones','mantenimiento':'Módulo Mantenimiento','finanzas':'Módulo Finanzas','reporte':'Reporte Mensual','compresorista':'Reporte Compresorista'};
 
 function mostrarAccesoDenegado(page){
@@ -4932,13 +4943,7 @@ function renderDashEjecutivo(){
   const mantPorEq=tags=>mantMes.filter(m=>m.aprobLog&&m.aprobLog.ok&&tags.some(t=>(m.equipo||'').toLowerCase().includes(t))).reduce((s,m)=>s+(m.costo||0),0);
   const ingMes=finIngMaqGet(mes);
 
-  const MAQUINAS=[
-    {label:'Scoop',           fig:'scoop',     col:'#5b6ef5',tags:['scoop dali','scoop epiroc','scoop monte','scoop'],mt:['scoop'],   op:()=>3900,opL:'S/3,900/mes'},
-    {label:'Dumper',          fig:'dumper',    col:'#f59e0b',tags:['dumper'],                          mt:['dumper'],  op:()=>3600,opL:'S/3,600/mes'},
-    {label:'Compresora',      fig:'compresora',col:'#8b5cf6',tags:['compresora m135','compresora m122','compresora'],mt:['compresora'],op:()=>2500,opL:'S/2,500/mes'},
-    {label:'Excavadora',      fig:'excavadora',col:'#10b981',tags:['excavadora'],                      mt:['excavadora'],op:()=>5000,opL:'S/5,000/mes'},
-    {label:'Cargador Frontal',fig:'cargador',  col:'#ef4444',tags:['cargador frontal','cargador'],     mt:['cargador'],op:()=>5000,opL:'S/5,000/mes'},
-  ];
+  const MAQUINAS=EQUIPOS_FACTURABLES;
   const maqData=MAQUINAS.map(m=>{
     const horas=m.tags.reduce((s,t)=>s+(horasMaq[t]||0),0);
     const galPet=m.tags.reduce((s,t)=>s+(galMaqPet[t]||0),0);
@@ -4947,7 +4952,7 @@ function renderDashEjecutivo(){
     const ingRegistrado=m.label in ingMes;
     const cMant=mantPorEq(m.mt);
     const cComb=galPet*precioPet+galGas*precioGas;
-    const cOp=m.op();
+    const cOp=m.op;
     return {...m,horas,galPet,galGas,ingresos,ingRegistrado,cMant,cComb,cOp,resultado:ingresos-cMant-cComb-cOp};
   });
   const maxAbs=Math.max(1,...maqData.map(m=>Math.abs(m.resultado)));
@@ -13800,13 +13805,7 @@ function _iaEquipos(){
     const mantMes=(state.mantenimiento||[]).filter(m=>(m.fecha||'').startsWith(mes));
     const mantPorEq=tags=>mantMes.filter(m=>m.aprobLog&&m.aprobLog.ok&&tags.some(t=>(m.equipo||'').toLowerCase().includes(t))).reduce((s,m)=>s+(m.costo||0),0);
     const ingMes=(typeof finIngMaqGet==='function')?finIngMaqGet(mes):{};
-    const MAQUINAS=[
-      {label:'Scoop',           tags:['scoop dali','scoop epiroc','scoop monte','scoop'],mt:['scoop'],   op:3900},
-      {label:'Dumper',          tags:['dumper'],                          mt:['dumper'],  op:3600},
-      {label:'Compresora',      tags:['compresora m135','compresora m122','compresora'],mt:['compresora'],op:2500},
-      {label:'Excavadora',      tags:['excavadora'],                      mt:['excavadora'],op:5000},
-      {label:'Cargador Frontal',tags:['cargador frontal','cargador'],     mt:['cargador'],op:5000},
-    ];
+    const MAQUINAS=EQUIPOS_FACTURABLES;
     return MAQUINAS.map(m=>{
       const horas=m.tags.reduce((s,t)=>s+(horasMaq[t]||0),0);
       const galPet=m.tags.reduce((s,t)=>s+(galMaqPet[t]||0),0);
@@ -14762,13 +14761,7 @@ function renderFinIngresosMaq(){
   const mes=(mesActualEl&&mesActualEl.value)||hoy;
   const ingGuardados=finIngMaqGet(mes);
 
-  const MAQUINAS_LABELS=[
-    {label:'Scoop',col:'#5b6ef5',tags:['scoop dali','scoop epiroc','scoop monte','scoop'],mt:['scoop'],op:3900,opL:'S/3,900/mes'},
-    {label:'Dumper',col:'#f59e0b',tags:['dumper'],mt:['dumper'],op:3600,opL:'S/3,600/mes'},
-    {label:'Compresora',col:'#5b6ef5',tags:['compresora m135','compresora m122','compresora'],mt:['compresora'],op:2500,opL:'S/2,500/mes'},
-    {label:'Excavadora',col:'#10b981',tags:['excavadora'],mt:['excavadora'],op:5000,opL:'S/5,000/mes'},
-    {label:'Cargador Frontal',col:'#ef4444',tags:['cargador frontal','cargador'],mt:['cargador'],op:5000,opL:'S/5,000/mes'},
-  ];
+  const MAQUINAS_LABELS=EQUIPOS_FACTURABLES;
 
   const compMes=(state.compresorista||[]).filter(r=>(r.fecha||'').startsWith(mes));
   const galMaqPet={},galMaqGas={};
@@ -14840,7 +14833,7 @@ function renderFinIngresosMaq(){
     <div style="font-size:11px;color:var(--text3);line-height:1.7">
       <strong style="color:var(--text2)">Combustible</strong> cruzado con reportes de compresorista del mes · Precio: S/${pPet}/gal petróleo, S/${pGas}/gal gasolina<br>
       <strong style="color:var(--text2)">Mantenimiento</strong> cruzado con costos registrados en módulo de Mantenimiento<br>
-      <strong style="color:var(--text2)">Sueldos</strong>: Scoop S/3,900 · Dumper S/3,600 · Compresora S/2,500 · Excavadora/Cargador S/5,000
+      <strong style="color:var(--text2)">Sueldos</strong>: ${EQUIPOS_FACTURABLES.map(m=>m.label+' '+m.opL.replace('/mes','')).join(' · ')}
     </div>
   </div>`;
 }
@@ -14848,7 +14841,7 @@ function renderFinIngresosMaq(){
 function finGuardarIngresosMaq(){
   const mesEl=document.getElementById('fim-mes');if(!mesEl)return;
   const mes=mesEl.value;
-  const labels=['Scoop','Dumper','Compresora','Excavadora','Cargador Frontal'];
+  const labels=EQUIPOS_FACTURABLES.map(m=>m.label);
   const data={};
   labels.forEach(l=>{
     const v=parseFloat(document.getElementById('fim-ing-'+l.replace(/ /g,'_'))?.value)||0;
