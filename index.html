@@ -11586,10 +11586,39 @@ function renderSolicitudMantLog(){
   }).join('')
   :`<div class="card"><div class="empty-state" style="padding:16px;color:var(--text3)">Sin historial de despachos.</div></div>`;
   wrap.innerHTML=`
-    <div class="section-title" style="margin-top:0">🧰 Pendientes de mi aprobación (Logística)</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:4px">
+      <div class="section-title" style="margin-top:0;margin-bottom:0">🧰 Pendientes de mi aprobación (Logística)</div>
+      <button id="btn-refrescar-mantlog" class="btn btn-outline" style="font-size:12px;padding:5px 14px" onclick="refrescarSolicitudMantLog()">🔄 Actualizar</button>
+    </div>
     ${pendHTML}
     <div class="section-title" style="margin-top:24px">📋 Historial de despachos</div>
     ${histHTML}`;
+}
+// Recarga los kits desde la nube (sin recargar la página) y vuelve a pintar el panel.
+// Útil para que Logística vea al instante una aprobación que Operaciones/Finanzas acaba de registrar.
+async function refrescarSolicitudMantLog(){
+  const btn=document.getElementById('btn-refrescar-mantlog');
+  if(btn){ btn.disabled=true; btn.textContent='⏳ Actualizando...'; }
+  try{
+    if(typeof sbLoadModulo==='function'){
+      const kNube=await sbLoadModulo('mant_kits');
+      if(Array.isArray(kNube)){
+        const kMerged=mergeMantKits(state.mantenimiento||[], kNube);
+        state.mantenimiento=kMerged;
+        try{ localStorage.setItem(MANTKIT_KEY,JSON.stringify(kMerged)); }catch(e){}
+        try{ if(typeof sbSyncModulo==='function') await sbSyncModulo('mant_kits', kMerged); }catch(e){}
+      }
+      const repNube=await sbLoadModulo('mant_repuestos');
+      if(Array.isArray(repNube)&&repNube.length){
+        state.mantRepuestos=repNube;
+        try{ localStorage.setItem(MANTREP_KEY,JSON.stringify(repNube)); }catch(e){}
+      }
+    }
+    if(typeof showNotif==='function') showNotif('✓ Datos actualizados desde la nube');
+  }catch(e){
+    if(typeof showNotif==='function') showNotif('⚠ No se pudo actualizar desde la nube','error');
+  }
+  renderSolicitudMantLog();
 }
 function aprobarLogKitLog(id){
   mantRepLoad();mantKitLoad();
