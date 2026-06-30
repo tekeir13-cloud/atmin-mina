@@ -2935,8 +2935,7 @@ select option{background:var(--coal3);}
 <div class="page" id="page-mantenimiento">
   <div class="mod-tabs">
     <button class="mod-tab active" onclick="modTab('mant','registro',this)">🧰 Solicitud de Kit</button>
-    <button class="mod-tab" onclick="modTab('mant','programamant',this)">📅 Programa Mant.</button>
-    <button class="mod-tab" onclick="modTab('mant','costosmant',this)">💲 Costos por Máquina</button>
+    <button class="mod-tab" onclick="modTab('mant','costosmant',this)">💲 Costo de Mantenimiento</button>
   </div>
   <div class="mod-pane active" style="display:block" id="mant-registro">
     <div class="kpi-grid">
@@ -2954,9 +2953,9 @@ select option{background:var(--coal3);}
     </div>
     <div id="mant-lista"></div>
   </div>
-  <div id="mant-programamant" class="mod-pane" style="display:none"></div>
   <div class="mod-pane" style="display:none" id="mant-costosmant">
-    <div class="section-title">Costo de Mantenimiento por Máquina</div>
+    <div class="section-title">💲 Costo de Mantenimiento</div>
+    <div style="font-size:12px;color:var(--text3);margin:-6px 0 14px">Suma de costos por cada salida de kit despachada (piezas + horas hombre), por máquina.</div>
     <div id="mant-costos-grid"></div>
     <div class="card" style="margin-top:18px"><div class="section-title">Distribución de Costos</div><div id="mant-costos-dist"></div></div>
   </div>
@@ -3974,7 +3973,7 @@ const state={
 };
 const FC={1:'#60a5fa',2:'#6ee7b7'};
 const FL={1:'Rampa',2:'Cortada'};
-const EI={'Compresora':'🔴','Perforadora Jack Leg':'🔩','Perforadora Stopper':'🔩','Generador Eléctrico':'⚡','Bomba de Agua':'💧','Winche':'⚙','Camioneta':'🚗','Instalaciones eléctricas':'💡'};
+const EI={'Compresora':'🔴','Compresora M135':'🔴','Compresora M122':'🔴','Perforadora Jack Leg':'🔩','Perforadora Stopper':'🔩','Generador Eléctrico':'⚡','Grupo Electrógeno':'⚡','DALI':'🚜','Scoop Monte':'🚜','Dumper':'🚛','Bomba de Agua':'💧','Winche':'⚙','Camioneta':'🚗','Instalaciones eléctricas':'💡'};
 const PT={'dashboard':'Dashboard KPI','logistica':'Módulo Logística','rrhh':'Recursos Humanos','operaciones':'Módulo Operaciones','mantenimiento':'Módulo Mantenimiento','finanzas':'Módulo Finanzas','reporte':'Reporte Mensual','compresorista':'Reporte Compresorista'};
 
 function mostrarAccesoDenegado(page){
@@ -4029,7 +4028,7 @@ const MODULE_PANES = {
   'log': ['almacen','historial','inventario','solicitudcompra','productos','explosivos','stockremanente','subalmacen2820','solicitudmantlog','combustible'],
   'rrhh': ['planilla','tareas','personal','costorrhh','servicios'],
   'op': ['tablero','avance','solicitudes','vsproyectado','valorizaciones'],
-  'mant': ['registro','programamant','costosmant'],
+  'mant': ['registro','costosmant'],
   'fin': ['dashboard','proyeccion','informe','costocentro']
 };
 
@@ -4475,7 +4474,6 @@ function renderModPane(mod,pane){
   else if(k==='op-solicitudes')renderSolicitudesPendientesOp();
   else if(k==='op-vsproyectado')renderResidente();
   else if(k==='mant-registro')renderMantenimiento();
-  else if(k==='mant-programamant')renderProgramaMant();
   else if(k==='mant-costosmant')renderCostosMant();
   else if(k==='fin-dashboard') renderFinDashboard();
   else if(k==='fin-proyeccion') renderFinProyeccion();
@@ -11187,11 +11185,40 @@ function generarValeDespacho(id){
   showNotif('✓ Vale de despacho generado');
 }
 function renderCostosMant(){
-  const eq=['Compresora','Perforadora Jack Leg','Perforadora Stopper','Generador Eléctrico','Bomba de Agua','Winche','Camioneta'];
-  const data=eq.map(e=>({e,c:state.mantenimiento.filter(m=>m.equipo===e).reduce((s,m)=>s+m.costo,0),n:state.mantenimiento.filter(m=>m.equipo===e).length})).filter(d=>d.n>0);
-  const mx=Math.max(...data.map(d=>d.c),1);
-  document.getElementById('mant-costos-grid').innerHTML=data.length?`<div class="kpi-grid">${data.map(d=>`<div class="kpi-card"><div class="kpi-label">${EI[d.e]||''} ${d.e}</div><div class="kpi-value warn" style="font-size:18px">${fmtS(d.c)}</div><div class="kpi-sub">${d.n} registros</div></div>`).join('')}</div>`:'<div class="empty-state">Sin datos</div>';
-  document.getElementById('mant-costos-dist').innerHTML=data.map(d=>`<div class="progress-row"><div class="progress-label" style="min-width:130px;font-size:11px">${d.e}</div><div class="progress-bar"><div class="progress-fill" style="width:${Math.round((d.c/mx)*100)}%;background:var(--accent)"></div></div><div class="progress-val">${fmtS(d.c)}</div></div>`).join('');
+  // Sumar costos por cada SALIDA de kit despachada (aprobada por Logística), agrupado por máquina
+  const kits=(state.mantenimiento||[]).filter(m=>m.aprobLog&&m.aprobLog.ok);
+  const groups={};
+  kits.forEach(m=>{
+    const key=m.equipo||m.equipoBase||'—';
+    if(!groups[key])groups[key]={equipo:key,base:m.equipoBase||m.equipo||key,piezas:0,horas:0,mo:0,total:0,n:0};
+    const grp=groups[key];
+    const piezas=(m.repuestos||[]).reduce((s,p)=>s+(p.cant||0)*(p.costo||0),0);
+    grp.piezas+=piezas; grp.horas+=(Number(m.horasMant)||0); grp.mo+=(Number(m.manoobra)||0); grp.total+=(Number(m.costo)||0); grp.n++;
+  });
+  const data=Object.values(groups).sort((a,b)=>b.total-a.total);
+  const mx=Math.max(...data.map(d=>d.total),1);
+  const totalGeneral=data.reduce((s,d)=>s+d.total,0);
+  const grid=document.getElementById('mant-costos-grid');
+  if(grid) grid.innerHTML=data.length?`
+    <div style="background:var(--coal4);border:1px solid var(--border);border-radius:14px;padding:14px 18px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Costo total de mantenimiento</div>
+      <div style="font-size:24px;font-weight:900;color:#e67e22">${fmtS(totalGeneral)}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px">
+    ${data.map(d=>`<div style="background:var(--coal3);border:1px solid var(--border);border-radius:14px;padding:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div style="font-size:28px;line-height:1">${EI[d.base]||'🔧'}</div>
+        <div style="font-weight:800;font-size:13px;color:var(--text)">${d.equipo}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;font-size:12px">
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--text3)">🔩 Costo de piezas</span><strong style="color:var(--text)">${fmtS(d.piezas)}</strong></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--text3)">👷 Horas hombre</span><strong style="color:var(--text)">${d.horas} h · ${fmtS(d.mo)}</strong></div>
+        <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:6px;margin-top:2px"><span style="color:var(--text2);font-weight:700">Total</span><strong style="color:#e67e22;font-size:14px">${fmtS(d.total)}</strong></div>
+        <div style="font-size:10px;color:var(--text3);text-align:right">${d.n} salida${d.n>1?'s':''} de kit</div>
+      </div>
+    </div>`).join('')}</div>`:'<div class="empty-state" style="padding:20px">Aún no hay salidas de kit despachadas. Se suman aquí cuando Logística aprueba un kit.</div>';
+  const dist=document.getElementById('mant-costos-dist');
+  if(dist) dist.innerHTML=data.length?data.map(d=>`<div class="progress-row"><div class="progress-label" style="min-width:160px;font-size:11px">${EI[d.base]||''} ${d.equipo}</div><div class="progress-bar"><div class="progress-fill" style="width:${Math.round((d.total/mx)*100)}%;background:#e67e22"></div></div><div class="progress-val">${fmtS(d.total)}</div></div>`).join(''):'<div class="empty-state">Sin datos</div>';
 }
 
 // ── FINANZAS ──
