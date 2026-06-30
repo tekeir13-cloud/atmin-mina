@@ -3054,9 +3054,13 @@ select option{background:var(--coal3);}
   <div class="card" style="padding:14px">
     <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;font-weight:700">Preguntas rápidas</div>
     <div style="display:flex;flex-wrap:wrap;gap:8px" id="ia-sugerencias">
-      ${['¿Cómo va la producción este mes?','Ganancia por equipo','¿Cuánto ganó la compresora?',
-         '¿Cuál es el costo por metro?','¿Cuánto gastamos en petróleo?','¿Quiénes están ausentes?',
-         '¿Vamos a cumplir la meta?','Dame un resumen ejecutivo'].map(q=>
+      ${['Dame un resumen ejecutivo','¿Cómo vamos con la meta?','¿Cuántos metros hicimos hoy?',
+         '¿Qué proyección tenemos al final del mes?','¿Cuánto costó la planilla este mes?',
+         '¿Cuánto queda en la cisterna?','¿Cuánto hay de explosivos en el polvorín?',
+         '¿Cuál es el costo por metro?','Ganancia por equipo','¿Cuánto gastamos en mantenimiento?',
+         '¿Hay órdenes de compra pendientes?','¿Quiénes están ausentes hoy?',
+         '¿Cómo va la utilidad del mes?','¿Cuántos productos hay en stock?',
+         '¿Hubo incidentes de seguridad este mes?'].map(q=>
         `<button onclick="preguntaRapidaIA('${q}')"
           style="background:var(--coal4);border:1px solid var(--border);color:var(--text2);
                  border-radius:8px;padding:7px 12px;font-size:11px;cursor:pointer;
@@ -14239,6 +14243,8 @@ function _iaAgregarMsg(texto, esBot, esTyping=false){
 function _iaMetrics(){
   const m={};
   try{
+    const hoyStr=hoy();
+    const mesYM=hoyStr.slice(0,7);
     const pers=state.personal.filter(p=>p.estado==='activo');
     const aus =state.personal.filter(p=>p.estado==='ausente');
     const perf=state.perforacion||[];
@@ -14260,6 +14266,43 @@ function _iaMetrics(){
     m.exp=(state.explosivos.historial||[]).reduce((s,e)=>s+(e.cantidad*(e.precio||0)),0);
     m.mant=(state.mantenimiento||[]).reduce((s,x)=>s+(x.costo||0),0);
     m.ocPend=(state.ordenes||[]).filter(o=>o.estado==='pendiente').length;
+    // — Nuevos datos —
+    // Combustible real (cisterna)
+    try{ m.petStockReal=(typeof combStockTipo==='function')?combStockTipo('pet'):m.petStock; m.gasStock=(typeof combStockTipo==='function')?combStockTipo('gas'):0; }catch(e){}
+    // Combustible costo mes
+    try{ m.costoPet=(typeof finCostoCombustible==='function')?finCostoCombustible(mesYM):m.pet; }catch(e){ m.costoPet=m.pet; }
+    // Logística (almacén)
+    try{ m.costoLog=(typeof finCostoLogistica==='function')?finCostoLogistica(mesYM):0; }catch(e){ m.costoLog=0; }
+    // Explosivos stock actual por producto
+    try{ const em=(typeof exploStockActual==='function')?exploStockActual():{};
+      m.exploStock=Object.entries(em).map(([k,v])=>({id:k,qty:v})).filter(x=>x.qty>0); }catch(e){ m.exploStock=[]; }
+    // Reporte de guardia hoy y último
+    try{
+      const rg=state.reportesGuardia||[];
+      const rgHoy=rg.filter(r=>r.fecha===hoyStr);
+      const rgLast=rg.length?[...rg].sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''))[0]:null;
+      m.rgHoy=rgHoy.length; m.rgLast=rgLast;
+      m.metrosHoyB=rgHoy.reduce((s,r)=>s+((r.brenda&&r.brenda.metros)||0),0);
+      m.metrosHoyCR=rgHoy.reduce((s,r)=>s+((r.crne&&r.crne.metros)||0),0);
+      m.disparosHoy=rgHoy.reduce((s,r)=>s+((r.brenda&&r.brenda.disparos&&r.brenda.disparos.length)||0)+((r.crne&&r.crne.disparos&&r.crne.disparos.length)||0),0);
+    }catch(e){}
+    // Reportes de seguridad este mes
+    try{ m.segMes=(state.seguridad||[]).filter(r=>(r.fecha||'').startsWith(mesYM)).length; m.segTotal=(state.seguridad||[]).length; }catch(e){ m.segMes=0; m.segTotal=0; }
+    // Planilla mes (operarios + supervisión)
+    try{
+      m.planillaOp=(typeof planillaOperariosTotal==='function')?planillaOperariosTotal(mesYM):0;
+      m.planillaSup=(typeof planillaSupTotal==='function')?planillaSupTotal(mesYM):0;
+    }catch(e){ m.planillaOp=0; m.planillaSup=0; }
+    // Mantenimiento: kits del mes
+    try{ m.kitsMes=(state.mantenimiento||[]).filter(k=>(k.fecha||'').startsWith(mesYM)).length; }catch(e){ m.kitsMes=0; }
+    // Tareas extra hoy
+    try{ m.tareoHoy=(state.tareas||[]).filter(t=>t.fecha===hoyStr).length; }catch(e){ m.tareoHoy=0; }
+    // Stock almacén: productos agotados
+    try{ const st=(typeof calcStock==='function')?calcStock():[]; m.prodConStock=st.filter(p=>p.stock>0).length; m.prodSinStock=st.filter(p=>p.stock<=0&&(p.ingreso>0||p.salida>0)).length; }catch(e){ m.prodConStock=0; m.prodSinStock=0; }
+    // Días restantes del mes
+    try{ const fin=new Date(new Date().getFullYear(),new Date().getMonth()+1,0); m.diasRestMes=fin.getDate()-new Date().getDate(); }catch(e){ m.diasRestMes=0; }
+    // Proyección de metros al final del mes
+    try{ m.proyMes=m.prom>0?Math.round(m.metros+m.prom*m.diasRestMes):m.metros; }catch(e){ m.proyMes=m.metros; }
   }catch(e){ console.warn('metrics',e); }
   return m;
 }
@@ -14327,33 +14370,89 @@ function _iaRespuestaLocal(texto){
   const q=(texto||'').toLowerCase();
   const has=(...ws)=>ws.some(w=>q.includes(w));
   const SR='Señor Alcides, ';
+
   // ── Equipos (ganancia/gasto por equipo) — prioridad alta ──
   if(has('equipo','equipos','scoop','dumper','volquete','compresora','compresor','excavadora','cargador','maquina','máquina','flota')){
     const r=_iaRespuestaEquipo(q,fS);
     if(r) return SR+r.charAt(0).toLowerCase()+r.slice(1);
   }
-  if(has('personal','trabajador','gente','cuadrilla','obrero','asisten'))
-    return `${SR}actualmente hay ${m.activos} trabajadores activos y ${m.ausentes} ausentes en la operación.`;
+
+  // ── Personal ──
+  if(has('ausente','falt','quien falt','no vino','inasistencia'))
+    return `${SR}hoy hay ${m.ausentes} trabajador${m.ausentes!==1?'es':''} ausente${m.ausentes!==1?'s':''} de un total de ${m.activos+m.ausentes} registrados. ${m.ausentes===0?'Asistencia completa, sin ausencias.':'Verifique el tareo del día para ver los nombres.'}`;
+  if(has('personal','trabajador','gente','cuadrilla','obrero','asisten','tareado'))
+    return `${SR}hay ${m.activos} trabajadores activos hoy${m.tareoHoy>0?' ('+m.tareoHoy+' con tareo registrado)':''}. Ausentes: ${m.ausentes}.`;
+
+  // ── Avance / perforación ──
+  if(has('hoy','dia de hoy','avance hoy','metro hoy') && has('metro','avance','disparo'))
+    return `${SR}en el reporte de hoy se registraron ${(m.metrosHoyB||0)+(m.metrosHoyCR||0)} metros (Brenda ${m.metrosHoyB||0} m · Cortada Noroeste ${m.metrosHoyCR||0} m) con ${m.disparosHoy||0} disparo${m.disparosHoy!==1?'s':''}.`;
+  if(has('disparo','voladura','guardia'))
+    return `${SR}en el día de hoy se han registrado ${m.disparosHoy||0} disparo${m.disparosHoy!==1?'s':''} en los frentes. ${m.rgHoy>0?'Hay '+m.rgHoy+' reporte'+(m.rgHoy!==1?'s':'')+' de guardia del día.':'Aún no hay reporte de guardia registrado hoy.'}`;
+  if(has('proyecci','pronostic','cuanto vamos a llegar','como vamos a terminar','alcanzar la meta'))
+    return `${SR}al ritmo actual de ${m.prom.toFixed(1)} m/día y con ${m.diasRestMes} días restantes en el mes, la proyección es alcanzar ${m.proyMes} m de los ${m.meta} m de meta (${m.cum}% completado).`;
   if(has('metro','avance','perfora','rampa','cortada'))
-    return `${SR}el avance acumulado es de ${m.metros.toFixed(1)} m (Rampa ${m.f1.toFixed(1)} m · Cortada ${m.f2.toFixed(1)} m), con ${m.cum}% de cumplimiento de la meta de ${m.meta} m. Promedio diario: ${m.prom.toFixed(1)} m/día.`;
-  if(has('utilidad','ganancia','margen','rentab'))
-    return `${SR}la utilidad es de ${fS(m.util)} con un margen del ${m.margen}%. Ingresos ${fS(m.ingreso)} contra costos ${fS(m.costo)}.`;
+    return `${SR}el avance acumulado es de ${m.metros.toFixed(1)} m (Rampa ${m.f1.toFixed(1)} m · Cortada Noroeste ${m.f2.toFixed(1)} m), con ${m.cum}% de cumplimiento. Promedio diario: ${m.prom.toFixed(1)} m/día.`;
+
+  // ── Financiero ──
+  if(has('utilidad','ganancia','margen','rentab','resultado'))
+    return `${SR}la utilidad del mes es ${fS(m.util)} con un margen de ${m.margen}%. Ingresos ${fS(m.ingreso)} menos costos ${fS(m.costo)}.`;
+  if(has('ingreso','valoriza','factura','cobr'))
+    return `${SR}los ingresos registrados este mes suman ${fS(m.ingreso)}, lo que deja una utilidad de ${fS(m.util)} (margen ${m.margen}%).`;
+  if(has('costo por metro','costo x metro','metro cuanto cuesta','cuanto cuesta cada metro'))
+    return `${SR}el costo por metro de avance es ${fS(m.cxm)}, calculado sobre ${m.metros.toFixed(1)} m acumulados y ${fS(m.costo)} en costos totales.`;
   if(has('costo','gasto','egreso'))
-    return `${SR}el costo operativo total es ${fS(m.costo)}, equivalente a ${fS(m.cxm)} por metro. Desglose: petróleo ${fS(m.pet)}, explosivos ${fS(m.exp)}, mantenimiento ${fS(m.mant)}.`;
-  if(has('ingreso','valoriza','factura'))
-    return `${SR}los ingresos registrados suman ${fS(m.ingreso)}, lo que deja una utilidad de ${fS(m.util)} (margen ${m.margen}%).`;
+    return `${SR}el costo operativo del mes es ${fS(m.costo)}: logística ${fS(m.costoLog)}, planilla ${fS(m.planillaOp+m.planillaSup)}, petróleo ${fS(m.costoPet)}, explosivos ${fS(m.exp)}, mantenimiento ${fS(m.mant)}.`;
+
+  // ── Planilla ──
+  if(has('planilla','sueldo','salario','jornal','pago de personal','cuanto pago'))
+    return `${SR}la planilla del mes suma ${fS(m.planillaOp+m.planillaSup)}: operarios ${fS(m.planillaOp)}${m.planillaSup>0?' + supervisión '+fS(m.planillaSup):' (supervisión pendiente de ingresar en Planilla Integrada)'}.`;
+
+  // ── Combustible ──
+  if(has('cuanto queda','stock combustible','nivel de petroleo','nivel petróleo','cisterna','gasolina','cuanto hay de combustible'))
+    return `${SR}el stock actual en cisterna es: petróleo ${Math.round(m.petStockReal||0)} galones · gasolina ${Math.round(m.gasStock||0)} galones.`;
   if(has('petroleo','petróleo','combustible','diesel','gasolina'))
-    return `${SR}el gasto en petróleo es ${fS(m.pet)} y el stock disponible es de ${m.petStock} galones.`;
-  if(has('explosiv','dinamita','anfo'))
-    return `${SR}el consumo de explosivos representa ${fS(m.exp)} en costos hasta el momento.`;
-  if(has('mantenimiento','maquina','equipo','reparac'))
-    return `${SR}el costo de mantenimiento acumulado es ${fS(m.mant)}. Hay ${m.ocPend} órdenes de compra pendientes.`;
-  if(has('orden','compra','pedido'))
-    return `${SR}hay ${m.ocPend} órdenes de compra pendientes de atención.`;
-  if(has('cumplimiento','meta','programa','proyecta'))
-    return `${SR}el cumplimiento del programa es ${m.cum}% (${m.metros.toFixed(1)} m de ${m.meta} m). A un promedio de ${m.prom.toFixed(1)} m/día en ${m.dias} días operados.`;
-  // Resumen general por defecto
-  return `${SR}el resumen de la operación es el siguiente: ${m.activos} trabajadores activos, ${m.metros.toFixed(1)} m avanzados (${m.cum}% de la meta), utilidad ${fS(m.util)} (margen ${m.margen}%) y costo por metro ${fS(m.cxm)}. Puede preguntarme por personal, avance, costos, utilidad, petróleo o mantenimiento para más detalle.`;
+    return `${SR}el gasto en combustible este mes es ${fS(m.costoPet)}. Stock disponible: petróleo ${Math.round(m.petStockReal||0)} gl · gasolina ${Math.round(m.gasStock||0)} gl.`;
+
+  // ── Explosivos ──
+  if(has('cuanto queda de explosivo','stock explosivo','polvorin','polvorín','anfo','dinamita','fulminante'))
+    return `${SR}el stock actual en el polvorín NV3190 es: ${(m.exploStock||[]).length>0?m.exploStock.map(x=>x.id+' '+x.qty+' und').join(', '):'sin datos disponibles'}. Consulte el módulo de Logística para el detalle.`;
+  if(has('explosiv'))
+    return `${SR}el consumo de explosivos representa ${fS(m.exp)} en costos. Stock en polvorín: ${(m.exploStock||[]).map(x=>x.id+' '+x.qty).join(', ')||'ver módulo Logística'}.`;
+
+  // ── Mantenimiento ──
+  if(has('kit','repuesto','pieza'))
+    return `${SR}este mes se han despachado ${m.kitsMes} kit${m.kitsMes!==1?'s':''} de mantenimiento con un costo total de ${fS(m.mant)}.`;
+  if(has('mantenimiento','reparac'))
+    return `${SR}el costo de mantenimiento del mes es ${fS(m.mant)} en ${m.kitsMes} kit${m.kitsMes!==1?'s':''} despachados. Órdenes de compra pendientes: ${m.ocPend}.`;
+
+  // ── Órdenes de compra ──
+  if(has('orden','compra','pedido','solicitud de compra'))
+    return `${SR}hay ${m.ocPend} orden${m.ocPend!==1?'es':''} de compra pendiente${m.ocPend!==1?'s':''} de atención. Puede revisarlas en Logística › Solicitud de Compra.`;
+
+  // ── Almacén / stock ──
+  if(has('stock','almacen','almacén','material','insumo','inventario'))
+    return `${SR}el almacén tiene ${m.prodConStock} producto${m.prodConStock!==1?'s':''} con stock disponible y ${m.prodSinStock} agotado${m.prodSinStock!==1?'s':''}. Revise Logística › Stock Vigente para el detalle.`;
+
+  // ── Seguridad ──
+  if(has('seguridad','accidente','incidente','reporte de seguridad','novedad de seguridad'))
+    return `${SR}este mes se han registrado ${m.segMes} reporte${m.segMes!==1?'s':''} de seguridad (${m.segTotal} en total histórico). Puede revisarlos en el módulo Seguridad.`;
+
+  // ── Meta / cumplimiento ──
+  if(has('cumplimiento','meta','programa','proyecta','como vamos'))
+    return `${SR}el cumplimiento del programa es ${m.cum}% — ${m.metros.toFixed(1)} m de ${m.meta} m meta. Con ${m.prom.toFixed(1)} m/día de promedio y ${m.diasRestMes} días restantes, la proyección es ${m.proyMes} m.`;
+
+  // ── Resumen ejecutivo ──
+  if(has('resumen','ejecutivo','panorama','todo','dame un','como esta','cómo está'))
+    return `${SR}resumen de operaciones: ${m.activos} trabajadores activos, avance ${m.metros.toFixed(1)} m (${m.cum}% de meta), costo operativo ${fS(m.costo)} a razón de ${fS(m.cxm)}/m, utilidad ${fS(m.util)} (margen ${m.margen}%). Stock cisterna: petróleo ${Math.round(m.petStockReal||0)} gl. ${m.ocPend>0?m.ocPend+' órdenes de compra pendientes.':'Sin órdenes pendientes.'}`;
+
+  // ── Saludo / identidad ──
+  if(has('hola','buenos','buenas','saludos'))
+    return `${SR}¡buen día! Estoy monitoreando la operación en tiempo real. Puede preguntarme sobre avance, costos, personal, combustible, explosivos, equipos o pedir un resumen ejecutivo.`;
+  if(has('quien eres','que puedes','qué puedes','que sabes','ayuda','comandos'))
+    return `${SR}soy el asistente de MUKICLOUD. Puedo responder sobre: avance de metros, personal y ausentes, costos operativos, planilla, combustible, stock de almacén y explosivos, equipos, mantenimiento, seguridad, cumplimiento de meta y proyecciones. Pregunte con naturalidad.`;
+
+  // ── Fallback resumen general ──
+  return `${SR}el resumen de operaciones: ${m.activos} activos, ${m.metros.toFixed(1)} m avanzados (${m.cum}% de meta), utilidad ${fS(m.util)} (margen ${m.margen}%), costo/metro ${fS(m.cxm)}. Pregunte por personal, avance, costos, combustible, explosivos, equipos o proyección del mes.`;
 }
 
 // ── Enviar mensaje ──
