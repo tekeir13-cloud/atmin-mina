@@ -14333,7 +14333,7 @@ DATOS ACTUALES DE LA MINA (${mes.mes?['','Enero','Febrero','Marzo','Abril','Mayo
 }
 
 // ── Agregar mensaje al chat ──
-function _iaAgregarMsg(texto, esBot, esTyping=false){
+function _iaAgregarMsg(texto, esBot, esTyping=false, esHtml=false){
   const container = document.getElementById('ia-messages');
   if(!container) return null;
 
@@ -14350,6 +14350,8 @@ function _iaAgregarMsg(texto, esBot, esTyping=false){
   if(esTyping){
     bubble.innerHTML = '<div class="ia-typing"><span></span><span></span><span></span></div>';
     div.id = 'ia-typing-indicator';
+  } else if(esHtml){
+    bubble.innerHTML = texto;
   } else {
     bubble.textContent = texto;
   }
@@ -14660,6 +14662,11 @@ Y por último, recomendaciones: alertas automáticas sobre lo que requiere su at
 Pregúnteme con naturalidad, como si conversara con un gerente de operaciones.`;
   }
 
+  // ── Detección off-topic ──
+  const mineroKw=['metro','avance','mina','minero','mineral','miner','explosion','explosiv','polvorin','polvorín','scoop','dumper','compresor','excavadora','cargador','grupo electr','cisterna','petroleo','petróleo','gasolina','combustibl','tareo','trabajador','personal','planilla','sueldo','jornal','almacen','almacén','stock','logistic','logística','costo','gasto','egreso','ingreso','factura','valoriza','utilidad','ganancia','margen','rentab','produccion','producción','perforac','disparo','voladura','frente','rampa','cortada','guardia','reporte','seguridad','accidente','incidente','mantenimiento','reparac','compra','pedido','solicitud','empresa','operacion','operación','mukicloud','poderosa','nia','resumen','cumplimiento','meta','programa','proyecci','recomend','alerta','kit','repuesto'];
+  const esMinero=mineroKw.some(k=>q.includes(k))||has('hola','buenos','buenas','saludos','quien eres','quién eres','como te llamas','cómo te llamas','que puedes','qué puedes','que sabes','qué sabes','ayuda');
+  if(!esMinero && q.length>3) return '__OFFTOPIC__';
+
   // ── Fallback resumen general ──
   return `${SR}el resumen de operaciones: ${m.activos} activos, ${m.metros.toFixed(1)} m avanzados (${m.cum}% de meta), utilidad ${fS(m.util)} (margen ${m.margen}%), costo/metro ${fS(m.cxm)}. Pregunte por personal, avance, costos, combustible, explosivos, equipos o proyección del mes.`;
 }
@@ -14689,6 +14696,35 @@ async function enviarMensajeIA(textoDirecto){
   await new Promise(r=>setTimeout(r,400));
 
   if(typingEl) typingEl.remove();
+
+  // ── Flujo especial: pregunta fuera del ámbito de la operación ──
+  if(respuesta==='__OFFTOPIC__'){
+    const msgRefusal=`Lo siento, ${SR.replace(',','')}. No estoy autorizada a responder ese tipo de consultas — mi acceso está limitado a los datos de la operación minera de Poderosa. Sin embargo, podría solicitar autorización a mi creador para ampliar ese acceso. ¿Desea que realice la solicitud?`;
+    const btnId='nia-offtopic-btn-'+Date.now();
+    const bubbleHtml=`${msgRefusal}<br><br><button id="${btnId}" onclick="window._niaSolicitarPermiso('${btnId}')" style="margin-top:6px;padding:5px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:0.82rem">📡 Sí, solicitar autorización</button>`;
+    _iaAgregarMsg(bubbleHtml, true, false, true);
+    _iaMensajes.push({ role:'assistant', content: msgRefusal });
+    _iaHablar(msgRefusal);
+    window._niaSolicitarPermiso=async function(bid){
+      const btn=document.getElementById(bid);
+      if(btn){ btn.disabled=true; btn.textContent='Enviando...'; }
+      await new Promise(r=>setTimeout(r,300));
+      _iaAgregarMsg('📡 Solicitando autorización al creador<span id="nia-dots">.</span>', true, true);
+      let dots=1;
+      const iv=setInterval(()=>{ dots=(dots%3)+1; const d=document.getElementById('nia-dots'); if(d) d.textContent='.'.repeat(dots); },500);
+      await new Promise(r=>setTimeout(r,2800));
+      clearInterval(iv);
+      const typing2=document.getElementById('ia-typing-indicator');
+      if(typing2) typing2.remove();
+      const confirmMsg=`✅ El mensaje ha sido enviado, esperando validación del creador. Le informaré cuando reciba respuesta, ${SR.replace(',','')}. Mientras tanto, ¿puedo ayudarle con algo más de la operación?`;
+      _iaAgregarMsg(confirmMsg, true);
+      _iaMensajes.push({ role:'assistant', content: confirmMsg });
+      _iaHablar(confirmMsg);
+    };
+    if(status) status.innerHTML = '<div style="width:7px;height:7px;border-radius:50%;background:var(--positive);box-shadow:0 0 6px var(--positive)"></div> Listo';
+    return;
+  }
+
   _iaAgregarMsg(respuesta, true);
   _iaMensajes.push({ role:'assistant', content: respuesta });
   _iaHablar(respuesta);
