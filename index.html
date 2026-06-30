@@ -4344,6 +4344,18 @@ async function cargarAlmacenCombustibleSB(){
         await sbSyncModulo('compresorista', cMerged);
       }
     }
+    // ── FINANZAS: ingreso por máquina (manual) — vinculado al dashboard ──
+    {
+      const fimNube=await sbLoadModulo('fin_ing_maq');
+      let fimLocal={}; try{fimLocal=JSON.parse(localStorage.getItem(FIN_ING_MAQ_KEY)||'{}')||{};}catch(e){}
+      if(fimNube&&typeof fimNube==='object'){
+        const merged={...fimNube,...fimLocal}; // local (este dispositivo) gana por mes
+        try{localStorage.setItem(FIN_ING_MAQ_KEY,JSON.stringify(merged));}catch(e){}
+        await sbSyncModulo('fin_ing_maq', merged);
+      }else if(Object.keys(fimLocal).length){
+        await sbSyncModulo('fin_ing_maq', fimLocal);
+      }
+    }
     if(typeof renderAlmacen==='function' && document.getElementById('log-almacen')) renderAlmacen();
     if(typeof renderDashboard==='function') renderDashboard();
   }catch(e){ console.error('cargarAlmacenCombustibleSB:',e); }
@@ -4917,11 +4929,11 @@ function renderDashEjecutivo(){
   const precioPet=compGetPrecioPet();
   const precioGas=compGetPrecioGas();
   const mantMes=(state.mantenimiento||[]).filter(m=>(m.fecha||'').startsWith(mes));
-  const mantPorEq=tags=>mantMes.filter(m=>tags.some(t=>(m.equipo||'').toLowerCase().includes(t))).reduce((s,m)=>s+(m.costo||0),0);
+  const mantPorEq=tags=>mantMes.filter(m=>m.aprobLog&&m.aprobLog.ok&&tags.some(t=>(m.equipo||'').toLowerCase().includes(t))).reduce((s,m)=>s+(m.costo||0),0);
   const ingMes=finIngMaqGet(mes);
 
   const MAQUINAS=[
-    {label:'Scoop',           fig:'scoop',     col:'#5b6ef5',tags:['scoop epiroc','scoop monte','scoop'],mt:['scoop'],   op:()=>3900,opL:'S/3,900/mes'},
+    {label:'Scoop',           fig:'scoop',     col:'#5b6ef5',tags:['scoop dali','scoop epiroc','scoop monte','scoop'],mt:['scoop'],   op:()=>3900,opL:'S/3,900/mes'},
     {label:'Dumper',          fig:'dumper',    col:'#f59e0b',tags:['dumper'],                          mt:['dumper'],  op:()=>3600,opL:'S/3,600/mes'},
     {label:'Compresora',      fig:'compresora',col:'#8b5cf6',tags:['compresora m135','compresora m122','compresora'],mt:['compresora'],op:()=>2500,opL:'S/2,500/mes'},
     {label:'Excavadora',      fig:'excavadora',col:'#10b981',tags:['excavadora'],                      mt:['excavadora'],op:()=>5000,opL:'S/5,000/mes'},
@@ -13786,10 +13798,10 @@ function _iaEquipos(){
     const precioPet=(typeof compGetPrecioPet==='function')?compGetPrecioPet():0;
     const precioGas=(typeof compGetPrecioGas==='function')?compGetPrecioGas():0;
     const mantMes=(state.mantenimiento||[]).filter(m=>(m.fecha||'').startsWith(mes));
-    const mantPorEq=tags=>mantMes.filter(m=>tags.some(t=>(m.equipo||'').toLowerCase().includes(t))).reduce((s,m)=>s+(m.costo||0),0);
+    const mantPorEq=tags=>mantMes.filter(m=>m.aprobLog&&m.aprobLog.ok&&tags.some(t=>(m.equipo||'').toLowerCase().includes(t))).reduce((s,m)=>s+(m.costo||0),0);
     const ingMes=(typeof finIngMaqGet==='function')?finIngMaqGet(mes):{};
     const MAQUINAS=[
-      {label:'Scoop',           tags:['scoop epiroc','scoop monte','scoop'],mt:['scoop'],   op:3900},
+      {label:'Scoop',           tags:['scoop dali','scoop epiroc','scoop monte','scoop'],mt:['scoop'],   op:3900},
       {label:'Dumper',          tags:['dumper'],                          mt:['dumper'],  op:3600},
       {label:'Compresora',      tags:['compresora m135','compresora m122','compresora'],mt:['compresora'],op:2500},
       {label:'Excavadora',      tags:['excavadora'],                      mt:['excavadora'],op:5000},
@@ -14751,7 +14763,7 @@ function renderFinIngresosMaq(){
   const ingGuardados=finIngMaqGet(mes);
 
   const MAQUINAS_LABELS=[
-    {label:'Scoop',col:'#5b6ef5',tags:['scoop epiroc','scoop monte','scoop'],mt:['scoop'],op:3900,opL:'S/3,900/mes'},
+    {label:'Scoop',col:'#5b6ef5',tags:['scoop dali','scoop epiroc','scoop monte','scoop'],mt:['scoop'],op:3900,opL:'S/3,900/mes'},
     {label:'Dumper',col:'#f59e0b',tags:['dumper'],mt:['dumper'],op:3600,opL:'S/3,600/mes'},
     {label:'Compresora',col:'#5b6ef5',tags:['compresora m135','compresora m122','compresora'],mt:['compresora'],op:2500,opL:'S/2,500/mes'},
     {label:'Excavadora',col:'#10b981',tags:['excavadora'],mt:['excavadora'],op:5000,opL:'S/5,000/mes'},
@@ -14766,7 +14778,7 @@ function renderFinIngresosMaq(){
   });
   const pPet=compGetPrecioPet(),pGas=compGetPrecioGas();
   const mantMes=(state.mantenimiento||[]).filter(m=>(m.fecha||'').startsWith(mes));
-  const mantPorEq=tags=>mantMes.filter(m=>tags.some(t=>(m.equipo||'').toLowerCase().includes(t))).reduce((s,m)=>s+(m.costo||0),0);
+  const mantPorEq=tags=>mantMes.filter(m=>m.aprobLog&&m.aprobLog.ok&&tags.some(t=>(m.equipo||'').toLowerCase().includes(t))).reduce((s,m)=>s+(m.costo||0),0);
 
   const filas=MAQUINAS_LABELS.map(m=>{
     const galPet=m.tags.reduce((s,t)=>s+(galMaqPet[t]||0),0);
@@ -14972,7 +14984,9 @@ const COMP_PRECIOS_ACEROS_DEFAULT = {'BARRA CONICA 4\' X 7/8"':249.17,'BARRA CON
 // Ingresos manuales por máquina: {mes: {label: importe}}
 const FIN_ING_MAQ_KEY='atmin_fin_ing_maq';
 function finIngMaqGet(mes){try{return JSON.parse(localStorage.getItem(FIN_ING_MAQ_KEY)||'{}')[mes]||{};}catch(e){return {};}}
-function finIngMaqSet(mes,data){try{const all=JSON.parse(localStorage.getItem(FIN_ING_MAQ_KEY)||'{}');all[mes]=data;localStorage.setItem(FIN_ING_MAQ_KEY,JSON.stringify(all));}catch(e){}}
+function finIngMaqSet(mes,data){try{const all=JSON.parse(localStorage.getItem(FIN_ING_MAQ_KEY)||'{}');all[mes]=data;localStorage.setItem(FIN_ING_MAQ_KEY,JSON.stringify(all));
+  try{ sbSyncModulo('fin_ing_maq', all); }catch(e){}  // nube: ingreso por máquina vinculado al dashboard
+  }catch(e){}}
 
 const PARAMS_COMB_KEY  = 'atmin_params_comb';
 const PARAMS_EXP_KEY   = 'atmin_params_exp';
@@ -15036,7 +15050,7 @@ function compCostoReporte(r){
   const cAce = (r.aceros||[]).reduce((s,a)=>s+((a.rampa||0)+(a.galeria||0))*(pAce[a.codigo]||0),0);
   return {cExp, cPet, cGas, cAce, total:cExp+cPet+cGas+cAce};
 }
-const COMP_PETROLEO   = ['Grupo Electrógeno','Compresora M135','Compresora M122','Scoop Epiroc','Scoop Monte','Dumper'];
+const COMP_PETROLEO   = ['Grupo Electrógeno','Compresora M135','Compresora M122','Scoop DALI','Scoop Monte','Dumper','Excavadora','Cargador Frontal'];
 const COMP_GASOLINA   = ['Camioneta Blanca','Camioneta Roja','Cuatrimoto C','Cuatrimoto N'];
 const COMP_HOROMETROS = ['Grupo Electrógeno','Compresora M135','Compresora M122','Scoop Epiroc','Scoop Monte','Dumper'];
 
