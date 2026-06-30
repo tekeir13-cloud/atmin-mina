@@ -2438,6 +2438,12 @@ select option{background:var(--coal3);}
                 letter-spacing:0.3px">
           Cierre Mensual
         </button>
+        <button id="btn-respaldo" onclick="respaldoCompleto()" title="Respaldo completo: nube + descarga (JSON y Excel)"
+                style="background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.35);
+                color:#22c55e;border-radius:4px;padding:6px 12px;cursor:pointer;
+                font-size:11px;font-family:'Syne',sans-serif;font-weight:700;letter-spacing:0.3px">
+          💾 Respaldo
+        </button>
         <!-- Botón cerrar sesión -->
         <button id="btn-salir" onclick="doLogout()"
                 style="background:rgba(224,90,58,0.1);border:1px solid rgba(224,90,58,0.25);color:var(--text2);border-radius:4px;padding:6px 12px;cursor:pointer;font-size:11px;font-family:'DM Sans',sans-serif">
@@ -16345,6 +16351,92 @@ function visorRenderDia() {
 const _origRenderTabla = typeof renderTablaCompresorista === 'function' ? renderTablaCompresorista : null;
 
 // ==================== FIN MÓDULO COMPRESORISTA ====================
+
+// ════════════════ CICLO DE PERIODO · RESPALDO · HISTORIAL ════════════════
+// Periodo de valorización = del 26 de un mes al 25 del siguiente (noche).
+// Etiquetado por el MES DEL CIERRE (ej: 26-jun→25-jul = "Julio").
+// Se ACTIVA en agosto; en julio es solo prueba (los cortes 26→25 no se usan aún).
+const CICLO_2625_DESDE = '2026-08';   // periodo (YYYY-MM) desde el que el ciclo 26→25 está activo
+function cicloActivo(){ try{ return periodoActual() >= CICLO_2625_DESDE; }catch(e){ return false; } }
+function periodoActual(){
+  const d=new Date(); let y=d.getFullYear(), m=d.getMonth(); // m 0-indexado
+  if(d.getDate()>=26){ m++; if(m>11){m=0;y++;} }
+  return y+'-'+String(m+1).padStart(2,'0'); // YYYY-MM del mes de cierre
+}
+function periodoRango(pYM){
+  const [y,m]=pYM.split('-').map(Number);
+  const f=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  return { ini:f(new Date(y,m-2,26)), fin:f(new Date(y,m-1,25)) };  // 26 mes anterior → 25 mes de cierre
+}
+function periodoLabel(pYM){ return (typeof finNombreMes==='function')?finNombreMes(pYM):pYM; }
+
+// Snapshot completo del estado (para respaldo / restauración)
+function snapshotEstado(){
+  let fim={}; try{ fim=JSON.parse(localStorage.getItem(FIN_ING_MAQ_KEY)||'{}'); }catch(e){}
+  return {
+    _ts:new Date().toISOString(), _periodo:(()=>{try{return periodoActual()}catch(e){return ''}})(),
+    almacen:state.almacen, personal:state.personal, tareas:state.tareas,
+    compresorista:state.compresorista, mantenimiento:state.mantenimiento, mantRepuestos:state.mantRepuestos,
+    reportesGuardia:state.reportesGuardia, perforacion:state.perforacion,
+    valorizacionesLabor:state.valorizacionesLabor, distribucion:state.distribucion, metas:state.metas,
+    reuniones:state.reuniones, remanenteSalidas:state.remanenteSalidas,
+    combustible:{ pet:(typeof combCargar==='function'?combCargar('pet'):[]), gas:(typeof combCargar==='function'?combCargar('gas'):[]) },
+    serviciosTerceros:(typeof servCargar==='function'?servCargar():[]),
+    finIngMaq:fim, mesesCerrados:state.mesesCerrados||[]
+  };
+}
+
+// Respaldo completo: nube + descarga JSON (+ Excel)
+async function respaldoCompleto(silencioso){
+  const periodo=(()=>{try{return periodoActual()}catch(e){return new Date().toISOString().slice(0,7)}})();
+  const stamp=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+  const snap=snapshotEstado();
+  // 1) Nube (recuperable)
+  try{ await sbSyncModulo('backup_'+periodo, snap); }catch(e){}
+  try{ await sbSyncModulo('backup_ultimo', {periodo,stamp,snap}); }catch(e){}
+  if(silencioso) return snap;
+  // 2) Descarga JSON
+  try{
+    const blob=new Blob([JSON.stringify(snap,null,2)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download='respaldo_'+periodo+'_'+stamp+'.json'; a.click();
+  }catch(e){}
+  // 3) Descarga Excel (resumen por módulo)
+  try{ await respaldoExcel(periodo,snap); }catch(e){ console.warn('xlsx backup',e); }
+  showNotif('✅ Respaldo completo de '+periodoLabel(periodo)+' (nube + descarga)','ok');
+  return snap;
+}
+
+async function respaldoExcel(periodo,snap){
+  if(typeof ExcelJS==='undefined'){ return; }
+  const wb=new ExcelJS.Workbook(); wb.creator='ATMIN';
+  const hoja=(nombre,cols,rows)=>{
+    const ws=wb.addWorksheet(nombre);
+    ws.addRow(cols).font={bold:true};
+    (rows||[]).forEach(r=>ws.addRow(r));
+    ws.columns.forEach(c=>{c.width=18;});
+  };
+  // Almacén (stock vigente)
+  const stock=(typeof calcStock==='function')?calcStock():[];
+  hoja('Stock', ['Almacén','Código','Producto','Unidad','Stock','Precio','Valor'],
+    stock.filter(r=>r.stock>0).map(r=>[r.almacen,r.codigo,r.producto||r.descripcion,r.unidad,r.stock,r.precio,Math.round(r.stock*r.precio*100)/100]));
+  hoja('Ingresos almacén', ['Fecha','Almacén','Producto','Cant','Precio','Total'],
+    (snap.almacen.ingresos||[]).map(i=>[i.fecha,i.almacen,i.producto||i.descripcion,i.cantidad,i.precio,i.total]));
+  hoja('Salidas almacén', ['Fecha','Almacén','Destino','Producto','Cant','Precio','Importe'],
+    (snap.almacen.salidas||[]).map(s=>[s.fecha,s.almacen,s.destino,s.producto||s.descripcion,s.cantidad,s.precio,s.importe]));
+  hoja('Tareos', ['Fecha','Turno','TrabajadorId','Mult','Jornal'],
+    (snap.tareas||[]).map(t=>[t.fecha,t.turno||'',t.trabajadorId,t.mult||1,t.jornal||'']));
+  hoja('Combustible', ['Tipo','Fecha','Placa','Cantidad','Precio'],
+    [].concat((snap.combustible.pet||[]).map(r=>['Petróleo',r.fecha,r.placa,r.cantidad,r.precio]),
+              (snap.combustible.gas||[]).map(r=>['Gasolina',r.fecha,r.placa,r.cantidad,r.precio])));
+  hoja('Mantenimiento', ['Fecha','Equipo','Tipo','Costo','Estado'],
+    (snap.mantenimiento||[]).map(m=>[m.fecha,m.equipo,m.tipo,m.costo,m.estado]));
+  hoja('Reportes Guardia', ['Fecha','Turno','Jefe','Avance Brenda','Avance CRNE'],
+    (snap.reportesGuardia||[]).map(r=>[r.fecha,r.turno,r.jefe,(r.brenda&&r.brenda.metros)||0,(r.crne&&r.crne.metros)||0]));
+  const buf=await wb.xlsx.writeBuffer();
+  const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='respaldo_'+periodo+'.xlsx'; a.click();
+}
 
 </script>
 
