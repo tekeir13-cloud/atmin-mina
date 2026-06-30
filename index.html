@@ -14461,30 +14461,69 @@ function _iaEquipos(){
 function _iaRespuestaEquipo(q,fS){
   const eqs=_iaEquipos();
   if(!eqs.length) return null;
-  // Buscar un equipo específico mencionado
-  const alias={
-    'scoop':'Scoop','dumper':'Dumper','volquete':'Dumper',
-    'compresora':'Compresora','compresor':'Compresora',
-    'excavadora':'Excavadora','retroexcavadora':'Excavadora',
-    'cargador':'Cargador Frontal','frontal':'Cargador Frontal',
-  };
+  // Alias → label exacto en EQUIPOS_FACTURABLES
+  const alias=[
+    {k:'dali',       l:'Scoop DALI'},
+    {k:'scoop dali', l:'Scoop DALI'},
+    {k:'monte',      l:'Scoop Monte'},
+    {k:'scoop monte',l:'Scoop Monte'},
+    {k:'dumper',     l:'Dumper'},
+    {k:'volquete',   l:'Dumper'},
+    {k:'m135',       l:'Compresora M135'},
+    {k:'135',        l:'Compresora M135'},
+    {k:'m122',       l:'Compresora M122'},
+    {k:'122',        l:'Compresora M122'},
+    {k:'excavadora', l:'Excavadora'},
+    {k:'retroexcavadora',l:'Excavadora'},
+    {k:'cargador',   l:'Cargador Frontal'},
+    {k:'frontal',    l:'Cargador Frontal'},
+    {k:'grupo',      l:'Grupo Electrógeno'},
+    {k:'electr',     l:'Grupo Electrógeno'},
+    {k:'generador',  l:'Grupo Electrógeno'},
+    {k:'compresora', l:null}, // puede ser M135 o M122 — responde ambas
+    {k:'compresor',  l:null},
+    {k:'scoop',      l:null}, // puede ser DALI o Monte — responde ambos
+  ];
   let objetivo=null;
-  for(const k in alias){ if(q.includes(k)){ objetivo=alias[k]; break; } }
+  for(const a of alias){
+    if(q.includes(a.k)){
+      if(a.l){ objetivo=a.l; break; }
+      // ambiguo: buscar todos los que contengan la palabra
+      const coinciden=eqs.filter(e=>e.label.toLowerCase().includes(a.k));
+      if(coinciden.length===1){ objetivo=coinciden[0].label; break; }
+      if(coinciden.length>1){
+        const detalle=coinciden.map(e=>{
+          if(!e.ingRegistrado) return `${e.label}: sin ingreso registrado (costos: mant. ${fS(e.cMant)}, comb. ${fS(e.cComb)}, op. ${fS(e.cOp)})`;
+          return `${e.label}: ${e.resultado>=0?'ganancia':'pérdida'} de ${fS(Math.abs(e.resultado))} (ing. ${fS(e.ingresos)}, ${e.horas.toFixed(0)} h)`;
+        }).join('. ');
+        return detalle+'. Pregúnteme por uno específico para el desglose completo.';
+      }
+      break;
+    }
+  }
+  // Equipo específico encontrado
   if(objetivo){
     const e=eqs.find(x=>x.label===objetivo);
     if(!e) return null;
     if(!e.ingRegistrado)
-      return `El equipo ${e.label} aún no tiene ingresos registrados este mes. Sus costos son: mantenimiento ${fS(e.cMant)}, combustible ${fS(e.cComb)} y operador ${fS(e.cOp)}. Registre el ingreso en Finanzas › Ingresos x Máq. para ver su ganancia.`;
-    const signo=e.resultado>=0?'una ganancia':'una pérdida';
-    return `El equipo ${e.label} generó ${signo} de ${fS(e.resultado)} este mes. Ingresos ${fS(e.ingresos)} menos mantenimiento ${fS(e.cMant)}, combustible ${fS(e.cComb)} y operador ${fS(e.cOp)}. Operó ${e.horas.toFixed(1)} horas.`;
+      return `El ${e.label} aún no tiene ingresos registrados este mes. Sus costos hasta ahora son: mantenimiento ${fS(e.cMant)}, combustible ${fS(e.cComb)} y operador ${fS(e.cOp)}. Ingrese el monto en Finanzas › Ingresos x Máq. para ver su ganancia real.`;
+    const signo=e.resultado>=0?'una ganancia neta':'una pérdida neta';
+    return `El ${e.label} generó ${signo} de ${fS(Math.abs(e.resultado))} este mes. Ingresos ${fS(e.ingresos)} menos: mantenimiento ${fS(e.cMant)}, combustible ${fS(e.cComb)} y costo de operador ${fS(e.cOp)}. Total operado: ${e.horas.toFixed(1)} horas.`;
   }
-  // Resumen general de todos los equipos
+  // Resumen general — todos los equipos del dashboard
+  const sinIng=eqs.filter(e=>!e.ingRegistrado);
   const conIng=eqs.filter(e=>e.ingRegistrado);
-  if(!conIng.length)
-    return `Aún no hay ingresos registrados por equipo este mes. Los equipos en seguimiento son: ${eqs.map(e=>e.label).join(', ')}. Registre ingresos en Finanzas › Ingresos x Máq.`;
   const totRes=conIng.reduce((s,e)=>s+e.resultado,0);
-  const detalle=conIng.map(e=>`${e.label} ${e.resultado>=0?'+':''}${fS(e.resultado)}`).join(', ');
-  return `Resultado por equipo este mes (${totRes>=0?'+':''}${fS(totRes)} en total): ${detalle}. Pregúnteme por un equipo específico —scoop, dumper, compresora, excavadora o cargador— para ver su desglose.`;
+  if(!conIng.length)
+    return `Aún no hay ingresos registrados por equipo este mes. Los ${eqs.length} equipos en seguimiento son: ${eqs.map(e=>e.label).join(', ')}. Ingrese los montos en Finanzas › Ingresos x Máq. para activar este análisis.`;
+  const lineas=eqs.map(e=>{
+    if(!e.ingRegistrado) return `${e.label}: pendiente de ingreso`;
+    return `${e.label}: ${e.resultado>=0?'+':''}${fS(e.resultado)} (${e.horas.toFixed(0)} h)`;
+  });
+  const resumen=`Resultado por equipo este mes — total ${totRes>=0?'+':''}${fS(totRes)}: `;
+  const lista=lineas.join(', ');
+  const nota=sinIng.length>0?` Aún faltan ingresos de: ${sinIng.map(e=>e.label).join(', ')}.`:'';
+  return resumen+lista+'.'+nota+' Pregúnteme por un equipo específico para el desglose.';
 }
 function _iaRespuestaLocal(texto){
   const m=_iaMetrics();
@@ -14494,7 +14533,7 @@ function _iaRespuestaLocal(texto){
   const SR='Señor Amador,';
 
   // ── Equipos (ganancia/gasto por equipo) — prioridad alta ──
-  if(has('equipo','equipos','scoop','dumper','volquete','compresora','compresor','excavadora','cargador','maquina','máquina','flota')){
+  if(has('equipo','equipos','scoop','dumper','volquete','compresora','compresor','excavadora','cargador','maquina','máquina','flota','dali','monte','m135','m122','grupo','electr','generador','ganancia por','rentabilidad de')){
     const r=_iaRespuestaEquipo(q,fS);
     if(r) return SR+r.charAt(0).toLowerCase()+r.slice(1);
   }
