@@ -2444,6 +2444,18 @@ select option{background:var(--coal3);}
                 font-size:11px;font-family:'Syne',sans-serif;font-weight:700;letter-spacing:0.3px">
           💾 Respaldo
         </button>
+        <button id="btn-cerrar-periodo" onclick="abrirCerrarPeriodo()" title="Cerrar periodo de valorización (26→25)"
+                style="display:none;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);
+                color:#f59e0b;border-radius:4px;padding:6px 12px;cursor:pointer;
+                font-size:11px;font-family:'Syne',sans-serif;font-weight:700;letter-spacing:0.3px">
+          🔒 Cerrar Periodo
+        </button>
+        <button id="btn-historial-periodos" onclick="abrirHistorialPeriodos()" title="Historial de periodos cerrados"
+                style="display:none;background:var(--coal3);border:1px solid var(--border);
+                color:var(--text);border-radius:4px;padding:6px 12px;cursor:pointer;
+                font-size:11px;font-family:'Syne',sans-serif;font-weight:700;letter-spacing:0.3px">
+          📁 Historial Periodos
+        </button>
         <!-- Botón cerrar sesión -->
         <button id="btn-salir" onclick="doLogout()"
                 style="background:rgba(224,90,58,0.1);border:1px solid rgba(224,90,58,0.25);color:var(--text2);border-radius:4px;padding:6px 12px;cursor:pointer;font-size:11px;font-family:'DM Sans',sans-serif">
@@ -4376,6 +4388,18 @@ async function cargarAlmacenCombustibleSB(){
       }else if(Object.keys(fimLocal).length){
         await sbSyncModulo('fin_ing_maq', fimLocal);
       }
+    }
+    // ── HISTORIAL DE PERIODOS — índice de cierres (unión por periodo, nube gana) ──
+    {
+      try{
+        const hNube=await sbLoadModulo('historial_periodos');
+        if(Array.isArray(hNube)&&hNube.length){
+          let hLocal=[]; try{hLocal=JSON.parse(localStorage.getItem('atmin_historial_periodos')||'[]');}catch(e){}
+          const byP={}; hLocal.forEach(h=>{if(h&&h.periodo)byP[h.periodo]=h;}); hNube.forEach(h=>{if(h&&h.periodo)byP[h.periodo]=h;});
+          const hMerged=Object.values(byP).sort((a,b)=>(b.periodo||'').localeCompare(a.periodo||''));
+          try{localStorage.setItem('atmin_historial_periodos',JSON.stringify(hMerged));}catch(e){}
+        }
+      }catch(e){}
     }
     if(typeof renderAlmacen==='function' && document.getElementById('log-almacen')) renderAlmacen();
     if(typeof renderDashboard==='function') renderDashboard();
@@ -12886,7 +12910,7 @@ function iniciarSesion(user){
 
   // Botones gerente
   const esGerente = user.rol === 'gerente_general' || user.rol === 'jefe_finanzas';
-  ['btn-admin-usuarios','btn-historial-cierres','btn-cierre-mensual'].forEach(id=>{
+  ['btn-admin-usuarios','btn-historial-cierres','btn-cierre-mensual','btn-cerrar-periodo','btn-historial-periodos'].forEach(id=>{
     const el = document.getElementById(id);
     if(el) el.style.display = esGerente ? 'block' : 'none';
   });
@@ -16436,6 +16460,173 @@ async function respaldoExcel(periodo,snap){
   const buf=await wb.xlsx.writeBuffer();
   const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='respaldo_'+periodo+'.xlsx'; a.click();
+}
+
+// ════════════════ HISTORIAL DE PERIODOS ════════════════
+const HIST_PERIODOS_KEY='atmin_historial_periodos';
+function histPeriodosLoad(){ try{ return JSON.parse(localStorage.getItem(HIST_PERIODOS_KEY)||'[]'); }catch(e){ return []; } }
+function histPeriodosSave(arr){ try{ localStorage.setItem(HIST_PERIODOS_KEY,JSON.stringify(arr||[])); }catch(e){} try{ sbSyncModulo('historial_periodos', arr||[]); }catch(e){} }
+
+function enRango(fecha,r){ const f=(fecha||'').slice(0,10); return !!f && f>=r.ini && f<=r.fin; }
+
+// Totales del periodo (consumos), para guardar en el índice del historial
+function periodoTotales(r){
+  const inRango=arr=>(arr||[]).filter(x=>enRango(x.fecha,r));
+  const sal=inRango(state.almacen&&state.almacen.salidas);
+  const ing=inRango(state.almacen&&state.almacen.ingresos);
+  const consumoAlmacen=sal.reduce((a,s)=>a+(Number(s.importe)|| (Number(s.cantidad)||0)*(Number(s.precio)||0)),0);
+  let pet=0,gas=0;
+  (state.compresorista||[]).filter(x=>enRango(x.fecha,r)).forEach(c=>{
+    pet+=(c.petroleo||[]).reduce((s,p)=>s+(p.gln||0),0);
+    gas+=(c.gasolina||[]).reduce((s,p)=>s+(p.gln||0),0);
+  });
+  const tareos=(state.tareas||[]).filter(x=>enRango(x.fecha,r)).length;
+  const reportes=(state.reportesGuardia||[]).filter(x=>enRango(x.fecha,r)).length;
+  const mant=(state.mantenimiento||[]).filter(x=>enRango(x.fecha,r)).length;
+  const metros=(state.reportesGuardia||[]).filter(x=>enRango(x.fecha,r)).reduce((a,g)=>a+((g.brenda&&g.brenda.metros)||0)+((g.crne&&g.crne.metros)||0),0);
+  return { consumoAlmacen:Math.round(consumoAlmacen*100)/100, petroleoGln:Math.round(pet*10)/10, gasolinaGln:Math.round(gas*10)/10,
+           ingresosAlmacen:ing.length, salidasAlmacen:sal.length, tareos, reportes, mantenimientos:mant, metrosAvance:Math.round(metros*100)/100 };
+}
+
+// Cierre de periodo: respaldo → archiva consumos → arrastra stocks → reinicia consumo
+async function cerrarPeriodo(periodo){
+  periodo = periodo || (()=>{try{return periodoActual()}catch(e){return new Date().toISOString().slice(0,7)}})();
+  const r=periodoRango(periodo);
+  const label=periodoLabel(periodo);
+  // 0) ¿ya cerrado?
+  const hist=histPeriodosLoad();
+  if(hist.some(h=>h.periodo===periodo)){ showNotif('El periodo '+label+' ya fue cerrado','error'); return false; }
+
+  // 1) Respaldo completo (nube + descarga) — el snapshot ES el archivo histórico
+  let snap=null;
+  try{ snap=await respaldoCompleto(false); }catch(e){ console.warn('respaldo cierre',e); }
+
+  // 2) Totales del periodo (para el índice)
+  const totales=periodoTotales(r);
+
+  // 3) Arrastre de stocks de inicio de mes (lo que queda pasa a apertura del nuevo periodo)
+  const fechaApertura=r.fin; // último día del periodo = saldo de apertura del siguiente
+  // 3a) Almacén → nuevo inventario inicial = stock vigente (>0)
+  try{
+    const stock=(typeof calcStock==='function')?calcStock():[];
+    const nuevoII=stock.filter(p=>p.stock>0).map((p,i)=>({
+      id:'II'+periodo.replace('-','')+String(i).padStart(4,'0'),
+      fecha:fechaApertura, almacen:p.almacen, codigo:p.codigo,
+      producto:p.producto||p.descripcion, descripcion:p.descripcion||p.producto,
+      unidad:p.unidad, precio:p.precio, cantidad:p.stock
+    }));
+    state.almacen.inventarioInicial=nuevoII;
+    state.almacen.ingresos=[];
+    state.almacen.salidas=[];
+    if(typeof almacenSave==='function') almacenSave();
+  }catch(e){ console.warn('arrastre almacen',e); }
+  // 3b) Combustible → apertura con el stock restante; se borran consumos previos
+  try{
+    ['pet','gas'].forEach(tipo=>{
+      const restante=(typeof combStockTipo==='function')?combStockTipo(tipo):0;
+      const apertura=[{ id:'CB'+tipo.toUpperCase()+periodo.replace('-',''), fecha:fechaApertura,
+        placa:'APERTURA', cantidad:Math.round(restante*10)/10, precio:0, apertura:true }];
+      if(typeof combGuardar==='function') combGuardar(tipo, apertura);
+    });
+  }catch(e){ console.warn('arrastre combustible',e); }
+  // 3c) Explosivos → apertura con el stock actual por producto
+  try{
+    const exMap=(typeof exploStockActual==='function')?exploStockActual():{};
+    const nuevosIng=Object.keys(exMap).filter(k=>exMap[k]>0).map(k=>({
+      id:'EI'+periodo.replace('-','')+k, fecha:fechaApertura, vale:'APERTURA',
+      producto:k, cajas:0, unidades:exMap[k], totalUnidades:exMap[k], origen:'Saldo periodo anterior', apertura:true
+    }));
+    state.almacen.explosivos={ ingresos:nuevosIng, salidas:[] };
+    if(typeof almacenSave==='function') almacenSave();
+  }catch(e){ console.warn('arrastre explosivos',e); }
+
+  // 4) Reinicio de consumo del periodo (los datos quedan en el respaldo/archivo)
+  try{
+    state.tareas=(state.tareas||[]).filter(x=>!enRango(x.fecha,r)); if(typeof tareasSave==='function') tareasSave();
+    state.compresorista=(state.compresorista||[]).filter(x=>!enRango(x.fecha,r)); if(typeof compGuardarLocal==='function') compGuardarLocal();
+    state.mantenimiento=(state.mantenimiento||[]).filter(x=>!enRango(x.fecha,r));
+    try{ sbSyncModulo('mantenimiento', state.mantenimiento||[]); }catch(e){}
+    state.reportesGuardia=(state.reportesGuardia||[]).filter(x=>!enRango(x.fecha,r)); if(typeof reportesGuardiaSave==='function') reportesGuardiaSave();
+    state.remanenteSalidas=(state.remanenteSalidas||[]).filter(x=>!enRango(x.fecha,r));
+    if(typeof remSalSave==='function'){ try{ remSalSave(); }catch(e){} }
+    if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes();
+  }catch(e){ console.warn('reinicio consumo',e); }
+
+  // 5) Índice del historial + marca de mes cerrado
+  hist.unshift({ periodo, label, rango:r, cerradoEl:new Date().toISOString(),
+    totales, backupKey:'backup_'+periodo });
+  histPeriodosSave(hist);
+  if(!state.mesesCerrados) state.mesesCerrados=[];
+  if(!state.mesesCerrados.includes(periodo)){ state.mesesCerrados.push(periodo); if(typeof saveState==='function') saveState(); }
+  try{ sbSyncModulo('mantRepuestos', state.mantRepuestos||[]); }catch(e){}
+
+  showNotif('🔒 Periodo '+label+' cerrado: respaldo guardado, stocks arrastrados y consumo reiniciado','ok');
+  try{ if(typeof refrescarVistaActual==='function') refrescarVistaActual(); }catch(e){}
+  return true;
+}
+
+// ── UI: confirmación de cierre ──
+function abrirCerrarPeriodo(){
+  let periodo; try{ periodo=periodoActual(); }catch(e){ periodo=new Date().toISOString().slice(0,7); }
+  const r=periodoRango(periodo); const label=periodoLabel(periodo);
+  const t=periodoTotales(r);
+  const activo=(typeof cicloActivo==='function')?cicloActivo():false;
+  const aviso=activo?'':'<div style="background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);border-radius:6px;padding:10px;font-size:12px;color:#f59e0b;margin-bottom:12px">⚠ El ciclo 26→25 se activa en agosto. En julio (modo prueba) puedes cerrar para validar el flujo, pero normalmente no es necesario.</div>';
+  const html=`<div id="modal-cerrar-periodo" class="modal-overlay" style="display:flex" onclick="if(event.target===this)cerrarModal('modal-cerrar-periodo')">
+    <div class="modal-box" style="max-width:520px" onclick="event.stopPropagation()">
+      <div class="modal-header"><h3>🔒 Cerrar Periodo · ${label}</h3>
+        <button onclick="cerrarModal('modal-cerrar-periodo')" class="modal-close">×</button></div>
+      <div style="padding:18px">
+        ${aviso}
+        <div style="font-size:13px;color:var(--text2);margin-bottom:10px">Periodo de valorización: <b>${r.ini}</b> → <b>${r.fin}</b> (noche)</div>
+        <div style="background:var(--coal3);border-radius:8px;padding:12px;font-size:12px;line-height:1.9;margin-bottom:14px">
+          <div>Consumo almacén: <b>${fmtS(t.consumoAlmacen)}</b></div>
+          <div>Petróleo consumido: <b>${t.petroleoGln} gln</b> · Gasolina: <b>${t.gasolinaGln} gln</b></div>
+          <div>Tareos: <b>${t.tareos}</b> · Reportes de guardia: <b>${t.reportes}</b> · Mantenimientos: <b>${t.mantenimientos}</b></div>
+          <div>Metros de avance: <b>${t.metrosAvance} m</b></div>
+        </div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:14px">Al cerrar: se genera respaldo (nube + Excel + JSON), se arrastran los stocks de almacén, combustible y explosivos como saldo de apertura, y se reinicia el consumo del periodo. Los datos quedan archivados en el respaldo.</div>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button onclick="cerrarModal('modal-cerrar-periodo')" style="background:var(--coal3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:9px 16px;cursor:pointer;font-size:12px">Cancelar</button>
+          <button onclick="confirmarCerrarPeriodo('${periodo}')" style="background:#f59e0b;border:none;color:#1a1a1a;border-radius:6px;padding:9px 16px;cursor:pointer;font-weight:700;font-size:12px">🔒 Cerrar periodo</button>
+        </div>
+      </div>
+    </div></div>`;
+  const prev=document.getElementById('modal-cerrar-periodo'); if(prev) prev.remove();
+  document.body.insertAdjacentHTML('beforeend',html);
+}
+async function confirmarCerrarPeriodo(periodo){
+  const btn=event&&event.target; if(btn){ btn.disabled=true; btn.textContent='Procesando…'; }
+  const ok=await cerrarPeriodo(periodo);
+  cerrarModal('modal-cerrar-periodo');
+  if(ok) setTimeout(abrirHistorialPeriodos,400);
+}
+
+// ── UI: historial de periodos ──
+function abrirHistorialPeriodos(){
+  const hist=histPeriodosLoad();
+  const filas=hist.length?hist.map(h=>{
+    const t=h.totales||{};
+    return `<div style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-weight:700;font-size:14px;color:var(--gold-light)">📅 ${h.label||h.periodo}</div>
+        <div style="font-size:11px;color:var(--text3)">${(h.rango&&h.rango.ini)||''} → ${(h.rango&&h.rango.fin)||''}</div>
+      </div>
+      <div style="font-size:11px;color:var(--text2);line-height:1.8">
+        Consumo almacén: <b>${fmtS(t.consumoAlmacen||0)}</b> · Petróleo: <b>${t.petroleoGln||0} gln</b> · Gasolina: <b>${t.gasolinaGln||0} gln</b><br>
+        Tareos: <b>${t.tareos||0}</b> · Reportes: <b>${t.reportes||0}</b> · Mantenimientos: <b>${t.mantenimientos||0}</b> · Avance: <b>${t.metrosAvance||0} m</b>
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-top:6px">Cerrado: ${(h.cerradoEl||'').slice(0,16).replace('T',' ')} · Respaldo en nube: <code>${h.backupKey||''}</code></div>
+    </div>`;
+  }).join(''):'<div style="text-align:center;color:var(--text3);padding:24px">Aún no hay periodos cerrados.</div>';
+  const html=`<div id="modal-historial-periodos" class="modal-overlay" style="display:flex" onclick="if(event.target===this)cerrarModal('modal-historial-periodos')">
+    <div class="modal-box" style="max-width:600px" onclick="event.stopPropagation()">
+      <div class="modal-header"><h3>📁 Historial de Periodos</h3>
+        <button onclick="cerrarModal('modal-historial-periodos')" class="modal-close">×</button></div>
+      <div style="padding:18px;max-height:70vh;overflow-y:auto">${filas}</div>
+    </div></div>`;
+  const prev=document.getElementById('modal-historial-periodos'); if(prev) prev.remove();
+  document.body.insertAdjacentHTML('beforeend',html);
 }
 
 </script>
