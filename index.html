@@ -2623,7 +2623,8 @@ select option{background:var(--coal3);}
     <button class="mod-tab active" onclick="modTab('rrhh','planilla',this)">📋 Tareo Diario</button>
     <button class="mod-tab" onclick="modTab('rrhh','tareas',this)">📂 Historial &amp; Edición</button>
     <button class="mod-tab" onclick="modTab('rrhh','personal',this)">👥 Personal</button>
-    <button class="mod-tab" onclick="modTab('rrhh','costorrhh',this)">💲 Costo Planilla</button>
+    <button class="mod-tab" onclick="modTab('rrhh','costorrhh',this)">👷 Planilla Operarios</button>
+    <button class="mod-tab" id="tab-planillaint" style="display:none" onclick="modTab('rrhh','planillaint',this)">🧾 Planilla Integrada</button>
     <button class="mod-tab" onclick="modTab('rrhh','servicios',this)">🤝 Servicios Terceros</button>
   </div>
 
@@ -2847,6 +2848,7 @@ select option{background:var(--coal3);}
     <button id="btn-reabrir-mes" style="display:none" onclick="reabrirMes()"></button>
   </div>
   <div id="rrhh-servicios" class="mod-pane" style="display:none"></div>
+  <div id="rrhh-planillaint" class="mod-pane" style="display:none"></div>
 </div>
 
 <!-- OPERACIONES -->
@@ -4054,7 +4056,7 @@ function navigate(page){
 // Mapa explícito de todos los panes por módulo
 const MODULE_PANES = {
   'log': ['almacen','historial','inventario','solicitudcompra','productos','explosivos','stockremanente','subalmacen2820','solicitudmantlog','combustible'],
-  'rrhh': ['planilla','tareas','personal','costorrhh','servicios'],
+  'rrhh': ['planilla','tareas','personal','costorrhh','servicios','planillaint'],
   'op': ['tablero','avance','solicitudes','vsproyectado','valorizaciones'],
   'mant': ['registro','costosmant'],
   'fin': ['dashboard','informe','costocentro']
@@ -4389,6 +4391,17 @@ async function cargarAlmacenCombustibleSB(){
         await sbSyncModulo('fin_ing_maq', fimLocal);
       }
     }
+    // ── PLANILLA SUPERVISIÓN — sueldos fijos por mes (nube gana, merge por mes) ──
+    {
+      try{
+        const psNube=await sbLoadModulo('planilla_supervision');
+        if(psNube&&typeof psNube==='object'&&!Array.isArray(psNube)){
+          let psLocal={}; try{psLocal=JSON.parse(localStorage.getItem('atmin_planilla_supervision')||'{}')||{};}catch(e){}
+          const merged={...psLocal,...psNube}; // nube gana por mes
+          try{localStorage.setItem('atmin_planilla_supervision',JSON.stringify(merged));}catch(e){}
+        }
+      }catch(e){}
+    }
     // ── HISTORIAL DE PERIODOS — índice de cierres (unión por periodo, nube gana) ──
     {
       try{
@@ -4540,6 +4553,7 @@ function renderModPane(mod,pane){
   else if(k==='rrhh-personal')renderPersonal();
   else if(k==='rrhh-costorrhh')renderCostoRRHH();
   else if(k==='rrhh-servicios')renderServiciosTerceros();
+  else if(k==='rrhh-planillaint')renderPlanillaIntegrada();
   else if(k==='op-tablero'){renderTableroOp();}
   else if(k==='op-valorizaciones'){renderValorizacionOp();}
   else if(k==='op-avance'){renderAvance();}
@@ -8912,6 +8926,183 @@ function reabrirMes(){
   showNotif(`🔓 Mes ${mes} reabierto`);
 }
 
+// ═══════════════ PLANILLA INTEGRADA (Supervisión + Operarios) · solo Jefe de Finanzas ═══════════════
+const PLANILLA_SUP_KEY='atmin_planilla_supervision';
+function planillaSupLoad(){ try{ return JSON.parse(localStorage.getItem(PLANILLA_SUP_KEY)||'{}')||{}; }catch(e){ return {}; } }
+function planillaSupSave(obj){ try{ localStorage.setItem(PLANILLA_SUP_KEY,JSON.stringify(obj||{})); }catch(e){} try{ sbSyncModulo('planilla_supervision', obj||{}); }catch(e){} }
+function planillaSupMes(mesYM){ const o=planillaSupLoad(); return Array.isArray(o[mesYM])?o[mesYM]:[]; }
+function planillaSupTotal(mesYM){ return planillaSupMes(mesYM).reduce((s,r)=>s+(Number(r.monto)||0),0); }
+// Total operarios del mes (tareos, excluye sueldos reservados) — para la planilla integrada
+function planillaOperariosTotal(mesYM){
+  return (state.tareas||[]).filter(t=>(t.fecha||'').startsWith(mesYM)).reduce((s,t)=>{
+    const p=(state.personal||[]).find(pp=>String(pp.id)===String(t.trabajadorId));
+    if(p && esSueldoReservado(p.rol)) return s;
+    const j=(t.jornal!=null?t.jornal:(p?p.jornal:0))||0;
+    return s+j*(t.mult||1);
+  },0);
+}
+
+function renderPlanillaIntegrada(){
+  const el=document.getElementById('rrhh-planillaint'); if(!el) return;
+  // Construir selector de meses (a partir de tareos + supervisión guardada)
+  const mesesSet=new Set([...(state.tareas||[]).map(t=>(t.fecha||'').slice(0,7)), ...Object.keys(planillaSupLoad())].filter(Boolean));
+  mesesSet.add(hoy().slice(0,7));
+  const meses=[...mesesSet].sort().reverse();
+  const mesSel=el.dataset.mes && mesesSet.has(el.dataset.mes) ? el.dataset.mes : meses[0];
+  el.dataset.mes=mesSel;
+  const opTot=planillaOperariosTotal(mesSel);
+  const sup=planillaSupMes(mesSel);
+  const supTot=planillaSupTotal(mesSel);
+  const integrado=opTot+supTot;
+  const supRows=sup.length?sup.map((r,i)=>`<tr style="${i%2?'background:rgba(255,255,255,0.02)':''}">
+      <td style="padding:8px 12px">${r.nombre}</td>
+      <td style="padding:8px 12px;color:var(--text3);font-size:12px">${r.rol||'—'}</td>
+      <td style="padding:8px 12px;text-align:right;font-family:'DM Mono',monospace;color:var(--gold-light)">${fmtS(r.monto)}</td>
+    </tr>`).join(''):`<tr><td colspan="3" style="padding:16px;text-align:center;color:var(--text3)">Sin planilla de supervisión para este mes. Pulsa "Ingresar Planilla Supervisión".</td></tr>`;
+  el.innerHTML=`
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+      <select id="pi-mes-sel" onchange="document.getElementById('rrhh-planillaint').dataset.mes=this.value;renderPlanillaIntegrada()"
+        style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;font-weight:600">
+        ${meses.map(m=>`<option value="${m}" ${m===mesSel?'selected':''}>${m}</option>`).join('')}
+      </select>
+      <div style="flex:1"></div>
+      <button class="btn" style="padding:8px 16px;font-size:12px;background:rgba(139,92,246,0.18);color:#a78bfa;border:1px solid rgba(139,92,246,0.4)" onclick="abrirPlanillaSupervision()">➕ Ingresar Planilla Supervisión</button>
+      <button class="btn btn-gold" style="padding:8px 16px;font-size:12px" onclick="exportarPlanillaIntegradaExcel()">📊 Exportar Planilla Integrada</button>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:18px">
+      <div style="flex:1;min-width:160px;background:var(--coal4);border:1px solid var(--border);border-radius:14px;padding:16px">
+        <div style="font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:6px">👷 Planilla Operarios</div>
+        <div style="font-size:24px;font-weight:900;color:#60a5fa">${fmtS(opTot)}</div>
+        <div style="font-size:10.5px;color:var(--text3)">tareos del mes</div>
+      </div>
+      <div style="flex:1;min-width:160px;background:var(--coal4);border:1px solid var(--border);border-radius:14px;padding:16px">
+        <div style="font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:6px">🧑‍💼 Planilla Supervisión</div>
+        <div style="font-size:24px;font-weight:900;color:#a78bfa">${fmtS(supTot)}</div>
+        <div style="font-size:10.5px;color:var(--text3)">${sup.length} cargo${sup.length!==1?'s':''}</div>
+      </div>
+      <div style="flex:1;min-width:160px;background:linear-gradient(135deg,rgba(201,168,76,0.18),rgba(201,168,76,0.05));border:1px solid rgba(201,168,76,0.4);border-radius:14px;padding:16px">
+        <div style="font-size:10.5px;color:var(--gold);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:6px">💰 Planilla Integrada</div>
+        <div style="font-size:26px;font-weight:900;color:var(--gold-light)">${fmtS(integrado)}</div>
+        <div style="font-size:10.5px;color:var(--text3)">operarios + supervisión</div>
+      </div>
+    </div>
+    <div class="section-title" style="margin-top:0">🧑‍💼 Detalle Planilla Supervisión · ${mesSel}</div>
+    <div class="table-wrap">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:#1a2744">
+          <th style="color:#fff;text-align:left;padding:10px 12px">Nombre</th>
+          <th style="color:#fff;text-align:left;padding:10px 12px">Cargo</th>
+          <th style="color:#fff;text-align:right;padding:10px 12px">Sueldo S/</th>
+        </tr></thead>
+        <tbody>${supRows}
+          <tr style="background:rgba(201,168,76,0.1);border-top:2px solid rgba(201,168,76,0.4)">
+            <td colspan="2" style="font-weight:800;color:var(--gold);padding:10px 12px">TOTAL SUPERVISIÓN</td>
+            <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:900;color:var(--gold-light);padding:10px 12px">${fmtS(supTot)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:12px;font-size:11px;color:var(--text3)">ℹ️ La planilla integrada se suma automáticamente al <b>Costo Operativo del mes</b> en el dashboard principal (operarios por tareos + supervisión), sin generar doble gasto.</div>`;
+}
+
+function abrirPlanillaSupervision(){
+  const el=document.getElementById('rrhh-planillaint');
+  const mes=(el&&el.dataset.mes)||hoy().slice(0,7);
+  // Personal con sueldo reservado (activos) + los ya guardados ese mes
+  const reservados=(state.personal||[]).filter(p=>esSueldoReservado(p.rol)&&p.estado!=='baja');
+  const guardados=planillaSupMes(mes);
+  const montoDe=id=>{const r=guardados.find(g=>String(g.id)===String(id));return r?r.monto:'';};
+  const filas=reservados.map(p=>`<tr>
+      <td style="padding:7px 10px;font-size:12px">${p.nombre}<div style="font-size:10px;color:var(--text3)">${p.rol}</div></td>
+      <td style="padding:7px 10px"><input type="number" min="0" step="0.01" data-pid="${p.id}" data-nombre="${(p.nombre||'').replace(/"/g,'&quot;')}" data-rol="${(p.rol||'').replace(/"/g,'&quot;')}" class="pi-sup-input" value="${montoDe(p.id)}" placeholder="0.00" style="width:130px;background:var(--coal2);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:13px"></td>
+    </tr>`).join('');
+  const html=`<div id="modal-planilla-sup" class="modal-overlay" style="display:flex" onclick="if(event.target===this)cerrarModal('modal-planilla-sup')">
+    <div class="modal-box" style="max-width:560px" onclick="event.stopPropagation()">
+      <div class="modal-header"><h3>🧑‍💼 Planilla Supervisión · ${mes}</h3>
+        <button onclick="cerrarModal('modal-planilla-sup')" class="modal-close">×</button></div>
+      <div style="padding:18px;max-height:70vh;overflow-y:auto">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:12px">Ingresa el sueldo mensual de cada cargo de supervisión. Estos montos se integran con la planilla de operarios y alimentan el costo operativo del dashboard.</div>
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:var(--coal3)"><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text3)">Cargo / Persona</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text3)">Sueldo mensual S/</th></tr></thead>
+          <tbody>${filas||'<tr><td colspan="2" style="padding:14px;text-align:center;color:var(--text3)">No hay personal con sueldo reservado registrado.</td></tr>'}</tbody>
+        </table>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+          <button onclick="cerrarModal('modal-planilla-sup')" style="background:var(--coal3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:9px 16px;cursor:pointer;font-size:12px">Cancelar</button>
+          <button onclick="guardarPlanillaSupervision('${mes}')" style="background:#8b5cf6;border:none;color:#fff;border-radius:6px;padding:9px 16px;cursor:pointer;font-weight:700;font-size:12px">💾 Guardar planilla</button>
+        </div>
+      </div>
+    </div></div>`;
+  const prev=document.getElementById('modal-planilla-sup'); if(prev) prev.remove();
+  document.body.insertAdjacentHTML('beforeend',html);
+}
+
+function guardarPlanillaSupervision(mes){
+  const inputs=document.querySelectorAll('#modal-planilla-sup .pi-sup-input');
+  const lista=[];
+  inputs.forEach(inp=>{
+    const monto=parseFloat(inp.value)||0;
+    if(monto>0) lista.push({ id:inp.dataset.pid, nombre:inp.dataset.nombre, rol:inp.dataset.rol, monto:Math.round(monto*100)/100 });
+  });
+  const obj=planillaSupLoad(); obj[mes]=lista; planillaSupSave(obj);
+  cerrarModal('modal-planilla-sup');
+  renderPlanillaIntegrada();
+  try{ if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
+  showNotif('💾 Planilla de supervisión guardada para '+mes+' — costo operativo actualizado','ok');
+}
+
+async function exportarPlanillaIntegradaExcel(){
+  const el=document.getElementById('rrhh-planillaint');
+  const mes=(el&&el.dataset.mes)||hoy().slice(0,7);
+  if(typeof ExcelJS==='undefined'){ showNotif('No se pudo cargar el generador de Excel','error'); return; }
+  const wb=new ExcelJS.Workbook(); wb.creator='ATMIN';
+  // Detalle operarios (por trabajador, excluye reservados)
+  const tMes=(state.tareas||[]).filter(t=>(t.fecha||'').startsWith(mes));
+  const opMap={};
+  tMes.forEach(t=>{
+    const p=(state.personal||[]).find(pp=>String(pp.id)===String(t.trabajadorId));
+    if(p && esSueldoReservado(p.rol)) return;
+    const k=String(t.trabajadorId);
+    if(!opMap[k]) opMap[k]={nombre:p?p.nombre:'—',rol:p?p.rol:'—',dias:new Set(),total:0};
+    const j=(t.jornal!=null?t.jornal:(p?p.jornal:0))||0;
+    opMap[k].dias.add(t.fecha); opMap[k].total+=j*(t.mult||1);
+  });
+  const opArr=Object.values(opMap).sort((a,b)=>b.total-a.total);
+  const opTot=opArr.reduce((s,r)=>s+r.total,0);
+  const sup=planillaSupMes(mes); const supTot=planillaSupTotal(mes);
+  const moneyFmt='"S/ "#,##0.00';
+  const styleHdr=row=>{ row.font={bold:true,color:{argb:'FFFFFFFF'}}; row.eachCell(c=>{c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1A2744'}};}); };
+  // Hoja 1: Operarios
+  const ws1=wb.addWorksheet('Planilla Operarios');
+  ws1.addRow(['PLANILLA OPERARIOS — '+mes]).font={bold:true,size:13};
+  ws1.addRow([]);
+  styleHdr(ws1.addRow(['Trabajador','Cargo','Días','Total S/']));
+  opArr.forEach(r=>{const row=ws1.addRow([r.nombre,r.rol,r.dias.size,r.total]);row.getCell(4).numFmt=moneyFmt;});
+  const t1=ws1.addRow(['TOTAL OPERARIOS','','',opTot]); t1.font={bold:true}; t1.getCell(4).numFmt=moneyFmt;
+  ws1.columns.forEach((c,i)=>{c.width=i===0?28:16;});
+  // Hoja 2: Supervisión
+  const ws2=wb.addWorksheet('Planilla Supervisión');
+  ws2.addRow(['PLANILLA SUPERVISIÓN — '+mes]).font={bold:true,size:13};
+  ws2.addRow([]);
+  styleHdr(ws2.addRow(['Nombre','Cargo','Sueldo S/']));
+  sup.forEach(r=>{const row=ws2.addRow([r.nombre,r.rol,r.monto]);row.getCell(3).numFmt=moneyFmt;});
+  const t2=ws2.addRow(['TOTAL SUPERVISIÓN','',supTot]); t2.font={bold:true}; t2.getCell(3).numFmt=moneyFmt;
+  ws2.columns.forEach((c,i)=>{c.width=i<2?26:16;});
+  // Hoja 3: Integrada (resumen)
+  const ws3=wb.addWorksheet('Planilla Integrada');
+  ws3.addRow(['PLANILLA INTEGRADA — '+mes]).font={bold:true,size:14};
+  ws3.addRow([]);
+  styleHdr(ws3.addRow(['Concepto','Monto S/']));
+  const r3a=ws3.addRow(['Planilla Operarios',opTot]); r3a.getCell(2).numFmt=moneyFmt;
+  const r3b=ws3.addRow(['Planilla Supervisión',supTot]); r3b.getCell(2).numFmt=moneyFmt;
+  const r3t=ws3.addRow(['TOTAL INTEGRADO',opTot+supTot]); r3t.font={bold:true,size:12}; r3t.getCell(2).numFmt=moneyFmt;
+  r3t.eachCell(c=>{c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFCE8B2'}};});
+  ws3.columns.forEach((c,i)=>{c.width=i===0?28:18;});
+  const buf=await wb.xlsx.writeBuffer();
+  const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='Planilla_Integrada_'+mes+'.xlsx'; a.click();
+  showNotif('📊 Planilla integrada de '+mes+' exportada','ok');
+}
+
 // ===== SERVICIOS TERCEROS =====
 const SERV_KEY='atmin_servicios_terceros';
 const SERV_TIPOS=[
@@ -12915,6 +13106,10 @@ function iniciarSesion(user){
     if(el) el.style.display = esGerente ? 'block' : 'none';
   });
 
+  // Pestaña Planilla Integrada: solo Jefe de Finanzas
+  const _tabPI=document.getElementById('tab-planillaint');
+  if(_tabPI) _tabPI.style.display = (user.rol==='jefe_finanzas') ? 'inline-block' : 'none';
+
   // Asignar módulos del rol
   user.modulos = ROLES_MODULOS[user.rol] || [];
   aplicarPermisosNavegacion(user.modulos);
@@ -14358,11 +14553,17 @@ function finCostoCombustible(mesYM){
 }
 // Planillas: tareo del mes (jornal × multiplicador)
 function finCostoPlanilla(mesYM){
-  return (state.tareas||[]).filter(t=>(t.fecha||'').startsWith(mesYM)).reduce((s,t)=>{
+  // Operarios: tareos diarios, EXCLUYE sueldos reservados (supervisión va aparte → sin doble gasto)
+  const operarios=(state.tareas||[]).filter(t=>(t.fecha||'').startsWith(mesYM)).reduce((s,t)=>{
     const p=(state.personal||[]).find(pp=>String(pp.id)===String(t.trabajadorId));
+    if(p && typeof esSueldoReservado==='function' && esSueldoReservado(p.rol)) return s;
     const j=(t.jornal!=null?t.jornal:(p?p.jornal:0))||0;
     return s+j*(t.mult||1);
   },0);
+  // Supervisión: monto fijo mensual ingresado por Finanzas. Solo a nivel mes (YYYY-MM), no por día.
+  const esMes=(mesYM||'').length===7;
+  const supervision=(esMes && typeof planillaSupTotal==='function')?planillaSupTotal(mesYM):0;
+  return operarios+supervision;
 }
 // Explosivos: gasto SEPARADO — NO se suma al costo operativo total.
 // Modelo nuevo: salidas de explosivos del almacén NV3190 (totalUnidades) × precio unitario.
@@ -16406,7 +16607,8 @@ function snapshotEstado(){
     reuniones:state.reuniones, remanenteSalidas:state.remanenteSalidas,
     combustible:{ pet:(typeof combCargar==='function'?combCargar('pet'):[]), gas:(typeof combCargar==='function'?combCargar('gas'):[]) },
     serviciosTerceros:(typeof servCargar==='function'?servCargar():[]),
-    finIngMaq:fim, mesesCerrados:state.mesesCerrados||[]
+    finIngMaq:fim, mesesCerrados:state.mesesCerrados||[],
+    planillaSupervision:(typeof planillaSupLoad==='function'?planillaSupLoad():{})
   };
 }
 
