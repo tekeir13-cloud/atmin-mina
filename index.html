@@ -3050,11 +3050,14 @@ select option{background:var(--coal3);}
     </div>
   </div>
 
+  <!-- Recomendaciones automáticas -->
+  <div id="ia-recomendaciones-wrap" class="card" style="padding:14px;margin-bottom:0"></div>
+
   <!-- Sugerencias rápidas -->
   <div class="card" style="padding:14px">
     <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;font-weight:700">Preguntas rápidas</div>
     <div style="display:flex;flex-wrap:wrap;gap:8px" id="ia-sugerencias">
-      ${['Dame un resumen ejecutivo','¿Cómo vamos con la meta?','¿Cuántos metros hicimos hoy?',
+      ${['¿Qué recomendaciones tienes para hoy?','Dame un resumen ejecutivo','¿Cómo vamos con la meta?','¿Cuántos metros hicimos hoy?',
          '¿Qué proyección tenemos al final del mes?','¿Cuánto costó la planilla este mes?',
          '¿Cuánto queda en la cisterna?','¿Cuánto hay de explosivos en el polvorín?',
          '¿Cuál es el costo por metro?','Ganancia por equipo','¿Cuánto gastamos en mantenimiento?',
@@ -14155,16 +14158,109 @@ const IA_SALUDO = 'Hola señor Alcides, soy el asistente de Temual asignado por 
 
 function renderIA(){
   _iaMensajes = [];
-  // Limpiar mensajes previos del contenedor
   const container = document.getElementById('ia-messages');
-  if(container){
-    container.innerHTML = '';
-  }
-  // Saludo inicial con voz — PC y móvil
+  if(container) container.innerHTML = '';
   setTimeout(()=>{
     _iaAgregarMsg(IA_SALUDO, true);
     _iaHablar(IA_SALUDO);
   }, 350);
+  setTimeout(()=>renderIARecomendaciones(), 500);
+}
+
+// ── Recomendaciones automáticas basadas en datos reales ──
+function renderIARecomendaciones(){
+  const wrap=document.getElementById('ia-recomendaciones-wrap'); if(!wrap) return;
+  const m=_iaMetrics();
+  const mesYM=hoy().slice(0,7);
+  const recs=[];
+
+  // Colores y niveles
+  const NIV={critico:{bg:'rgba(239,68,68,0.1)',border:'rgba(239,68,68,0.45)',ico:'🔴',lbl:'CRÍTICO'},
+             alerta:{bg:'rgba(245,158,11,0.1)',border:'rgba(245,158,11,0.45)',ico:'🟡',lbl:'ALERTA'},
+             ok:{bg:'rgba(34,197,94,0.08)',border:'rgba(34,197,94,0.3)',ico:'🟢',lbl:'OK'},
+             info:{bg:'rgba(91,110,245,0.1)',border:'rgba(91,110,245,0.35)',ico:'🔵',lbl:'INFO'}};
+
+  // 1. Meta de producción
+  if(m.meta>0){
+    const diasMes=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate();
+    const diasPasados=new Date().getDate();
+    const metaEsperada=Math.round((diasPasados/diasMes)*m.meta);
+    const deficit=metaEsperada-m.metros;
+    if(m.cum<60 && m.diasRestMes<=10)
+      recs.push({niv:'critico',titulo:'Meta de avance en riesgo',msg:`Solo ${m.cum}% de la meta completada con ${m.diasRestMes} días restantes. Se necesitan ${(m.meta-m.metros).toFixed(0)} metros más. Acelere el ritmo a ${m.diasRestMes>0?((m.meta-m.metros)/m.diasRestMes).toFixed(1):0} m/día.`});
+    else if(m.cum<80 && deficit>20)
+      recs.push({niv:'alerta',titulo:'Avance por debajo del programa',msg:`El avance esperado a esta fecha es ${metaEsperada} m pero solo se tienen ${m.metros.toFixed(0)} m (déficit de ${deficit.toFixed(0)} m). Proyección fin de mes: ${m.proyMes} m de ${m.meta} m.`});
+    else if(m.cum>=100)
+      recs.push({niv:'ok',titulo:'Meta de producción superada',msg:`¡Excelente! Se superó la meta con ${m.metros.toFixed(0)} m de ${m.meta} m programados (${m.cum}%). Promedio diario: ${m.prom.toFixed(1)} m/día.`});
+  }
+
+  // 2. Combustible
+  const petCrit=200, petAlerta=400;
+  const petReal=Math.round(m.petStockReal||0);
+  if(petReal>0 && petReal<=petCrit)
+    recs.push({niv:'critico',titulo:'Stock crítico de petróleo',msg:`Solo quedan ${petReal} galones en cisterna. Al ritmo actual puede quedar sin combustible en menos de 3 días. Solicite reabastecimiento urgente.`});
+  else if(petReal>0 && petReal<=petAlerta)
+    recs.push({niv:'alerta',titulo:'Stock bajo de petróleo',msg:`El stock de petróleo es ${petReal} galones. Se recomienda coordinar reabastecimiento pronto para no interrumpir operaciones.`});
+
+  // 3. Ausencias
+  const total=m.activos+m.ausentes;
+  const pctAus=total>0?Math.round((m.ausentes/total)*100):0;
+  if(m.ausentes>=3 || pctAus>=25)
+    recs.push({niv:'alerta',titulo:'Alta tasa de ausencias hoy',msg:`${m.ausentes} de ${total} trabajadores ausentes hoy (${pctAus}%). Verifique si cubre los frentes con el personal disponible y si hay que llamar refuerzos.`});
+
+  // 4. Órdenes de compra pendientes
+  if(m.ocPend>=3)
+    recs.push({niv:'alerta',titulo:'Órdenes de compra sin atender',msg:`Hay ${m.ocPend} órdenes de compra pendientes de aprobación. Revíselas en Logística › Solicitud de Compra para no frenar los requerimientos de obra.`});
+  else if(m.ocPend>0)
+    recs.push({niv:'info',titulo:`${m.ocPend} orden${m.ocPend>1?'es':''} de compra pendiente${m.ocPend>1?'s':''}`,msg:`Revise y apruebe la${m.ocPend>1?'s':''} orden${m.ocPend>1?'es':''} en Logística › Solicitud de Compra para agilizar el suministro.`});
+
+  // 5. Margen financiero
+  if(m.ingreso>0 && m.margen<10)
+    recs.push({niv:'critico',titulo:'Margen operativo muy bajo',msg:`El margen es solo ${m.margen}% (utilidad ${((Number(m.util)||0)).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g,'.')} S/). Revise los costos más altos —planilla, petróleo o mantenimiento— y analice si los ingresos están completos.`});
+  else if(m.ingreso>0 && m.margen<25)
+    recs.push({niv:'alerta',titulo:'Margen operativo por debajo del objetivo',msg:`Margen actual: ${m.margen}%. Un margen saludable debería superar el 25%. Analice el costo por metro (${((Number(m.cxm)||0)).toFixed(1)} S//m) y los rubros con mayor variación.`});
+
+  // 6. Planilla supervisión no ingresada
+  if(m.planillaOp>0 && m.planillaSup===0)
+    recs.push({niv:'info',titulo:'Planilla de supervisión pendiente',msg:`La planilla de operarios ya tiene registros (${((Number(m.planillaOp)||0)).toLocaleString('es-PE',{style:'currency',currency:'PEN'})}), pero aún no se ingresó la planilla de supervisión. Ingrésela en RRHH › Planilla Integrada para que el costo operativo sea completo.`});
+
+  // 7. Sin reportes de guardia hoy
+  if(m.rgHoy===0){
+    const horaActual=new Date().getHours();
+    if(horaActual>=10)
+      recs.push({niv:'alerta',titulo:'Sin reporte de guardia hoy',msg:`No se ha registrado ningún reporte de guardia en el día de hoy. Recuerde que el reporte alimenta los metros del dashboard y el control de disparos.`});
+  }
+
+  // 8. Costo por metro inusualmente alto
+  if(m.metros>0 && m.cxm>500)
+    recs.push({niv:'alerta',titulo:'Costo por metro elevado',msg:`El costo actual es S/ ${m.cxm.toFixed(0)}/m, por encima del rango esperado. Revise si hay gastos extraordinarios en mantenimiento (${((Number(m.mant)||0)).toFixed(0)} S/) o combustible (${((Number(m.costoPet)||0)).toFixed(0)} S/).`});
+
+  // 9. Productos agotados en almacén
+  if(m.prodSinStock>=10)
+    recs.push({niv:'info',titulo:`${m.prodSinStock} productos agotados en almacén`,msg:`Hay ${m.prodSinStock} productos sin stock disponible. Revise Logística › Stock Vigente y genere las solicitudes de compra necesarias antes de que paralice algún frente.`});
+
+  // 10. Sin incidentes de seguridad (positivo)
+  if(m.segMes===0 && new Date().getDate()>=10)
+    recs.push({niv:'ok',titulo:'Cero incidentes de seguridad este mes',msg:`Vamos ${new Date().getDate()} días del mes sin reportes de incidentes de seguridad. Mantenga las inspecciones diarias para sostener este resultado.`});
+
+  // Render
+  if(!recs.length){
+    wrap.innerHTML=`<div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;font-weight:700">⚡ Recomendaciones</div>
+      <div style="font-size:12px;color:var(--text3);text-align:center;padding:6px 0">Sin alertas activas. La operación marcha bien. ✅</div>`;
+    return;
+  }
+  const cards=recs.map(r=>{
+    const n=NIV[r.niv]||NIV.info;
+    return `<div style="background:${n.bg};border:1px solid ${n.border};border-radius:10px;padding:11px 14px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px">
+        <span style="font-size:13px">${n.ico}</span>
+        <span style="font-size:10px;font-weight:800;color:${n.border.replace('0.45','1').replace('0.3','1').replace('0.35','1')};text-transform:uppercase;letter-spacing:.5px">${n.lbl}</span>
+        <span style="font-size:12px;font-weight:700;color:var(--text)">${r.titulo}</span>
+      </div>
+      <div style="font-size:11.5px;color:var(--text2);line-height:1.6">${r.msg}</div>
+    </div>`;
+  }).join('');
+  wrap.innerHTML=`<div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;font-weight:700">⚡ Recomendaciones automáticas · ${recs.length} alerta${recs.length!==1?'s':''}</div>${cards}`;
 }
 
 // ── Construir contexto de la mina para Claude ──
@@ -14444,6 +14540,33 @@ function _iaRespuestaLocal(texto){
   // ── Resumen ejecutivo ──
   if(has('resumen','ejecutivo','panorama','todo','dame un','como esta','cómo está'))
     return `${SR}resumen de operaciones: ${m.activos} trabajadores activos, avance ${m.metros.toFixed(1)} m (${m.cum}% de meta), costo operativo ${fS(m.costo)} a razón de ${fS(m.cxm)}/m, utilidad ${fS(m.util)} (margen ${m.margen}%). Stock cisterna: petróleo ${Math.round(m.petStockReal||0)} gl. ${m.ocPend>0?m.ocPend+' órdenes de compra pendientes.':'Sin órdenes pendientes.'}`;
+
+  // ── Recomendaciones del día ──
+  if(has('recomendacion','recomendación','consejo','alerta','que debo','qué debo','que me recomienda','qué me recomienda','que hay que hacer','sugerencia','prioridad')){
+    // Generar resumen de recomendaciones como texto de chat
+    const diasMes=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate();
+    const diasPasados=new Date().getDate();
+    const petReal=Math.round(m.petStockReal||0);
+    const total=m.activos+m.ausentes;
+    const items=[];
+    if(m.meta>0){
+      const metaEsp=Math.round((diasPasados/diasMes)*m.meta);
+      if(m.metros<metaEsp-20) items.push(`⛏ Avance por debajo del programa (${m.cum}% de meta). Necesita ${(m.meta-m.metros).toFixed(0)} metros más con ${m.diasRestMes} días restantes — ritmo mínimo requerido: ${m.diasRestMes>0?((m.meta-m.metros)/m.diasRestMes).toFixed(1):0} m/día.`);
+      else if(m.cum>=100) items.push(`✅ Meta de producción superada (${m.cum}%). Excelente desempeño.`);
+    }
+    if(petReal<=200) items.push(`🔴 Stock crítico de petróleo: solo ${petReal} galones. Reabastecimiento urgente.`);
+    else if(petReal<=400) items.push(`🟡 Stock bajo de petróleo: ${petReal} galones. Coordine reabastecimiento.`);
+    if(m.ausentes>=3) items.push(`🟡 Alta tasa de ausencias: ${m.ausentes} de ${total} trabajadores hoy. Verifique cobertura de frentes.`);
+    if(m.ocPend>=3) items.push(`🟡 ${m.ocPend} órdenes de compra pendientes. Apruébelas en Logística para no frenar la obra.`);
+    if(m.ingreso>0 && m.margen<10) items.push(`🔴 Margen operativo muy bajo (${m.margen}%). Revise costos de planilla, petróleo o mantenimiento.`);
+    else if(m.ingreso>0 && m.margen<25) items.push(`🟡 Margen del ${m.margen}%, por debajo del 25% objetivo. Analice el costo por metro (S/ ${m.cxm.toFixed(0)}/m).`);
+    if(m.planillaOp>0 && m.planillaSup===0) items.push(`🔵 Falta ingresar la planilla de supervisión en RRHH › Planilla Integrada para cerrar el costo de personal.`);
+    if(m.rgHoy===0 && new Date().getHours()>=10) items.push(`🟡 No hay reporte de guardia registrado hoy. Solicite al Jefe de Guardia que lo ingrese.`);
+    if(m.prodSinStock>=10) items.push(`🔵 ${m.prodSinStock} productos agotados en almacén. Genere solicitudes de compra.`);
+    if(m.segMes===0 && new Date().getDate()>=10) items.push(`✅ Cero incidentes de seguridad este mes. Mantenga las inspecciones diarias.`);
+    if(!items.length) return `${SR}la operación está sin alertas activas hoy: avance en ritmo, stock suficiente, personal completo y margen financiero estable. Siga así.`;
+    return `${SR}estas son mis recomendaciones para hoy:\n\n${items.join('\n\n')}`;
+  }
 
   // ── Saludo / identidad ──
   if(has('hola','buenos','buenas','saludos'))
