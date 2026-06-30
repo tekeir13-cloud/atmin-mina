@@ -10600,8 +10600,19 @@ function renderMantenimiento(){
 
 // ── Solicitud de Kit de Mantenimiento ──
 function kitRepOptions(sel){
-  const prods=(typeof calcStock==='function'?calcStock():[]).filter(p=>p.almacen==='Mantenimiento'&&p.stock>0);
-  return prods.map(p=>`<option value="${p.key}" ${sel===p.key?'selected':''}>${p.producto||p.descripcion} — ${p.unidad} (stock ${p.stock})</option>`).join('');
+  // Stock actual del almacén de Mantenimiento, indexado por nombre (referencia)
+  const stockMant={};
+  (typeof calcStock==='function'?calcStock():[]).filter(p=>p.almacen==='Mantenimiento').forEach(p=>{
+    const n=String(p.producto||p.descripcion||'').trim().toUpperCase();
+    if(n) stockMant[n]=(stockMant[n]||0)+(p.stock||0);
+  });
+  // Vincular a TODO el maestro de productos (no solo lo que ya tuvo movimiento)
+  const prods=((state.almacen&&state.almacen.productos)||[]).slice().sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+  return prods.map(p=>{
+    const n=String(p.nombre||'').trim().toUpperCase();
+    const stock=stockMant[n]||0;
+    return `<option value="${p.codigo}" data-precio="${p.precio||0}" data-unidad="${p.unidad||'UND'}" data-nombre="${(p.nombre||'').replace(/"/g,'&quot;')}" ${sel===p.codigo?'selected':''}>${p.nombre} — ${p.unidad||'UND'} (stock ${stock})</option>`;
+  }).join('');
 }
 function kitAddPiezaRow(id,cant){
   const wrap=document.getElementById('kit-piezas-rows');if(!wrap)return;
@@ -10615,13 +10626,13 @@ function kitAddPiezaRow(id,cant){
 }
 const KIT_TARIFA_HORA = 37.5; // S/ por hora jefe de mantenimiento
 function kitRecalcCosto(){
-  const prods=typeof calcStock==='function'?calcStock():[];
   let piezas=0;
   document.querySelectorAll('#kit-piezas-rows .kit-pieza-row').forEach(row=>{
-    const key=row.querySelector('.kit-pieza-id')?.value;
+    const sel=row.querySelector('.kit-pieza-id');
+    const opt=sel&&sel.options[sel.selectedIndex];
+    const precio=parseFloat(opt&&opt.getAttribute('data-precio'))||0;
     const cant=parseFloat(row.querySelector('.kit-pieza-cant')?.value)||0;
-    const r=prods.find(x=>x.key===key);
-    if(r&&cant>0)piezas+=cant*(r.precio||0);
+    if(sel&&sel.value&&cant>0)piezas+=cant*precio;
   });
   const horas=parseFloat(document.getElementById('kit-manoobra')?.value)||0;
   const mo=horas*KIT_TARIFA_HORA;
@@ -10691,13 +10702,16 @@ function guardarKitMant(){
   const g=i=>document.getElementById(i);
   const resp=g('kit-resp').value.trim(),desc=g('kit-desc').value.trim();
   if(!desc){showNotif('⚠ Describe el trabajo a realizar','error');return;}
-  const prods=typeof calcStock==='function'?calcStock():[];
   const piezas=[];
   document.querySelectorAll('#kit-piezas-rows .kit-pieza-row').forEach(row=>{
-    const key=row.querySelector('.kit-pieza-id')?.value;
+    const sel=row.querySelector('.kit-pieza-id');
+    const opt=sel&&sel.options[sel.selectedIndex];
+    const codigo=sel?sel.value:'';
     const cant=parseFloat(row.querySelector('.kit-pieza-cant')?.value)||0;
-    const r=prods.find(x=>x.key===key);
-    if(r&&cant>0)piezas.push({key,nombre:r.producto||r.descripcion,unidad:r.unidad,cant,costo:r.precio||0});
+    if(codigo&&cant>0){
+      const nombre=(opt&&opt.getAttribute('data-nombre'))||'';
+      piezas.push({key:codigo,codigo,nombre,unidad:(opt&&opt.getAttribute('data-unidad'))||'UND',cant,costo:parseFloat(opt&&opt.getAttribute('data-precio'))||0});
+    }
   });
   const horasMant=parseFloat(g('kit-manoobra').value)||0;
   const mo=horasMant*KIT_TARIFA_HORA;
@@ -11080,9 +11094,11 @@ function aprobarLogKitLog(id){
   if(!m.aprobLog)m.aprobLog={ok:false,resp:'',fecha:''};
   // Guarda de stock: validar contra el stock real del almacén de Mantenimiento (calcStock por key)
   const stkMant=(typeof calcStock==='function')?calcStock().filter(r=>r.almacen==='Mantenimiento'):[];
+  const norm=s=>String(s||'').trim().toUpperCase();
   for(const p of (m.repuestos||[])){
     if(!p.key||!p.cant) continue;
-    const r=stkMant.find(x=>x.key===p.key);
+    // Coincidir por código o por nombre (los ingresos antiguos no traen código)
+    const r=stkMant.find(x=>x.key===p.key || norm(x.codigo)===norm(p.codigo||p.key) || norm(x.producto||x.descripcion)===norm(p.nombre));
     const disp=r?(r.stock||0):0;
     if(p.cant>disp){showNotif(`⚠ Stock insuficiente de ${p.nombre} en Almacén Mantenimiento (disp. ${disp}) — no se puede aprobar el despacho`,'error');return;}
   }
