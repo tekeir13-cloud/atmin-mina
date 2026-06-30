@@ -10600,18 +10600,13 @@ function renderMantenimiento(){
 
 // ── Solicitud de Kit de Mantenimiento ──
 function kitRepOptions(sel){
-  // Stock actual del almacén de Mantenimiento, indexado por nombre (referencia)
-  const stockMant={};
-  (typeof calcStock==='function'?calcStock():[]).filter(p=>p.almacen==='Mantenimiento').forEach(p=>{
-    const n=String(p.producto||p.descripcion||'').trim().toUpperCase();
-    if(n) stockMant[n]=(stockMant[n]||0)+(p.stock||0);
-  });
-  // Vincular a TODO el maestro de productos (no solo lo que ya tuvo movimiento)
-  const prods=((state.almacen&&state.almacen.productos)||[]).slice().sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+  // SOLO lo que hay en el almacén de Mantenimiento (stock disponible)
+  const prods=(typeof calcStock==='function'?calcStock():[])
+    .filter(p=>p.almacen==='Mantenimiento'&&p.stock>0)
+    .sort((a,b)=>String(a.producto||a.descripcion||'').localeCompare(String(b.producto||b.descripcion||'')));
   return prods.map(p=>{
-    const n=String(p.nombre||'').trim().toUpperCase();
-    const stock=stockMant[n]||0;
-    return `<option value="${p.codigo}" data-precio="${p.precio||0}" data-unidad="${p.unidad||'UND'}" data-nombre="${(p.nombre||'').replace(/"/g,'&quot;')}" ${sel===p.codigo?'selected':''}>${p.nombre} — ${p.unidad||'UND'} (stock ${stock})</option>`;
+    const nombre=p.producto||p.descripcion||'';
+    return `<option value="${p.key}" data-precio="${p.precio||0}" data-unidad="${p.unidad||'UND'}" data-nombre="${String(nombre).replace(/"/g,'&quot;')}" ${sel===p.key?'selected':''}>${nombre} — ${p.unidad||'UND'} (stock ${p.stock})</option>`;
   }).join('');
 }
 function kitAddPiezaRow(id,cant){
