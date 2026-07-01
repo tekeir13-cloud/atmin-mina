@@ -2906,6 +2906,8 @@ select option{background:var(--coal3);}
       <div class="kpi-card"><div class="kpi-label">Taladros Cargados Hoy</div><div class="kpi-value gold" id="op-tcarg-hoy">—</div><div class="kpi-sub" id="op-tcarg-sub">—</div></div>
       <div class="kpi-card"><div class="kpi-label">Reportes Hoy</div><div class="kpi-value blue" id="op-rep-hoy">—</div><div class="kpi-sub">turnos cargados</div></div>
     </div>
+    <div style="font-size:12px;color:var(--text3);margin:18px 0 8px">📆 Acumulado del Mes <strong id="op-mes-label" style="color:var(--text2)"></strong> — suma de todos los reportes del mes por frente.</div>
+    <div class="two-col" id="op-mes-frentes" style="margin-bottom:18px"></div>
     <div class="card" style="margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
       <div>
         <div class="section-title" style="margin:0">Reportes de Jefe de Guardia</div>
@@ -9907,11 +9909,12 @@ function sincronizarPerforacionReportes(){
 
 function renderAvance(){
   reportesGuardiaLoad();
-  const ts=hoy();
+  if(typeof metasLoad==='function')metasLoad();
+  const ts=hoy(), mesAct=ts.slice(0,7);
   const rg=state.reportesGuardia||[];
   // Solo reportes del día actual → suma ambos turnos. Cambia de día = se reinicia.
   const hoyRep=rg.filter(r=>r.fecha===ts);
-  const sum=(f,k)=>hoyRep.reduce((s,r)=>s+(r[f]?.[k]||0),0);
+  const sum=(f,k,arr)=>(arr||hoyRep).reduce((s,r)=>s+(r[f]?.[k]||0),0);
   const f1h=sum('brenda','metros'),f2h=sum('crne','metros');
   const brCimbra=sum('brenda','cimbra');
   const crPerno=sum('crne','perno'),crMalla=sum('crne','malla');
@@ -9927,6 +9930,31 @@ function renderAvance(){
   g('op-tperf-hoy',tperf);g('op-tperf-sub',`Brenda: ${brTperf} · CRNE: ${crTperf}`);
   g('op-tcarg-hoy',tcarg);g('op-tcarg-sub',`Brenda: ${brTcarg} · CRNE: ${crTcarg}`);
   g('op-rep-hoy',hoyRep.length);
+
+  // ── Acumulado del mes por frente (misma fuente y misma meta que el Tablero de Operaciones) ──
+  const mesLbl=document.getElementById('op-mes-label');if(mesLbl)mesLbl.textContent='· '+finNombreMes(mesAct);
+  const rgMes=rg.filter(r=>(r.fecha||'').slice(0,7)===mesAct);
+  const mesF1=sum('brenda','metros',rgMes),mesF2=sum('crne','metros',rgMes);
+  const diasM=(state.metas&&state.metas.dias)||26;
+  const metaMesF1=(state.metas&&(state.metas.mensualF1||(state.metas.f1*diasM)))||520;
+  const metaMesF2=(state.metas&&(state.metas.mensualF2||(state.metas.f2*diasM)))||520;
+  const pcF1=metaMesF1>0?Math.round((mesF1/metaMesF1)*100):0;
+  const pcF2=metaMesF2>0?Math.round((mesF2/metaMesF2)*100):0;
+  const mesCard=(nom,color,mes,meta,pc,hoyM)=>`
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div class="section-title" style="margin:0;font-size:13px;color:${color}">${nom}</div>
+        <span class="vs-pct ${pc>=100?'over':'under'}">${pc}%</span>
+      </div>
+      <div class="progress-row"><div class="progress-bar" style="height:8px"><div class="progress-fill ${pc>=100?'green':'red'}" style="width:${Math.min(100,pc)}%"></div></div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+        <div><div style="font-size:10px;color:var(--text3)">Avance mes</div><div style="font-size:13px;font-weight:700;color:var(--text)">${mes.toFixed(1)} / ${meta} m</div></div>
+        <div><div style="font-size:10px;color:var(--text3)">Hoy</div><div style="font-size:13px;font-weight:700;color:var(--text)">${hoyM.toFixed(1)} m</div></div>
+      </div>
+    </div>`;
+  const mf=document.getElementById('op-mes-frentes');
+  if(mf)mf.innerHTML=mesCard('🟦 RA Brenda','#60a5fa',mesF1,metaMesF1,pcF1,f1h)+mesCard('🟩 CRNE','#34d399',mesF2,metaMesF2,pcF2,f2h);
+
   const wrap=document.getElementById('rg-lista');if(!wrap)return;
   const lista=[...rg].sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')||(b.creadoEn||0)-(a.creadoEn||0));
   if(!lista.length){wrap.innerHTML='<div class="card"><div class="empty-state">Sin reportes registrados. Genera el primero con el botón ➕.</div></div>';return;}
