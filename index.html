@@ -4586,10 +4586,19 @@ function nv2820Stock(){
     }
     return map[k];
   };
-  // INGRESO: Logística → NV2820
+  // INGRESO: Logística → NV2820 (salida directa registrada en Almacén General)
   ((state.almacen&&state.almacen.salidas)||[]).filter(s=>String(s.destino)==='2820').forEach(s=>{
     const r=ensure(s.codigo||s.producto, s.producto||s.codigo, s.unidad);
     if(r)r.ingreso+=Number(s.cantidad)||0;
+  });
+  // INGRESO: Materiales declarados por el Compresorista y APROBADOS por Logística
+  // (confirma que el material realmente llegó al subalmacén). Los no aprobados NO suman stock.
+  (state.compresorista||[]).forEach(rep=>{
+    (rep.materialesAlmacen||[]).forEach(m=>{
+      if(!m.aprobado)return;
+      const r=ensure(m.desc, m.desc, m.unidad);
+      if(r)r.ingreso+=Number(m.cant)||0;
+    });
   });
   // EGRESO: Compresorista → Rampa/Cortada
   (state.compresorista||[]).forEach(rep=>{
@@ -4805,10 +4814,37 @@ function renderSubalmacen2820(){
     </tr>`;
   }).join('') || `<tr><td colspan="5" style="padding:18px;text-align:center;color:var(--text3)">Sin movimientos en NV2820. Registra salidas con destino NV2820 en Almacén General.</td></tr>`;
 
+  // ── Materiales declarados por el Compresorista, pendientes de aprobación de Logística ──
+  // Solo al aprobar (✓) se confirma que el material realmente llegó a NV2820 y recién ahí
+  // suma al stock del subalmacén y queda disponible para consumo en Rampa/Cortada.
+  const pendientes=[];
+  (state.compresorista||[]).forEach(rep=>{
+    (rep.materialesAlmacen||[]).forEach(m=>{
+      if(!m.aprobado) pendientes.push({...m,fecha:rep.fecha,turno:rep.turno,repNombre:rep.nombre});
+    });
+  });
+  pendientes.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  const pendHTML=pendientes.length?`
+    <div style="background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.3);border-radius:16px;padding:16px;margin-bottom:20px">
+      <div class="section-title" style="margin:0 0 4px;font-size:13px;color:#fbbf24">⏳ Materiales declarados por Compresorista — Pendientes de aprobación</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:12px">El compresorista indica que Logística ya le entregó estos materiales. Aprueba solo cuando confirmes que efectivamente los moviste a NV2820 — recién entonces sumarán al stock del subalmacén y aparecerán disponibles para consumo en Rampa/Cortada.</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${pendientes.map(m=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--coal3);border:1px solid var(--border);border-radius:10px;padding:10px 14px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--text)">${m.desc}</div>
+              <div style="font-size:11px;color:var(--text3)">${fmtF(m.fecha)} · Turno ${m.turno} · ${m.repNombre||'—'} · Cant: <strong style="color:var(--text2)">${m.cant||'—'} ${m.unidad||''}</strong></div>
+            </div>
+            <button class="btn" style="font-size:12px;padding:5px 14px;background:#15803d;color:#fff;border:1px solid #15803d" onclick="aprobarMaterialComp('${m.fecha}','${m.turno}','${m.id}')">✅ Aprobar ingreso</button>
+          </div>`).join('')}
+      </div>
+    </div>`:'';
+
   cont.innerHTML=`
     <div class="section-title" style="margin-top:0">🏗 Subalmacén NV2820</div>
     <div style="font-size:12px;color:var(--text3);margin:-6px 0 16px">Control de materiales movidos desde el almacén principal hacia el nivel NV2820. No forma parte de la fórmula Almacén General = Insumos + Mantenimiento.</div>
 
+    ${pendHTML}
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
       <div style="background:var(--coal3);border:1px solid var(--border);border-radius:14px;padding:14px 16px">
         <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">📥 Ingresado (Logística)</div>
@@ -4837,6 +4873,23 @@ function renderSubalmacen2820(){
       </table>
     </div>
   `;
+}
+// Aprueba (confirma) el ingreso real de un material declarado por el Compresorista.
+// Recién aquí el material suma stock en NV2820 y queda disponible para consumo en Rampa/Cortada.
+function aprobarMaterialComp(fecha,turno,id){
+  if(typeof compGuardarLocal!=='function')return;
+  const rep=(state.compresorista||[]).find(r=>r.fecha===fecha&&r.turno===turno);
+  if(!rep){showNotif('Reporte no encontrado','error');return;}
+  const m=(rep.materialesAlmacen||[]).find(x=>x.id===id);
+  if(!m){showNotif('Material no encontrado','error');return;}
+  const def=(typeof usuarioActivo!=='undefined'&&usuarioActivo&&usuarioActivo.nombre)?usuarioActivo.nombre:'';
+  const resp=(prompt('Responsable que confirma el ingreso a NV2820 (Logística):',def)||'').trim();
+  if(!resp){showNotif('Cancelado — se requiere nombre','error');return;}
+  m.aprobado=true;m.aprobadoPor=resp;m.aprobadoFecha=hoy();
+  compGuardarLocal();
+  renderSubalmacen2820();
+  try{ if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
+  showNotif(`✓ Ingreso aprobado: ${m.desc} → stock NV2820`);
 }
 
 function calcCostos(){
@@ -16158,13 +16211,26 @@ function guardarReporteComp() {
   if(!_compTurnoSeleccionado){showNotif('Selecciona el turno','error');return;}
   if(!fecha){showNotif('Selecciona la fecha','error');return;}
 
-  // materiales almacén
+  // materiales almacén — cada ítem queda "pendiente de aprobación" hasta que Logística confirme
+  // que efectivamente movió ese material al subalmacén NV2820. Solo entonces cuenta como ingreso
+  // real de stock y queda disponible para consumo en Rampa/Cortada.
+  const _repExistente=(state.compresorista||[]).find(r=>r.fecha===fecha&&r.turno===_compTurnoSeleccionado);
+  const _matPrevias=(_repExistente&&_repExistente.materialesAlmacen)||[];
   const materialesAlmacen = [];
-  document.getElementById('comp-mat-rows').querySelectorAll('div').forEach(row => {
+  document.getElementById('comp-mat-rows').querySelectorAll('div').forEach((row,idxRow) => {
     const desc=(row.querySelector('.comp-mat-desc')?.value||'').trim();
     const cant=row.querySelector('.comp-mat-cant')?.value||'';
     const unidad=row.querySelector('.comp-mat-unidad')?.value||'';
-    if(desc) materialesAlmacen.push({desc,cant,unidad});
+    if(!desc)return;
+    // Conserva la aprobación previa si el ítem ya existía (por descripción) al editar el reporte
+    const prev=_matPrevias.find(m=>String(m.desc||'').trim().toLowerCase()===desc.toLowerCase());
+    materialesAlmacen.push({
+      id: (prev&&prev.id)||('MAT'+Date.now()+idxRow),
+      desc,cant,unidad,
+      aprobado: prev?!!prev.aprobado:false,
+      aprobadoPor: (prev&&prev.aprobadoPor)||'',
+      aprobadoFecha: (prev&&prev.aprobadoFecha)||''
+    });
   });
 
   // explosivos
