@@ -9997,7 +9997,11 @@ function editarReporteGuardia(id){
 function eliminarReporteGuardia(id){
   if(!confirm('¿Eliminar este reporte de guardia?'))return;
   state.reportesGuardia=(state.reportesGuardia||[]).filter(r=>r.id!==id);
-  reportesGuardiaSave();renderAvance();showNotif('✓ Reporte eliminado');
+  // También limpia la perforación derivada de este reporte antes de refrescar tableros
+  state.perforacion=(state.perforacion||[]).filter(p=>p._rg!==id);
+  reportesGuardiaSave();renderAvance();
+  if(typeof refrescarVistasGuardia==='function') refrescarVistasGuardia();
+  showNotif('✓ Reporte eliminado');
 }
 
 function rgToggleSost(pfx){
@@ -10108,7 +10112,16 @@ function guardarReporteGuardia(){
   if(crMetros>0)state.perforacion.push({_rg:rep.id,fecha,frente:2,metros:crMetros,personas:1,roca:'—',obs:'CRNE — '+(rep.jefe||'')});
   reportesGuardiaSave();
   cerrarModal('modal-reporte-guardia');renderAvance();
+  // Vincular el reporte a todos los tableros: Operaciones y Dashboard general se refrescan en vivo
+  refrescarVistasGuardia();
   showNotif('✓ Reporte de guardia guardado');
+}
+// Refresca en vivo todas las vistas alimentadas por el reporte de jefe de guardia:
+// Tablero de Operaciones + Dashboard general (además de la pestaña de reportes que ya se pinta).
+function refrescarVistasGuardia(){
+  try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){}
+  try{ if(typeof renderTableroOp==='function') renderTableroOp(); }catch(e){}
+  try{ if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
 }
 // ── Persistencia local (sin DB por ahora) ──
 const DIST_KEY='atmin_distribucion',REU_KEY='atmin_reuniones',METAS_KEY='atmin_metas';
