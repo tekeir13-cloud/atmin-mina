@@ -4079,7 +4079,8 @@ function modTab(mod, pane, btn){
 }
 
 function toggleFrente(n){state.frenteActivo=n;}
-function hoy(){return new Date().toISOString().split('T')[0];}
+function fechaLocalISO(d){const p=n=>String(n).padStart(2,'0');return`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;}
+function hoy(){return fechaLocalISO(new Date());}
 function fmtF(d){if(!d)return'—';const[y,m,dia]=d.split('-');return`${dia}/${m}/${y}`;}
 // Ordena registros por fecha (más reciente primero); empata por id/timestamp desc.
 function sortRegistros(arr){return[...(arr||[])].sort((a,b)=>{const fa=(a&&a.fecha)||'',fb=(b&&b.fecha)||'';if(fa!==fb)return fb.localeCompare(fa);return String((b&&b.id)||'').localeCompare(String((a&&a.id)||''));});}
@@ -5655,7 +5656,7 @@ function renderProductos(){
 function mpGuardarCombustibles(){
   const pet=parseFloat(document.getElementById('mp-pet')?.value)||24.5;
   const gas=parseFloat(document.getElementById('mp-gas')?.value)||21.0;
-  const now=new Date().toISOString().split('T')[0];
+  const now=hoy();
   const quien=(usuarioActivo&&usuarioActivo.nombre)||'Sistema';
   paramsSetComb({pet,gas,updatedAt:now,updatedBy:quien});
   showNotif('Precios de combustible guardados','ok');
@@ -5695,7 +5696,7 @@ function importarMaestroExcel(input){
       const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
       if(rows.length<2){showNotif('El archivo está vacío','error');return;}
 
-      const now=new Date().toISOString().split('T')[0];
+      const now=hoy();
       const quien=(usuarioActivo&&usuarioActivo.nombre)||'Sistema';
       const newComb={...(paramsGetComb()||{pet:24.5,gas:21.0}), updatedAt:now, updatedBy:quien};
       const newExp={...COMP_PRECIOS_EXP_DEFAULT};
@@ -12870,7 +12871,7 @@ function renderGraficosReporte(modulo, ac, cos, ing, util){
   const ps0   = [...perf0].sort((a,b)=>a.fecha.localeCompare(b.fecha)).slice(-14);
   const du0   = [...new Set(ps0.map(p=>p.fecha))];
   const d70   = [];
-  for(let d=6;d>=0;d--){const f=new Date();f.setDate(f.getDate()-d);d70.push(f.toISOString().split('T')[0]);}
+  for(let d=6;d>=0;d--){const f=new Date();f.setDate(f.getDate()-d);d70.push(fechaLocalISO(f));}
   window._reportData = {
     costos:     [j0, exp0, petL0, man0, maqT0],
     financiero: [ing, cos, Math.max(0,util)],
@@ -13017,7 +13018,7 @@ function renderGraficosReporte(modulo, ac, cos, ing, util){
   const ctxFr = document.getElementById('rep-chart-frentes');
   if(ctxFr){
     const d7 = [];
-    for(let d=6;d>=0;d--){ const f=new Date(); f.setDate(f.getDate()-d); d7.push(f.toISOString().split('T')[0]); }
+    for(let d=6;d>=0;d--){ const f=new Date(); f.setDate(f.getDate()-d); d7.push(fechaLocalISO(f)); }
     window._chartFrentes = new Chart(ctxFr, {
       type: 'line',
       data: {
@@ -13483,7 +13484,7 @@ function imprimirReporte(){
   const ps0   = [...perf0].sort((a,b)=>a.fecha.localeCompare(b.fecha)).slice(-14);
   const du0   = [...new Set(ps0.map(p=>p.fecha))];
   const d7    = [];
-  for(let d=6;d>=0;d--){const f=new Date();f.setDate(f.getDate()-d);d7.push(f.toISOString().split('T')[0]);}
+  for(let d=6;d>=0;d--){const f=new Date();f.setDate(f.getDate()-d);d7.push(fechaLocalISO(f));}
   const DATA  = {
     costos:   [j0,exp0,pet0,man0,maq0],
     fin:      [ing0,cos0,Math.max(0,util0)],
@@ -15890,7 +15891,7 @@ function compCargarLocal() {
       state.compresorista = JSON.parse(raw);
       // Limpieza automática: conservar solo reportes de los últimos 31 días
       const limite = new Date(); limite.setDate(limite.getDate()-31);
-      const limStr = limite.toISOString().split('T')[0];
+      const limStr = fechaLocalISO(limite);
       state.compresorista = state.compresorista.filter(r => r.fecha >= limStr);
       compGuardarLocal();
     }
@@ -15984,7 +15985,7 @@ function abrirModalCompresorista() {
   document.getElementById('comp-nombre').value = '';
   document.getElementById('comp-dni').value = '';
   document.getElementById('comp-obs').value = '';
-  document.getElementById('comp-fecha').value = new Date().toISOString().split('T')[0];
+  document.getElementById('comp-fecha').value = hoy();
   _compTurnoSeleccionado = '';
   ['dia','noche'].forEach(t => {
     const b = document.getElementById('comp-turno-'+t);
