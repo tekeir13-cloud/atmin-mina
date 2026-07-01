@@ -5494,11 +5494,11 @@ function autoFillProductoIngreso(){
   }
   // rebuild datalist
   const dl=document.getElementById('prod-datalist');
-  if(dl){dl.innerHTML=(state.almacen.productos||[]).map(x=>`<option value="${x.nombre}" label="${x.codigo} · ${x.nombre}">`).join('');}
+  if(dl){dl.innerHTML=(state.almacen.productos||[]).map(x=>`<option value="${escAttr(x.nombre)}" label="${escAttr(x.codigo+' · '+x.nombre)}">`).join('');}
 }
 function poblarDatalistProductos(){
   const dl=document.getElementById('prod-datalist');
-  if(dl)dl.innerHTML=(state.almacen.productos||[]).map(x=>`<option value="${x.nombre}">${x.codigo} · ${x.nombre}</option>`).join('');
+  if(dl)dl.innerHTML=(state.almacen.productos||[]).map(x=>`<option value="${escAttr(x.nombre)}">${x.codigo} · ${x.nombre}</option>`).join('');
 }
 // ── MAESTRO DE PRODUCTOS ──
 function nextCodigoProducto(){
@@ -6471,6 +6471,10 @@ function almMesConDatos(){
   return meses.sort().reverse()[0];
 }
 function prodKey(almacen,codigo,desc){return (almacen||'')+'|'+String(desc||'').trim().toUpperCase();}
+// Escapa comillas/ángulos para usar de forma segura dentro de un atributo HTML (value="...").
+// Sin esto, descripciones con comillas (p.ej. medidas en pulgadas: 1/2") rompen el atributo
+// y el <option> pierde su value real, impidiendo seleccionar el producto correcto.
+function escAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
 function nivelLabel(d){return d==='mantenimiento'?'Almacén Mantenimiento':d?('NV'+d):'—';}
 
 // Stock = inventario inicial + ingresos - salidas (acumulado histórico, no por mes)
@@ -6631,7 +6635,7 @@ function poblarProductosSalida(){
   const alm=document.getElementById('sa-almacen').value;
   const stock=calcStock().filter(r=>r.almacen===alm&&r.stock>0).sort((a,b)=>(a.producto||a.descripcion).localeCompare(b.producto||b.descripcion));
   const sel=document.getElementById('sa-producto');
-  sel.innerHTML='<option value="">— Seleccionar —</option>'+stock.map(r=>`<option value="${r.key}">${r.producto?r.producto+' — ':''}${r.descripcion} (stock: ${fmt3(r.stock)} ${r.unidad})</option>`).join('');
+  sel.innerHTML='<option value="">— Seleccionar —</option>'+stock.map(r=>`<option value="${escAttr(r.key)}">${r.producto?r.producto+' — ':''}${r.descripcion} (stock: ${fmt3(r.stock)} ${r.unidad})</option>`).join('');
   document.getElementById('sa-unidad').value='';
   document.getElementById('sa-precio').value='';document.getElementById('sa-stock-disp').textContent='—';
   if(!stock.length) sel.innerHTML='<option value="">Sin productos con stock en este almacén</option>';
@@ -8159,9 +8163,9 @@ function poblarSelectJefes(selId, valorActual){
   const sel=document.getElementById(selId);if(!sel)return;
   const lista=jefesTurnoLista();
   const cur=valorActual!=null?valorActual:sel.value;
-  sel.innerHTML='<option value="">— Seleccionar —</option>'+lista.map(p=>`<option value="${p.nombre}">${p.nombre} · ${p.rol}</option>`).join('');
+  sel.innerHTML='<option value="">— Seleccionar —</option>'+lista.map(p=>`<option value="${escAttr(p.nombre)}">${p.nombre} · ${p.rol}</option>`).join('');
   // Si el valor guardado no está en la lista (cargo cambiado/baja), agregarlo igual para no perderlo
-  if(cur && !lista.some(p=>p.nombre===cur)) sel.insertAdjacentHTML('beforeend',`<option value="${cur}">${cur}</option>`);
+  if(cur && !lista.some(p=>p.nombre===cur)) sel.insertAdjacentHTML('beforeend',`<option value="${escAttr(cur)}">${cur}</option>`);
   if(cur) sel.value=cur;
 }
 
@@ -11171,7 +11175,7 @@ function kitRepOptions(sel){
     .sort((a,b)=>String(a.producto||a.descripcion||'').localeCompare(String(b.producto||b.descripcion||'')));
   return prods.map(p=>{
     const nombre=p.producto||p.descripcion||'';
-    return `<option value="${p.key}" data-precio="${p.precio||0}" data-unidad="${p.unidad||'UND'}" data-nombre="${String(nombre).replace(/"/g,'&quot;')}" ${sel===p.key?'selected':''}>${nombre} — ${p.unidad||'UND'} (stock ${p.stock})</option>`;
+    return `<option value="${escAttr(p.key)}" data-precio="${p.precio||0}" data-unidad="${p.unidad||'UND'}" data-nombre="${escAttr(nombre)}" ${sel===p.key?'selected':''}>${nombre} — ${p.unidad||'UND'} (stock ${p.stock})</option>`;
   }).join('');
 }
 function kitAddPiezaRow(id,cant){
