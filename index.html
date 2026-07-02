@@ -3971,6 +3971,8 @@ try {
       onAuthStateChange: () => ({ data:{ subscription:{ unsubscribe:()=>{} } } }),
     },
     storage: { from: () => ({ upload:async()=>({data:null,error:null}), getPublicUrl:()=>({data:{publicUrl:''}}) }) },
+    channel: () => ({ on(){ return this; }, subscribe(){ return this; }, unsubscribe(){}, }),
+    removeChannel: ()=>{},
   };
 }
 const state={
@@ -4205,6 +4207,8 @@ async function cargarDesdeSB(){
   // Sincronización de almacén/combustible: SIEMPRE, aunque las tablas principales
   // de Supabase no existan o falle la carga anterior. Aquí se activa CLOUD_SYNC_READY.
   try{ await cargarAlmacenCombustibleSB(); }catch(e){ console.error('almacen/comb sync:',e); }
+  // Ya con los datos hidratados, activar la escucha en tiempo real (cambios de otros dispositivos)
+  try{ if(typeof iniciarRealtime==='function') iniciarRealtime(); }catch(e){}
 }
 
 // Cargar almacén y combustible desde la nube (snapshot por módulo).
@@ -5497,6 +5501,7 @@ function renderDashAlertas(){
 // Cada módulo (almacén, combustible) se guarda como un snapshot JSON. Last-write-wins.
 async function sbSyncModulo(modulo, dataObj){
   if(!SB_ONLINE || !CLOUD_SYNC_READY) return;
+  try{ _rtSelfWrite[modulo]=Date.now(); }catch(e){}   // marca escritura propia (evita eco realtime)
   try{
     await sb.from('app_modulos').upsert(
       { modulo, data: dataObj, updated_at: new Date().toISOString() },
@@ -5510,6 +5515,77 @@ async function sbLoadModulo(modulo){
     const { data } = await sb.from('app_modulos').select('data').eq('modulo', modulo).single();
     return data ? data.data : null;
   }catch(e){ return null; }
+}
+
+// ════════════════ SINCRONIZACIÓN EN TIEMPO REAL ════════════════
+// Escucha cambios en la tabla app_modulos y refresca el estado + la vista activa al instante,
+// para que dos dispositivos vean los cambios del otro sin recargar la página.
+const _rtSelfWrite={};
+let _rtChannel=null, _rtLastNotif=0, _rtRerenderT=null;
+
+// Aplica al estado local un módulo que cambió en la nube (SIN re-subir → evita bucles).
+function _rtAplicarModulo(modulo, data){
+  const setLS=(k,v)=>{ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} };
+  const M=(typeof mergeSnapById==='function')?mergeSnapById:((a,b)=>b||a||[]);
+  switch(modulo){
+    case 'almacen':            if(data&&typeof data==='object'){ state.almacen=Object.assign(state.almacen||{}, data); setLS('atmin_almacen', state.almacen); } break;
+    case 'personal':           if(Array.isArray(data)){ state.personal=data; setLS('atmin_personal_snap', data); } break;
+    case 'tareas':             if(Array.isArray(data)){ state.tareas=data; setLS('atmin_tareas_snap', data); } break;
+    case 'reportes_guardia':   if(Array.isArray(data)){ state.reportesGuardia=M(state.reportesGuardia||[], data); setLS('atmin_reportes_guardia', state.reportesGuardia); try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){} } break;
+    case 'mant_kits':          if(Array.isArray(data)){ state.mantenimiento=(typeof mergeMantKits==='function')?mergeMantKits(state.mantenimiento||[], data):M(state.mantenimiento||[], data); setLS('atmin_mant_kits', state.mantenimiento); } break;
+    case 'mant_repuestos':     if(Array.isArray(data)){ state.mantRepuestos=data; setLS('atmin_mant_repuestos', data); } break;
+    case 'compresorista':      if(Array.isArray(data)){ const kof=r=>(r.fecha||'')+'|'+(r.turno||''); const by={}; data.forEach(r=>{by[kof(r)]=r;}); (state.compresorista||[]).forEach(r=>{by[kof(r)]=r;}); state.compresorista=Object.values(by); setLS('atmin_compresorista', state.compresorista); } break;
+    case 'val_labor':          if(Array.isArray(data)){ state.valorizacionesLabor=data; setLS('atmin_valorizaciones_labor', data); } break;
+    case 'distribucion':       if(data&&typeof data==='object'){ state.distribucion=data; setLS('atmin_distribucion', data); } break;
+    case 'metas':              if(data&&typeof data==='object'){ state.metas=Object.assign(state.metas||{}, data); setLS('atmin_metas', state.metas); } break;
+    case 'reuniones':          if(Array.isArray(data)){ state.reuniones=M(state.reuniones||[], data); setLS('atmin_reuniones', state.reuniones); } break;
+    case 'remanente_salidas':  if(Array.isArray(data)){ state.remanenteSalidas=M(state.remanenteSalidas||[], data); setLS('atmin_remanente_salidas', state.remanenteSalidas); } break;
+    case 'servicios_terceros': if(Array.isArray(data)){ let loc=[]; try{loc=JSON.parse(localStorage.getItem('atmin_servicios_terceros')||'[]');}catch(e){} setLS('atmin_servicios_terceros', M(loc, data)); } break;
+    case 'planilla_supervision': if(data&&typeof data==='object'){ setLS('atmin_planilla_supervision', data); } break;
+    case 'comb_pet':           if(Array.isArray(data)){ setLS('atmin_comb_petroleo', data); } break;
+    case 'comb_gas':           if(Array.isArray(data)){ setLS('atmin_comb_gasolina', data); } break;
+    case 'fin_ing_maq':        if(data&&typeof data==='object'){ setLS('atmin_fin_ing_maq', data); } break;
+    case 'historial_periodos': if(Array.isArray(data)){ state.historialPeriodos=data; setLS('atmin_historial_periodos', data); } break;
+    default: break;
+  }
+}
+
+// Re-renderiza la vista visible sin cambiar de pestaña ni de módulo.
+function _rtRerenderActivo(){
+  try{
+    const page=window._currentPage;
+    if(!page) return;
+    if(page==='dashboard'){ if(typeof renderDashboard==='function') renderDashboard(); return; }
+    if(page==='ia'){ try{ if(typeof renderIARecomendaciones==='function') renderIARecomendaciones(); }catch(e){} return; }
+    const pageEl=document.getElementById('page-'+page); if(!pageEl) return;
+    let paneEl=pageEl.querySelector('.mod-pane.active') || Array.from(pageEl.querySelectorAll('.mod-pane')).find(p=>p.offsetParent!==null);
+    if(paneEl && paneEl.id && paneEl.id.indexOf('-')>0){
+      const idx=paneEl.id.indexOf('-');
+      if(typeof renderModPane==='function') renderModPane(paneEl.id.slice(0,idx), paneEl.id.slice(idx+1));
+    }
+  }catch(e){}
+}
+function _rtRerenderDebounced(){ clearTimeout(_rtRerenderT); _rtRerenderT=setTimeout(_rtRerenderActivo, 400); }
+function _rtIndicador(){ const n=Date.now(); if(n-_rtLastNotif>4000){ _rtLastNotif=n; if(typeof showNotif==='function') showNotif('🔄 Datos actualizados en tiempo real'); } }
+
+function iniciarRealtime(){
+  if(!SB_ONLINE || !sb || typeof sb.channel!=='function' || _rtChannel) return;
+  try{
+    _rtChannel = sb.channel('rt-app-modulos')
+      .on('postgres_changes', { event:'*', schema:'public', table:'app_modulos' }, payload=>{
+        try{
+          const row = payload.new || payload.old || {};
+          const modulo = row.modulo, data = row.data;
+          if(!modulo) return;
+          // Ignora el eco de nuestra propia escritura reciente
+          if(_rtSelfWrite[modulo] && (Date.now()-_rtSelfWrite[modulo] < 5000)) return;
+          _rtAplicarModulo(modulo, data);
+          _rtRerenderDebounced();
+          _rtIndicador();
+        }catch(e){}
+      })
+      .subscribe();
+  }catch(e){ console.warn('realtime no disponible', e); }
 }
 
 // ════════════════ MÓDULO ALMACÉN / INVENTARIO ════════════════
