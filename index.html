@@ -5586,13 +5586,16 @@ function iniciarRealtime(){
           _rtIndicador();
         }catch(e){}
       })
-      .subscribe((status)=>{
+      .subscribe((status, err)=>{
         try{
+          console.log('[realtime] estado:', status, err||'');
           if(status==='SUBSCRIBED'){ if(typeof showNotif==='function') showNotif('🟢 Tiempo real conectado'); }
-          else if(status==='CHANNEL_ERROR' || status==='TIMED_OUT'){ if(typeof showNotif==='function') showNotif('⚠ Tiempo real NO conectó ('+status+') — revisa Realtime/RLS en Supabase','error'); }
+          else { if(typeof showNotif==='function') showNotif('📡 Tiempo real: '+status+(err?(' — '+(err.message||err)):''), 'warn'); }
         }catch(e){}
       });
-  }catch(e){ console.warn('realtime no disponible', e); }
+    // Si a los 6s no hubo confirmación de suscripción, avisar (probablemente Realtime desactivado en el proyecto)
+    setTimeout(()=>{ try{ if(_rtChannel && _rtChannel.state && _rtChannel.state!=='joined'){ if(typeof showNotif==='function') showNotif('⚠ Tiempo real no se conectó ('+_rtChannel.state+'). Revisa que Realtime esté habilitado en Supabase.','error'); } }catch(e){} }, 6000);
+  }catch(e){ console.warn('realtime no disponible', e); if(typeof showNotif==='function') showNotif('⚠ Tiempo real no disponible: '+(e&&e.message||e),'error'); }
 }
 
 // ════════════════ MÓDULO ALMACÉN / INVENTARIO ════════════════
