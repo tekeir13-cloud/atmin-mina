@@ -4655,7 +4655,8 @@ function renderStockRemanente(){
     const esMecha=e.unidad==='rollo';
     const mPorR=e.mPorRollo||150;
     const um=esMecha?'m':'und';
-    const rollosLine=esMecha?`<div style="font-size:11px;color:#60a5fa;margin-top:3px;font-weight:700">≈ ${fmtN(disp/mPorR)} rollos <span style="color:var(--text3);font-weight:400;font-size:9px">(1 rollo = ${mPorR} m)</span></div>`:'';
+    const _rollos=Math.floor(disp/mPorR), _restoM=Math.round((disp-_rollos*mPorR)*100)/100;
+    const rollosLine=esMecha?`<div style="font-size:11px;color:#60a5fa;margin-top:3px;font-weight:700">${_rollos} rollo${_rollos!==1?'s':''} + ${fmtN(_restoM)} m <span style="color:var(--text3);font-weight:400;font-size:9px">(1 rollo = ${mPorR} m)</span></div>`:'';
     return `<div style="background:var(--coal3);border:1px solid var(--border);border-radius:14px;padding:14px;text-align:center;position:relative;overflow:hidden">
       <div style="position:absolute;top:0;right:0;width:54px;height:54px;background:${col}14;border-radius:0 14px 0 54px"></div>
       <div style="font-size:30px;line-height:1;margin-bottom:6px">${fig}</div>
@@ -7047,8 +7048,9 @@ function renderExploStock(){
     const qty=stock[c.id]||0;
     const color=qty>20?'#22c55e':qty>0?'#f59e0b':'#ef4444';
     const cajas=Math.floor(qty/c.upCaja);const sueltas=qty%c.upCaja;
-    // Mecha rápida (NEITHER): qty está en METROS → mostrar metros + equivalente en rollos (150 m c/u)
-    const label=c.id==='NEITHER'?`${qty} m · ≈ ${(qty/(c.mPorRollo||150)).toFixed(2)} rollos`:`${cajas} caj${cajas!==1?'as':'a'} + ${sueltas} und`;
+    // Mecha rápida (NEITHER): qty está en METROS → mostrar metros + rollos completos + sobrante (150 m c/u)
+    const _mpr=c.mPorRollo||150, _rll=Math.floor(qty/_mpr), _rst=Math.round((qty-_rll*_mpr)*100)/100;
+    const label=c.id==='NEITHER'?`${qty} m · ${_rll} rollo${_rll!==1?'s':''} + ${_rst} m`:`${cajas} caj${cajas!==1?'as':'a'} + ${sueltas} und`;
     return `<div class="kpi-card" style="padding:14px 16px">
       <div class="kpi-label" style="font-size:11px">${c.nombre}</div>
       <div style="font-size:24px;font-weight:800;color:${color};font-family:'DM Mono',monospace;margin:6px 0">${qty}</div>
