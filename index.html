@@ -5570,8 +5570,21 @@ function _rtRerenderActivo(){
 function _rtRerenderDebounced(){ clearTimeout(_rtRerenderT); _rtRerenderT=setTimeout(_rtRerenderActivo, 400); }
 function _rtIndicador(){ const n=Date.now(); if(n-_rtLastNotif>4000){ _rtLastNotif=n; if(typeof showNotif==='function') showNotif('🔄 Datos actualizados en tiempo real'); } }
 
+// Indicador PERMANENTE del estado del tiempo real (esquina inferior izquierda, siempre visible)
+function _rtSetStatus(txt, color){
+  let el=document.getElementById('rt-status-badge');
+  if(!el){
+    el=document.createElement('div');
+    el.id='rt-status-badge';
+    el.style.cssText='position:fixed;left:10px;bottom:10px;z-index:9999;font-size:11px;font-weight:700;padding:5px 10px;border-radius:20px;background:rgba(0,0,0,.7);border:1px solid rgba(255,255,255,.15);color:#fff;display:flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(0,0,0,.4);cursor:default';
+    document.body.appendChild(el);
+  }
+  el.innerHTML='<span style="width:8px;height:8px;border-radius:50%;background:'+color+';box-shadow:0 0 6px '+color+'"></span>'+txt;
+}
 function iniciarRealtime(){
-  if(!SB_ONLINE || !sb || typeof sb.channel!=='function' || _rtChannel) return;
+  if(!SB_ONLINE || !sb || typeof sb.channel!=='function'){ _rtSetStatus('Sin nube', '#9ca3af'); return; }
+  if(_rtChannel) return;
+  _rtSetStatus('Conectando tiempo real…', '#f59e0b');
   try{
     _rtChannel = sb.channel('rt-app-modulos')
       .on('postgres_changes', { event:'*', schema:'public', table:'app_modulos' }, payload=>{
@@ -5589,13 +5602,14 @@ function iniciarRealtime(){
       .subscribe((status, err)=>{
         try{
           console.log('[realtime] estado:', status, err||'');
-          if(status==='SUBSCRIBED'){ if(typeof showNotif==='function') showNotif('🟢 Tiempo real conectado'); }
-          else { if(typeof showNotif==='function') showNotif('📡 Tiempo real: '+status+(err?(' — '+(err.message||err)):''), 'warn'); }
+          if(status==='SUBSCRIBED'){ _rtSetStatus('En vivo', '#22c55e'); }
+          else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){ _rtSetStatus('Sin tiempo real ('+status+')', '#ef4444'); }
+          else { _rtSetStatus('Tiempo real: '+status, '#f59e0b'); }
         }catch(e){}
       });
-    // Si a los 6s no hubo confirmación de suscripción, avisar (probablemente Realtime desactivado en el proyecto)
-    setTimeout(()=>{ try{ if(_rtChannel && _rtChannel.state && _rtChannel.state!=='joined'){ if(typeof showNotif==='function') showNotif('⚠ Tiempo real no se conectó ('+_rtChannel.state+'). Revisa que Realtime esté habilitado en Supabase.','error'); } }catch(e){} }, 6000);
-  }catch(e){ console.warn('realtime no disponible', e); if(typeof showNotif==='function') showNotif('⚠ Tiempo real no disponible: '+(e&&e.message||e),'error'); }
+    // Fallback: si a los 8s el canal no quedó "joined", marcar en rojo (Realtime desactivado o RLS)
+    setTimeout(()=>{ try{ if(_rtChannel && _rtChannel.state!=='joined'){ _rtSetStatus('Sin tiempo real ('+(_rtChannel.state||'?')+')', '#ef4444'); } }catch(e){} }, 8000);
+  }catch(e){ console.warn('realtime no disponible', e); _rtSetStatus('Sin tiempo real (error)', '#ef4444'); }
 }
 
 // ════════════════ MÓDULO ALMACÉN / INVENTARIO ════════════════
