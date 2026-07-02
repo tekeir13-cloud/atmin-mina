@@ -6796,8 +6796,10 @@ function guardarSalida(){
   if(!salidaCart.length){showNotif('⚠ Agrega al menos un ítem a la lista','error');return;}
   const fecha=g('sa-fecha').value||hoy();
   const destino=g('sa-destino').value;
+  if(!destino){showNotif('⚠ Seleccione el destino / nivel de la salida','error');return;}
   const maquina=g('sa-maquina').value.trim();
   const solicitante=g('sa-solicitante').value.trim();
+  if(!solicitante){showNotif('⚠ Indique el solicitante de la salida','error');return;}
   const base=Date.now();const grupo='G'+base;
   salidaCart.forEach((i,idx)=>{
     const item={id:'S'+(base+idx),grupo,fecha,destino,almacen:i.almacen,maquina,solicitante,
@@ -6970,9 +6972,31 @@ function guardarEdicionSalida(){
   const desc=g('es-descripcion').value.trim();const cant=parseFloat(g('es-cantidad').value)||0;
   if(!desc){showNotif('⚠ Ingresa la descripción','error');return;}
   if(cant<=0){showNotif('⚠ Cantidad inválida','error');return;}
-  s.fecha=g('es-fecha').value||hoy();s.destino=g('es-destino').value;s.almacen=g('es-almacen').value;
+  const nuevoDestino=g('es-destino').value;
+  const nuevoAlmacen=g('es-almacen').value;
+  // Revalidar stock: disponible = stock actual del producto + la cantidad original de ESTA salida
+  // (que se está reemplazando). Evita dejar el stock en negativo al editar.
+  const cantOriginal=Number(s.cantidad)||0;
+  const keyEdit=(typeof prodKey==='function')?prodKey(nuevoAlmacen,g('es-producto').value.trim(),desc):null;
+  if(keyEdit && typeof calcStock==='function'){
+    const rStk=calcStock().find(x=>x.key===keyEdit);
+    const dispEfectivo=(rStk?(rStk.stock||0):0) + (String(s.almacen)===String(nuevoAlmacen)&&String(s.descripcion).trim().toUpperCase()===desc.toUpperCase()?cantOriginal:0);
+    if(cant>dispEfectivo){showNotif(`⚠ Stock insuficiente. Disponible: ${(typeof fmt3==='function'?fmt3(dispEfectivo):dispEfectivo)} — no se puede editar a ${cant}`,'error');return;}
+  }
+  const destinoAntes=String(s.destino);
+  s.fecha=g('es-fecha').value||hoy();s.destino=nuevoDestino;s.almacen=nuevoAlmacen;
   s.maquina=g('es-maquina').value.trim();s.solicitante=g('es-solicitante').value.trim();s.producto=g('es-producto').value.trim();s.descripcion=desc;
-  s.unidad=g('es-unidad').value;s.precio=parseFloat(g('es-precio').value)||0;s.cantidad=cant;s.importe=s.cantidad*s.precio;
+  s.unidad=g('es-unidad').value;s.precio=parseFloat(g('es-precio').value)||0;
+  const cambioCantidad=(cantOriginal!==cant);
+  s.cantidad=cant;s.importe=s.cantidad*s.precio;
+  // Mantener coherente el flujo de confirmación NV2820 al editar:
+  if(String(nuevoDestino)==='2820'){
+    // Si pasó a ser NV2820, o cambió la cantidad de una salida NV2820, requiere (re)confirmación del compresorista
+    if(destinoAntes!=='2820' || cambioCantidad){ s.confirmadoNV2820=false; delete s.confirmadoPor; delete s.confirmadoFecha; }
+  } else if(destinoAntes==='2820'){
+    // Dejó de ser NV2820: limpiar los marcadores de confirmación huérfanos
+    delete s.confirmadoNV2820; delete s.confirmadoPor; delete s.confirmadoFecha;
+  }
   almacenSave();cerrarModal('modal-edit-salida');renderHistorialAlmacen();renderAlmacen();showNotif('✓ Salida actualizada');
 }
 
@@ -7528,21 +7552,29 @@ function aprobarSolicitud(id,area,valor){
     // Auto-crear OC si no existe una ya creada para esta solicitud
     if(!sol._ocCreada){
       sol._ocCreada=true;
+      const montoOC = Number(sol.totalEst||sol.monto||sol.total||0)||0;
       const nuevaOC={
         _id: Date.now(),
         fecha: hoy(),
         categoria: sol.categoria||sol.tipo||'Suministros',
         proveedor: sol.proveedor||'Por definir',
         desc: sol.descripcion||sol.concepto||'Solicitud aprobada #'+sol.id,
-        monto: sol.monto||sol.total||0,
-        total: sol.monto||sol.total||0,
+        monto: montoOC,
+        total: montoOC,
         solicitante: sol.solicitante||'Sistema',
-        estado: 'aprobado',
+        estado: 'aprobada',
         _solicitudId: sol.id
       };
       if(!state.ordenes) state.ordenes=[];
       state.ordenes.push(nuevaOC);
-      guardarOrdenes&&guardarOrdenes();
+      // Persistir la OC en la tabla ordenes_compra (igual que crearOC) y guardar el id real de BD
+      (async()=>{
+        try{
+          const{data}=await sb.from('ordenes_compra').insert([{fecha:nuevaOC.fecha,categoria:nuevaOC.categoria,proveedor:nuevaOC.proveedor,descripcion:nuevaOC.desc,monto:nuevaOC.monto,solicitante:nuevaOC.solicitante,estado:'aprobada',mes_id:(typeof getMesId==='function'?getMesId():null)}]).select().single();
+          if(data){ nuevaOC._id=data.id; }
+        }catch(e){}
+        try{ if(typeof renderOrdenes==='function') renderOrdenes(); }catch(e){}
+      })();
     }
   }
   else{sol.estado='espera';}
@@ -7925,17 +7957,23 @@ async function registrarExplosivo(){
   if((state.explosivos.stock[tipo]||0)<cant){showNotif('⚠ Stock insuficiente','error');return;}
   const nv={fecha:document.getElementById('exp-fecha').value,frente:parseInt(document.getElementById('exp-frente').value),tipo,cantidad:cant,detalle:document.getElementById('exp-detalle').value||'Sin detalle',precio};
   const ns=(state.explosivos.stock[tipo]||0)-cant;
-  try{await sb.from('explosivos_historial').insert([{...nv, mes_id: getMesId()}]);await sb.from('explosivos_stock').update({cantidad:ns,updated_at:new Date()}).eq('tipo',tipo);}catch(e){}
+  let okNube=false;
+  try{ if(SB_ONLINE){ await sb.from('explosivos_historial').insert([{...nv, mes_id: getMesId()}]); await sb.from('explosivos_stock').update({cantidad:ns,updated_at:new Date()}).eq('tipo',tipo); okNube=true; } }catch(e){ okNube=false; }
   state.explosivos.stock[tipo]=ns;state.explosivos.historial.push(nv);
-  renderExplosivos();showNotif(`✓ ${cant} ${tipo} registrados`);
+  renderExplosivos();
+  if(okNube) showNotif(`✓ ${cant} ${tipo} registrados`);
+  else showNotif(`⚠ ${cant} ${tipo} registrados solo en este equipo — NO se guardó en la nube (sin conexión). Verifique y vuelva a intentar.`,'error');
 }
 async function confirmarRecarga(){
   const tipo=document.getElementById('rec-tipo').value;
   const cant=parseInt(document.getElementById('rec-cant').value);
   if(!cant||cant<=0){showNotif('⚠ Cantidad inválida','error');return;}
   const ns=(state.explosivos.stock[tipo]||0)+cant;
-  try{await sb.from('explosivos_stock').update({cantidad:ns,updated_at:new Date()}).eq('tipo',tipo);}catch(e){}
-  state.explosivos.stock[tipo]=ns;cerrarModal('modal-recarga');renderExplosivos();showNotif(`✓ +${cant} ${tipo} ingresados`);
+  let okNube=false;
+  try{ if(SB_ONLINE){ await sb.from('explosivos_stock').update({cantidad:ns,updated_at:new Date()}).eq('tipo',tipo); okNube=true; } }catch(e){ okNube=false; }
+  state.explosivos.stock[tipo]=ns;cerrarModal('modal-recarga');renderExplosivos();
+  if(okNube) showNotif(`✓ +${cant} ${tipo} ingresados`);
+  else showNotif(`⚠ +${cant} ${tipo} ingresados solo en este equipo — NO se guardó en la nube. Verifique la conexión.`,'error');
 }
 function renderAceros(){
   const cm=state.aceros.historial.reduce((s,a)=>s+(a.cantidad*(a.precio||0)),0);
@@ -10229,13 +10267,22 @@ function guardarReporteGuardia(){
   const g=i=>document.getElementById(i);
   const fecha=g('rg-fecha').value;
   if(!fecha){showNotif('⚠ Indique la fecha','error');return;}
+  const jefe=g('rg-jefe').value.trim();
+  if(!jefe){showNotif('⚠ Indique el Jefe de Guardia','error');return;}
+  const turno=g('rg-turno').value;
+  const idActual=g('rg-id').value;
+  // Aviso de duplicado: ya existe OTRO reporte para la misma fecha+turno (evita doble conteo de metros)
+  if(!idActual){
+    const dup=(state.reportesGuardia||[]).find(r=>r.fecha===fecha && r.turno===turno);
+    if(dup && !confirm(`Ya existe un reporte de ${turno} para ${fecha} (Jefe: ${dup.jefe||'—'}). ¿Registrar OTRO reporte igual? Esto puede duplicar los metros en el dashboard.`)) return;
+  }
   // Disparos por frente → totales automáticos
   const brDisp=rgGetDisparos('br'), crDisp=rgGetDisparos('cr');
   const brT=rgComputeFrenteTotals(brDisp), crT=rgComputeFrenteTotals(crDisp);
   const brMetros=brT.metros, crMetros=crT.metros;
   const rep={
-    id:g('rg-id').value||'RG'+Date.now(),
-    fecha, turno:g('rg-turno').value, jefe:g('rg-jefe').value.trim(),
+    id:idActual||'RG'+Date.now(),
+    fecha, turno, jefe,
     brenda:{trabajos:g('rg-br-trabajos').value.trim(),disparos:brDisp,metros:brT.metros,sost:brT.sost,cimbra:brT.cimbra,perno:brT.perno,malla:brT.malla,tperf:brT.tperf,tcarg:brT.tcarg,masas:brT.masas},
     crne:{trabajos:g('rg-cr-trabajos').value.trim(),disparos:crDisp,metros:crT.metros,sost:crT.sost,cimbra:crT.cimbra,perno:crT.perno,malla:crT.malla,tperf:crT.tperf,tcarg:crT.tcarg,masas:crT.masas},
     frentesExtra:[],
@@ -11824,9 +11871,15 @@ function rechazarLogKitLog(id){
   const resp=(prompt('Responsable (Logística):')||'').trim();
   if(!resp){showNotif('Cancelado — se requiere nombre','error');return;}
   // Si ya estaba aprobado, reponer stock: quitar las salidas de almacén generadas por este kit
+  // Y devolver también las unidades al almacén de repuestos (mantRepuestos), que se descontó al aprobar.
   if(m.aprobLog&&m.aprobLog.ok){
     state.almacen=state.almacen||{};
     state.almacen.salidas=(state.almacen.salidas||[]).filter(s=>s.grupo!=='KIT-'+id);
+    (m.repuestos||[]).forEach(p=>{
+      const rr=(state.mantRepuestos||[]).find(x=>x.id===p.id);
+      if(rr) rr.stock=(rr.stock||0)+(p.cant||0);
+    });
+    if(typeof mantRepSave==='function') mantRepSave();
     almacenSave();
   }
   m.aprobLog={ok:false,rechazado:true,resp,fecha:hoy(),motivo};
@@ -15827,9 +15880,9 @@ function finGuardarSplit(){
 }
 function renderFinIngresosMaq(){
   const el=document.getElementById('fin-ingmaq');if(!el)return;
-  const hoy=new Date().toISOString().slice(0,7);
+  const mesLocal=(typeof finMesActual==='function')?finMesActual():hoy().slice(0,7);
   const mesActualEl=document.getElementById('fim-mes');
-  const mes=(mesActualEl&&mesActualEl.value)||hoy;
+  const mes=(mesActualEl&&mesActualEl.value)||mesLocal;
   const ingGuardados=finIngMaqGet(mes);
 
   const MAQUINAS_LABELS=EQUIPOS_FACTURABLES;
@@ -15868,7 +15921,7 @@ function renderFinIngresosMaq(){
     </tr>`;
   }).join('');
 
-  const meses=[];for(let i=0;i<6;i++){const d=new Date();d.setMonth(d.getMonth()-i);meses.push(d.toISOString().slice(0,7));}
+  const meses=[];for(let i=0;i<6;i++){const d=new Date();d.setMonth(d.getMonth()-i);meses.push((typeof fechaLocalISO==='function'?fechaLocalISO(d):d.toISOString().slice(0,10)).slice(0,7));}
   const optsMes=meses.map(m=>`<option value="${m}" ${m===mes?'selected':''}>${m}</option>`).join('');
 
   el.innerHTML=`
@@ -17342,7 +17395,7 @@ async function cerrarPeriodo(periodo){
     state.tareas=(state.tareas||[]).filter(x=>!enRango(x.fecha,r)); if(typeof tareasSave==='function') tareasSave();
     state.compresorista=(state.compresorista||[]).filter(x=>!enRango(x.fecha,r)); if(typeof compGuardarLocal==='function') compGuardarLocal();
     state.mantenimiento=(state.mantenimiento||[]).filter(x=>!enRango(x.fecha,r));
-    try{ sbSyncModulo('mantenimiento', state.mantenimiento||[]); }catch(e){}
+    try{ sbSyncModulo('mant_kits', state.mantenimiento||[]); }catch(e){}
     state.reportesGuardia=(state.reportesGuardia||[]).filter(x=>!enRango(x.fecha,r)); if(typeof reportesGuardiaSave==='function') reportesGuardiaSave();
     state.remanenteSalidas=(state.remanenteSalidas||[]).filter(x=>!enRango(x.fecha,r));
     if(typeof remSalSave==='function'){ try{ remSalSave(); }catch(e){} }
@@ -17355,7 +17408,7 @@ async function cerrarPeriodo(periodo){
   histPeriodosSave(hist);
   if(!state.mesesCerrados) state.mesesCerrados=[];
   if(!state.mesesCerrados.includes(periodo)){ state.mesesCerrados.push(periodo); if(typeof saveState==='function') saveState(); }
-  try{ sbSyncModulo('mantRepuestos', state.mantRepuestos||[]); }catch(e){}
+  try{ sbSyncModulo('mant_repuestos', state.mantRepuestos||[]); }catch(e){}
 
   showNotif('🔒 Periodo '+label+' cerrado: respaldo guardado, stocks arrastrados y consumo reiniciado','ok');
   try{ if(typeof refrescarVistaActual==='function') refrescarVistaActual(); }catch(e){}
