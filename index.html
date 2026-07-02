@@ -4651,7 +4651,11 @@ function renderStockRemanente(){
     const disp=Math.max(0,(e.stock||0)-salRem);
     const col=disp>50?'#22c55e':(disp>0?'#f59e0b':'#ef4444');
     const fig=(typeof exploFig==='function')?exploFig(e.id):'🧨';
-    const um=e.unidad==='rollo'?'rollos':'und';
+    // Mecha rápida (NEITHER): el stock está en METROS. Se muestra en metros + equivalente en rollos.
+    const esMecha=e.unidad==='rollo';
+    const mPorR=e.mPorRollo||150;
+    const um=esMecha?'m':'und';
+    const rollosLine=esMecha?`<div style="font-size:11px;color:#60a5fa;margin-top:3px;font-weight:700">≈ ${fmtN(disp/mPorR)} rollos <span style="color:var(--text3);font-weight:400;font-size:9px">(1 rollo = ${mPorR} m)</span></div>`:'';
     return `<div style="background:var(--coal3);border:1px solid var(--border);border-radius:14px;padding:14px;text-align:center;position:relative;overflow:hidden">
       <div style="position:absolute;top:0;right:0;width:54px;height:54px;background:${col}14;border-radius:0 14px 0 54px"></div>
       <div style="font-size:30px;line-height:1;margin-bottom:6px">${fig}</div>
@@ -4659,8 +4663,9 @@ function renderStockRemanente(){
       <div style="font-size:10px;color:var(--text3);margin-bottom:8px;font-family:monospace">${e.id}</div>
       <div style="font-size:22px;font-weight:900;color:${col};letter-spacing:-1px;line-height:1">${fmtN(disp)}</div>
       <div style="font-size:10px;color:var(--text3);margin-top:2px">${um} remanente</div>
+      ${rollosLine}
       <div style="font-size:9.5px;color:var(--text3);margin-top:6px;border-top:1px solid var(--border);padding-top:6px">
-        Stock: ${fmtN(e.stock)}${salRem>0?` · Salidas rem.: ${fmtN(salRem)}`:''}
+        Stock: ${fmtN(e.stock)}${esMecha?' m':''}${salRem>0?` · Salidas rem.: ${fmtN(salRem)}`:''}
       </div>
     </div>`;
   }).join('') || `<div style="grid-column:1/-1;padding:18px;text-align:center;color:var(--text3)">Sin explosivos en catálogo</div>`;
@@ -7042,7 +7047,8 @@ function renderExploStock(){
     const qty=stock[c.id]||0;
     const color=qty>20?'#22c55e':qty>0?'#f59e0b':'#ef4444';
     const cajas=Math.floor(qty/c.upCaja);const sueltas=qty%c.upCaja;
-    const label=c.id==='NEITHER'?`${qty} rollos (${qty*c.mPorRollo} m)`:`${cajas} caj${cajas!==1?'as':'a'} + ${sueltas} und`;
+    // Mecha rápida (NEITHER): qty está en METROS → mostrar metros + equivalente en rollos (150 m c/u)
+    const label=c.id==='NEITHER'?`${qty} m · ≈ ${(qty/(c.mPorRollo||150)).toFixed(2)} rollos`:`${cajas} caj${cajas!==1?'as':'a'} + ${sueltas} und`;
     return `<div class="kpi-card" style="padding:14px 16px">
       <div class="kpi-label" style="font-size:11px">${c.nombre}</div>
       <div style="font-size:24px;font-weight:800;color:${color};font-family:'DM Mono',monospace;margin:6px 0">${qty}</div>
