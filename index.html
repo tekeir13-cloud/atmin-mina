@@ -4238,6 +4238,8 @@ async function cargarAlmacenCombustibleSB(){
         explosivos:almNube.explosivos||{ingresos:[],salidas:[]},
         catalogVersion:5
       };
+      // La nube viene sin fotos (se suben ligeras); devolver las fotos guardadas en este equipo
+      try{ if(typeof _almRestaurarFotos==='function') state.almacen=_almRestaurarFotos(state.almacen); }catch(e){}
       try{localStorage.setItem(ALM_KEY,JSON.stringify(state.almacen));}catch(e){}
       // Si el catálogo era obsoleto, forzar subida a nube con catálogo nuevo
       if(catalogoObsoleto) await sbSyncModulo('almacen',{...state.almacen});
@@ -5528,7 +5530,7 @@ function _rtAplicarModulo(modulo, data){
   const setLS=(k,v)=>{ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} };
   const M=(typeof mergeSnapById==='function')?mergeSnapById:((a,b)=>b||a||[]);
   switch(modulo){
-    case 'almacen':            if(data&&typeof data==='object'){ state.almacen=Object.assign(state.almacen||{}, data); setLS('atmin_almacen', state.almacen); } break;
+    case 'almacen':            if(data&&typeof data==='object'){ let a=Object.assign(state.almacen||{}, data); try{ if(typeof _almRestaurarFotos==='function') a=_almRestaurarFotos(a); }catch(e){} state.almacen=a; setLS('atmin_almacen', state.almacen); } break;
     case 'personal':           if(Array.isArray(data)){ state.personal=data; setLS('atmin_personal_snap', data); } break;
     case 'tareas':             if(Array.isArray(data)){ state.tareas=data; setLS('atmin_tareas_snap', data); } break;
     case 'reportes_guardia':   if(Array.isArray(data)){ state.reportesGuardia=M(state.reportesGuardia||[], data); setLS('atmin_reportes_guardia', state.reportesGuardia); try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){} } break;
@@ -5614,11 +5616,33 @@ function iniciarRealtime(){
 
 // ════════════════ MÓDULO ALMACÉN / INVENTARIO ════════════════
 const ALM_KEY='atmin_almacen';
+// Copia "ligera" del almacén para la nube: quita las fotos base64 (que son pesadas y desbordan
+// el límite de Supabase y del tiempo real). Las fotos se conservan SOLO en localStorage del equipo
+// que las tomó. Así el registro siempre sube y aparece en todos los dispositivos (sin la imagen).
+function _almClonLight(alm){
+  const strip=arr=>(arr||[]).map(r=>{ if(r && r.fotoBase64){ const c={...r}; delete c.fotoBase64; c._tieneFoto=true; return c; } return r; });
+  const ex=alm.explosivos||{ingresos:[],salidas:[]};
+  return { ...alm, productos: alm.productos||[],
+    ingresos: strip(alm.ingresos), salidas: strip(alm.salidas),
+    explosivos: { ...ex, ingresos: strip(ex.ingresos), salidas: strip(ex.salidas) } };
+}
+// Al cargar desde la nube (que viene sin fotos), re-adjunta las fotos guardadas localmente,
+// emparejando por id. NO resucita registros borrados — solo devuelve la imagen a los que existen.
+function _almRestaurarFotos(alm){
+  let loc=null; try{ loc=JSON.parse(localStorage.getItem(ALM_KEY)||'null'); }catch(e){}
+  if(!loc) return alm;
+  const restore=(arr,locArr)=>{ const byId={}; (locArr||[]).forEach(r=>{ if(r&&r.id!=null&&r.fotoBase64) byId[r.id]=r.fotoBase64; }); return (arr||[]).map(r=>{ if(r&&r.id!=null&&!r.fotoBase64&&byId[r.id]) return {...r, fotoBase64:byId[r.id]}; return r; }); };
+  const exC=alm.explosivos||{ingresos:[],salidas:[]}, exL=loc.explosivos||{};
+  alm.ingresos=restore(alm.ingresos, loc.ingresos);
+  alm.salidas=restore(alm.salidas, loc.salidas);
+  alm.explosivos={...exC, ingresos:restore(exC.ingresos, exL.ingresos), salidas:restore(exC.salidas, exL.salidas)};
+  return alm;
+}
 function almacenSave(){
   try{
+    // Local: versión COMPLETA con fotos. Nube: versión LIGERA sin fotos (para que siempre suba).
     localStorage.setItem(ALM_KEY,JSON.stringify({...state.almacen,productos:state.almacen.productos||[]}));
-    // Sincronizar a la nube (no bloquea: si falla, el dato ya está en localStorage)
-    sbSyncModulo('almacen', {...state.almacen, productos: state.almacen.productos||[]});
+    sbSyncModulo('almacen', _almClonLight(state.almacen));
     return true;
   }catch(e){
     // Cuota excedida (típicamente por fotos en base64): avisar en vez de fallar en silencio
