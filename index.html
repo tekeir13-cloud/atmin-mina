@@ -5546,6 +5546,7 @@ function _rtAplicarModulo(modulo, data){
     case 'comb_gas':           if(Array.isArray(data)){ setLS('atmin_comb_gasolina', data); } break;
     case 'fin_ing_maq':        if(data&&typeof data==='object'){ setLS('atmin_fin_ing_maq', data); } break;
     case 'historial_periodos': if(Array.isArray(data)){ state.historialPeriodos=data; setLS('atmin_historial_periodos', data); } break;
+    case 'seguridad':          if(Array.isArray(data)){ const mm=(typeof seguridadDedup==='function')?seguridadDedup([ ...data, ...(state.seguridad||[]) ]):data; mm.sort((a,b)=>(b.id||0)-(a.id||0)); state.seguridad=mm; setLS('atmin_seguridad', mm); try{ if(typeof segBadgeUpdate==='function') segBadgeUpdate(); }catch(e){} } break;
     default: break;
   }
 }
@@ -5556,6 +5557,7 @@ function _rtRerenderActivo(){
     const page=window._currentPage;
     if(!page) return;
     if(page==='dashboard'){ if(typeof renderDashboard==='function') renderDashboard(); return; }
+    if(page==='seguridad'){ if(typeof renderSeguridad==='function') renderSeguridad(); return; }
     if(page==='ia'){ try{ if(typeof renderIARecomendaciones==='function') renderIARecomendaciones(); }catch(e){} return; }
     const pageEl=document.getElementById('page-'+page); if(!pageEl) return;
     let paneEl=pageEl.querySelector('.mod-pane.active') || Array.from(pageEl.querySelectorAll('.mod-pane')).find(p=>p.offsetParent!==null);
@@ -14025,6 +14027,8 @@ async function guardarReporteSeguridad(){
 
   if(!state.seguridad) state.seguridad = [];
   state.seguridad.unshift(nv);
+  // Persistir en localStorage + nube (app_modulos) → visible en todos los dispositivos y en tiempo real
+  if(typeof seguridadSave==='function') seguridadSave();
   segBadgeUpdate();
 
   cerrarModal('modal-seguridad');
@@ -14188,30 +14192,43 @@ function verFotoSeg(i){
 function eliminarReporteSeg(i){
   if(!confirm('¿Eliminar este reporte?')) return;
   state.seguridad.splice(i,1);
+  if(typeof seguridadSave==='function') seguridadSave();
   renderSeguridad();
   showNotif('Reporte eliminado','warn');
 }
 
+// Persistencia de reportes de seguridad — ahora vía app_modulos (localStorage + nube + tiempo real),
+// igual que los reportes de guardia, para que aparezcan en todos los dispositivos al instante.
+const SEG_KEY='atmin_seguridad';
+function _segSig(r){ return [r&&r.fecha||'',r&&r.hora||'',r&&r.frente||'',r&&r.turno||'',((r&&r.registrado)||'').trim(),((r&&r.obs)||'').trim()].join('|'); }
+function seguridadDedup(arr){ const seen=new Set(),out=[]; (arr||[]).forEach(r=>{ if(!r)return; const k=_segSig(r); if(seen.has(k))return; seen.add(k); out.push(r); }); return out; }
+function seguridadLoad(){ try{ const d=JSON.parse(localStorage.getItem(SEG_KEY)||'[]'); if(Array.isArray(d)&&d.length) state.seguridad=d; }catch(e){} }
+function seguridadSave(){ try{ localStorage.setItem(SEG_KEY, JSON.stringify(state.seguridad||[])); }catch(e){} try{ sbSyncModulo('seguridad', state.seguridad||[]); }catch(e){} }
 async function cargarSeguridadSB(){
   try{
-    const { data } = await sb.from('reportes_seguridad').select('*').order('fecha',{ascending:false});
-    if(data && data.length){
-      state.seguridad = data.map(r=>({
-        id:         r.id,
-        fecha:      r.fecha,
-        hora:       r.hora,
-        frente:     r.frente,
-        turno:      r.turno,
-        taladros:   r.taladros||0,
-        cargados:   r.cargados||0,
-        disparados: r.disparados||0,
-        obs:        r.obs||'',
-        foto:       r.foto_url || r.foto_base64 || null,
-        registrado: r.registrado_por||'—',
-        created_at: r.created_at,
-      }));
-    }
-  }catch(e){ console.warn('reportes_seguridad no configurada en Supabase aún'); }
+    seguridadLoad(); // 1) local primero
+    let segNube=null; try{ segNube=await sbLoadModulo('seguridad'); }catch(e){}   // 2) snapshot app_modulos
+    let tabla=[];
+    try{ // 3) tabla dedicada (legado / respaldo)
+      const { data } = await sb.from('reportes_seguridad').select('*').order('fecha',{ascending:false});
+      if(data && data.length){
+        tabla = data.map(r=>({
+          id: r.id, fecha:r.fecha, hora:r.hora, frente:r.frente, turno:r.turno,
+          taladros:r.taladros||0, cargados:r.cargados||0, disparados:r.disparados||0,
+          obs:r.obs||'', foto:r.foto_url||r.foto_base64||null, registrado:r.registrado_por||'—', created_at:r.created_at,
+        }));
+      }
+    }catch(e){}
+    // Combinar las tres fuentes sin duplicar (por contenido: fecha+hora+frente+turno+registrado+obs)
+    const merged = seguridadDedup([ ...(state.seguridad||[]), ...(Array.isArray(segNube)?segNube:[]), ...tabla ]);
+    // Ordenar por id desc (más reciente primero)
+    merged.sort((a,b)=>(b.id||0)-(a.id||0));
+    state.seguridad = merged;
+    try{ localStorage.setItem(SEG_KEY, JSON.stringify(merged)); }catch(e){}
+    // Re-subir el consolidado a app_modulos (migra lo que estaba solo en la tabla dedicada)
+    if(merged.length){ try{ sbSyncModulo('seguridad', merged); }catch(e){} }
+    try{ if(typeof segBadgeUpdate==='function') segBadgeUpdate(); }catch(e){}
+  }catch(e){ console.warn('carga seguridad', e); }
 }
 
 
