@@ -7274,7 +7274,7 @@ function renderExploHistorial(){
           <div style="font-size:12px;color:var(--text3);margin-top:3px">${esIng?'Polvorín Santa María → NV3190':'NV3190 → Almacén NV2820'}</div>
           <div style="font-size:12px;margin-top:4px">Vale: <strong>${r.vale||'—'}</strong> · Cantidad: <strong style="color:${color}">${cantLabel}</strong></div>
         </div>
-        ${r.fotoBase64?`<img src="${r.fotoBase64}" style="max-height:64px;max-width:100px;border-radius:6px;border:1px solid var(--border);cursor:pointer" onclick="verFotoExplo('${r.id}')" title="Ver foto del vale">`:'<div style="color:var(--text3);font-size:11px;padding:4px">Sin foto</div>'}
+        ${(r.fotoUrl||r.fotoBase64)?`<img src="${r.fotoUrl||r.fotoBase64}" style="max-height:64px;max-width:100px;border-radius:6px;border:1px solid var(--border);cursor:pointer" onclick="verFotoExplo('${r.id}')" title="Ver foto del vale">`:((r._tieneFoto)?'<div style="color:var(--text3);font-size:11px;padding:4px">📷 Foto en otro equipo</div>':'<div style="color:var(--text3);font-size:11px;padding:4px">Sin foto</div>')}
       </div>
     </div>`;
   }).join('');
@@ -7282,9 +7282,10 @@ function renderExploHistorial(){
 function verFotoExplo(id){
   const exp=state.almacen.explosivos||{ingresos:[],salidas:[]};
   const r=[...exp.ingresos,...exp.salidas].find(x=>x.id===id);
-  if(!r||!r.fotoBase64)return;
+  const src=r&&(r.fotoUrl||r.fotoBase64);
+  if(!src)return;
   const w=window.open('','_blank');
-  w.document.write(`<html><body style="margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${r.fotoBase64}" style="max-width:100%;max-height:100vh"></body></html>`);
+  w.document.write(`<html><body style="margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${src}" style="max-width:100%;max-height:100vh"></body></html>`);
 }
 function previsualizarFoto(inputId,previewId){
   const inp=document.getElementById(inputId);const prev=document.getElementById(previewId);
@@ -7325,7 +7326,21 @@ function abrirModalExploIngreso(){
   g('exi-foto-preview').style.display='none';g('exi-foto-preview').src='';
   abrirModal('modal-explo-ingreso');
 }
-function guardarExploIngreso(){
+// Sube una foto (base64) a Supabase Storage y devuelve la URL pública (compartible entre dispositivos).
+// Devuelve null si no hay conexión, no hay bucket o falla la subida → el llamador usa base64 local.
+async function subirFotoStorage(base64, carpeta){
+  if(!base64 || !SB_ONLINE || !sb || !sb.storage) return null;
+  try{
+    const blob = await fetch(base64).then(r=>r.blob());
+    const ext = (blob.type && blob.type.indexOf('png')>=0) ? 'png' : 'jpg';
+    const path = `${carpeta}/${Date.now()}-${Math.floor(Math.random()*1e6)}.${ext}`;
+    const { error } = await sb.storage.from('reportes-fotos').upload(path, blob, { contentType: blob.type||'image/jpeg', upsert:true });
+    if(error) return null;
+    const { data } = sb.storage.from('reportes-fotos').getPublicUrl(path);
+    return (data && data.publicUrl) || null;
+  }catch(e){ return null; }
+}
+async function guardarExploIngreso(){
   const g=id=>document.getElementById(id);
   const prodId=g('exi-producto').value;
   if(!prodId){showNotif('⚠ Selecciona el tipo de explosivo','error');return;}
@@ -7339,10 +7354,16 @@ function guardarExploIngreso(){
     id:'EI'+Date.now(),fecha:g('exi-fecha').value||hoy(),vale,
     producto:prodId,cajas:parseInt(g('exi-cajas').value)||0,
     unidades:parseInt(g('exi-unidades').value)||0,totalUnidades:total,
-    origen:'Polvorin Santa Maria',fotoBase64
+    origen:'Polvorin Santa Maria'
   };
+  // Subir la foto a Storage (se ve en TODOS los dispositivos); si falla, queda solo local en base64
+  if(fotoBase64){
+    showNotif('📤 Subiendo foto…');
+    const url=await subirFotoStorage(fotoBase64,'explosivos');
+    if(url) reg.fotoUrl=url; else reg.fotoBase64=fotoBase64;
+  }
   state.almacen.explosivos.ingresos.push(reg);
-  if(fotoBase64 && !almacenSave()){reg.fotoBase64=null;almacenSave();}  // si la foto desbordó la cuota, guarda al menos el registro
+  if(!almacenSave() && reg.fotoBase64){reg.fotoBase64=null;almacenSave();}  // si la foto local desbordó la cuota, guarda al menos el registro
   cerrarModal('modal-explo-ingreso');renderExploTab();
   showNotif(`✓ Ingreso registrado: ${total} ${exploGetCat(prodId)?.unidad||'und'} de ${exploGetCat(prodId)?.nombre}`);
 }
@@ -7402,7 +7423,7 @@ function abrirModalExploSalida(){
   }
   abrirModal('modal-explo-salida');
 }
-function guardarExploSalida(){
+async function guardarExploSalida(){
   const g=id=>document.getElementById(id);
   const prodId=g('exs-producto').value;
   if(!prodId){showNotif('⚠ Selecciona el tipo de explosivo','error');return;}
@@ -7418,10 +7439,15 @@ function guardarExploSalida(){
     id:'ES'+Date.now(),fecha:g('exs-fecha').value||hoy(),vale,
     producto:prodId,cajas:parseInt(g('exs-cajas').value)||0,
     unidades:parseInt(g('exs-unidades').value)||0,totalUnidades:total,
-    destino:'Almacen NV2820',fotoBase64
+    destino:'Almacen NV2820'
   };
+  if(fotoBase64){
+    showNotif('📤 Subiendo foto…');
+    const url=await subirFotoStorage(fotoBase64,'explosivos');
+    if(url) reg.fotoUrl=url; else reg.fotoBase64=fotoBase64;
+  }
   state.almacen.explosivos.salidas.push(reg);
-  if(fotoBase64 && !almacenSave()){reg.fotoBase64=null;almacenSave();}
+  if(!almacenSave() && reg.fotoBase64){reg.fotoBase64=null;almacenSave();}
   cerrarModal('modal-explo-salida');renderExploTab();
   try{ if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
   showNotif(`✓ Salida registrada: ${total} ${exploGetCat(prodId)?.unidad||'und'} de ${exploGetCat(prodId)?.nombre}`);
@@ -7490,6 +7516,10 @@ async function exportarExplosivosExcel(){
         row.height=150;
         ws1.addImage(imgId,{tl:{col:9.05,row:rowIdx-1+0.05},ext:{width:180,height:195},editAs:'oneCell'});
       }catch(e){row.getCell(10).value='(foto error)';}
+    }else if(r.fotoUrl){
+      const cell=row.getCell(10);
+      cell.value={ text:'Ver foto', hyperlink:r.fotoUrl };
+      cell.font={color:{argb:'FF2563EB'},underline:true,size:10};
     }else{
       row.getCell(10).value='—';
     }
