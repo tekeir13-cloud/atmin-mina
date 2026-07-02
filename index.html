@@ -3257,6 +3257,7 @@ select option{background:var(--coal3);}
         <button id="vt-noche-btn" onclick="visorTurno('Noche')"
           style="padding:8px 18px;border:2px solid var(--border);background:var(--coal4);color:var(--text2);border-radius:6px;cursor:pointer;font-size:12px;font-weight:700">🌙 Noche</button>
       </div>
+      <select id="vt-mes-sel" onchange="visorPoblarDias();visorRenderDia()" style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 12px;font-size:12px;min-width:140px" title="Mes a revisar"></select>
       <select id="vt-dia-sel" onchange="visorRenderDia()" style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 12px;font-size:12px;min-width:160px">
         <option value="">— Seleccionar día —</option>
       </select>
@@ -3632,7 +3633,7 @@ select option{background:var(--coal3);}
     </div>
     <input type="hidden" id="prod-edit-id">
     <div class="form-grid">
-      <div class="form-group"><label>Código</label><input type="text" id="prod-codigo" style="font-family:'DM Mono',monospace" placeholder="Ej: 1300000036"></div>
+      <div class="form-group"><label>Código <span style="color:var(--text3);font-size:10px">(automático)</span></label><input type="text" id="prod-codigo" style="font-family:'DM Mono',monospace" placeholder="Se genera solo" title="Se genera automáticamente"></div>
       <div class="form-group"><label>Unidad</label><input type="text" id="prod-unidad" placeholder="PZA / KG / M / BOL"></div>
       <div class="form-group" style="grid-column:1/-1"><label>Nombre del Producto</label><input type="text" id="prod-nombre" placeholder="Ej: CEMENTO GRIS ANTISALITRE PORTL. TIPO MS"></div>
       <div class="form-group" style="grid-column:1/-1"><label>Precio Unitario (S/)</label><input id="prod-precio" type="number" step="0.01" min="0" placeholder="0.00" style="width:140px"></div>
@@ -4547,7 +4548,7 @@ function renderPage(page){
   else if(page==='seguridad')renderSeguridad();
   else if(page==='ia')renderIA();
   else if(page==='reporte')renderReportePage();
-  else if(page==='compresorista'){if(typeof renderTablaCompresorista==='function'){renderTablaCompresorista();visorPoblarDias();visorRenderDia();}}
+  else if(page==='compresorista'){if(typeof renderTablaCompresorista==='function'){renderTablaCompresorista();if(typeof visorPoblarMeses==='function')visorPoblarMeses();visorPoblarDias();visorRenderDia();}}
 }
 
 function renderModPane(mod,pane){
@@ -5708,21 +5709,31 @@ function nextCodigoProducto(){
   const max=nums.length?Math.max(...nums):0;
   return 'PRD-'+ String(max+1).padStart(3,'0');
 }
+// Genera un código correlativo automático para un producto nuevo del maestro.
+// Formato: ART-00001, ART-00002, … (toma el mayor ART- existente y suma 1).
+function generarCodigoProducto(){
+  const prods=(state.almacen&&state.almacen.productos)||[];
+  let max=0;
+  prods.forEach(p=>{ const m=/^ART-(\d+)$/.exec(String(p.codigo||'')); if(m){ const n=parseInt(m[1],10); if(n>max) max=n; } });
+  return 'ART-'+String(max+1).padStart(5,'0');
+}
 function abrirModalProducto(id){
   const g=k=>document.getElementById(k);
+  const cod=g('prod-codigo');
   if(id){
     const p=(state.almacen.productos||[]).find(x=>x.id===id);
     if(!p)return;
     g('modal-prod-titulo').textContent='Editar Producto';
     g('prod-edit-id').value=p.id;
-    g('prod-codigo').value=p.codigo;
+    if(cod){ cod.value=p.codigo; cod.readOnly=false; }
     g('prod-nombre').value=p.nombre;
     g('prod-unidad').value=p.unidad||'PZA';
     g('prod-precio').value=p.precio||'';
   }else{
     g('modal-prod-titulo').textContent='Nuevo Producto';
     g('prod-edit-id').value='';
-    g('prod-codigo').value='';
+    // Código correlativo automático (el usuario ya no lo escribe)
+    if(cod){ cod.value=generarCodigoProducto(); cod.readOnly=true; cod.style.opacity='0.75'; }
     g('prod-nombre').value='';
     g('prod-unidad').value='PZA';
     g('prod-precio').value='';
@@ -16085,12 +16096,9 @@ function compCargarLocal() {
   try {
     const raw = localStorage.getItem(COMP_STORAGE_KEY);
     if(raw){
-      state.compresorista = JSON.parse(raw);
-      // Limpieza automática: conservar solo reportes de los últimos 31 días
-      const limite = new Date(); limite.setDate(limite.getDate()-31);
-      const limStr = fechaLocalISO(limite);
-      state.compresorista = state.compresorista.filter(r => r.fecha >= limStr);
-      compGuardarLocal();
+      state.compresorista = JSON.parse(raw)||[];
+      // (Antes se borraban los reportes de más de 31 días — se ELIMINÓ esa purga para poder
+      //  revisar reportes de meses pasados con sus gráficas.)
     }
   } catch(e){ state.compresorista = []; }
 }
@@ -16401,8 +16409,11 @@ function guardarReporteComp() {
   compGuardarLocal();
   renderTablaCompresorista();
   mostrarResumenComp(reporte);
+  if(typeof visorPoblarMeses==='function') visorPoblarMeses();
+  // Apuntar el visor al mes del reporte recién guardado
+  const selMes=document.getElementById('vt-mes-sel');
+  if(selMes){ selMes.value=String(fecha).slice(0,7); }
   visorPoblarDias();
-  // Apuntar el selector al reporte recién guardado
   const selVT=document.getElementById('vt-dia-sel');
   if(selVT){selVT.value=fecha;}
   visorRenderDia();
@@ -16799,30 +16810,48 @@ function visorTurno(turno) {
   visorRenderDia();
 }
 
+const _VT_MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+// Rellena el selector de MES con todos los meses que tengan reportes + el mes actual.
+function visorPoblarMeses(){
+  const sel = document.getElementById('vt-mes-sel');
+  if(!sel) return;
+  const prev = sel.value;
+  const hoy = new Date();
+  const mesActual = hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0');
+  const meses = new Set([mesActual]);
+  (state.compresorista||[]).forEach(r=>{ if(r.fecha) meses.add(String(r.fecha).slice(0,7)); });
+  const lista = [...meses].sort().reverse(); // más reciente primero
+  sel.innerHTML = lista.map(m=>{
+    const [y,mm]=m.split('-');
+    return `<option value="${m}">${_VT_MESES[parseInt(mm,10)-1]} ${y}</option>`;
+  }).join('');
+  sel.value = (prev && lista.includes(prev)) ? prev : mesActual;
+}
 function visorPoblarDias() {
   const sel = document.getElementById('vt-dia-sel');
   if(!sel) return;
+  if(!document.getElementById('vt-mes-sel')?.options.length) visorPoblarMeses();
   const prev = sel.value;
-  // Obtener todos los días con reportes del turno activo
+  // Mes seleccionado en el visor (por defecto, el mes actual)
+  const mesSel = document.getElementById('vt-mes-sel')?.value || (new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'));
+  const [year, monthNum] = mesSel.split('-').map(Number);
+  const month = monthNum-1;
   const diasConReporte = new Set(state.compresorista.filter(r=>r.turno===_vtTurno).map(r=>r.fecha));
-  // Calcular días del mes actual
-  const hoy = new Date();
-  const year = hoy.getFullYear(), month = hoy.getMonth();
   const diasMes = new Date(year, month+1, 0).getDate();
-  const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   sel.innerHTML = '<option value="">— Seleccionar día —</option>';
   for(let d=1; d<=diasMes; d++){
     const fStr = year+'-'+String(month+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
     const tieneReporte = diasConReporte.has(fStr);
     const opt = document.createElement('option');
     opt.value = fStr;
-    opt.textContent = d + ' ' + MESES[month] + (tieneReporte ? ' ✓' : '');
+    opt.textContent = d + ' ' + _VT_MESES[month] + (tieneReporte ? ' ✓' : '');
     if(tieneReporte) opt.style.color = '#22d3a5';
     sel.appendChild(opt);
   }
-  // Badge total
+  // Badge: reportes del turno en el mes seleccionado
+  const nMes = [...diasConReporte].filter(f=>String(f).slice(0,7)===mesSel).length;
   const badge = document.getElementById('vt-badge');
-  if(badge) badge.textContent = diasConReporte.size + ' reportes de turno ' + _vtTurno + ' este mes';
+  if(badge) badge.textContent = nMes + ' reportes de turno ' + _vtTurno + ' en ' + _VT_MESES[month] + ' ' + year;
   if(prev) sel.value = prev;
 }
 
