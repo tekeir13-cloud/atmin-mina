@@ -4397,9 +4397,12 @@ async function cargarAlmacenCombustibleSB(){
       let fimLocal={}; try{fimLocal=JSON.parse(localStorage.getItem(FIN_ING_MAQ_KEY)||'{}')||{};}catch(e){}
       if(fimNube&&typeof fimNube==='object'){
         const merged={...fimNube,...fimLocal}; // local (este dispositivo) gana por mes
+        try{ if(typeof _fimMigrarNombres==='function') _fimMigrarNombres(merged); }catch(e){}  // renombres de equipos
         try{localStorage.setItem(FIN_ING_MAQ_KEY,JSON.stringify(merged));}catch(e){}
         await sbSyncModulo('fin_ing_maq', merged);
       }else if(Object.keys(fimLocal).length){
+        try{ if(typeof _fimMigrarNombres==='function') _fimMigrarNombres(fimLocal); }catch(e){}
+        try{localStorage.setItem(FIN_ING_MAQ_KEY,JSON.stringify(fimLocal));}catch(e){}
         await sbSyncModulo('fin_ing_maq', fimLocal);
       }
     }
@@ -5552,7 +5555,7 @@ function _rtAplicarModulo(modulo, data){
     case 'planilla_supervision': if(data&&typeof data==='object'){ setLS('atmin_planilla_supervision', data); } break;
     case 'comb_pet':           if(Array.isArray(data)){ setLS('atmin_comb_petroleo', data); } break;
     case 'comb_gas':           if(Array.isArray(data)){ setLS('atmin_comb_gasolina', data); } break;
-    case 'fin_ing_maq':        if(data&&typeof data==='object'){ setLS('atmin_fin_ing_maq', data); } break;
+    case 'fin_ing_maq':        if(data&&typeof data==='object'){ try{ if(typeof _fimMigrarNombres==='function') _fimMigrarNombres(data); }catch(e){} setLS('atmin_fin_ing_maq', data); } break;
     case 'historial_periodos': if(Array.isArray(data)){ state.historialPeriodos=data; setLS('atmin_historial_periodos', data); } break;
     case 'seguridad':          if(Array.isArray(data)){ let mm=(typeof seguridadDedup==='function')?seguridadDedup([ ...data, ...(state.seguridad||[]) ]):data; mm.sort((a,b)=>(b.id||0)-(a.id||0)); if(typeof _segStripFotos==='function') mm=_segStripFotos(mm); state.seguridad=mm; setLS('atmin_seguridad', mm); try{ if(typeof segBadgeUpdate==='function') segBadgeUpdate(); }catch(e){} } break;
     default: break;
@@ -16447,7 +16450,30 @@ const COMP_PRECIOS_ACEROS_DEFAULT = {'BARRA CONICA 4\' X 7/8"':249.17,'BARRA CON
 // Parametros centralizados — solo jefe_finanzas puede editar
 // Ingresos manuales por máquina: {mes: {label: importe}}
 const FIN_ING_MAQ_KEY='atmin_fin_ing_maq';
-function finIngMaqGet(mes){try{return JSON.parse(localStorage.getItem(FIN_ING_MAQ_KEY)||'{}')[mes]||{};}catch(e){return {};}}
+// Migración de nombres de equipos: los ingresos por máquina se guardan POR NOMBRE (label).
+// Al renombrar equipos, esto mueve los montos guardados del nombre viejo al nuevo
+// para que el dashboard "Ganancia por Equipo", NIA e Ingresos x Máq. no pierdan el vínculo.
+const _FIM_RENAMES={'Scoop DALI':'Scoop WJ-2','Scoop Monte':'Scoop Epiroc','Camioneta Roja':'Camioneta Roja BRY-800'};
+function _fimMigrarNombres(all){
+  let cambio=false;
+  Object.keys(all||{}).forEach(mes=>{
+    const m=all[mes]||{};
+    Object.entries(_FIM_RENAMES).forEach(([viejo,nuevo])=>{
+      if(viejo in m){ if(!(nuevo in m)) m[nuevo]=m[viejo]; delete m[viejo]; cambio=true; }
+    });
+  });
+  return cambio;
+}
+function finIngMaqGet(mes){
+  try{
+    const all=JSON.parse(localStorage.getItem(FIN_ING_MAQ_KEY)||'{}');
+    if(_fimMigrarNombres(all)){
+      localStorage.setItem(FIN_ING_MAQ_KEY,JSON.stringify(all));
+      try{ sbSyncModulo('fin_ing_maq', all); }catch(e){}
+    }
+    return all[mes]||{};
+  }catch(e){return {};}
+}
 function finIngMaqSet(mes,data){try{const all=JSON.parse(localStorage.getItem(FIN_ING_MAQ_KEY)||'{}');all[mes]=data;localStorage.setItem(FIN_ING_MAQ_KEY,JSON.stringify(all));
   try{ sbSyncModulo('fin_ing_maq', all); }catch(e){}  // nube: ingreso por máquina vinculado al dashboard
   }catch(e){}}
