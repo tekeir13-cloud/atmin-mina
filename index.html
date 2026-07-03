@@ -5557,7 +5557,7 @@ function _rtAplicarModulo(modulo, data){
     case 'comb_gas':           if(Array.isArray(data)){ setLS('atmin_comb_gasolina', data); } break;
     case 'fin_ing_maq':        if(data&&typeof data==='object'){ setLS('atmin_fin_ing_maq', data); } break;
     case 'historial_periodos': if(Array.isArray(data)){ state.historialPeriodos=data; setLS('atmin_historial_periodos', data); } break;
-    case 'seguridad':          if(Array.isArray(data)){ const mm=(typeof seguridadDedup==='function')?seguridadDedup([ ...data, ...(state.seguridad||[]) ]):data; mm.sort((a,b)=>(b.id||0)-(a.id||0)); state.seguridad=mm; setLS('atmin_seguridad', mm); try{ if(typeof segBadgeUpdate==='function') segBadgeUpdate(); }catch(e){} } break;
+    case 'seguridad':          if(Array.isArray(data)){ let mm=(typeof seguridadDedup==='function')?seguridadDedup([ ...data, ...(state.seguridad||[]) ]):data; mm.sort((a,b)=>(b.id||0)-(a.id||0)); if(typeof _segStripFotos==='function') mm=_segStripFotos(mm); state.seguridad=mm; setLS('atmin_seguridad', mm); try{ if(typeof segBadgeUpdate==='function') segBadgeUpdate(); }catch(e){} } break;
     default: break;
   }
 }
@@ -14317,7 +14317,7 @@ function renderSeguridad(){
       : `<div style="width:100%;height:160px;background:var(--coal3);display:flex;align-items:center;
                      justify-content:center;flex-direction:column;gap:8px">
            <div style="font-size:32px">📷</div>
-           <div style="font-size:10px;color:var(--text3)">Sin foto</div>
+           <div style="font-size:10px;color:var(--text3)">${r._fotoEliminada?'Foto liberada por espacio':'Sin foto'}</div>
          </div>`;
 
     return `
@@ -14414,7 +14414,21 @@ const SEG_KEY='atmin_seguridad';
 function _segSig(r){ return [r&&r.fecha||'',r&&r.hora||'',r&&r.frente||'',r&&r.turno||'',((r&&r.registrado)||'').trim(),((r&&r.obs)||'').trim()].join('|'); }
 function seguridadDedup(arr){ const seen=new Set(),out=[]; (arr||[]).forEach(r=>{ if(!r)return; const k=_segSig(r); if(seen.has(k))return; seen.add(k); out.push(r); }); return out; }
 function seguridadLoad(){ try{ const d=JSON.parse(localStorage.getItem(SEG_KEY)||'[]'); if(Array.isArray(d)&&d.length) state.seguridad=d; }catch(e){} }
-function seguridadSave(){ try{ localStorage.setItem(SEG_KEY, JSON.stringify(state.seguridad||[])); }catch(e){} try{ sbSyncModulo('seguridad', state.seguridad||[]); }catch(e){} }
+// Elimina las FOTOS en base64 (pesadas, llenan el almacenamiento). Conserva las fotos que sean
+// enlaces de Supabase Storage (http…), que son livianas. Deja marca _fotoEliminada para la vista.
+function _segStripFotos(arr){
+  return (arr||[]).map(r=>{
+    if(r && typeof r.foto==='string' && r.foto.indexOf('data:')===0){
+      const {foto, ...rest}=r; return {...rest, _fotoEliminada:true};
+    }
+    return r;
+  });
+}
+function seguridadSave(){
+  try{ state.seguridad=_segStripFotos(state.seguridad||[]); }catch(e){}   // no guardar fotos base64
+  try{ localStorage.setItem(SEG_KEY, JSON.stringify(state.seguridad||[])); }catch(e){}
+  try{ sbSyncModulo('seguridad', state.seguridad||[]); }catch(e){}
+}
 async function cargarSeguridadSB(){
   try{
     seguridadLoad(); // 1) local primero
@@ -14431,12 +14445,13 @@ async function cargarSeguridadSB(){
       }
     }catch(e){}
     // Combinar las tres fuentes sin duplicar (por contenido: fecha+hora+frente+turno+registrado+obs)
-    const merged = seguridadDedup([ ...(state.seguridad||[]), ...(Array.isArray(segNube)?segNube:[]), ...tabla ]);
+    let merged = seguridadDedup([ ...(state.seguridad||[]), ...(Array.isArray(segNube)?segNube:[]), ...tabla ]);
     // Ordenar por id desc (más reciente primero)
     merged.sort((a,b)=>(b.id||0)-(a.id||0));
+    merged = _segStripFotos(merged);   // limpiar fotos base64 (liberar almacenamiento)
     state.seguridad = merged;
     try{ localStorage.setItem(SEG_KEY, JSON.stringify(merged)); }catch(e){}
-    // Re-subir el consolidado a app_modulos (migra lo que estaba solo en la tabla dedicada)
+    // Re-subir el consolidado (ya sin fotos base64) a app_modulos
     if(merged.length){ try{ sbSyncModulo('seguridad', merged); }catch(e){} }
     try{ if(typeof segBadgeUpdate==='function') segBadgeUpdate(); }catch(e){}
   }catch(e){ console.warn('carga seguridad', e); }
