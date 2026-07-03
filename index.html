@@ -6786,11 +6786,16 @@ function fmtS2(n){return 'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFra
 
 // Rellena un <select> de filtro de almacén con los almacenes realmente presentes en el stock,
 // conservando la selección actual. Primera opción: "Todos los almacenes" (value vacío).
+// Etiqueta visible para cada almacén (el valor interno 'General' se muestra como "Insumos")
+function almLabel(a){ return a==='General' ? 'Insumos' : a; }
 function poblarFiltroAlmacenes(selId){
   const sel=document.getElementById(selId); if(!sel) return;
   const cur=sel.value;
-  const alms=[...new Set((calcStock()||[]).map(r=>r.almacen).filter(Boolean))].sort();
-  sel.innerHTML='<option value="">Todos los almacenes</option>'+alms.map(a=>`<option value="${escAttr(a)}">${a}</option>`).join('');
+  // Siempre ofrecer Insumos (General) y Mantenimiento, más cualquier otro almacén presente
+  const presentes=[...new Set((calcStock()||[]).map(r=>r.almacen).filter(Boolean))];
+  const base=['General','Mantenimiento'];
+  const alms=[...new Set([...base,...presentes])].sort((x,y)=>almLabel(x).localeCompare(almLabel(y)));
+  sel.innerHTML='<option value="">Todos los almacenes</option>'+alms.map(a=>`<option value="${escAttr(a)}">${escAttr(almLabel(a))}</option>`).join('');
   if(cur && alms.includes(cur)) sel.value=cur;
 }
 function renderStockVigente(){
