@@ -14190,51 +14190,32 @@ async function guardarReporteSeguridad(){
 
   if(!fecha){ showNotif('Selecciona la fecha','error'); return; }
 
+  // Subir la foto a Supabase Storage (liviana + visible en todos los dispositivos).
+  // NUNCA se guarda base64 en el snapshot (eso saturaba el navegador). Si Storage falla, se avisa.
+  let fotoUrl = null, fotoFallo = false;
+  if(segFotoBase64){
+    showNotif('📤 Subiendo foto…');
+    fotoUrl = (typeof subirFotoStorage==='function') ? await subirFotoStorage(segFotoBase64,'seguridad') : null;
+    if(!fotoUrl) fotoFallo = true;
+  }
+
   const nv = {
     id:         Date.now(),
-    fecha,
-    hora,
-    frente,
-    turno,
-    obs,
-    foto:       segFotoBase64 || null,
+    fecha, hora, frente, turno, obs,
+    foto:       fotoUrl,   // solo enlace de Storage (liviano); sin base64
     registrado: usuarioActivo ? usuarioActivo.nombre : '—',
     created_at: new Date().toISOString(),
   };
 
-  // Guardar en Supabase
+  // Respaldo en tabla dedicada (sin base64)
   try {
-    let fotoUrl = null;
-
-    // Si hay foto, subir a Supabase Storage
-    if(segFotoBase64 && window.sbStorage){
-      try{
-        const blob = await fetch(segFotoBase64).then(r=>r.blob());
-        const ext  = blob.type.includes('png')?'png':'jpg';
-        const path = `seguridad/${fecha}-${Date.now()}.${ext}`;
-        const { data:upData, error:upErr } = await sb.storage
-          .from('reportes-fotos')
-          .upload(path, blob, { contentType: blob.type, upsert: true });
-        if(!upErr){
-          const { data:urlData } = sb.storage.from('reportes-fotos').getPublicUrl(path);
-          fotoUrl = urlData.publicUrl;
-        }
-      }catch(e){ console.warn('Storage no configurado, guardando en local'); }
-    }
-
     await sb.from('reportes_seguridad').insert([{
-      fecha, hora,
-      frente,
-      turno,
-      obs,
-      foto_url:    fotoUrl,
-      foto_base64: !fotoUrl ? segFotoBase64 : null,
+      fecha, hora, frente, turno, obs,
+      foto_url: fotoUrl, foto_base64: null,
       registrado_por: nv.registrado,
       mes_id: getMesId ? getMesId() : null,
     }]);
-  } catch(e){
-    console.warn('Sin Supabase — guardando localmente:', e.message);
-  }
+  } catch(e){ console.warn('Sin Supabase — guardando localmente:', e.message); }
 
   if(!state.seguridad) state.seguridad = [];
   state.seguridad.unshift(nv);
@@ -14244,7 +14225,8 @@ async function guardarReporteSeguridad(){
 
   cerrarModal('modal-seguridad');
   renderSeguridad();
-  showNotif('✓ Reporte de seguridad guardado');
+  if(fotoFallo) showNotif('✓ Reporte guardado, pero la foto NO se subió (revisa el bucket "reportes-fotos" en Supabase).','error');
+  else showNotif('✓ Reporte de seguridad guardado');
 }
 
 // ── Badge de reportes de seguridad no leídos ──────────────────
