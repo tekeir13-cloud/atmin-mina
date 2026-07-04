@@ -4234,11 +4234,21 @@ async function cargarAlmacenCombustibleSB(){
       // Unir movimientos de nube + locales (por id) → recupera lo que un equipo tenga y la nube haya perdido
       ingFinal = (typeof mergeSnapById==='function') ? mergeSnapById(ingFinal, almLocalPrev.ingresos||[]) : ingFinal;
       salFinal = (typeof mergeSnapById==='function') ? mergeSnapById(salFinal, almLocalPrev.salidas||[]) : salFinal;
+      // Explosivos NV3190: unir ingresos y salidas de nube + locales, igual que los demás
+      // movimientos, para no perder salidas recién registradas por Logística que aún no
+      // llegaron a la nube (antes se tomaba la nube tal cual y se borraban).
+      const exNube=almNube.explosivos||{ingresos:[],salidas:[]};
+      const exLoc=almLocalPrev.explosivos||{ingresos:[],salidas:[]};
+      const exFinal=(typeof mergeSnapById==='function')
+        ? { ...exNube,
+            ingresos: mergeSnapById(exNube.ingresos||[], exLoc.ingresos||[]),
+            salidas:  mergeSnapById(exNube.salidas||[],  exLoc.salidas||[]) }
+        : (almNube.explosivos||{ingresos:[],salidas:[]});
       state.almacen={
         ingresos:ingFinal, salidas:salFinal,
         inventarioInicial:invFinal, historialMeses:almNube.historialMeses||[],
         productos:productosFinales, solicitudesCompra:almNube.solicitudesCompra||[],
-        explosivos:almNube.explosivos||{ingresos:[],salidas:[]},
+        explosivos:exFinal,
         catalogVersion:8
       };
       // La nube viene sin fotos (se suben ligeras); devolver las fotos guardadas en este equipo
@@ -5542,7 +5552,7 @@ function _rtAplicarModulo(modulo, data){
   const setLS=(k,v)=>{ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} };
   const M=(typeof mergeSnapById==='function')?mergeSnapById:((a,b)=>b||a||[]);
   switch(modulo){
-    case 'almacen':            if(data&&typeof data==='object'){ let a=Object.assign(state.almacen||{}, data); try{ if(typeof _almRestaurarFotos==='function') a=_almRestaurarFotos(a); }catch(e){} state.almacen=a; setLS('atmin_almacen', state.almacen); } break;
+    case 'almacen':            if(data&&typeof data==='object'){ const prevAlm=state.almacen||{}; let a=Object.assign({}, prevAlm, data); if(typeof mergeSnapById==='function'){ a.ingresos=mergeSnapById(data.ingresos||[], prevAlm.ingresos||[]); a.salidas=mergeSnapById(data.salidas||[], prevAlm.salidas||[]); const exN=data.explosivos||prevAlm.explosivos||{ingresos:[],salidas:[]}, exP=prevAlm.explosivos||{ingresos:[],salidas:[]}; a.explosivos={...exN, ingresos:mergeSnapById(exN.ingresos||[], exP.ingresos||[]), salidas:mergeSnapById(exN.salidas||[], exP.salidas||[])}; } try{ if(typeof _almRestaurarFotos==='function') a=_almRestaurarFotos(a); }catch(e){} state.almacen=a; setLS('atmin_almacen', state.almacen); } break;
     case 'personal':           if(Array.isArray(data)){ state.personal=data; setLS('atmin_personal_snap', data); } break;
     case 'tareas':             if(Array.isArray(data)){ state.tareas=data; setLS('atmin_tareas_snap', data); } break;
     case 'reportes_guardia':   if(Array.isArray(data)){ state.reportesGuardia=M(state.reportesGuardia||[], data); setLS('atmin_reportes_guardia', state.reportesGuardia); try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){} } break;
