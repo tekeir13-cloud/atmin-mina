@@ -4221,6 +4221,13 @@ async function cargarAlmacenCombustibleSB(){
     const almNube = await sbLoadModulo('almacen');
     // A partir de aquí ya leímos la nube: habilitar escritura (incl. bootstrap)
     CLOUD_SYNC_READY = true;
+    // ── TOMBSTONES: cargar el registro de borrados ANTES de unir cualquier módulo,
+    // para que los merges por id no resuciten registros eliminados en otro equipo ──
+    try{
+      const tombNube = await sbLoadModulo('tombstones');
+      if(typeof tombMerge==='function') tombMerge(tombNube);
+      if(typeof tombLoad==='function' && Object.keys(tombLoad()).length) await sbSyncModulo('tombstones', tombLoad());
+    }catch(e){}
     if(almNube && (((almNube.ingresos||[]).length)||((almNube.salidas||[]).length)||((almNube.inventarioInicial||[]).length))){
       // La nube manda: reemplaza el estado local y persiste
       // Verificar si el catálogo en nube es viejo (PRD- o sin versión) → usar catálogo nuevo
@@ -4460,6 +4467,9 @@ async function cargarAlmacenCombustibleSB(){
         }
       }catch(e){}
     }
+    // Purga final: descarta del estado en memoria cualquier registro marcado como borrado
+    // (cubre los módulos que se reemplazan al por mayor y no pasan por mergeSnapById)
+    try{ if(typeof tombPurgarState==='function') tombPurgarState(); }catch(e){}
     if(typeof renderAlmacen==='function' && document.getElementById('log-almacen')) renderAlmacen();
     if(typeof renderDashboard==='function') renderDashboard();
   }catch(e){ console.error('cargarAlmacenCombustibleSB:',e); }
@@ -4820,6 +4830,7 @@ function guardarRemSalida(){
 }
 function eliminarRemSalida(id){
   if(!confirm('¿Eliminar esta salida de remanente?'))return;
+  if(typeof tombAdd==='function')tombAdd(id);
   state.remanenteSalidas=(state.remanenteSalidas||[]).filter(s=>s.id!==id);
   remSalSave();
   renderStockRemanente();
@@ -5676,7 +5687,8 @@ function _rtAplicarModulo(modulo, data){
     case 'comb_gas':           if(Array.isArray(data)){ setLS('atmin_comb_gasolina', data); } break;
     case 'fin_ing_maq':        if(data&&typeof data==='object'){ try{ if(typeof _fimMigrarNombres==='function') _fimMigrarNombres(data); }catch(e){} setLS('atmin_fin_ing_maq', data); } break;
     case 'historial_periodos': if(Array.isArray(data)){ state.historialPeriodos=data; setLS('atmin_historial_periodos', data); } break;
-    case 'seguridad':          if(Array.isArray(data)){ let mm=(typeof seguridadDedup==='function')?seguridadDedup([ ...data, ...(state.seguridad||[]) ]):data; mm.sort((a,b)=>(b.id||0)-(a.id||0)); if(typeof _segStripFotos==='function') mm=_segStripFotos(mm); state.seguridad=mm; setLS('atmin_seguridad', mm); try{ if(typeof segBadgeUpdate==='function') segBadgeUpdate(); }catch(e){} } break;
+    case 'seguridad':          if(Array.isArray(data)){ let mm=(typeof seguridadDedup==='function')?seguridadDedup([ ...data, ...(state.seguridad||[]) ]):data; mm=mm.filter(r=>!(r&&typeof _segSig==='function'&&typeof tombHas==='function'&&tombHas('seg:'+_segSig(r)))); mm.sort((a,b)=>(b.id||0)-(a.id||0)); if(typeof _segStripFotos==='function') mm=_segStripFotos(mm); state.seguridad=mm; setLS('atmin_seguridad', mm); try{ if(typeof segBadgeUpdate==='function') segBadgeUpdate(); }catch(e){} } break;
+    case 'tombstones':         if(data&&typeof data==='object'&&!Array.isArray(data)){ if(typeof tombMerge==='function'&&tombMerge(data)){ if(typeof tombPurgarState==='function') tombPurgarState(); } } break;
     default: break;
   }
 }
@@ -7204,10 +7216,12 @@ function guardarSalida(){
 }
 function eliminarIngreso(id){
   if(!confirm('¿Eliminar este ingreso?'))return;
+  if(typeof tombAdd==='function')tombAdd(id);
   state.almacen.ingresos=state.almacen.ingresos.filter(i=>i.id!==id);almacenSave();renderAlmacen();renderHistorialAlmacen();showNotif('Ingreso eliminado','warn');
 }
 function eliminarSalida(id){
   if(!confirm('¿Eliminar esta salida?'))return;
+  if(typeof tombAdd==='function')tombAdd(id);
   state.almacen.salidas=state.almacen.salidas.filter(s=>s.id!==id);almacenSave();renderAlmacen();renderHistorialAlmacen();showNotif('Salida eliminada','warn');
 }
 
@@ -10606,9 +10620,50 @@ function reportesGuardiaLoad(){try{const d=localStorage.getItem(RG_KEY);if(d)sta
 const PERSONAL_KEY='atmin_personal_snap';
 const TAREAS_KEY='atmin_tareas_snap';
 // Une dos listas por 'id' sin duplicar; los elementos de 'a' ganan en conflicto.
+// ── TOMBSTONES (registro de borrados) ──
+// Los merges por unión ("local gana") resucitaban registros eliminados: si un equipo borraba
+// una salida, otro equipo que aún la tenía la re-subía al sincronizar. Este registro guarda los
+// ids eliminados (con fecha) en localStorage + nube (módulo 'tombstones') y todos los merges
+// filtran contra él. Se poda a 90 días para que no crezca sin límite.
+const TOMB_KEY='atmin_tombstones';
+let _tombs=null;
+function tombLoad(){ if(_tombs) return _tombs; try{ _tombs=JSON.parse(localStorage.getItem(TOMB_KEY)||'{}')||{}; }catch(e){ _tombs={}; } return _tombs; }
+function tombPrune(){ const t=tombLoad(); const lim=Date.now()-1000*60*60*24*90; Object.keys(t).forEach(k=>{ if(!(t[k]>lim)) delete t[k]; }); }
+function tombPersist(){ try{ localStorage.setItem(TOMB_KEY,JSON.stringify(tombLoad())); }catch(e){} }
+function tombAdd(id){
+  if(id==null||id==='') return;
+  const t=tombLoad(); t[String(id)]=Date.now(); tombPrune(); tombPersist();
+  try{ if(typeof sbSyncModulo==='function') sbSyncModulo('tombstones', tombLoad()); }catch(e){}
+}
+function tombHas(id){ return id!=null && !!tombLoad()[String(id)]; }
+// Une tombstones remotos (nube/tiempo real) con los locales conservando el timestamp más nuevo.
+function tombMerge(remote){
+  if(!remote||typeof remote!=='object'||Array.isArray(remote)) return false;
+  const t=tombLoad(); let ch=false;
+  Object.entries(remote).forEach(([k,v])=>{ const n=Number(v)||0; if(!t[k]||n>t[k]){ t[k]=n; ch=true; } });
+  if(ch){ tombPrune(); tombPersist(); }
+  return ch;
+}
+// Purga del estado en memoria los registros ya marcados como borrados (para arrays que se
+// reemplazan al por mayor y no pasan por mergeSnapById).
+function tombPurgarState(){
+  try{
+    const f=arr=>(arr||[]).filter(r=>!(r&&r.id!=null&&tombHas(r.id)));
+    if(state.almacen){
+      state.almacen.ingresos=f(state.almacen.ingresos); state.almacen.salidas=f(state.almacen.salidas);
+      if(state.almacen.explosivos){ state.almacen.explosivos.ingresos=f(state.almacen.explosivos.ingresos); state.almacen.explosivos.salidas=f(state.almacen.explosivos.salidas); }
+    }
+    state.reportesGuardia=f(state.reportesGuardia);
+    state.remanenteSalidas=f(state.remanenteSalidas);
+    state.mantenimiento=f(state.mantenimiento);
+    state.reuniones=f(state.reuniones);
+    // Seguridad no usa id como clave de dedupe: sus tombstones van por firma 'seg:'+_segSig(r)
+    state.seguridad=(state.seguridad||[]).filter(r=>!(r&&typeof _segSig==='function'&&tombHas('seg:'+_segSig(r))));
+  }catch(e){}
+}
 function mergeSnapById(a,b){
   const out=[],seen=new Set();
-  const add=r=>{ if(!r)return; const k=(r.id!=null)?('id:'+r.id):('j:'+JSON.stringify(r)); if(seen.has(k))return; seen.add(k); out.push(r); };
+  const add=r=>{ if(!r)return; if(r.id!=null&&tombHas(r.id))return; const k=(r.id!=null)?('id:'+r.id):('j:'+JSON.stringify(r)); if(seen.has(k))return; seen.add(k); out.push(r); };
   (a||[]).forEach(add); (b||[]).forEach(add);
   return out;
 }
@@ -10638,7 +10693,7 @@ function mergeMantKits(local,nube){
   const out=Array.from(map.values());
   (local||[]).forEach(r=>{ if(r&&r.id==null) out.push(r); });
   (nube||[]).forEach(r=>{ if(r&&r.id==null) out.push(r); });
-  return out;
+  return out.filter(r=>!(r&&r.id!=null&&typeof tombHas==='function'&&tombHas(r.id)));
 }
 function personalSave(){try{localStorage.setItem(PERSONAL_KEY,JSON.stringify(state.personal||[]));}catch(e){} try{ sbSyncModulo('personal', state.personal||[]); }catch(e){}}
 function tareasSave(){try{localStorage.setItem(TAREAS_KEY,JSON.stringify(state.tareas||[]));}catch(e){} try{ sbSyncModulo('tareas', state.tareas||[]); }catch(e){}}
@@ -10790,6 +10845,7 @@ function editarReporteGuardia(id){
 
 function eliminarReporteGuardia(id){
   if(!confirm('¿Eliminar este reporte de guardia?'))return;
+  if(typeof tombAdd==='function')tombAdd(id);
   state.reportesGuardia=(state.reportesGuardia||[]).filter(r=>r.id!==id);
   // También limpia la perforación derivada de este reporte antes de refrescar tableros
   state.perforacion=(state.perforacion||[]).filter(p=>p._rg!==id);
@@ -11066,6 +11122,7 @@ function editarReunion(id){
 }
 function eliminarReunion(id){
   if(!confirm('¿Eliminar este reporte de reunión?'))return;
+  if(typeof tombAdd==='function')tombAdd(id);
   state.reuniones=(state.reuniones||[]).filter(r=>r.id!==id);
   reunionesSave();renderReuniones();showNotif('✓ Reporte eliminado');
 }
@@ -12038,7 +12095,12 @@ function eliminarKitMant(id){
   if(!confirm('¿Eliminar esta solicitud de kit?'))return;
   const m=(state.mantenimiento||[]).find(x=>x.id===id);
   // Reponer stock solo si Logística había aprobado el despacho (stock descontado)
-  if(m&&m.aprobLog&&m.aprobLog.ok){state.almacen=state.almacen||{};state.almacen.salidas=(state.almacen.salidas||[]).filter(s=>s.grupo!=='KIT-'+m.id);almacenSave();}
+  if(m&&m.aprobLog&&m.aprobLog.ok){
+    state.almacen=state.almacen||{};
+    if(typeof tombAdd==='function')(state.almacen.salidas||[]).forEach(s=>{ if(s.grupo==='KIT-'+m.id) tombAdd(s.id); });
+    state.almacen.salidas=(state.almacen.salidas||[]).filter(s=>s.grupo!=='KIT-'+m.id);almacenSave();
+  }
+  if(typeof tombAdd==='function')tombAdd(id);
   state.mantenimiento=(state.mantenimiento||[]).filter(x=>x.id!==id);
   mantKitSave();renderMantenimiento();showNotif('✓ Solicitud eliminada');
 }
@@ -14772,6 +14834,9 @@ function verFotoSeg(i){
 
 function eliminarReporteSeg(i){
   if(!confirm('¿Eliminar este reporte?')) return;
+  // Seguridad se deduplica por FIRMA (no por id): el tombstone usa la misma firma
+  const rDel=state.seguridad[i];
+  if(rDel&&typeof tombAdd==='function'&&typeof _segSig==='function') tombAdd('seg:'+_segSig(rDel));
   state.seguridad.splice(i,1);
   if(typeof seguridadSave==='function') seguridadSave();
   renderSeguridad();
