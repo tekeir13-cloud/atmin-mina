@@ -4252,6 +4252,8 @@ async function cargarAlmacenCombustibleSB(){
     }
     // Apertura de explosivos NV3190 (una sola vez): fija el stock nuevo con 0 movimientos
     try{ if(typeof aplicarAperturaExplosivos==='function') aplicarAperturaExplosivos(); }catch(e){}
+    // Reconstruye las salidas de explosivos perdidas por el bug de la foto del vale (una sola vez)
+    try{ if(typeof reconstruirSalidasExplosivos==='function') reconstruirSalidasExplosivos(); }catch(e){}
     // EPP enviados a NV2820 (fueron consumidos por operarios): sacarlos del subalmacén
     try{ if(typeof migrarEppSalidas2820==='function') migrarEppSalidas2820(); }catch(e){}
     // ── COMBUSTIBLE ──
@@ -7365,6 +7367,37 @@ function aplicarAperturaExplosivos(){
     }));
     state.almacen.explosivos={ ingresos, salidas:[] };  // stock = apertura, 0 movimientos
     state.almacen.exploAperturaV=EXPLO_APERTURA_V;
+    try{ localStorage.setItem(ALM_KEY, JSON.stringify(state.almacen)); }catch(e){}
+    try{ if(typeof sbSyncModulo==='function') sbSyncModulo('almacen', (typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
+    return true;
+  }catch(e){ return false; }
+}
+// Migración (una sola vez): reconstruye las salidas de explosivos NV3190 que se perdieron
+// (se registraron con foto del vale, la cuota de almacenamiento rompió el guardado y nunca
+// subieron a la nube; al recargar el stock volvió a los valores de apertura). Se reponen como
+// UN ajuste por explosivo para que el stock quede en el valor final real que reportó Logística:
+//   EMULNOR 1000=164 · 3000=1292 · 5000=680 · CARMEX 1.8=323 · CARMEX 2.40=343 · FAME=538 · MECHA=804 m
+// Cantidad de salida = apertura − final. Id fijo → mergeSnapById evita duplicados entre equipos.
+const EXPLO_AJUSTE_SALIDAS_V=1;
+const EXPLO_AJUSTE_SALIDAS={ M1000:60, M3000:809, M5000:899, CARMEX18:258, NEITHER:85 };
+function reconstruirSalidasExplosivos(){
+  try{
+    state.almacen=state.almacen||{};
+    if((state.almacen.exploAjusteSalidasV||0)>=EXPLO_AJUSTE_SALIDAS_V) return false;
+    // Solo aplica si el stock está en apertura (sin salidas previas): evita descontar de más
+    // en un equipo que sí conserve las salidas reales.
+    const exp=state.almacen.explosivos||{ingresos:[],salidas:[]};
+    const yaHaySalidas=(exp.salidas||[]).some(s=>s.vale!=='AJUSTE-RECUP');
+    if(yaHaySalidas){ state.almacen.exploAjusteSalidasV=EXPLO_AJUSTE_SALIDAS_V; return false; }
+    if(!state.almacen.explosivos) state.almacen.explosivos={ingresos:[],salidas:[]};
+    Object.entries(EXPLO_AJUSTE_SALIDAS).forEach(([id,q])=>{
+      if(!q) return;
+      state.almacen.explosivos.salidas.push({
+        id:'ESADJ-'+id, fecha:'2026-07-04', vale:'AJUSTE-RECUP', producto:id,
+        cajas:0, unidades:Number(q)||0, totalUnidades:Number(q)||0, destino:'Almacen NV2820'
+      });
+    });
+    state.almacen.exploAjusteSalidasV=EXPLO_AJUSTE_SALIDAS_V;
     try{ localStorage.setItem(ALM_KEY, JSON.stringify(state.almacen)); }catch(e){}
     try{ if(typeof sbSyncModulo==='function') sbSyncModulo('almacen', (typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
     return true;
