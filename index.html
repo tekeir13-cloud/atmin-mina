@@ -2907,6 +2907,7 @@ select option{background:var(--coal3);}
       <div class="kpi-card"><div class="kpi-label">Taladros Perforados Hoy</div><div class="kpi-value warn" id="op-tperf-hoy">—</div><div class="kpi-sub" id="op-tperf-sub">—</div></div>
       <div class="kpi-card"><div class="kpi-label">Taladros Cargados Hoy</div><div class="kpi-value gold" id="op-tcarg-hoy">—</div><div class="kpi-sub" id="op-tcarg-sub">—</div></div>
       <div class="kpi-card"><div class="kpi-label">Reportes Hoy</div><div class="kpi-value blue" id="op-rep-hoy">—</div><div class="kpi-sub">turnos cargados</div></div>
+      <div class="kpi-card"><div class="kpi-label">Cimbras Instaladas Hoy</div><div class="kpi-value warn" id="op-cimbras-hoy">—</div><div class="kpi-sub" id="op-cimbras-hoy-sub">—</div></div>
     </div>
     <div style="font-size:12px;color:var(--text3);margin:18px 0 8px">📆 Acumulado del Mes <strong id="op-mes-label" style="color:var(--text2)"></strong> — suma de todos los reportes del mes por frente.</div>
     <div class="two-col" id="op-mes-frentes" style="margin-bottom:18px"></div>
@@ -10573,6 +10574,16 @@ function renderAvance(){
   g('op-tperf-hoy',tperf);g('op-tperf-sub',`Brenda: ${brTperf} · CRNE: ${crTperf}`);
   g('op-tcarg-hoy',tcarg);g('op-tcarg-sub',`Brenda: ${brTcarg} · CRNE: ${crTcarg}`);
   g('op-rep-hoy',hoyRep.length);
+  // ── Cimbras instaladas HOY (suma de todos los frentes, incluye frentes extra) ──
+  const sumCimbras=(arr)=>(arr||[]).reduce((s,r)=>{
+    let c=(r.brenda?.cimbra||0)+(r.crne?.cimbra||0);
+    (r.frentesExtra||[]).forEach(f=>c+=(f.cimbra||0));
+    return s+c;
+  },0);
+  const cimbHoy=sumCimbras(hoyRep);
+  const cimHoyF1=sum('brenda','cimbra'), cimHoyF2=sum('crne','cimbra');
+  g('op-cimbras-hoy',cimbHoy);
+  g('op-cimbras-hoy-sub',`Brenda: ${cimHoyF1} · CRNE: ${cimHoyF2}`);
 
   // ── Acumulado del mes por frente (misma fuente y misma meta que el Tablero de Operaciones) ──
   const mesLbl=document.getElementById('op-mes-label');if(mesLbl)mesLbl.textContent='· '+finNombreMes(mesAct);
@@ -10986,6 +10997,15 @@ function renderTableroOp(){
   // Taladros hoy
   const tperfHoy=sumF(rgHoy,'brenda','tperf')+sumF(rgHoy,'crne','tperf');
   const tcargHoy=sumF(rgHoy,'brenda','tcarg')+sumF(rgHoy,'crne','tcarg');
+  // Cimbras instaladas (reportadas por los Jefes de Guardia): hoy y acumulado del mes, por frente
+  const sumCimbrasT=(arr)=>arr.reduce((s,r)=>{
+    let c=(r.brenda?.cimbra||0)+(r.crne?.cimbra||0);
+    (r.frentesExtra||[]).forEach(f=>c+=(f.cimbra||0));
+    return s+c;
+  },0);
+  const cimbHoyT=sumCimbrasT(rgHoy), cimbMesT=sumCimbrasT(rgMes);
+  const cimbMesF1=sumF(rgMes,'brenda','cimbra'), cimbMesF2=sumF(rgMes,'crne','cimbra');
+  const cimbHoyF1=sumF(rgHoy,'brenda','cimbra'), cimbHoyF2=sumF(rgHoy,'crne','cimbra');
   // Personal distribuido
   const dist=state.distribucion||{};
   const persF1=Object.values(dist).filter(f=>f==1).length;
@@ -11003,9 +11023,11 @@ function renderTableroOp(){
     <div class="kpi-card"><div class="kpi-label">Cumplimiento Mes</div><div class="kpi-value ${pcTot>=100?'green':(pcTot>=60?'warn':'red')}">${pcTot}%</div><div class="kpi-sub">del programa</div></div>
     <div class="kpi-card"><div class="kpi-label">Taladros Hoy</div><div class="kpi-value warn">${tperfHoy} / ${tcargHoy}</div><div class="kpi-sub">perf. / carg.</div></div>
     <div class="kpi-card"><div class="kpi-label">Personal en Frentes</div><div class="kpi-value blue">${persF1+persF2}</div><div class="kpi-sub">Brenda ${persF1} · CRNE ${persF2}</div></div>
-    <div class="kpi-card"><div class="kpi-label">Masas / Explosivos Hoy</div><div class="kpi-value gold">${masasHoy}</div><div class="kpi-sub">unidades consumidas</div></div>`;
+    <div class="kpi-card"><div class="kpi-label">Masas / Explosivos Hoy</div><div class="kpi-value gold">${masasHoy}</div><div class="kpi-sub">unidades consumidas</div></div>
+    <div class="kpi-card"><div class="kpi-label">Cimbras Hoy</div><div class="kpi-value warn">${cimbHoyT}</div><div class="kpi-sub">Brenda ${cimbHoyF1} · CRNE ${cimbHoyF2}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Cimbras Mes</div><div class="kpi-value blue">${cimbMesT}</div><div class="kpi-sub">acumulado · Brenda ${cimbMesF1} · CRNE ${cimbMesF2}</div></div>`;
   // Frentes
-  const frenteCard=(nom,color,mes,meta,pc,hoyM,pers,ritmoObj)=>`
+  const frenteCard=(nom,color,mes,meta,pc,hoyM,pers,ritmoObj,cimbMes,cimbHoy)=>`
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <div class="section-title" style="margin:0;font-size:13px;color:${color}">${nom}</div>
@@ -11017,12 +11039,16 @@ function renderTableroOp(){
         <div><div style="font-size:10px;color:var(--text3)">Hoy</div><div style="font-size:13px;font-weight:700;color:var(--text)">${hoyM.toFixed(1)} m</div></div>
         <div><div style="font-size:10px;color:var(--text3)">Personal</div><div style="font-size:13px;font-weight:700;color:var(--text)">${pers}</div></div>
       </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;border-top:1px solid var(--border);padding-top:8px">
+        <div><div style="font-size:10px;color:var(--text3)">Cimbras mes</div><div style="font-size:13px;font-weight:700;color:#fbbf24">${cimbMes}</div></div>
+        <div><div style="font-size:10px;color:var(--text3)">Cimbras hoy</div><div style="font-size:13px;font-weight:700;color:var(--text)">${cimbHoy}</div></div>
+      </div>
       <div style="font-size:11px;color:var(--text3);margin-top:8px">Ritmo objetivo: ${ritmoObj} m/día</div>
     </div>`;
   const tf=document.getElementById('tab-frentes');
   if(tf)tf.innerHTML='<div class="two-col">'+
-    frenteCard('🟦 RA Brenda','#60a5fa',mesF1,metaMesF1,pcF1,hoyF1,persF1,(metaMesF1/dias).toFixed(1))+
-    frenteCard('🟩 CRNE','#34d399',mesF2,metaMesF2,pcF2,hoyF2,persF2,(metaMesF2/dias).toFixed(1))+
+    frenteCard('🟦 RA Brenda','#60a5fa',mesF1,metaMesF1,pcF1,hoyF1,persF1,(metaMesF1/dias).toFixed(1),cimbMesF1,cimbHoyF1)+
+    frenteCard('🟩 CRNE','#34d399',mesF2,metaMesF2,pcF2,hoyF2,persF2,(metaMesF2/dias).toFixed(1),cimbMesF2,cimbHoyF2)+
     '</div>';
   // Alertas
   const alertas=[];
