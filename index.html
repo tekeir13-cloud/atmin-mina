@@ -5071,14 +5071,15 @@ function renderDashEjecutivo(){
   const pctMargen=val.total>0?Math.round(margen/val.total*100):0;
 
   // ── METROS POR FRENTE (mes en curso) — solo Frente 1 (Brenda) y Frente 2 (Cortada) ──
-  const perfMes=(state.perforacion||[]).filter(p=>((typeof enVentana==='function')?enVentana(p.fecha,mes):(p.fecha||'').startsWith(mes))&&(p.frente===1||p.frente===2));
+  const perfMes=(state.perforacion||[]).filter(p=>((typeof filtroMes==='function')?filtroMes(p.fecha,mes):(p.fecha||'').startsWith(mes))&&(p.frente===1||p.frente===2));
   const frentes=[...new Set(perfMes.map(p=>p.frente))].sort();
-  const metrosTot=perfMes.reduce((s,p)=>s+(p.metros||0),0);
+  const r1m=n=>Math.round((Number(n)||0)*10)/10;   // redondeo a 1 decimal (evita 3.4000000004)
+  const metrosTot=r1m(perfMes.reduce((s,p)=>s+(p.metros||0),0));
   const maxFr=Math.max(1,...frentes.map(f=>perfMes.filter(p=>p.frente===f).reduce((s,p)=>s+(p.metros||0),0)));
   const FCOL=['#5b6ef5','#10b981','#5b6ef5','#f59e0b','#ef4444'];
   const FNOM={1:'Rampa',2:'Cortada'};
   const frentesHtml=frentes.length?frentes.map((f,i)=>{
-    const mt=perfMes.filter(p=>p.frente===f).reduce((s,p)=>s+(p.metros||0),0);
+    const mt=r1m(perfMes.filter(p=>p.frente===f).reduce((s,p)=>s+(p.metros||0),0));
     const pct=Math.round(mt/maxFr*100);const col=FCOL[i%FCOL.length];
     return `<div style="margin-bottom:13px">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
