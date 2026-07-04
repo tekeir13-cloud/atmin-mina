@@ -4254,6 +4254,8 @@ async function cargarAlmacenCombustibleSB(){
     try{ if(typeof aplicarAperturaExplosivos==='function') aplicarAperturaExplosivos(); }catch(e){}
     // Reconstruye las salidas de explosivos perdidas por el bug de la foto del vale (una sola vez)
     try{ if(typeof reconstruirSalidasExplosivos==='function') reconstruirSalidasExplosivos(); }catch(e){}
+    // Salida de PRUEBA reversible (se activa/desactiva con EXPLO_PRUEBA_ACTIVA)
+    try{ if(typeof aplicarSalidaPrueba==='function') aplicarSalidaPrueba(); }catch(e){}
     // EPP enviados a NV2820 (fueron consumidos por operarios): sacarlos del subalmacén
     try{ if(typeof migrarEppSalidas2820==='function') migrarEppSalidas2820(); }catch(e){}
     // ── COMBUSTIBLE ──
@@ -7408,6 +7410,37 @@ function reconstruirSalidasExplosivos(){
       });
     });
     state.almacen.exploAjusteSalidasV=EXPLO_AJUSTE_SALIDAS_V;
+    try{ localStorage.setItem(ALM_KEY, JSON.stringify(state.almacen)); }catch(e){}
+    try{ if(typeof sbSyncModulo==='function') sbSyncModulo('almacen', (typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
+    return true;
+  }catch(e){ return false; }
+}
+// ── SALIDA DE PRUEBA (reversible) ──
+// Interruptor para demostrar en el Excel cómo un mismo vale agrupa varias líneas de productos.
+// Con EXPLO_PRUEBA_ACTIVA=true se agrega; al ponerlo en false se elimina y el stock vuelve
+// idéntico. Ids fijos con prefijo 'ESPRB-' → no se duplica y se limpia por completo.
+const EXPLO_PRUEBA_ACTIVA=true;
+const EXPLO_PRUEBA_SALIDAS=[
+  {id:'ESPRB-1', producto:'M3000',    cant:10, vale:'PRUEBA-01'},
+  {id:'ESPRB-2', producto:'M5000',    cant:5,  vale:'PRUEBA-01'},
+  {id:'ESPRB-3', producto:'CARMEX18', cant:20, vale:'PRUEBA-01'},
+];
+function aplicarSalidaPrueba(){
+  try{
+    state.almacen=state.almacen||{};
+    if(!state.almacen.explosivos) state.almacen.explosivos={ingresos:[],salidas:[]};
+    const exp=state.almacen.explosivos;
+    const esPrueba=s=>String(s.id||'').indexOf('ESPRB-')===0;
+    const yaEsta=(exp.salidas||[]).some(esPrueba);
+    if(EXPLO_PRUEBA_ACTIVA===yaEsta) return false; // nada que cambiar
+    if(EXPLO_PRUEBA_ACTIVA){
+      EXPLO_PRUEBA_SALIDAS.forEach(o=>exp.salidas.push({
+        id:o.id, fecha:'2026-07-04', vale:o.vale, producto:o.producto,
+        cajas:0, unidades:o.cant, totalUnidades:o.cant, destino:'Almacen NV2820'
+      }));
+    }else{
+      exp.salidas=(exp.salidas||[]).filter(s=>!esPrueba(s)); // quitar prueba → stock vuelve
+    }
     try{ localStorage.setItem(ALM_KEY, JSON.stringify(state.almacen)); }catch(e){}
     try{ if(typeof sbSyncModulo==='function') sbSyncModulo('almacen', (typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
     return true;
