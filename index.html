@@ -7677,10 +7677,23 @@ async function exportarExplosivosExcel(){
   head1.forEach((h,i)=>{const c=hr1.getCell(i+1);c.value=h;c.font={bold:true,color:{argb:'FFFFFFFF'},size:11};
     c.fill={type:'pattern',pattern:'solid',fgColor:{argb:C_HEAD}};c.alignment={horizontal:'center',vertical:'middle'};c.border=allB;});
   hr1.height=20;
+  // Orden: AGRUPADO POR N° DE VALE (cada vale junta sus líneas de distintos productos),
+  // vales numéricos ascendentes primero y luego los de texto (APERTURA, etc.); dentro del
+  // mismo vale, por fecha. Cada movimiento se lista individual (no se suma por producto).
+  const _valeCmp=(a,b)=>{
+    const va=String(a.vale||''), vb=String(b.vale||'');
+    const na=parseFloat(va), nb=parseFloat(vb);
+    const aNum=!isNaN(na)&&/^\d/.test(va), bNum=!isNaN(nb)&&/^\d/.test(vb);
+    if(aNum&&bNum && na!==nb) return na-nb;
+    if(aNum&&!bNum) return -1;
+    if(!aNum&&bNum) return 1;
+    if(!aNum&&!bNum && va!==vb) return va.localeCompare(vb);
+    return (a.fecha||'').localeCompare(b.fecha||'');
+  };
   const movs=[
     ...ings.map(r=>({...r,tipo:'INGRESO',ruta:'Polvorín Santa María → NV3190'})),
     ...sals.map(r=>({...r,tipo:'SALIDA',ruta:'NV3190 → Almacén NV2820'}))
-  ].sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  ].sort(_valeCmp);
   let rowIdx=4;
   movs.forEach(r=>{
     const c=exploGetCat(r.producto);const bg=r.tipo==='INGRESO'?C_AZUL:C_ROJO;
