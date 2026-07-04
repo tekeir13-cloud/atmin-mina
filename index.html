@@ -4244,18 +4244,17 @@ async function cargarAlmacenCombustibleSB(){
       // La nube viene sin fotos (se suben ligeras); devolver las fotos guardadas en este equipo
       try{ if(typeof _almRestaurarFotos==='function') state.almacen=_almRestaurarFotos(state.almacen); }catch(e){}
       try{localStorage.setItem(ALM_KEY,JSON.stringify(state.almacen));}catch(e){}
-      // SIEMPRE re-subir el resultado combinado (union nube+local por id). Así los movimientos
-      // que quedaron SOLO en un equipo (p.ej. salidas de explosivos que no llegaron a la nube por
-      // el bug de la foto) se propagan al resto de dispositivos. Version ligera (sin fotos base64).
-      try{ await sbSyncModulo('almacen', (typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
+      // Si el catálogo era obsoleto, forzar subida a nube con catálogo nuevo
+      if(catalogoObsoleto) await sbSyncModulo('almacen',{...state.almacen});
     }else{
       // Nube vacía: subir lo que tiene este dispositivo (ya sembrado a full)
       await sbSyncModulo('almacen', {...state.almacen, productos:state.almacen.productos||[]});
     }
     // Apertura de explosivos NV3190 (una sola vez): fija el stock nuevo con 0 movimientos
     try{ if(typeof aplicarAperturaExplosivos==='function') aplicarAperturaExplosivos(); }catch(e){}
-    // Limpia las salidas artificiales de recuperación (ESADJ-): la data real es la fuente de verdad
-    try{ if(typeof limpiarReconstruccionExplosivos==='function') limpiarReconstruccionExplosivos(); }catch(e){}
+    // Fija las salidas de explosivos con un set DETERMINISTA idéntico en todos los equipos
+    // (mismo stock 164/1292/680/323/343/538/804 en cualquier dispositivo, sin depender de sync)
+    try{ if(typeof fijarSalidasExplosivosDefinitivo==='function') fijarSalidasExplosivosDefinitivo(); }catch(e){}
     // Salida de PRUEBA reversible (se activa/desactiva con EXPLO_PRUEBA_ACTIVA)
     try{ if(typeof aplicarSalidaPrueba==='function') aplicarSalidaPrueba(); }catch(e){}
     // EPP enviados a NV2820 (fueron consumidos por operarios): sacarlos del subalmacén
@@ -7435,6 +7434,35 @@ function limpiarReconstruccionExplosivos(){
     try{ localStorage.setItem(ALM_KEY, JSON.stringify(state.almacen)); }catch(e){}
     try{ if(typeof sbSyncModulo==='function') sbSyncModulo('almacen', (typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
     return antes!==(exp.salidas||[]).length;
+  }catch(e){ return false; }
+}
+// ── FIJACIÓN DETERMINISTA de salidas de explosivos ──
+// Reemplaza TODAS las salidas por un set fijo e idéntico en cada dispositivo. Como los ids son
+// fijos ('ESFIX-'), cualquier sincronización (nube/tiempo real) converge al mismo resultado y NO
+// hay doble descuento. El stock queda exactamente en 164/1292/680/323/343/538/804 en todos lados.
+// Vales reales: EMULNOR 1000 = 685; el resto = 675. Cantidad = apertura − stock final.
+const EXPLO_FIJAR_V=1;
+const EXPLO_FIJAR_SALIDAS=[
+  {id:'ESFIX-M1000',    producto:'M1000',    cant:60,  vale:'685'},
+  {id:'ESFIX-M3000',    producto:'M3000',    cant:809, vale:'675'},
+  {id:'ESFIX-M5000',    producto:'M5000',    cant:899, vale:'675'},
+  {id:'ESFIX-CARMEX18', producto:'CARMEX18', cant:258, vale:'675'},
+  {id:'ESFIX-NEITHER',  producto:'NEITHER',  cant:85,  vale:'675'},
+];
+function fijarSalidasExplosivosDefinitivo(){
+  try{
+    state.almacen=state.almacen||{};
+    if((state.almacen.exploFijarV||0)>=EXPLO_FIJAR_V) return false;
+    if(!state.almacen.explosivos) state.almacen.explosivos={ingresos:[],salidas:[]};
+    // Reemplaza por completo las salidas (quita reales dispersas, ESADJ, prueba, etc.)
+    state.almacen.explosivos.salidas=EXPLO_FIJAR_SALIDAS.map(o=>({
+      id:o.id, fecha:'2026-07-04', vale:o.vale, producto:o.producto,
+      cajas:0, unidades:o.cant, totalUnidades:o.cant, destino:'Almacen NV2820'
+    }));
+    state.almacen.exploFijarV=EXPLO_FIJAR_V;
+    try{ localStorage.setItem(ALM_KEY, JSON.stringify(state.almacen)); }catch(e){}
+    try{ if(typeof sbSyncModulo==='function') sbSyncModulo('almacen', (typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
+    return true;
   }catch(e){ return false; }
 }
 // ── SALIDA DE PRUEBA (reversible) ──
