@@ -7378,23 +7378,33 @@ function aplicarAperturaExplosivos(){
 // UN ajuste por explosivo para que el stock quede en el valor final real que reportó Logística:
 //   EMULNOR 1000=164 · 3000=1292 · 5000=680 · CARMEX 1.8=323 · CARMEX 2.40=343 · FAME=538 · MECHA=804 m
 // Cantidad de salida = apertura − final. Id fijo → mergeSnapById evita duplicados entre equipos.
-const EXPLO_AJUSTE_SALIDAS_V=1;
-const EXPLO_AJUSTE_SALIDAS={ M1000:60, M3000:809, M5000:899, CARMEX18:258, NEITHER:85 };
+const EXPLO_AJUSTE_SALIDAS_V=2;
+// Cantidad (apertura − final) y vale real de cada salida a reponer.
+const EXPLO_AJUSTE_SALIDAS={
+  M1000:   {cant:60,  vale:'685'},
+  M3000:   {cant:809, vale:'675'},
+  M5000:   {cant:899, vale:'675'},
+  CARMEX18:{cant:258, vale:'675'},
+  NEITHER: {cant:85,  vale:'675'},
+};
 function reconstruirSalidasExplosivos(){
   try{
     state.almacen=state.almacen||{};
     if((state.almacen.exploAjusteSalidasV||0)>=EXPLO_AJUSTE_SALIDAS_V) return false;
-    // Solo aplica si el stock está en apertura (sin salidas previas): evita descontar de más
-    // en un equipo que sí conserve las salidas reales.
-    const exp=state.almacen.explosivos||{ingresos:[],salidas:[]};
-    const yaHaySalidas=(exp.salidas||[]).some(s=>s.vale!=='AJUSTE-RECUP');
-    if(yaHaySalidas){ state.almacen.exploAjusteSalidasV=EXPLO_AJUSTE_SALIDAS_V; return false; }
     if(!state.almacen.explosivos) state.almacen.explosivos={ingresos:[],salidas:[]};
-    Object.entries(EXPLO_AJUSTE_SALIDAS).forEach(([id,q])=>{
-      if(!q) return;
-      state.almacen.explosivos.salidas.push({
-        id:'ESADJ-'+id, fecha:'2026-07-04', vale:'AJUSTE-RECUP', producto:id,
-        cajas:0, unidades:Number(q)||0, totalUnidades:Number(q)||0, destino:'Almacen NV2820'
+    const exp=state.almacen.explosivos;
+    // Las salidas de esta reconstrucción llevan id fijo con prefijo 'ESADJ-'. Cualquier OTRA
+    // salida indica que el equipo conserva movimientos reales → no tocar (solo marcar versión).
+    const esRecup=s=>String(s.id||'').indexOf('ESADJ-')===0;
+    const hayReales=(exp.salidas||[]).some(s=>!esRecup(s));
+    if(hayReales){ state.almacen.exploAjusteSalidasV=EXPLO_AJUSTE_SALIDAS_V; return false; }
+    // Idempotente: quitar las de reconstrucción previas (v1 con 'AJUSTE-RECUP') y volver a poner
+    exp.salidas=(exp.salidas||[]).filter(s=>!esRecup(s));
+    Object.entries(EXPLO_AJUSTE_SALIDAS).forEach(([id,o])=>{
+      if(!o||!o.cant) return;
+      exp.salidas.push({
+        id:'ESADJ-'+id, fecha:'2026-07-04', vale:o.vale, producto:id,
+        cajas:0, unidades:Number(o.cant)||0, totalUnidades:Number(o.cant)||0, destino:'Almacen NV2820'
       });
     });
     state.almacen.exploAjusteSalidasV=EXPLO_AJUSTE_SALIDAS_V;
