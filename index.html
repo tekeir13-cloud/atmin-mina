@@ -4649,14 +4649,11 @@ function renderStockRemanente(){
   if(!cont)return;
   const fmtN=n=>(Math.round((n||0)*100)/100).toLocaleString('es-PE');
 
-  // ── (1) Explosivos: figura, código y stock remanente (menos salidas de remanente de logística) ──
-  try{ if(typeof remSalLoad==='function') remSalLoad(); }catch(e){}
-  const remSalPorExp={};
-  (state.remanenteSalidas||[]).forEach(s=>{ remSalPorExp[s.producto]=(remSalPorExp[s.producto]||0)+(Number(s.cantidad)||0); });
+  // ── Stock de explosivos NV3190 (SOLO ingresos − salidas de la pestaña Explosivos NV3190) ──
+  // El consumo del Jefe de Guardia NO descuenta. Solo Logística mueve stock desde Explosivos NV3190.
   const expStock=(typeof exploStockTotal==='function')?exploStockTotal():[];
   const expCards=expStock.map(e=>{
-    const salRem=remSalPorExp[e.id]||0;
-    const disp=Math.max(0,(e.stock||0)-salRem);
+    const disp=Math.max(0,(e.stock||0));
     const col=disp>50?'#22c55e':(disp>0?'#f59e0b':'#ef4444');
     const fig=(typeof exploFig==='function')?exploFig(e.id):'🧨';
     // Mecha rápida (NEITHER): el stock está en METROS. Se muestra en metros + equivalente en rollos.
@@ -4674,7 +4671,7 @@ function renderStockRemanente(){
       <div style="font-size:10px;color:var(--text3);margin-top:2px">${um} remanente</div>
       ${rollosLine}
       <div style="font-size:9.5px;color:var(--text3);margin-top:6px;border-top:1px solid var(--border);padding-top:6px">
-        Stock: ${fmtN(e.stock)}${esMecha?' m':''}${salRem>0?` · Salidas rem.: ${fmtN(salRem)}`:''}
+        Stock NV3190: ${fmtN(e.stock)}${esMecha?' m':''}
       </div>
     </div>`;
   }).join('') || `<div style="grid-column:1/-1;padding:18px;text-align:center;color:var(--text3)">Sin explosivos en catálogo</div>`;
@@ -4733,23 +4730,12 @@ function renderStockRemanente(){
 
   cont.innerHTML=`
     <div class="section-title" style="margin-top:0">📉 Stock Remanente</div>
-    <div style="font-size:12px;color:var(--text3);margin:-6px 0 18px">Stock de explosivos en almacén (ingresos − salidas NV3190) y consumo reportado por los Jefes de Guardia.</div>
+    <div style="font-size:12px;color:var(--text3);margin:-6px 0 18px">Stock del polvorín NV3190 (solo lectura). El stock se controla ÚNICAMENTE desde la pestaña <strong style="color:var(--text2)">💣 Explosivos NV3190</strong> — solo Logística registra ingresos y salidas allí. Lo que reporta el Jefe de Guardia <strong style="color:var(--text2)">no descuenta</strong> este stock.</div>
 
     <div style="background:var(--coal2);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:18px">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
-        <div style="font-size:13px;font-weight:800;color:var(--text)">🧨 Explosivos — Stock Remanente</div>
-        <button class="btn btn-gold" style="font-size:12px;padding:7px 16px" onclick="abrirRemSalida()">📤 Dar Salida</button>
-      </div>
+      <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:12px">🧨 Explosivos — Stock NV3190</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px">${expCards}</div>
     </div>
-
-    <div style="background:var(--coal2);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:22px">
-      <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:10px">📤 Salidas de Remanente (movimientos de logística)</div>
-      ${remHist}
-    </div>
-
-    <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:12px">👷 Reporte Jefe de Guardia — Consumo de Explosivos</div>
-    ${repCards}
   `;
 }
 // ── Salida de Stock Remanente ──
