@@ -5398,9 +5398,13 @@ function renderDashStockActual(){
     </div>`;
   };
 
-  // ── Explosivos ──
-  const expStock=state.explosivos&&state.explosivos.stock?state.explosivos.stock:{};
-  const expItems=Object.entries(expStock);
+  // ── Explosivos: stock real del polvorín NV3190 (mismo que la pestaña Explosivos NV3190) ──
+  const expItems=((typeof exploStockTotal==='function')?exploStockTotal():[])
+    .map(e=>{
+      const esMecha=e.unidad==='rollo';
+      const um=esMecha?'m':'und';
+      return [e.nombre, Math.max(0,Math.round((e.stock||0)*100)/100), um];
+    });
 
   // ── Almacén — top 5 productos con menor stock ──
   const invItems=(()=>{
@@ -5440,14 +5444,14 @@ function renderDashStockActual(){
     ${expItems.length?`<div style="background:var(--coal4);border:1px solid var(--border);border-radius:18px;padding:20px;margin-bottom:14px">
       <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:12px">💣 Stock Explosivos</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">
-        ${expItems.map(([prod,q])=>{
+        ${expItems.map(([prod,q,um])=>{
           const col=q<30?'#ef4444':q<100?'#f59e0b':'#22d3a5';
           return `<div style="background:var(--coal3);border:1px solid ${col}33;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:10px">
             <div style="font-size:20px">💣</div>
             <div style="min-width:0">
               <div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${prod}</div>
-              <div style="font-size:20px;font-weight:900;color:${col};line-height:1.1">${q}</div>
-              <div style="font-size:9px;color:var(--text3)">unidades</div>
+              <div style="font-size:20px;font-weight:900;color:${col};line-height:1.1">${q.toLocaleString('es-PE')}</div>
+              <div style="font-size:9px;color:var(--text3)">${um==='m'?'metros':'unidades'}</div>
             </div>
           </div>`;
         }).join('')}
