@@ -3729,7 +3729,7 @@ select option{background:var(--coal3);}
           <option value="CARMEX18">CARMEX 1.8" MTRS (350/caja)</option>
           <option value="CARMEX240">CARMEX 2.40" MTRS (300/caja)</option>
           <option value="FAMECORTE">FAME CORTE (144/caja)</option>
-          <option value="NEITHER">MECHA RAPIDA DE IGNISION (rollo = 150 m)</option>
+          <option value="NEITHER">MECHA RAPIDA DE IGNISION (Cajas = rollos de 150 m · Unidades = metros)</option>
         </select>
       </div>
       <div class="form-group" style="margin:0"><label>Cajas</label><input type="number" id="exi-cajas" min="0" step="1" placeholder="0" oninput="calcTotalExplo('exi')"></div>
@@ -7767,9 +7767,13 @@ function calcTotalExplo(pfx){
   const cajas=parseInt(document.getElementById(pfx+'-cajas')?.value)||0;
   const und=parseInt(document.getElementById(pfx+'-unidades')?.value)||0;
   const c=exploGetCat(prodId);
-  const total=c?cajas*c.upCaja+und:0;
+  // Mecha rápida (NEITHER): el stock vive en METROS → "Cajas" se interpreta como ROLLOS
+  // (1 rollo = mPorRollo m) y "Unidades" como METROS sueltos. Antes usaba upCaja=10 y
+  // registraba cantidades absurdas (1 rollo entraba como 10 "unidades" contra un stock en metros).
+  const esMecha=c&&c.id==='NEITHER';
+  const total=c?(esMecha?cajas*(c.mPorRollo||150)+und:cajas*c.upCaja+und):0;
   const el=document.getElementById(pfx+'-total');
-  if(el)el.textContent=c?`${total} ${c.unidad}`:'Selecciona producto y cantidad';
+  if(el)el.textContent=c?(esMecha?`${total} m (${cajas} rollo${cajas!==1?'s':''} + ${und} m)`:`${total} ${c.unidad}`):'Selecciona producto y cantidad';
   return total;
 }
 function abrirModalExploIngreso(){
@@ -7858,7 +7862,7 @@ function abrirModalExploSalida(){
       EXPLO_CATALOGO.map(c=>{
         const q=stock[c.id]||0;
         const cajas=Math.floor(q/c.upCaja);const und=q%c.upCaja;
-        const stockLabel=c.id==='NEITHER'?`${q} rollos`:(q>0?`${cajas} caj. + ${und} und`:'Sin stock');
+        const stockLabel=c.id==='NEITHER'?`${q} m · ${Math.floor(q/(c.mPorRollo||150))} rollo(s) + ${Math.round((q%(c.mPorRollo||150))*100)/100} m`:(q>0?`${cajas} caj. + ${und} und`:'Sin stock');
         return `<option value="${c.id}">${c.nombre} — ${stockLabel}</option>`;
       }).join('');
   }
