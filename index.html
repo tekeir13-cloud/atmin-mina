@@ -4897,6 +4897,7 @@ function confirmarMaterialNV2820(salidaId){
   s.confirmadoNV2820=true;s.confirmadoPor=resp;s.confirmadoFecha=hoy();
   if(typeof almacenSave==='function') almacenSave();
   if(typeof renderMatPendientesComp==='function') renderMatPendientesComp();
+  if(typeof _compRefrescarConsumoSelectors==='function') _compRefrescarConsumoSelectors(); // ← ya disponible para consumo
   try{ if(typeof renderSubalmacen2820==='function') renderSubalmacen2820(); }catch(e){}
   try{ if(typeof renderAlertaPendientes2820==='function') renderAlertaPendientes2820(); }catch(e){}
   try{ if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
@@ -16658,14 +16659,27 @@ function compAddMat() {
   document.getElementById('comp-mat-rows').appendChild(row);
 }
 
+// Opciones del selector de consumo = material CONFIRMADO en el subalmacén NV2820, con stock > 0.
+function _compConsOpts(){
+  const stock=(typeof nv2820Stock==='function')?nv2820Stock().filter(p=>p.stock>0):[];
+  return stock.length
+    ? stock.map(p=>`<option value="${p.codigo}" data-unidad="${p.unidad}" data-desc="${(p.nombre||'').replace(/"/g,'&quot;')}">${p.codigo} · ${p.nombre} (disp: ${p.stock} ${p.unidad})</option>`).join('')
+    : '<option value="">Sin stock en NV2820 (confirma arriba lo que envió Logística)</option>';
+}
+// Repobla los selectores de consumo ya creados (p.ej. tras confirmar un material) sin perder la selección.
+function _compRefrescarConsumoSelectors(){
+  const opts=_compConsOpts();
+  document.querySelectorAll('.comp-cons-sel').forEach(sel=>{
+    const cur=sel.value;
+    sel.innerHTML='<option value="">— Material del subalmacén NV2820 —</option>'+opts;
+    if(cur) sel.value=cur;
+  });
+}
 function compAddCons(frente) {
   const row = document.createElement('div');
   row.style.cssText = 'display:grid;grid-template-columns:1fr 80px 70px 30px;gap:6px;margin-bottom:6px';
   // Productos disponibles en el subalmacén NV2820 (con stock)
-  const stock=(typeof nv2820Stock==='function')?nv2820Stock().filter(p=>p.stock>0):[];
-  const opts=stock.length
-    ?stock.map(p=>`<option value="${p.codigo}" data-unidad="${p.unidad}" data-desc="${(p.nombre||'').replace(/"/g,'&quot;')}">${p.codigo} · ${p.nombre} (disp: ${p.stock} ${p.unidad})</option>`).join('')
-    :'<option value="">Sin stock en NV2820</option>';
+  const opts=_compConsOpts();
   row.innerHTML = `
     <select class="comp-cons-sel" onchange="compConsSelChange(this)" style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 10px;font-size:12px">
       <option value="">— Material del subalmacén NV2820 —</option>${opts}
