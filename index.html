@@ -4244,8 +4244,10 @@ async function cargarAlmacenCombustibleSB(){
       // La nube viene sin fotos (se suben ligeras); devolver las fotos guardadas en este equipo
       try{ if(typeof _almRestaurarFotos==='function') state.almacen=_almRestaurarFotos(state.almacen); }catch(e){}
       try{localStorage.setItem(ALM_KEY,JSON.stringify(state.almacen));}catch(e){}
-      // Si el catálogo era obsoleto, forzar subida a nube con catálogo nuevo
-      if(catalogoObsoleto) await sbSyncModulo('almacen',{...state.almacen});
+      // SIEMPRE re-subir el resultado combinado (union nube+local por id). Así los movimientos
+      // que quedaron SOLO en un equipo (p.ej. salidas de explosivos que no llegaron a la nube por
+      // el bug de la foto) se propagan al resto de dispositivos. Version ligera (sin fotos base64).
+      try{ await sbSyncModulo('almacen', (typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
     }else{
       // Nube vacía: subir lo que tiene este dispositivo (ya sembrado a full)
       await sbSyncModulo('almacen', {...state.almacen, productos:state.almacen.productos||[]});
@@ -5590,7 +5592,7 @@ function _rtIndicador(){ const n=Date.now(); if(n-_rtLastNotif>4000){ _rtLastNot
 
 // Indicador PERMANENTE del estado del tiempo real (esquina inferior izquierda, siempre visible)
 // Versión visible del build → sirve para confirmar que se cargó la versión nueva (no la de caché).
-const APP_BUILD='v2026.07.04-5';
+const APP_BUILD='v2026.07.04-6';
 function _rtSetStatus(txt, color){
   let el=document.getElementById('rt-status-badge');
   if(!el){
