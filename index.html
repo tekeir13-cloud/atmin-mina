@@ -4248,12 +4248,18 @@ async function cargarAlmacenCombustibleSB(){
             salidas:  mergeSnapById(exNube.salidas||[],  exLoc.salidas||[]) }
         : (almNube.explosivos||{ingresos:[],salidas:[]});
       state.almacen={
+        ...almNube,   // conserva flags de migración (exploAperturaV, exploFijarV, etc.)
         ingresos:ingFinal, salidas:salFinal,
         inventarioInicial:invFinal, historialMeses:almNube.historialMeses||[],
         productos:productosFinales, solicitudesCompra:almNube.solicitudesCompra||[],
         explosivos:exFinal,
         catalogVersion:8
       };
+      // Conservar el valor MÁS ALTO de cada flag de migración (nube o local) para que las
+      // migraciones de explosivos (apertura, ajuste, fijación) NO se vuelvan a ejecutar en
+      // cada carga y borren las salidas nuevas registradas por Logística.
+      ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV']
+        .forEach(k=>{ const mx=Math.max(Number(almNube[k]||0), Number(almLocalPrev[k]||0)); if(mx) state.almacen[k]=mx; });
       // La nube viene sin fotos (se suben ligeras); devolver las fotos guardadas en este equipo
       try{ if(typeof _almRestaurarFotos==='function') state.almacen=_almRestaurarFotos(state.almacen); }catch(e){}
       try{localStorage.setItem(ALM_KEY,JSON.stringify(state.almacen));}catch(e){}
