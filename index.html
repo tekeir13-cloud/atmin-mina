@@ -2473,6 +2473,7 @@ select option{background:var(--coal3);}
   <!-- ── Resumen del día + avance + alertas (reconstruido, intuitivo) ── -->
   <div id="d-resumen-hoy"></div>
   <div id="d-avance-meta"></div>
+  <div id="d-top-trabajadores"></div>
   <div id="d-stock-actual"></div>
   <div id="d-alertas-panel"></div>
 </div>
@@ -3432,6 +3433,7 @@ select option{background:var(--coal3);}
       <button class="mod-tab" onclick="switchCompTab('petroleo',this)">⛽ Petróleo/Gasolina</button>
       <button class="mod-tab" onclick="switchCompTab('horometros',this)">⏱️ Horómetros</button>
       <button class="mod-tab" onclick="switchCompTab('observaciones',this)">📝 Observaciones</button>
+      <button class="mod-tab" onclick="switchCompTab('historial',this)">📅 Historial</button>
     </div>
     <div id="comp-tab-explosivos" class="comp-tab-content">
       <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Código</th><th class="r">I</th><th class="r">E</th><th class="r">C</th><th class="r">F</th><th class="r" style="color:#f87171">Rampa Brenda</th><th class="r" style="color:#60a5fa">Cortada Noreste</th></tr></thead><tbody id="tbody-explosivos"><tr><td colspan="9" style="text-align:center;color:var(--text3);padding:20px">Sin reportes aún</td></tr></tbody></table></div>
@@ -3448,6 +3450,13 @@ select option{background:var(--coal3);}
     <div id="comp-tab-observaciones" class="comp-tab-content" style="display:none">
       <div style="font-size:11px;color:var(--text3);margin-bottom:10px">👆 Haz clic en cualquier reporte para ver sus totales y gráficos</div>
       <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Compresorista</th><th>Observaciones</th><th class="r">Acción</th></tr></thead><tbody id="tbody-observaciones"><tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">Sin reportes aún</td></tr></tbody></table></div>
+    </div>
+    <div id="comp-tab-historial" class="comp-tab-content" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+        <div><div class="section-title" style="margin:0">📅 Historial — Acumulado Mensual</div><div style="font-size:12px;color:var(--text3);margin-top:4px">Consumo por frente y por equipos · explosivo costeado (diario y del mes)</div></div>
+        <select id="comp-hist-mes" onchange="renderCompHistorial()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:13px"></select>
+      </div>
+      <div id="comp-hist-cont"></div>
     </div>
   </div>
 </div>
@@ -5205,8 +5214,46 @@ function renderDashboard(){
   renderDashEjecutivo();
   renderDashResumenHoy();
   renderDashAvanceMeta();
+  renderDashTopTrabajadores();
   renderDashStockActual();
   renderDashAlertas();
+}
+
+// Ranking Top 5 de trabajadores con más tareas (vinculado a RRHH · tareo).
+function renderDashTopTrabajadores(){
+  const cont=document.getElementById('d-top-trabajadores'); if(!cont)return;
+  const mesYM=(typeof finMesActual==='function')?finMesActual():hoy().slice(0,7);
+  const enMes=t=>(typeof enVentana==='function')?enVentana(t.fecha,mesYM):((t.fecha||'').slice(0,7)===mesYM);
+  const conteo={};
+  (state.tareas||[]).filter(enMes).forEach(t=>{ const id=t.trabajadorId; if(id==null)return; conteo[id]=(conteo[id]||0)+1; });
+  const rank=Object.entries(conteo).map(([id,n])=>{
+    const p=(state.personal||[]).find(x=>String(x.id)===String(id));
+    return {nombre:p?p.nombre:('#'+id), rol:p?(p.rol||''):'', n};
+  }).sort((a,b)=>b.n-a.n).slice(0,5);
+  const nombreMes=(typeof finNombreMes==='function')?finNombreMes(mesYM):mesYM;
+  if(!rank.length){
+    cont.innerHTML=`<div style="background:var(--coal4);border:1px solid var(--border);border-radius:18px;padding:22px;margin-bottom:18px">
+      <div style="font-size:14px;font-weight:800;color:var(--text);margin-bottom:6px">🏆 Top 5 Trabajadores · ${nombreMes}</div>
+      <div style="font-size:12px;color:var(--text3)">Aún no hay tareas registradas este mes en RRHH.</div></div>`;
+    return;
+  }
+  const max=rank[0].n||1;
+  const medal=['🥇','🥈','🥉','4️⃣','5️⃣'];
+  cont.innerHTML=`<div style="background:var(--coal4);border:1px solid var(--border);border-radius:18px;padding:22px;margin-bottom:18px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-size:14px;font-weight:800;color:var(--text)">🏆 Top 5 Trabajadores con más tareas · ${nombreMes}</div>
+      <button class="btn btn-outline" style="font-size:11px;padding:5px 12px" onclick="navigate('rrhh')">Ver RRHH →</button>
+    </div>
+    ${rank.map((r,i)=>`<div style="margin-bottom:11px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+        <span style="font-size:13px;font-weight:700;color:var(--text)">${medal[i]} ${r.nombre}${r.rol?` <span style="font-size:10px;color:var(--text3);font-weight:400">· ${r.rol}</span>`:''}</span>
+        <span style="font-size:13px;font-weight:800;color:var(--gold-light);font-family:'DM Mono',monospace">${r.n} tareas</span>
+      </div>
+      <div style="background:rgba(255,255,255,.06);border-radius:99px;height:12px;overflow:hidden">
+        <div style="width:${Math.max(4,Math.round((r.n/max)*100))}%;height:100%;background:linear-gradient(90deg,#c9a84c,#e6cd7a);border-radius:99px"></div>
+      </div>
+    </div>`).join('')}
+  </div>`;
 }
 
 // Resumen del día + acumulado del mes — tarjetas grandes y claras
@@ -11014,6 +11061,12 @@ function renderTableroOp(){
   const cimbHoyT=sumCimbrasT(rgHoy), cimbMesT=sumCimbrasT(rgMes);
   const cimbMesF1=sumF(rgMes,'brenda','cimbra'), cimbMesF2=sumF(rgMes,'crne','cimbra');
   const cimbHoyF1=sumF(rgHoy,'brenda','cimbra'), cimbHoyF2=sumF(rgHoy,'crne','cimbra');
+  // Gasto de explosivo por frente (acumulado del mes) — proviene del Historial del Compresorista
+  const preciosExpT=(typeof compGetPreciosExp==='function')?compGetPreciosExp():(typeof COMP_PRECIOS_EXP_DEFAULT!=='undefined'?COMP_PRECIOS_EXP_DEFAULT:{});
+  const compMesT=(state.compresorista||[]).filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mesAct):((r.fecha||'').slice(0,7)===mesAct));
+  let gastoExpF1=0,gastoExpF2=0;
+  compMesT.forEach(r=>(r.expFrente||[]).forEach(x=>{const pr=preciosExpT[x.codigo]||0; gastoExpF1+=(Number(x.rampa)||0)*pr; gastoExpF2+=(Number(x.galeria)||0)*pr;}));
+  const fST=n=>'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:0,maximumFractionDigits:0});
   // Personal distribuido
   const dist=state.distribucion||{};
   const persF1=Object.values(dist).filter(f=>f==1).length;
@@ -11031,11 +11084,12 @@ function renderTableroOp(){
     <div class="kpi-card"><div class="kpi-label">Cumplimiento Mes</div><div class="kpi-value ${pcTot>=100?'green':(pcTot>=60?'warn':'red')}">${pcTot}%</div><div class="kpi-sub">del programa</div></div>
     <div class="kpi-card"><div class="kpi-label">Taladros Hoy</div><div class="kpi-value warn">${tperfHoy} / ${tcargHoy}</div><div class="kpi-sub">perf. / carg.</div></div>
     <div class="kpi-card"><div class="kpi-label">Personal en Frentes</div><div class="kpi-value blue">${persF1+persF2}</div><div class="kpi-sub">Brenda ${persF1} · CRNE ${persF2}</div></div>
-    <div class="kpi-card"><div class="kpi-label">Masas / Explosivos Hoy</div><div class="kpi-value gold">${masasHoy}</div><div class="kpi-sub">unidades consumidas</div></div>
+    <div class="kpi-card"><div class="kpi-label">Gasto Explosivo Mes por Frente</div><div class="kpi-value gold">${fST(gastoExpF1+gastoExpF2)}</div><div class="kpi-sub">🟥 Brenda ${fST(gastoExpF1)} · 🟦 CRNE ${fST(gastoExpF2)}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Masas / Explosivos Hoy</div><div class="kpi-value blue">${masasHoy}</div><div class="kpi-sub">unidades consumidas</div></div>
     <div class="kpi-card"><div class="kpi-label">Cimbras Hoy</div><div class="kpi-value warn">${cimbHoyT}</div><div class="kpi-sub">Brenda ${cimbHoyF1} · CRNE ${cimbHoyF2}</div></div>
     <div class="kpi-card"><div class="kpi-label">Cimbras Mes</div><div class="kpi-value blue">${cimbMesT}</div><div class="kpi-sub">acumulado · Brenda ${cimbMesF1} · CRNE ${cimbMesF2}</div></div>`;
   // Frentes
-  const frenteCard=(nom,color,mes,meta,pc,hoyM,pers,ritmoObj,cimbMes,cimbHoy)=>`
+  const frenteCard=(nom,color,mes,meta,pc,hoyM,pers,ritmoObj,cimbMes,cimbHoy,gastoExp)=>`
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <div class="section-title" style="margin:0;font-size:13px;color:${color}">${nom}</div>
@@ -11047,16 +11101,17 @@ function renderTableroOp(){
         <div><div style="font-size:10px;color:var(--text3)">Hoy</div><div style="font-size:13px;font-weight:700;color:var(--text)">${hoyM.toFixed(1)} m</div></div>
         <div><div style="font-size:10px;color:var(--text3)">Personal</div><div style="font-size:13px;font-weight:700;color:var(--text)">${pers}</div></div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;border-top:1px solid var(--border);padding-top:8px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px;border-top:1px solid var(--border);padding-top:8px">
         <div><div style="font-size:10px;color:var(--text3)">Cimbras mes</div><div style="font-size:13px;font-weight:700;color:#fbbf24">${cimbMes}</div></div>
         <div><div style="font-size:10px;color:var(--text3)">Cimbras hoy</div><div style="font-size:13px;font-weight:700;color:var(--text)">${cimbHoy}</div></div>
+        <div><div style="font-size:10px;color:var(--text3)">Explosivo mes</div><div style="font-size:13px;font-weight:700;color:#22d3a5">${fST(gastoExp)}</div></div>
       </div>
       <div style="font-size:11px;color:var(--text3);margin-top:8px">Ritmo objetivo: ${ritmoObj} m/día</div>
     </div>`;
   const tf=document.getElementById('tab-frentes');
   if(tf)tf.innerHTML='<div class="two-col">'+
-    frenteCard('🟦 RA Brenda','#60a5fa',mesF1,metaMesF1,pcF1,hoyF1,persF1,(metaMesF1/dias).toFixed(1),cimbMesF1,cimbHoyF1)+
-    frenteCard('🟩 CRNE','#34d399',mesF2,metaMesF2,pcF2,hoyF2,persF2,(metaMesF2/dias).toFixed(1),cimbMesF2,cimbHoyF2)+
+    frenteCard('🟦 RA Brenda','#60a5fa',mesF1,metaMesF1,pcF1,hoyF1,persF1,(metaMesF1/dias).toFixed(1),cimbMesF1,cimbHoyF1,gastoExpF1)+
+    frenteCard('🟩 CRNE','#34d399',mesF2,metaMesF2,pcF2,hoyF2,persF2,(metaMesF2/dias).toFixed(1),cimbMesF2,cimbHoyF2,gastoExpF2)+
     '</div>';
   // Alertas
   const alertas=[];
@@ -12779,6 +12834,15 @@ function rptGeneral(per,dt,usr,ac,aus,cos,ing,util,mrg){
   const ingVal=state.valorizaciones.reduce((s,v)=>s+v.monto,0);
   const ocPend=state.ordenes.filter(o=>o.estado==='pendiente');
   const tarEx=state.tareas.filter(t=>Number(t.mult||1)>1).length;
+  // Stock de explosivos del polvorín NV3190 (mismo dato que la pestaña Explosivos NV3190),
+  // mostrado en unidades + cajas y sueltas.
+  const exStockGer=(typeof exploStockActual==='function')?exploStockActual():{};
+  const exStockRows=(typeof EXPLO_CATALOGO!=='undefined'?EXPLO_CATALOGO:[]).map(c=>{
+    const q=exStockGer[c.id]||0;
+    const cajas=Math.floor(q/(c.upCaja||1)), sueltas=q%(c.upCaja||1);
+    const det=c.id==='NEITHER'?`${Math.floor(q/(c.mPorRollo||150))} rollos + ${(q%(c.mPorRollo||150)).toFixed(0)} m`:`${cajas} caj. + ${sueltas} und`;
+    return `<tr><td>${c.nombre}</td><td class="r" style="font-weight:700">${q.toLocaleString('es-PE')}</td><td class="r">${det}</td></tr>`;
+  }).join('');
 
   // ── PÁGINA 1 — PORTADA ──
   const portada = rPortada(per,'general',
@@ -12853,6 +12917,15 @@ function rptGeneral(per,dt,usr,ac,aus,cos,ing,util,mrg){
           ${rRow('Costo líder',ldr[0])}${rRow('Personal',ac+' activos')}
         </div>
       </div>
+    </div>
+    <div style="margin-top:8px">
+      <div class="rp-st" style="margin-bottom:6px">
+        <div class="rp-st-n">4</div><div class="rp-st-t">Stock de Explosivos — Polvorín NV3190</div><div class="rp-st-b">Cajas y unidades</div>
+      </div>
+      <table class="rp-tbl">
+        <thead><tr><th>Explosivo</th><th class="r">Unidades</th><th class="r">Cajas + sueltas</th></tr></thead>
+        <tbody>${exStockRows||'<tr><td colspan="3" style="text-align:center;color:#9ca3af;padding:10px">Sin stock registrado</td></tr>'}</tbody>
+      </table>
     </div>
   `, 'MUKICLOUD — Resumen General', per, '2 / 3');
 
@@ -17080,6 +17153,129 @@ function switchCompTab(tab, btn) {
   document.querySelectorAll('#page-compresorista .mod-tab').forEach(el=>el.classList.remove('active'));
   document.getElementById('comp-tab-'+tab).style.display='block';
   btn.classList.add('active');
+  if(tab==='historial') renderCompHistorial();
+}
+
+// Figuras (íconos) de los equipos del compresorista
+const COMP_FIG = {
+  'Grupo Electrógeno':'⚡','Compresora M135':'🌀','Compresora M122':'🌀',
+  'Scoop WJ-2':'🚜','Scoop Epiroc':'🚜','Dumper':'🚛','Excavadora':'🏗️','Cargador Frontal':'🚜',
+  'Camioneta Blanca':'🛻','Camioneta Roja BRY-800':'🛻','Cuatrimoto C':'🏍️','Cuatrimoto N':'🏍️'
+};
+function compFig(eq){ return COMP_FIG[eq]||'⚙️'; }
+
+// Periodo (YYYY-MM) al que pertenece una fecha según la ventana 26→25.
+function _compPeriodoDe(fecha){
+  const ym=(fecha||'').slice(0,7); if(!ym) return ym;
+  if(typeof enVentana!=='function') return ym;
+  // Probar el mes propio y el siguiente (una fecha del 26+ cae en el periodo del mes siguiente)
+  const [y,m]=ym.split('-').map(Number);
+  const sig=(m===12)?((y+1)+'-01'):(y+'-'+String(m+1).padStart(2,'0'));
+  for(const c of [ym,sig]){ if(enVentana(fecha,c)) return c; }
+  return ym;
+}
+
+// Barra horizontal simple (sin librerías) para las gráficas del historial
+function _histBar(label, val, max, color, sufijo){
+  const pct=max>0?Math.max(2,Math.round((val/max)*100)):0;
+  return `<div style="margin-bottom:7px">
+    <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
+      <span style="color:var(--text2)">${label}</span>
+      <span style="color:${color};font-weight:700;font-family:'DM Mono',monospace">${sufijo||''}</span>
+    </div>
+    <div style="background:var(--coal4);border-radius:5px;height:9px;overflow:hidden">
+      <div style="height:100%;width:${pct}%;background:${color};border-radius:5px"></div>
+    </div>
+  </div>`;
+}
+
+// Historial del compresorista: acumulado mensual, consumo por frente (explosivo costeado
+// diario + del mes) y por equipos, con figuras y gráficas.
+function renderCompHistorial(){
+  const cont=document.getElementById('comp-hist-cont'); if(!cont) return;
+  const data=state.compresorista||[];
+  const selEl=document.getElementById('comp-hist-mes');
+  // Meses disponibles (por ventana de periodo 26→25 si existe, si no por YYYY-MM)
+  const meses=[...new Set(data.map(r=>_compPeriodoDe(r.fecha)))].filter(Boolean).sort().reverse();
+  const mesAct=(typeof finMesActual==='function')?finMesActual():(hoy().slice(0,7));
+  if(selEl){
+    const cur=selEl.value|| (meses.includes(mesAct)?mesAct:(meses[0]||mesAct));
+    selEl.innerHTML=(meses.length?meses:[mesAct]).map(m=>`<option value="${m}" ${m===cur?'selected':''}>${(typeof finNombreMes==='function')?finNombreMes(m):m}</option>`).join('');
+    if(!selEl.value) selEl.value=cur;
+  }
+  const mes=(selEl&&selEl.value)||mesAct;
+  const enMes=r=>(typeof enVentana==='function')?enVentana(r.fecha,mes):((r.fecha||'').slice(0,7)===mes);
+  const repMes=data.filter(enMes);
+  const precios=(typeof compGetPreciosExp==='function')?compGetPreciosExp():COMP_PRECIOS_EXP_DEFAULT;
+  const pPet=(typeof compGetPrecioPet==='function')?compGetPrecioPet():24.5;
+  const pGas=(typeof compGetPrecioGas==='function')?compGetPrecioGas():21;
+
+  if(!repMes.length){ cont.innerHTML='<div class="card"><div class="empty-state">Sin reportes en este mes.</div></div>'; return; }
+
+  // ── Gasto de explosivo por frente: diario y acumulado ──
+  const costoRep=(r,campo)=>(r.expFrente||[]).reduce((s,x)=>s+(Number(x[campo])||0)*(precios[x.codigo]||0),0);
+  const porDia={}; // fecha -> {rampa, galeria}
+  let gastoF1=0,gastoF2=0;
+  repMes.forEach(r=>{
+    const cr=costoRep(r,'rampa'), cg=costoRep(r,'galeria');
+    gastoF1+=cr; gastoF2+=cg;
+    const k=r.fecha; if(!porDia[k])porDia[k]={rampa:0,galeria:0};
+    porDia[k].rampa+=cr; porDia[k].galeria+=cg;
+  });
+  const dias=Object.keys(porDia).sort();
+  const maxDia=Math.max(1,...dias.map(d=>Math.max(porDia[d].rampa,porDia[d].galeria)));
+  const fS=n=>'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  const kpiFrentes=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px">
+    <div class="kpi-card"><div class="kpi-label">💥 Gasto Explosivo Mes</div><div class="kpi-value gold">${fS(gastoF1+gastoF2)}</div><div class="kpi-sub">acumulado ${finNombreMes?finNombreMes(mes):mes}</div></div>
+    <div class="kpi-card"><div class="kpi-label">🟥 Rampa Brenda (F1)</div><div class="kpi-value" style="color:#f87171">${fS(gastoF1)}</div><div class="kpi-sub">explosivo del mes</div></div>
+    <div class="kpi-card"><div class="kpi-label">🟦 Cortada Noreste (F2)</div><div class="kpi-value blue">${fS(gastoF2)}</div><div class="kpi-sub">explosivo del mes</div></div>
+  </div>`;
+
+  const graficaDiaria=`<div class="card" style="margin-bottom:16px">
+    <div class="section-title" style="margin-top:0;font-size:13px">📈 Gasto de explosivo por día (por frente)</div>
+    ${dias.map(d=>`<div style="margin-bottom:10px">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px">${(typeof fmtF==='function')?fmtF(d):d}</div>
+      ${_histBar('🟥 Rampa',porDia[d].rampa,maxDia,'#f87171',fS(porDia[d].rampa))}
+      ${_histBar('🟦 Cortada',porDia[d].galeria,maxDia,'#60a5fa',fS(porDia[d].galeria))}
+    </div>`).join('')}
+  </div>`;
+
+  // ── Consumo por equipos: combustible (gln + S/) ──
+  const combEq={}; // equipo -> {pet, gas}
+  repMes.forEach(r=>{
+    (r.petroleo||[]).forEach(p=>{ if(p.gln){ combEq[p.equipo]=combEq[p.equipo]||{pet:0,gas:0}; combEq[p.equipo].pet+=Number(p.gln)||0; } });
+    (r.gasolina||[]).forEach(p=>{ if(p.gln){ combEq[p.equipo]=combEq[p.equipo]||{pet:0,gas:0}; combEq[p.equipo].gas+=Number(p.gln)||0; } });
+  });
+  const eqList=Object.keys(combEq).sort((a,b)=>((combEq[b].pet+combEq[b].gas)-(combEq[a].pet+combEq[a].gas)));
+  const maxGln=Math.max(1,...eqList.map(e=>combEq[e].pet+combEq[e].gas));
+  const equiposCards=eqList.length?`<div class="card" style="margin-bottom:16px">
+    <div class="section-title" style="margin-top:0;font-size:13px">🛠️ Consumo de combustible por equipo</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">
+      ${eqList.map(e=>{const c=combEq[e];const gln=c.pet+c.gas;const costo=c.pet*pPet+c.gas*pGas;
+        return `<div style="background:var(--coal3);border:1px solid var(--border);border-radius:12px;padding:12px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span style="font-size:22px">${compFig(e)}</span>
+            <div style="font-size:12px;font-weight:700;color:var(--text);line-height:1.1">${e}</div>
+          </div>
+          <div style="font-size:18px;font-weight:900;color:#22d3a5">${gln.toLocaleString('es-PE',{maximumFractionDigits:1})} gln</div>
+          <div style="font-size:11px;color:var(--text3)">${c.pet?`Pet: ${c.pet.toFixed(1)} · `:''}${c.gas?`Gas: ${c.gas.toFixed(1)} · `:''}${fS(costo)}</div>
+          <div style="margin-top:6px">${_histBar('',gln,maxGln,'#22d3a5','')}</div>
+        </div>`;}).join('')}
+    </div>
+  </div>`:'';
+
+  // ── Horómetros acumulados por equipo ──
+  const horoEq={};
+  repMes.forEach(r=>(r.horometros||[]).forEach(h=>{ if(h.HT){ horoEq[h.equipo]=(horoEq[h.equipo]||0)+(Number(h.HT)||0); } }));
+  const horoList=Object.keys(horoEq).sort((a,b)=>horoEq[b]-horoEq[a]);
+  const maxHoro=Math.max(1,...horoList.map(e=>horoEq[e]));
+  const horoCard=horoList.length?`<div class="card">
+    <div class="section-title" style="margin-top:0;font-size:13px">⏱️ Horas trabajadas por equipo (acumulado mes)</div>
+    ${horoList.map(e=>_histBar(`${compFig(e)} ${e}`,horoEq[e],maxHoro,'#a78bfa',horoEq[e].toFixed(1)+' h')).join('')}
+  </div>`:'';
+
+  cont.innerHTML=kpiFrentes+graficaDiaria+equiposCards+horoCard;
 }
 
 function renderTablaCompresorista() {
