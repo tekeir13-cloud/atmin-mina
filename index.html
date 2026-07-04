@@ -4223,12 +4223,17 @@ async function cargarAlmacenCombustibleSB(){
       // Verificar si el catálogo en nube es viejo (PRD- o sin versión) → usar catálogo nuevo
       const nubeProds=almNube.productos||[];
       const catalogoObsoleto=almNube.catalogVersion!==8||(nubeProds.length>0&&nubeProds.every(p=>(p.codigo||'').startsWith('PRD-')||(p.id||'').startsWith('P0')));
+      // Movimientos locales (aún no sincronizados) para no perderlos en la carga desde nube
+      let almLocalPrev={}; try{ almLocalPrev=JSON.parse(localStorage.getItem(ALM_KEY)||'{}')||{}; }catch(e){}
       let productosFinales=nubeProds, invFinal=almNube.inventarioInicial||[], ingFinal=almNube.ingresos||[], salFinal=almNube.salidas||[];
       if(catalogoObsoleto){
-        // Migración v5: catálogo de 380 productos + stock inicial del Excel (Insumos/Mantenimiento). Baseline limpio.
+        // Actualiza SOLO catálogo + inventario inicial. NO borra movimientos (ingresos/salidas se conservan).
         almacenSeedProductos(); almacenSeedInventarioInicial();
-        productosFinales=state.almacen.productos; invFinal=state.almacen.inventarioInicial; ingFinal=[]; salFinal=[];
+        productosFinales=state.almacen.productos; invFinal=state.almacen.inventarioInicial;
       }
+      // Unir movimientos de nube + locales (por id) → recupera lo que un equipo tenga y la nube haya perdido
+      ingFinal = (typeof mergeSnapById==='function') ? mergeSnapById(ingFinal, almLocalPrev.ingresos||[]) : ingFinal;
+      salFinal = (typeof mergeSnapById==='function') ? mergeSnapById(salFinal, almLocalPrev.salidas||[]) : salFinal;
       state.almacen={
         ingresos:ingFinal, salidas:salFinal,
         inventarioInicial:invFinal, historialMeses:almNube.historialMeses||[],
@@ -5677,7 +5682,7 @@ function almacenLoad(){
     if(catalogoObsoletoLocal){
       almacenSeedProductos();
       almacenSeedInventarioInicial();
-      state.almacen.ingresos=[]; state.almacen.salidas=[];
+      // NO borrar movimientos: se conservan los ingresos/salidas existentes de este equipo
       state.almacen.catalogVersion=8;
       almacenSave();
     } else if(!state.almacen.ingresos.length && !state.almacen.salidas.length && !(state.almacen.inventarioInicial||[]).length && !(state.almacen.historialMeses||[]).length){
