@@ -5292,6 +5292,13 @@ function renderDashAvanceMeta(){
   const pct=mp>0?Math.round(tot/mp*100):0;
   const ok=pct>=100;
 
+  // Cimbras instaladas — acumulado del mes por frente (reportes de Jefe de Guardia)
+  const mesAct=(typeof finMesActual==='function')?finMesActual():hoy().slice(0,7);
+  const rgMes=(state.reportesGuardia||[]).filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mesAct):((r.fecha||'').slice(0,7)===mesAct));
+  const cimbF={1:0,2:0}; let cimbExtra=0;
+  rgMes.forEach(r=>{ cimbF[1]+=(r.brenda?.cimbra||0); cimbF[2]+=(r.crne?.cimbra||0); (r.frentesExtra||[]).forEach(fx=>cimbExtra+=(fx.cimbra||0)); });
+  const cimbTot=cimbF[1]+cimbF[2]+cimbExtra;
+
   // por frente
   const filas=[1,2].map(f=>{
     const real=state.perforacion.filter(p=>p.frente===f).reduce((s,p)=>s+(Number(p.metros)||0),0);
@@ -5299,7 +5306,7 @@ function renderDashAvanceMeta(){
     const p=meta>0?Math.round(real/meta*100):0;
     return `<div style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
-        <span style="font-size:13px;font-weight:700;color:var(--text)">⛏ Frente ${f} · ${FNOM[f]}</span>
+        <span style="font-size:13px;font-weight:700;color:var(--text)">⛏ Frente ${f} · ${FNOM[f]} <span style="font-size:11px;color:#fbbf24;font-weight:600">· 🏗 ${cimbF[f]} cimbras mes</span></span>
         <span style="font-size:12px;color:var(--text3)"><strong style="color:${FCOL[f]};font-size:18px">${r1(real)} m</strong> / ${meta} m meta</span>
       </div>
       <div style="background:rgba(255,255,255,.06);border-radius:99px;height:16px;overflow:hidden;position:relative">
@@ -5319,8 +5326,9 @@ function renderDashAvanceMeta(){
       </div>
     </div>
     ${filas}
-    <div style="margin-top:6px;padding-top:14px;border-top:1px solid var(--border);font-size:12px;color:${ok?'#10b981':'var(--text3)'}">
-      ${ok?'✅ Meta del período alcanzada':`Faltan <strong style="color:var(--text2)">${r1(Math.max(0,mp-tot))} m</strong> para la meta`}
+    <div style="margin-top:6px;padding-top:14px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <span style="font-size:12px;color:${ok?'#10b981':'var(--text3)'}">${ok?'✅ Meta del período alcanzada':`Faltan <strong style="color:var(--text2)">${r1(Math.max(0,mp-tot))} m</strong> para la meta`}</span>
+      <span style="font-size:12px;color:var(--text3)">🏗 Cimbras del mes: <strong style="color:#fbbf24;font-size:15px">${cimbTot}</strong>${cimbExtra?` <span style="color:var(--text3)">(incl. ${cimbExtra} en frentes extra)</span>`:''}</span>
     </div>
   </div>`;
 }
@@ -13215,10 +13223,15 @@ function rptOperaciones(per,dt,usr,cos,ing){
   const pF2=perf.filter(p=>p.frente===2), avg2=pF2.length?(f2m/pF2.length).toFixed(1):0;
   const cxM=tm>0?(cos/tm).toFixed(1):0;
   const ixM=tm>0?(ing/tm).toFixed(1):0;
+  // Cimbras instaladas (reportes de Jefe de Guardia): por frente + total
+  const cimb1=(state.reportesGuardia||[]).reduce((s,r)=>s+(r.brenda?.cimbra||0),0);
+  const cimb2=(state.reportesGuardia||[]).reduce((s,r)=>s+(r.crne?.cimbra||0),0);
+  let cimbEx=0; (state.reportesGuardia||[]).forEach(r=>(r.frentesExtra||[]).forEach(f=>cimbEx+=(f.cimbra||0)));
+  const cimbTot=cimb1+cimb2+cimbEx;
 
   const portada = rPortada(per,'operaciones',
     `Metros avanzados: ${tm}m totales (${cum}% de meta). Rampa: ${f1m}m (${c1}%) · Cortada: ${f2m}m (${c2}%).`,
-    `Promedio: ${prom} m/día en ${dias} días efectivos. Costo/metro: S/${cxM}/m · Ingreso/metro: S/${ixM}/m.`,
+    `Promedio: ${prom} m/día en ${dias} días efectivos. Cimbras instaladas: ${cimbTot} (Rampa ${cimb1} · Cortada ${cimb2}). Costo/metro: S/${cxM}/m · Ingreso/metro: S/${ixM}/m.`,
     dt,usr);
 
   // Registros diarios
@@ -13280,6 +13293,7 @@ function rptOperaciones(per,dt,usr,cos,ing){
         ${rRow('Mejor día',pF1.length?Math.max(...pF1.map(p=>p.metros))+'m':'—')}
         ${rRow('Meta',m1+'m')}
         ${rRow('Cumplimiento',c1+'%')}
+        ${rRow('Cimbras instaladas',cimb1)}
         <div style="margin-top:8px">${progRampa}</div>
       </div>
       <div class="rp-card"><div class="rp-ct">Cortada</div>
@@ -13289,6 +13303,7 @@ function rptOperaciones(per,dt,usr,cos,ing){
         ${rRow('Mejor día',pF2.length?Math.max(...pF2.map(p=>p.metros))+'m':'—')}
         ${rRow('Meta',m2+'m')}
         ${rRow('Cumplimiento',c2+'%')}
+        ${rRow('Cimbras instaladas',cimb2)}
         <div style="margin-top:8px">${progCortada}</div>
       </div>
       <div class="rp-card"><div class="rp-ct">Total Consolidado</div>
@@ -13297,6 +13312,7 @@ function rptOperaciones(per,dt,usr,cos,ing){
         ${rRow('Promedio general',prom+' m/día')}
         ${rRow('Meta total',meta+'m')}
         ${rRow('Cumplimiento',cum+'%')}
+        ${rRow('Cimbras instaladas',cimbTot+(cimbEx?` (incl. ${cimbEx} extra)`:''),true)}
         ${rRow('Costo/metro','S/'+cxM+'/m')}
         ${rRow('Ingreso/metro','S/'+ixM+'/m')}
         <div style="margin-top:8px">${progTotal}</div>
