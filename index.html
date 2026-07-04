@@ -3723,11 +3723,6 @@ select option{background:var(--coal3);}
       <div class="form-group" style="margin:0"><label>Unidades</label><input type="number" id="exi-unidades" min="0" step="1" placeholder="0" oninput="calcTotalExplo('exi')"></div>
     </div>
     <span id="exi-total" style="display:none"></span>
-    <div class="form-group" style="margin-bottom:12px">
-      <label>📷 Foto del Vale</label>
-      <input type="file" id="exi-foto" accept="image/*" onchange="previsualizarFoto('exi-foto','exi-foto-preview')" style="display:block;margin-bottom:6px">
-      <img id="exi-foto-preview" src="" style="display:none;max-width:100%;max-height:120px;border-radius:8px;border:1px solid var(--border)">
-    </div>
     <div class="btn-row">
       <button class="btn btn-gold" onclick="guardarExploIngreso()">✓ Registrar Ingreso</button>
       <button class="btn btn-outline" onclick="cerrarModal('modal-explo-ingreso')">Cancelar</button>
@@ -3789,11 +3784,6 @@ select option{background:var(--coal3);}
         <div id="exs-stock-warn" style="font-size:12px;color:#f87171;font-weight:600;display:none">⚠ Excede el stock</div>
       </div>
       <span id="exs-total" style="display:none"></span>
-    </div>
-    <div class="form-group" style="margin-bottom:12px">
-      <label>📷 Foto del Vale</label>
-      <input type="file" id="exs-foto" accept="image/*" onchange="previsualizarFoto('exs-foto','exs-foto-preview')" style="display:block;margin-bottom:6px">
-      <img id="exs-foto-preview" src="" style="display:none;max-width:100%;max-height:120px;border-radius:8px;border:1px solid var(--border)">
     </div>
     <div class="btn-row">
       <button class="btn btn-gold" onclick="guardarExploSalida()">✓ Registrar Salida</button>
@@ -7457,7 +7447,7 @@ function renderExploHistorial(){
           <div style="font-size:12px;color:var(--text3);margin-top:3px">${esIng?'Polvorín Santa María → NV3190':'NV3190 → Almacén NV2820'}</div>
           <div style="font-size:12px;margin-top:4px">Vale: <strong>${r.vale||'—'}</strong> · Cantidad: <strong style="color:${color}">${cantLabel}</strong></div>
         </div>
-        ${(r.fotoUrl||r.fotoBase64)?`<img src="${r.fotoUrl||r.fotoBase64}" style="max-height:64px;max-width:100px;border-radius:6px;border:1px solid var(--border);cursor:pointer" onclick="verFotoExplo('${r.id}')" title="Ver foto del vale">`:((r._tieneFoto)?'<div style="color:var(--text3);font-size:11px;padding:4px">📷 Foto en otro equipo</div>':'<div style="color:var(--text3);font-size:11px;padding:4px">Sin foto</div>')}
+        ${(r.fotoUrl||r.fotoBase64)?`<img src="${r.fotoUrl||r.fotoBase64}" style="max-height:64px;max-width:100px;border-radius:6px;border:1px solid var(--border);cursor:pointer" onclick="verFotoExplo('${r.id}')" title="Ver foto del vale">`:''}
       </div>
     </div>`;
   }).join('');
@@ -7505,8 +7495,6 @@ function abrirModalExploIngreso(){
   const g=id=>document.getElementById(id);
   g('exi-fecha').value=hoy();g('exi-vale').value='';g('exi-producto').value='';
   g('exi-cajas').value='';g('exi-unidades').value='';g('exi-total').textContent='Selecciona producto y cantidad';
-  g('exi-foto').value='';delete g('exi-foto').dataset.b64;
-  g('exi-foto-preview').style.display='none';g('exi-foto-preview').src='';
   abrirModal('modal-explo-ingreso');
 }
 // Sube una foto (base64) a Supabase Storage y devuelve la URL pública (compartible entre dispositivos).
@@ -7532,21 +7520,14 @@ async function guardarExploIngreso(){
   const total=calcTotalExplo('exi');
   if(total<=0){showNotif('⚠ Ingresa cajas o unidades','error');return;}
   if(!state.almacen.explosivos)state.almacen.explosivos={ingresos:[],salidas:[]};
-  const fotoBase64=g('exi-foto').dataset.b64||null;
   const reg={
     id:'EI'+Date.now(),fecha:g('exi-fecha').value||hoy(),vale,
     producto:prodId,cajas:parseInt(g('exi-cajas').value)||0,
     unidades:parseInt(g('exi-unidades').value)||0,totalUnidades:total,
     origen:'Polvorin Santa Maria'
   };
-  // Subir la foto a Storage (se ve en TODOS los dispositivos); si falla, queda solo local en base64
-  if(fotoBase64){
-    showNotif('📤 Subiendo foto…');
-    const url=await subirFotoStorage(fotoBase64,'explosivos');
-    if(url) reg.fotoUrl=url; else reg.fotoBase64=fotoBase64;
-  }
   state.almacen.explosivos.ingresos.push(reg);
-  if(!almacenSave() && reg.fotoBase64){reg.fotoBase64=null;almacenSave();}  // si la foto local desbordó la cuota, guarda al menos el registro
+  almacenSave();
   cerrarModal('modal-explo-ingreso');renderExploTab();
   showNotif(`✓ Ingreso registrado: ${total} ${exploGetCat(prodId)?.unidad||'und'} de ${exploGetCat(prodId)?.nombre}`);
 }
@@ -7587,10 +7568,6 @@ function abrirModalExploSalida(){
   g('exs-vale').value='';
   g('exs-cajas').value='';
   g('exs-unidades').value='';
-  g('exs-foto').value='';
-  delete g('exs-foto').dataset.b64;
-  g('exs-foto-preview').style.display='none';
-  g('exs-foto-preview').src='';
   const warn=g('exs-stock-warn');if(warn)warn.style.display='none';
   const disp=g('exs-stock-disp');if(disp)disp.textContent='—';
   const stock=exploStockActual();
@@ -7617,20 +7594,14 @@ async function guardarExploSalida(){
   const stock=exploStockActual();
   if(total>(stock[prodId]||0)){showNotif(`⚠ Stock insuficiente. Disponible: ${stock[prodId]||0} ${exploGetCat(prodId)?.unidad||'und'}`,'error');return;}
   if(!state.almacen.explosivos)state.almacen.explosivos={ingresos:[],salidas:[]};
-  const fotoBase64=g('exs-foto').dataset.b64||null;
   const reg={
     id:'ES'+Date.now(),fecha:g('exs-fecha').value||hoy(),vale,
     producto:prodId,cajas:parseInt(g('exs-cajas').value)||0,
     unidades:parseInt(g('exs-unidades').value)||0,totalUnidades:total,
     destino:'Almacen NV2820'
   };
-  if(fotoBase64){
-    showNotif('📤 Subiendo foto…');
-    const url=await subirFotoStorage(fotoBase64,'explosivos');
-    if(url) reg.fotoUrl=url; else reg.fotoBase64=fotoBase64;
-  }
   state.almacen.explosivos.salidas.push(reg);
-  if(!almacenSave() && reg.fotoBase64){reg.fotoBase64=null;almacenSave();}
+  almacenSave();
   cerrarModal('modal-explo-salida');renderExploTab();
   try{ if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
   showNotif(`✓ Salida registrada: ${total} ${exploGetCat(prodId)?.unidad||'und'} de ${exploGetCat(prodId)?.nombre}`);
