@@ -5103,7 +5103,7 @@ function renderDashEjecutivo(){
   });
   const precioPet=compGetPrecioPet();
   const precioGas=compGetPrecioGas();
-  const mantMes=(state.mantenimiento||[]).filter(m=>(m.fecha||'').startsWith(mes));
+  const mantMes=(state.mantenimiento||[]).filter(m=>filtroMes(m.fecha,mes));
   const mantPorEq=tags=>mantMes.filter(m=>m.aprobLog&&m.aprobLog.ok&&tags.some(t=>(m.equipo||'').toLowerCase().includes(t))).reduce((s,m)=>s+(m.costo||0),0);
   const ingMes=finIngMaqGet(mes);
 
@@ -5329,11 +5329,11 @@ function renderDashResumenHoy(){
   const fMetros = pre => (typeof finAvanceMes==='function') ? finAvanceMes(pre) : 0;
   // Costo operativo → planilla (tareo)
   const fPlanilla = pre => (typeof finCostoPlanilla==='function') ? finCostoPlanilla(pre)
-      : state.tareas.filter(t=>(t.fecha||'').startsWith(pre)).reduce((s,t)=>{const p=state.personal.find(x=>x.id===t.trabajadorId);return s+((t.jornal??p?.jornal??0)*(t.mult||1));},0);
+      : state.tareas.filter(t=>filtroMes(t.fecha,pre)).reduce((s,t)=>{const p=state.personal.find(x=>x.id===t.trabajadorId);return s+((t.jornal??p?.jornal??0)*(t.mult||1));},0);
   // Logística → salidas de almacén general
   const fLogistica = pre => (typeof finCostoLogistica==='function') ? finCostoLogistica(pre) : 0;
   // Petróleo → salidas de combustible (pestaña Combustible)
-  const fPetroleo = pre => { try{ return (combCargar('pet')||[]).filter(r=>(r.fecha||'').startsWith(pre)).reduce((s,r)=>s+(Number(r.cantidad)||0),0); }catch(e){ return 0; } };
+  const fPetroleo = pre => { try{ return (combCargar('pet')||[]).filter(r=>filtroMes(r.fecha,pre)).reduce((s,r)=>s+(Number(r.cantidad)||0),0); }catch(e){ return 0; } };
   // Explosivos → salidas de explosivos NV3190
   const fExplos = pre => (typeof finCostoExplosivos==='function') ? finCostoExplosivos(pre) : 0;
   // Mantenimiento → kits de mantenimiento aprobados por logística
@@ -7238,7 +7238,7 @@ function renderHistorialAlmacen(){
   const mes=(sel&&sel.value)||'';
   let ings=state.almacen.ingresos.slice();
   let sals=state.almacen.salidas.slice();
-  if(mes){ings=ings.filter(i=>(i.fecha||'').startsWith(mes));sals=sals.filter(s=>(s.fecha||'').startsWith(mes));}
+  if(mes){ings=ings.filter(i=>filtroMes(i.fecha,mes));sals=sals.filter(s=>filtroMes(s.fecha,mes));}
   // ── INGRESOS agrupados por hoja de registro (grupo); fallback a vale para datos antiguos ──
   const gIn={};
   ings.forEach(i=>{const k=i.grupo||(i.vale?('V'+i.vale):('U'+i.id));(gIn[k]=gIn[k]||[]).push(i);});
@@ -7429,10 +7429,10 @@ function renderInventario(){
   if(filtroAlm) stock=stock.filter(r=>r.almacen===filtroAlm);
   stock=stock.sort((a,b)=>a.almacen.localeCompare(b.almacen)||(a.producto||a.descripcion).localeCompare(b.producto||b.descripcion));
   const valorStock=stock.reduce((a,r)=>a+r.stock*r.precio,0);
-  const sals=state.almacen.salidas.filter(s=>(s.fecha||'').startsWith(mes)&&(!filtroAlm||s.almacen===filtroAlm));
+  const sals=state.almacen.salidas.filter(s=>filtroMes(s.fecha,mes)&&(!filtroAlm||s.almacen===filtroAlm));
   const gasto=sals.reduce((a,s)=>a+(Number(s.importe)||0),0);
-  const gGen=state.almacen.salidas.filter(s=>(s.fecha||'').startsWith(mes)&&s.almacen==='General').reduce((a,s)=>a+(Number(s.importe)||0),0);
-  const gMant=state.almacen.salidas.filter(s=>(s.fecha||'').startsWith(mes)&&s.almacen==='Mantenimiento').reduce((a,s)=>a+(Number(s.importe)||0),0);
+  const gGen=state.almacen.salidas.filter(s=>filtroMes(s.fecha,mes)&&s.almacen==='General').reduce((a,s)=>a+(Number(s.importe)||0),0);
+  const gMant=state.almacen.salidas.filter(s=>filtroMes(s.fecha,mes)&&s.almacen==='Mantenimiento').reduce((a,s)=>a+(Number(s.importe)||0),0);
   const g=id=>document.getElementById(id);
   // Semáforos de stock: 🟢 OK (≥10) · 🟡 bajo (1-9) · 🔴 agotado (≤0)
   const conStock=stock.filter(r=>r.stock>0);
@@ -7487,8 +7487,8 @@ function renderInventario(){
 }
 function cerrarMesInventario(){
   const mes=document.getElementById('inv-mes-sel')?.value||almMesActual();
-  const ings=state.almacen.ingresos.filter(i=>(i.fecha||'').startsWith(mes));
-  const sals=state.almacen.salidas.filter(s=>(s.fecha||'').startsWith(mes));
+  const ings=state.almacen.ingresos.filter(i=>filtroMes(i.fecha,mes));
+  const sals=state.almacen.salidas.filter(s=>filtroMes(s.fecha,mes));
   if(!ings.length&&!sals.length){showNotif('No hay movimientos en este mes para cerrar','error');return;}
   if(!confirm(`¿Cerrar el mes ${mes}?\n\nSe archivará el gasto y los movimientos. El stock restante pasará como inventario inicial del siguiente mes. El gasto se reinicia.`))return;
   const gasto=sals.reduce((a,s)=>a+(Number(s.importe)||0),0);
@@ -7498,8 +7498,8 @@ function cerrarMesInventario(){
   const stock=calcStock().filter(r=>r.stock>0).map(r=>({almacen:r.almacen,codigo:r.codigo,producto:r.producto,descripcion:r.descripcion,unidad:r.unidad,precio:r.precio,cantidad:r.stock}));
   state.almacen.historialMeses.push({mes,gasto,gastoGeneral,gastoMant,ingresos:ings,salidas:sals,cerradoEl:hoy()});
   // Limpiar movimientos del mes cerrado; conservar otros meses (por si hay)
-  state.almacen.ingresos=state.almacen.ingresos.filter(i=>!(i.fecha||'').startsWith(mes));
-  state.almacen.salidas=state.almacen.salidas.filter(s=>!(s.fecha||'').startsWith(mes));
+  state.almacen.ingresos=state.almacen.ingresos.filter(i=>!filtroMes(i.fecha,mes));
+  state.almacen.salidas=state.almacen.salidas.filter(s=>!filtroMes(s.fecha,mes));
   state.almacen.inventarioInicial=stock;
   almacenSave();renderInventario();renderAlmacen();
   showNotif(`✓ Mes ${mes} cerrado. Stock arrastrado: ${stock.length} productos`);
@@ -8453,7 +8453,7 @@ function renderCentroCostos(){
   const mes=(sel&&sel.value)||almMesConDatos();
   const fNivel=document.getElementById('cc-filtro-nivel')?.value||'';
   const fAlm=document.getElementById('cc-filtro-alm')?.value||'';
-  let sals=state.almacen.salidas.filter(s=>(s.fecha||'').startsWith(mes));
+  let sals=state.almacen.salidas.filter(s=>filtroMes(s.fecha,mes));
   if(fNivel) sals=sals.filter(s=>String(s.destino)===fNivel);
   if(fAlm) sals=sals.filter(s=>s.almacen===fAlm);
   const total=sals.reduce((a,s)=>a+(Number(s.importe)||0),0);
@@ -8488,8 +8488,8 @@ function exportarInventarioExcel(){
   const mes=document.getElementById('inv-mes-sel')?.value||document.getElementById('cc-mes-sel')?.value||almMesActual();
   const [anio,mesN]=mes.split('-');
   const nombreMes=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][parseInt(mesN)-1]||mes;
-  const sals=state.almacen.salidas.filter(s=>(s.fecha||'').startsWith(mes));
-  const ings=state.almacen.ingresos.filter(i=>(i.fecha||'').startsWith(mes));
+  const sals=state.almacen.salidas.filter(s=>filtroMes(s.fecha,mes));
+  const ings=state.almacen.ingresos.filter(i=>filtroMes(i.fecha,mes));
   const stock=calcStock();
   const S={
     titulo:{font:{bold:true,sz:16,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'B91C1C'}},alignment:{horizontal:'center',vertical:'center'}},
@@ -9071,7 +9071,7 @@ function actualizarKpisTareo(fecha){
   const mes=f.slice(0,7);
   const activos=state.personal.filter(p=>p.estado!=='baja');
   const hoyT=state.tareas.filter(t=>t.fecha===f);
-  const mesT=state.tareas.filter(t=>t.fecha.startsWith(mes));
+  const mesT=state.tareas.filter(t=>filtroMes(t.fecha,mes));
   const costHoy=hoyT.reduce((s,t)=>{const p=state.personal.find(x=>x.id==t.trabajadorId);return s+((t.jornal??p?.jornal??0)*(t.mult||1));},0);
   const costMes=mesT.reduce((s,t)=>{const p=state.personal.find(x=>x.id==t.trabajadorId);return s+((t.jornal??p?.jornal??0)*(t.mult||1));},0);
   const g=id=>document.getElementById(id);
@@ -9618,7 +9618,7 @@ async function eliminarPersonal(id){
 function renderCostoRRHH(){
   const g=id=>document.getElementById(id);
   const mes=g('costo-mes-sel')?.value||hoy().slice(0,7);
-  const tMes=state.tareas.filter(t=>t.fecha.startsWith(mes));
+  const tMes=state.tareas.filter(t=>filtroMes(t.fecha,mes));
   const todos=state.personal; // todos, incluyendo bajas
   const tbody=g('cr-tabla-tbody');if(!tbody) return;
   let totTotal=0,totTareas=0,totDias=0;
@@ -9704,7 +9704,7 @@ function planillaSupMes(mesYM){ const o=planillaSupLoad(); return Array.isArray(
 function planillaSupTotal(mesYM){ return planillaSupMes(mesYM).reduce((s,r)=>s+(Number(r.monto)||0),0); }
 // Total operarios del mes (tareos, excluye sueldos reservados) — para la planilla integrada
 function planillaOperariosTotal(mesYM){
-  return (state.tareas||[]).filter(t=>(t.fecha||'').startsWith(mesYM)).reduce((s,t)=>{
+  return (state.tareas||[]).filter(t=>filtroMes(t.fecha,mesYM)).reduce((s,t)=>{
     const p=(state.personal||[]).find(pp=>String(pp.id)===String(t.trabajadorId));
     if(p && esSueldoReservado(p.rol)) return s;
     const j=(t.jornal!=null?t.jornal:(p?p.jornal:0))||0;
@@ -9826,7 +9826,7 @@ async function exportarPlanillaIntegradaExcel(){
   if(typeof ExcelJS==='undefined'){ showNotif('No se pudo cargar el generador de Excel','error'); return; }
   const wb=new ExcelJS.Workbook(); wb.creator='ATMIN';
   // Detalle operarios (por trabajador, excluye reservados)
-  const tMes=(state.tareas||[]).filter(t=>(t.fecha||'').startsWith(mes));
+  const tMes=(state.tareas||[]).filter(t=>filtroMes(t.fecha,mes));
   const opMap={};
   tMes.forEach(t=>{
     const p=(state.personal||[]).find(pp=>String(pp.id)===String(t.trabajadorId));
@@ -10316,7 +10316,7 @@ async function servReporteMensual(){
 
   // Pedir mes al usuario via prompt simple
   const mesSelec=prompt('Mes a reportar (YYYY-MM) — deja en blanco para todos los registros:', hoy().slice(0,7));
-  const filtrados=mesSelec?arr.filter(r=>(r.fecha||'').startsWith(mesSelec)):arr;
+  const filtrados=mesSelec?arr.filter(r=>filtroMes(r.fecha,mesSelec)):arr;
   if(!filtrados.length){showNotif('No hay liquidaciones para ese período','warn');return;}
 
   const proyecto=localStorage.getItem('atmin_fin_proyecto')||'Proyecto Minero';
@@ -10377,7 +10377,7 @@ async function servReporteMensual(){
   ws.getRow(r).height=24;
 
   // ── HOJA ANEXA: PLANILLA COMPLETA del mismo período (tareos × jornal) ──
-  const tareosMes=(state.tareas||[]).filter(t=>mesSelec?(t.fecha||'').startsWith(mesSelec):true)
+  const tareosMes=(state.tareas||[]).filter(t=>mesSelec?filtroMes(t.fecha,mesSelec):true)
     .sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
   const wp=wb.addWorksheet('Planilla',{pageSetup:{paperSize:9,orientation:'landscape',fitToPage:true,fitToWidth:1}});
   wp.columns=[{width:5},{width:14},{width:10},{width:34},{width:22},{width:12},{width:8},{width:14}];
@@ -10440,7 +10440,7 @@ function exportarPlanillaExcel(){
   const mes=document.getElementById('costo-mes-sel')?.value||hoy().slice(0,7);
   const [anio,mesN]=mes.split('-');
   const nombreMes=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][parseInt(mesN)-1]||mes;
-  const tMes=state.tareas.filter(t=>t.fecha.startsWith(mes));
+  const tMes=state.tareas.filter(t=>filtroMes(t.fecha,mes));
   const todos=state.personal;
   // ── Estilos ──
   const S={
@@ -12794,6 +12794,8 @@ function renderUtilidad(){
 const MN_REP = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
   'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
+// Periodo (YYYY-MM) del reporte que se está generando — lo fijan generarReporte y lo usan rpt*
+let _repMesYM = null;
 // Helper: crear fila de dato
 const rRow = (l,v,hi)=>
   `<div class="rp-row"><span class="rp-rl">${l}</span><span class="rp-rv${hi?' hi':''}">${v}</span></div>`;
@@ -12886,8 +12888,11 @@ function generarReporte(){
   const pers = state.personal.filter(p=>p.estado==='activo');
   const ac   = pers.length;
   const aus  = state.personal.filter(p=>p.estado==='ausente').length;
-  const cos  = calcCostos();
-  const ing  = calcIngresos();
+  // Cifras UNIFICADAS del periodo elegido: misma fórmula que Dashboard/Finanzas/NIA
+  // (antes usaba calcCostos/calcIngresos sobre módulos legacy vacíos → cifras en 0/desalineadas)
+  _repMesYM = `${año}-${String(mes).padStart(2,'0')}`;
+  const cos  = (typeof finCostoTotal==='function') ? finCostoTotal(_repMesYM) : calcCostos();
+  const ing  = (typeof finValorizacionMes==='function') ? (finValorizacionMes(_repMesYM).total||0) : calcIngresos();
   const util = ing-cos;
   const mrg  = ing>0?Math.round((util/ing)*100):0;
 
@@ -12946,7 +12951,10 @@ function rptGeneral(per,dt,usr,ac,aus,cos,ing,util,mrg){
   const ixM=tm>0?(ing/tm).toFixed(1):0;
   const roi=cos>0?Math.round((util/cos)*100):0;
   const spread=Number(ixM)-Number(cxM);
-  const ldr=[['Planilla',j],['Explosivos',exp],['Petróleo',pet],['Mantenimiento',man],['Maquinaria',maq]].sort((a,b)=>b[1]-a[1])[0];
+  const ldr=((typeof finDesgloseGastos==='function'&&_repMesYM)
+    ? finDesgloseGastos(_repMesYM).map(c=>[c.label,c.monto])
+    : [['Planilla',j],['Explosivos',exp],['Petróleo',pet],['Mantenimiento',man],['Maquinaria',maq]]
+  ).sort((a,b)=>b[1]-a[1])[0]||['—',0];
   const ingMaq=state.maquinas&&state.maquinas.uso?state.maquinas.uso.reduce((s,u)=>{const t=state.tarifario.maquinas.find(m=>m.equipo===u.equipo);return s+(t?(u.horas||0)*t.tarifaHora:0);},0):0;
   const ingFre=[1,2].reduce((s,f)=>{const t=state.tarifario.frentes.find(tf=>tf.frente===f);const mt=perf.filter(p=>p.frente===f).reduce((sm,p)=>sm+p.metros,0);return s+(t?mt*t.tarifaMetro:0);},0);
   const ingVal=state.valorizaciones.reduce((s,v)=>s+v.monto,0);
@@ -13048,19 +13056,20 @@ function rptGeneral(per,dt,usr,ac,aus,cos,ing,util,mrg){
   `, 'MUKICLOUD — Resumen General', per, '2 / 3');
 
   // ── PÁGINA 3 — ANÁLISIS FINANCIERO GERENCIAL ──
+  // Estado de resultados UNIFICADO: mismos rubros que Dashboard/Finanzas (finDesgloseGastos)
+  // y la valorización del periodo como ingreso. Antes usaba módulos legacy vacíos.
+  const _desg=(typeof finDesgloseGastos==='function'&&_repMesYM)?finDesgloseGastos(_repMesYM):[];
+  const _valPer=(typeof finValorizacionMes==='function'&&_repMesYM)?finValorizacionMes(_repMesYM):{total:ing,descuento:0};
+  const _ingMaqU=(typeof finIngMaqGet==='function'&&_repMesYM)?Object.values(finIngMaqGet(_repMesYM)).reduce((s,v)=>s+(Number(v)||0),0):0;
+  const filasCostos=_desg.map(c=>`<tr><td>(−) ${c.label}</td><td class="r">${fmtS(c.monto)}</td><td class="r g">${ing>0?Math.round((c.monto/ing)*100):0}%</td><td class="r g">${cos>0?Math.round((c.monto/cos)*100):0}%</td></tr>`).join('');
   const edoHtml=`<table class="rp-tbl">
     <thead><tr><th>Concepto</th><th class="r">Monto S/</th><th class="r">% Ing.</th><th class="r">% Cost.</th></tr></thead>
     <tbody>
-      <tr><td style="color:#1d6fe5;font-weight:700">(+) Ingresos Máquinas</td><td class="r">${fmtS(ingMaq)}</td><td class="r g">${ing>0?Math.round((ingMaq/ing)*100):0}%</td><td class="r g">—</td></tr>
-      <tr><td style="color:#1d6fe5;font-weight:700">(+) Ingresos Frentes</td><td class="r">${fmtS(ingFre)}</td><td class="r g">${ing>0?Math.round((ingFre/ing)*100):0}%</td><td class="r g">—</td></tr>
-      <tr><td style="color:#1d6fe5;font-weight:700">(+) Valorizaciones</td><td class="r">${fmtS(ingVal)}</td><td class="r g">${ing>0?Math.round((ingVal/ing)*100):0}%</td><td class="r g">—</td></tr>
+      <tr><td style="color:#1d6fe5;font-weight:700">(+) Valorización del periodo</td><td class="r">${fmtS(_valPer.total||0)}</td><td class="r g">${ing>0?Math.round(((_valPer.total||0)/ing)*100):0}%</td><td class="r g">—</td></tr>
+      ${_valPer.descuento?`<tr><td style="color:#dc2626">(−) Descuentos de valorización</td><td class="r">${fmtS(_valPer.descuento)}</td><td class="r g">—</td><td class="r g">—</td></tr>`:''}
+      ${_ingMaqU?`<tr><td style="color:#64748b">Ingresos x Máquina (informativo, incluido arriba si valorizado)</td><td class="r">${fmtS(_ingMaqU)}</td><td class="r g">—</td><td class="r g">—</td></tr>`:''}
       <tr style="background:#f0f7ff"><td style="font-weight:800">= INGRESOS TOTALES</td><td class="r" style="font-weight:800">${fmtS(ing)}</td><td class="r" style="font-weight:800">100%</td><td class="r g">—</td></tr>
-      <tr><td>(−) Planilla</td><td class="r">${fmtS(j)}</td><td class="r g">${ing>0?Math.round((j/ing)*100):0}%</td><td class="r g">${cos>0?Math.round((j/cos)*100):0}%</td></tr>
-      <tr><td>(−) Explosivos</td><td class="r">${fmtS(exp)}</td><td class="r g">${ing>0?Math.round((exp/ing)*100):0}%</td><td class="r g">${cos>0?Math.round((exp/cos)*100):0}%</td></tr>
-      <tr><td>(−) Petróleo</td><td class="r">${fmtS(pet)}</td><td class="r g">${ing>0?Math.round((pet/ing)*100):0}%</td><td class="r g">${cos>0?Math.round((pet/cos)*100):0}%</td></tr>
-      <tr><td>(−) Maquinaria</td><td class="r">${fmtS(maq)}</td><td class="r g">${ing>0?Math.round((maq/ing)*100):0}%</td><td class="r g">${cos>0?Math.round((maq/cos)*100):0}%</td></tr>
-      <tr><td>(−) Mantenimiento</td><td class="r">${fmtS(man)}</td><td class="r g">${ing>0?Math.round((man/ing)*100):0}%</td><td class="r g">${cos>0?Math.round((man/cos)*100):0}%</td></tr>
-      <tr><td>(−) Aceros / EPP</td><td class="r">${fmtS(ac2+epp)}</td><td class="r g">${ing>0?Math.round(((ac2+epp)/ing)*100):0}%</td><td class="r g">${cos>0?Math.round(((ac2+epp)/cos)*100):0}%</td></tr>
+      ${filasCostos}
       <tr class="tot"><td>= COSTOS TOTALES</td><td class="r">${fmtS(cos)}</td><td class="r">${ing>0?Math.round((cos/ing)*100):0}%</td><td class="r">100%</td></tr>
       <tr style="background:${util>=0?'#f0fdf4':'#fff1f2'}">
         <td style="font-weight:800;color:${util>=0?'#16a34a':'#dc2626'}">= UTILIDAD NETA</td>
@@ -13839,13 +13848,18 @@ function renderGraficosReporte(modulo, ac, cos, ing, util){
   // ── GRÁFICO 1: Pastel distribución de costos — 5 categorías con colores vivos ──
   const ctxC = document.getElementById('rep-chart-costos');
   if(ctxC){
+    // Distribución de costos con el desglose UNIFICADO del periodo (mismo que Dashboard/Finanzas)
+    const _dg=(typeof finDesgloseGastos==='function'&&typeof _repMesYM!=='undefined'&&_repMesYM)?finDesgloseGastos(_repMesYM):null;
+    const _dgLabels=_dg?_dg.map(c=>c.label):['Jornales / Planilla','Explosivos','Petróleo (logística)','Mantenimiento','Maquinaria'];
+    const _dgData=_dg?_dg.map(c=>c.monto):[j, exp, petL, man, maqTotal];
+    const _dgColors=_dg?_dg.map(c=>c.color):[COLORS.jornales, COLORS.explosivos, COLORS.petroleo, COLORS.mant, COLORS.maquinaria];
     window._chartCostos = new Chart(ctxC, {
       type: 'doughnut',
       data: {
-        labels: ['Jornales / Planilla','Explosivos','Petróleo (logística)','Mantenimiento','Maquinaria'],
+        labels: _dgLabels,
         datasets: [{
-          data: [j, exp, petL, man, maqTotal],
-          backgroundColor: [COLORS.jornales, COLORS.explosivos, COLORS.petroleo, COLORS.mant, COLORS.maquinaria],
+          data: _dgData,
+          backgroundColor: _dgColors,
           borderColor: '#ffffff',
           borderWidth: 3,
           hoverOffset: 8,
@@ -15304,8 +15318,10 @@ function _iaContexto(){
   const dias = new Set(perf.map(p=>p.fecha)).size;
   const meta = (state.metas.f1+state.metas.f2)*state.metas.dias;
   const cum  = meta>0?Math.round((tm/meta)*100):0;
-  const cos  = calcCostos();
-  const ing  = calcIngresos();
+  // Cifras unificadas del periodo actual (mismas que Dashboard/Finanzas/Reporte Mensual)
+  const _mesIA=(typeof finMesActual==='function')?finMesActual():hoy().slice(0,7);
+  const cos  = (typeof finCostoTotal==='function')?finCostoTotal(_mesIA):calcCostos();
+  const ing  = (typeof finValorizacionMes==='function')?(finValorizacionMes(_mesIA).total||0):calcIngresos();
   const util = ing-cos;
   const mrg  = ing>0?Math.round((util/ing)*100):0;
   const cxM  = tm>0?(cos/tm).toFixed(1):0;
@@ -15456,7 +15472,7 @@ function _iaEquipos(){
     });
     const precioPet=(typeof compGetPrecioPet==='function')?compGetPrecioPet():0;
     const precioGas=(typeof compGetPrecioGas==='function')?compGetPrecioGas():0;
-    const mantMes=(state.mantenimiento||[]).filter(m=>(m.fecha||'').startsWith(mes));
+    const mantMes=(state.mantenimiento||[]).filter(m=>filtroMes(m.fecha,mes));
     const mantPorEq=tags=>mantMes.filter(m=>m.aprobLog&&m.aprobLog.ok&&tags.some(t=>(m.equipo||'').toLowerCase().includes(t))).reduce((s,m)=>s+(m.costo||0),0);
     const ingMes=(typeof finIngMaqGet==='function')?finIngMaqGet(mes):{};
     const MAQUINAS=EQUIPOS_FACTURABLES;
@@ -15984,6 +16000,16 @@ function ventanaMes(mesYM){
   return { ini:p+'-01', fin:p+'-31' };
 }
 function enVentana(fecha, mesYM){ const f=(fecha||'').slice(0,10); if(!f) return false; const w=ventanaMes(mesYM); return f>=w.ini && f<=w.fin; }
+// Filtro de mes UNIFORME para toda la app: si 'mes' es un periodo YYYY-MM respeta la ventana
+// del ciclo (mes calendario hasta jul-2026; 26→25 desde ago-2026). Si es un prefijo más largo
+// (un día YYYY-MM-DD) compara por prefijo. Reemplaza los antiguos startsWith(mes) que se
+// desalineaban del resto de vistas al empezar el ciclo 26→25.
+function filtroMes(fecha, mes){
+  const m=String(mes||''); if(!m) return true;
+  const f=String(fecha||'');
+  if(m.length===7) return enVentana(f, m);
+  return f.startsWith(m);
+}
 // Predicado que acepta prefijo de día (YYYY-MM-DD → ese día exacto) o de mes/periodo (YYYY-MM → ventana)
 function _finEnPre(fecha, pre){ if(!pre) return true; if(String(pre).length>7) return (fecha||'').startsWith(pre); return enVentana(fecha, pre); }
 function finMesActual(){ return (typeof periodoActual==='function')?periodoActual():hoy().slice(0,7); }
@@ -16693,14 +16719,14 @@ function renderFinIngresosMaq(){
 
   const MAQUINAS_LABELS=EQUIPOS_FACTURABLES;
 
-  const compMes=(state.compresorista||[]).filter(r=>(r.fecha||'').startsWith(mes));
+  const compMes=(state.compresorista||[]).filter(r=>filtroMes(r.fecha,mes));
   const galMaqPet={},galMaqGas={};
   compMes.forEach(r=>{
     (r.petroleo||[]).forEach(p=>{const k=(p.equipo||'').toLowerCase();galMaqPet[k]=(galMaqPet[k]||0)+(p.gln||0);});
     (r.gasolina||[]).forEach(p=>{const k=(p.equipo||'').toLowerCase();galMaqGas[k]=(galMaqGas[k]||0)+(p.gln||0);});
   });
   const pPet=compGetPrecioPet(),pGas=compGetPrecioGas();
-  const mantMes=(state.mantenimiento||[]).filter(m=>(m.fecha||'').startsWith(mes));
+  const mantMes=(state.mantenimiento||[]).filter(m=>filtroMes(m.fecha,mes));
   const mantPorEq=tags=>mantMes.filter(m=>m.aprobLog&&m.aprobLog.ok&&tags.some(t=>(m.equipo||'').toLowerCase().includes(t))).reduce((s,m)=>s+(m.costo||0),0);
 
   const filas=MAQUINAS_LABELS.map(m=>{
