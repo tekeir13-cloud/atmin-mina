@@ -4252,8 +4252,8 @@ async function cargarAlmacenCombustibleSB(){
     }
     // Apertura de explosivos NV3190 (una sola vez): fija el stock nuevo con 0 movimientos
     try{ if(typeof aplicarAperturaExplosivos==='function') aplicarAperturaExplosivos(); }catch(e){}
-    // Reconstruye las salidas de explosivos perdidas por el bug de la foto del vale (una sola vez)
-    try{ if(typeof reconstruirSalidasExplosivos==='function') reconstruirSalidasExplosivos(); }catch(e){}
+    // Limpia las salidas artificiales de recuperación (ESADJ-): la data real es la fuente de verdad
+    try{ if(typeof limpiarReconstruccionExplosivos==='function') limpiarReconstruccionExplosivos(); }catch(e){}
     // Salida de PRUEBA reversible (se activa/desactiva con EXPLO_PRUEBA_ACTIVA)
     try{ if(typeof aplicarSalidaPrueba==='function') aplicarSalidaPrueba(); }catch(e){}
     // EPP enviados a NV2820 (fueron consumidos por operarios): sacarlos del subalmacén
@@ -7415,11 +7415,29 @@ function reconstruirSalidasExplosivos(){
     return true;
   }catch(e){ return false; }
 }
+// Limpieza (una sola vez): elimina las salidas ARTIFICIALES de recuperación (ids 'ESADJ-') que
+// se crearon cuando se creyó que la data estaba perdida. Los equipos con las salidas REALES son
+// la fuente de verdad; estas consolidadas ya no hacen falta y podrían duplicar el descuento.
+const EXPLO_LIMPIEZA_RECUP_V=1;
+function limpiarReconstruccionExplosivos(){
+  try{
+    state.almacen=state.almacen||{};
+    if((state.almacen.exploLimpiezaRecupV||0)>=EXPLO_LIMPIEZA_RECUP_V) return false;
+    if(!state.almacen.explosivos) state.almacen.explosivos={ingresos:[],salidas:[]};
+    const exp=state.almacen.explosivos;
+    const antes=(exp.salidas||[]).length;
+    exp.salidas=(exp.salidas||[]).filter(s=>String(s.id||'').indexOf('ESADJ-')!==0);
+    state.almacen.exploLimpiezaRecupV=EXPLO_LIMPIEZA_RECUP_V;
+    try{ localStorage.setItem(ALM_KEY, JSON.stringify(state.almacen)); }catch(e){}
+    try{ if(typeof sbSyncModulo==='function') sbSyncModulo('almacen', (typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
+    return antes!==(exp.salidas||[]).length;
+  }catch(e){ return false; }
+}
 // ── SALIDA DE PRUEBA (reversible) ──
 // Interruptor para demostrar en el Excel cómo un mismo vale agrupa varias líneas de productos.
 // Con EXPLO_PRUEBA_ACTIVA=true se agrega; al ponerlo en false se elimina y el stock vuelve
 // idéntico. Ids fijos con prefijo 'ESPRB-' → no se duplica y se limpia por completo.
-const EXPLO_PRUEBA_ACTIVA=true;
+const EXPLO_PRUEBA_ACTIVA=false;
 // 5 registros de prueba en 2 vales (uno con 3 productos, otro con 2) para ver la agrupación.
 const EXPLO_PRUEBA_SALIDAS=[
   {id:'ESPRB-1', producto:'M1000',    cant:15, vale:'702'},
