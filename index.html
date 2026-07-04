@@ -7420,10 +7420,13 @@ function reconstruirSalidasExplosivos(){
 // Con EXPLO_PRUEBA_ACTIVA=true se agrega; al ponerlo en false se elimina y el stock vuelve
 // idéntico. Ids fijos con prefijo 'ESPRB-' → no se duplica y se limpia por completo.
 const EXPLO_PRUEBA_ACTIVA=true;
+// 5 registros de prueba en 2 vales (uno con 3 productos, otro con 2) para ver la agrupación.
 const EXPLO_PRUEBA_SALIDAS=[
-  {id:'ESPRB-1', producto:'M3000',    cant:10, vale:'PRUEBA-01'},
-  {id:'ESPRB-2', producto:'M5000',    cant:5,  vale:'PRUEBA-01'},
-  {id:'ESPRB-3', producto:'CARMEX18', cant:20, vale:'PRUEBA-01'},
+  {id:'ESPRB-1', producto:'M1000',    cant:15, vale:'702'},
+  {id:'ESPRB-2', producto:'M3000',    cant:8,  vale:'702'},
+  {id:'ESPRB-3', producto:'CARMEX18', cant:12, vale:'702'},
+  {id:'ESPRB-4', producto:'M5000',    cant:6,  vale:'718'},
+  {id:'ESPRB-5', producto:'NEITHER',  cant:30, vale:'718'},
 ];
 function aplicarSalidaPrueba(){
   try{
@@ -7431,15 +7434,18 @@ function aplicarSalidaPrueba(){
     if(!state.almacen.explosivos) state.almacen.explosivos={ingresos:[],salidas:[]};
     const exp=state.almacen.explosivos;
     const esPrueba=s=>String(s.id||'').indexOf('ESPRB-')===0;
-    const yaEsta=(exp.salidas||[]).some(esPrueba);
-    if(EXPLO_PRUEBA_ACTIVA===yaEsta) return false; // nada que cambiar
+    const actuales=(exp.salidas||[]).filter(esPrueba);
+    // Estado deseado (ids) según el interruptor
+    const deseados=EXPLO_PRUEBA_ACTIVA?EXPLO_PRUEBA_SALIDAS.map(o=>o.id).sort().join(','):'';
+    const presentes=actuales.map(s=>s.id).sort().join(',');
+    if(deseados===presentes) return false; // ya coincide, nada que hacer
+    // Reconciliar: quitar todas las de prueba y volver a poner el set deseado
+    exp.salidas=(exp.salidas||[]).filter(s=>!esPrueba(s));
     if(EXPLO_PRUEBA_ACTIVA){
       EXPLO_PRUEBA_SALIDAS.forEach(o=>exp.salidas.push({
         id:o.id, fecha:'2026-07-04', vale:o.vale, producto:o.producto,
         cajas:0, unidades:o.cant, totalUnidades:o.cant, destino:'Almacen NV2820'
       }));
-    }else{
-      exp.salidas=(exp.salidas||[]).filter(s=>!esPrueba(s)); // quitar prueba → stock vuelve
     }
     try{ localStorage.setItem(ALM_KEY, JSON.stringify(state.almacen)); }catch(e){}
     try{ if(typeof sbSyncModulo==='function') sbSyncModulo('almacen', (typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
