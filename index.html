@@ -4030,20 +4030,19 @@ function metaMensualFrente(id,dias){
   if(String(id)==='2') return M.mensualF2||(M.f2*dias)||0;
   return (M.metasFrentes&&Number(M.metasFrentes[id]))||0;
 }
-// Pronóstico de cierre de mes: ritmo diario real (avance a la fecha ÷ días transcurridos del
-// periodo) proyectado a los "días hábiles del mes" que define el Ingeniero Residente (no el
-// calendario de 30/31 días). diasHabiles = state.metas.dias (o el que se pase).
-function calcPronostico(valorAlaFecha, diasHabiles, iniPeriodo){
+// Pronóstico de cierre de mes: ritmo diario real = valor acumulado ÷ DÍAS CON ACTIVIDAD
+// (fechas distintas con reporte, no el calendario transcurrido), proyectado a los "días hábiles
+// del mes" que define el Ingeniero Residente. Usar días con actividad evita inflar el ritmo
+// cuando hay pocos días trabajados o cuando alguna fecha de reporte supera la fecha del sistema.
+// Ej: 47.2 m en 10 días con reporte = 4.72 m/día → a 26 días hábiles = 122.7 m.
+// El pronóstico nunca puede ser MENOR que lo ya avanzado (si ya se superó, se mantiene lo real).
+function calcPronostico(valorAlaFecha, diasHabiles, diasConActividad){
   diasHabiles=Number(diasHabiles)||26;
-  let diasTranscurridos=diasHabiles;
-  try{
-    if(iniPeriodo){
-      const d=Math.floor((new Date(hoy()+'T00:00:00')-new Date(iniPeriodo+'T00:00:00'))/86400000)+1;
-      if(d>0) diasTranscurridos=Math.min(diasHabiles,d);
-    }
-  }catch(e){}
-  const ritmo=diasTranscurridos>0?(Number(valorAlaFecha)||0)/diasTranscurridos:0;
-  return { ritmo, diasTranscurridos, proyeccion:ritmo*diasHabiles };
+  const val=Number(valorAlaFecha)||0;
+  const base=Math.max(1, Number(diasConActividad)||0);
+  const ritmo=val/base;
+  const proyeccion=Math.max(val, ritmo*diasHabiles);   // nunca proyecta menos de lo ya hecho
+  return { ritmo, diasConActividad:base, proyeccion };
 }
 function setMetaMensualFrente(id,val){
   state.metas=state.metas||{};
@@ -5170,12 +5169,13 @@ function renderDashEjecutivo(){
   // ── Pronóstico de cierre del mes (metros + cimbras) al ritmo diario real, proyectado a los
   // días hábiles que define el Ing. Residente ──
   const diasHabEjec=(state.metas&&state.metas.dias)||26;
-  const iniEjec=(typeof ventanaMes==='function')?ventanaMes(mes).ini:null;
   const rgMesEjec=(state.reportesGuardia||[]).filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mes):((r.fecha||'').slice(0,7)===mes));
   const cimbrasMesEjec=rgMesEjec.reduce((s,r)=>{ let c=FRENTES.reduce((ss,f)=>ss+((r[f.key]&&r[f.key].cimbra)||0),0); (r.frentesExtra||[]).forEach(fx=>c+=(fx.cimbra||0)); return s+c; },0);
+  // Días con actividad = fechas distintas de reporte en el mes (para no inflar el ritmo)
+  const diasActEjec=[...new Set(rgMesEjec.map(r=>r.fecha))].length || diasPerf || 1;
   const metaTotalEjec=FRENTES.reduce((s,f)=>s+(metaMensualFrente(f.id,diasHabEjec)||0),0);
-  const _pronMEjec=calcPronostico(metrosTot,diasHabEjec,iniEjec).proyeccion;
-  const _pronCEjec=Math.round(calcPronostico(cimbrasMesEjec,diasHabEjec,iniEjec).proyeccion);
+  const _pronMEjec=calcPronostico(metrosTot,diasHabEjec,diasPerf).proyeccion;
+  const _pronCEjec=Math.round(calcPronostico(cimbrasMesEjec,diasHabEjec,diasActEjec).proyeccion);
   const _pronPctEjec=metaTotalEjec>0?Math.min(100,Math.round(_pronMEjec/metaTotalEjec*100)):0;
 
   // ── P&L POR EQUIPO ──
@@ -5489,15 +5489,16 @@ function renderDashAvanceMeta(){
 
   // Por frente — los 5 frentes configurados
   let cimbExtra=0; rgMes.forEach(r=>(r.frentesExtra||[]).forEach(fx=>cimbExtra+=(fx.cimbra||0)));
-  const iniPeriodo=(typeof ventanaMes==='function')?ventanaMes(mesAct).ini:null;
   const datos=FRENTES.map(f=>{
     const real=r1(state.perforacion.filter(p=>String(p.frente)===String(f.id)).reduce((s,p)=>s+(Number(p.metros)||0),0));
     const meta=metaMensualFrente(f.id,dias)||0;
     const pc=meta>0?Math.round(real/meta*100):0;
     const cimb=rgMes.reduce((s,r)=>s+((r[f.key]&&r[f.key].cimbra)||0),0);
     const gastoExp=gastoExpD[f.id]||0;
-    const pronM=calcPronostico(real,dias,iniPeriodo);
-    const pronC=calcPronostico(cimb,dias,iniPeriodo);
+    // Días con actividad del frente = fechas distintas con avance de ese frente en el mes
+    const diasActF=[...new Set(state.perforacion.filter(p=>String(p.frente)===String(f.id)&&((typeof filtroMes==='function')?filtroMes(p.fecha,mesAct):true)).map(p=>p.fecha))].length;
+    const pronM=calcPronostico(real,dias,diasActF);
+    const pronC=calcPronostico(cimb,dias,diasActF);
     return {f,real,meta,pc,cimb,gastoExp,proyM:pronM.proyeccion,proyC:pronC.proyeccion};
   });
   const tot=r1(datos.reduce((s,d)=>s+d.real,0));
@@ -11294,7 +11295,6 @@ function renderTableroOp(){
   const fST=n=>'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:0,maximumFractionDigits:0});
 
   // ── Datos por frente (los 5 configurados en FRENTES) ──
-  const iniPeriodo=(typeof ventanaMes==='function')?ventanaMes(mesAct).ini:null;
   const datos=FRENTES.map(f=>{
     const hoyM=r1m(sumF(rgHoy,f.key,'metros'));
     const mesM=r1m(sumF(rgMes,f.key,'metros'));
@@ -11302,8 +11302,10 @@ function renderTableroOp(){
     const pc=meta>0?Math.round((mesM/meta)*100):0;
     const pers=(f.id===1||f.id===2)?Object.values(dist).filter(v=>String(v)===String(f.id)).length:0;
     const cimbMes=sumF(rgMes,f.key,'cimbra');
-    const pronM=calcPronostico(mesM,dias,iniPeriodo);
-    const pronC=calcPronostico(cimbMes,dias,iniPeriodo);
+    // Días con actividad del frente = fechas distintas con avance de ese frente en el mes
+    const diasActF=[...new Set(rgMes.filter(r=>((r[f.key]&&r[f.key].metros)||0)>0).map(r=>r.fecha))].length;
+    const pronM=calcPronostico(mesM,dias,diasActF);
+    const pronC=calcPronostico(cimbMes,dias,diasActF);
     return {f, hoyM, mesM, meta, pc, pers, cimbMes, cimbHoy:sumF(rgHoy,f.key,'cimbra'),
       tperfHoy:sumF(rgHoy,f.key,'tperf'), tcargHoy:sumF(rgHoy,f.key,'tcarg'),
       masasHoy:rgHoy.reduce((s,r)=>s+((r[f.key]&&r[f.key].masas)||[]).reduce((ss,m)=>ss+(m.cant||0),0),0),
