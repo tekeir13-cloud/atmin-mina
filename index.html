@@ -4030,6 +4030,21 @@ function metaMensualFrente(id,dias){
   if(String(id)==='2') return M.mensualF2||(M.f2*dias)||0;
   return (M.metasFrentes&&Number(M.metasFrentes[id]))||0;
 }
+// Pronóstico de cierre de mes: ritmo diario real (avance a la fecha ÷ días transcurridos del
+// periodo) proyectado a los "días hábiles del mes" que define el Ingeniero Residente (no el
+// calendario de 30/31 días). diasHabiles = state.metas.dias (o el que se pase).
+function calcPronostico(valorAlaFecha, diasHabiles, iniPeriodo){
+  diasHabiles=Number(diasHabiles)||26;
+  let diasTranscurridos=diasHabiles;
+  try{
+    if(iniPeriodo){
+      const d=Math.floor((new Date(hoy()+'T00:00:00')-new Date(iniPeriodo+'T00:00:00'))/86400000)+1;
+      if(d>0) diasTranscurridos=Math.min(diasHabiles,d);
+    }
+  }catch(e){}
+  const ritmo=diasTranscurridos>0?(Number(valorAlaFecha)||0)/diasTranscurridos:0;
+  return { ritmo, diasTranscurridos, proyeccion:ritmo*diasHabiles };
+}
 function setMetaMensualFrente(id,val){
   state.metas=state.metas||{};
   if(String(id)==='1'){ state.metas.mensualF1=val; return; }
@@ -5459,13 +5474,16 @@ function renderDashAvanceMeta(){
 
   // Por frente — los 5 frentes configurados
   let cimbExtra=0; rgMes.forEach(r=>(r.frentesExtra||[]).forEach(fx=>cimbExtra+=(fx.cimbra||0)));
+  const iniPeriodo=(typeof ventanaMes==='function')?ventanaMes(mesAct).ini:null;
   const datos=FRENTES.map(f=>{
     const real=r1(state.perforacion.filter(p=>String(p.frente)===String(f.id)).reduce((s,p)=>s+(Number(p.metros)||0),0));
     const meta=metaMensualFrente(f.id,dias)||0;
     const pc=meta>0?Math.round(real/meta*100):0;
     const cimb=rgMes.reduce((s,r)=>s+((r[f.key]&&r[f.key].cimbra)||0),0);
     const gastoExp=gastoExpD[f.id]||0;
-    return {f,real,meta,pc,cimb,gastoExp};
+    const pronM=calcPronostico(real,dias,iniPeriodo);
+    const pronC=calcPronostico(cimb,dias,iniPeriodo);
+    return {f,real,meta,pc,cimb,gastoExp,proyM:pronM.proyeccion,proyC:pronC.proyeccion};
   });
   const tot=r1(datos.reduce((s,d)=>s+d.real,0));
   const mp=datos.reduce((s,d)=>s+d.meta,0);
@@ -5473,8 +5491,13 @@ function renderDashAvanceMeta(){
   const ok=pct>=100;
   const cimbTot=datos.reduce((s,d)=>s+d.cimb,0)+cimbExtra;
   const gastoExpTot=datos.reduce((s,d)=>s+d.gastoExp,0);
+  const proyMTot=datos.reduce((s,d)=>s+d.proyM,0);
+  const proyCTot=Math.round(datos.reduce((s,d)=>s+d.proyC,0));
+  const proyPct=mp>0?Math.round(proyMTot/mp*100):0;
 
-  const filas=datos.map(d=>`<div style="margin-bottom:14px">
+  const filas=datos.map(d=>{
+    const cumpliriaMeta=d.meta>0 && d.proyM>=d.meta;
+    return `<div style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;flex-wrap:wrap;gap:4px">
         <span style="font-size:13px;font-weight:700;color:var(--text)">${d.f.emoji} ${d.f.nombre} <span style="font-size:11px;color:#fbbf24;font-weight:600">· 🏗 ${d.cimb} cimbras</span>${d.gastoExp?` <span style="font-size:11px;color:#22d3a5;font-weight:600">· 💥 ${fSexp(d.gastoExp)} expl.</span>`:''}</span>
         <span style="font-size:12px;color:var(--text3)"><strong style="color:${d.f.color};font-size:18px">${d.real.toFixed(1)} m</strong>${d.meta>0?` / ${d.meta} m meta`:' · sin meta asignada'}</span>
@@ -5483,7 +5506,9 @@ function renderDashAvanceMeta(){
         <div style="width:${Math.min(100,d.pc)}%;height:100%;background:linear-gradient(90deg,${d.f.color},${d.f.color}bb);border-radius:99px;transition:width .7s"></div>
         <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.5)">${d.meta>0?d.pc+'%':'—'}</div>
       </div>
-    </div>`).join('');
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">🔮 Pronóstico a fin de mes: <strong style="color:${cumpliriaMeta?'#10b981':'#f59e0b'}">${d.proyM.toFixed(1)} m</strong>${d.meta>0?` (${Math.round(d.proyM/d.meta*100)}% de meta)`:''} · <strong style="color:#fbbf24">${Math.round(d.proyC)} cimbras</strong></div>
+    </div>`;
+  }).join('');
 
   cont.innerHTML=`
   <div style="background:var(--coal4);border:1px solid var(--border);border-radius:18px;padding:22px;margin-bottom:18px">
@@ -5498,6 +5523,16 @@ function renderDashAvanceMeta(){
     <div style="margin-top:6px;padding-top:14px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <span style="font-size:12px;color:${ok?'#10b981':'var(--text3)'}">${ok?'✅ Meta del período alcanzada':`Faltan <strong style="color:var(--text2)">${r1(Math.max(0,mp-tot)).toFixed(1)} m</strong> para la meta`}</span>
       <span style="font-size:12px;color:var(--text3)">🏗 Cimbras: <strong style="color:#fbbf24;font-size:15px">${cimbTot}</strong>${cimbExtra?` <span style="color:var(--text3)">(+${cimbExtra} extra)</span>`:''} · 💥 Explosivo mes: <strong style="color:#22d3a5;font-size:15px">${fSexp(gastoExpTot)}</strong></span>
+    </div>
+    <div style="margin-top:14px;padding:14px 16px;background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.3);border-radius:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:12px;font-weight:800;color:#a78bfa">🔮 Pronóstico al cierre del mes (${dias} días hábiles definidos por Ing. Residente)</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">Al ritmo diario real de avance a la fecha, así cerraría el mes</div>
+      </div>
+      <div style="display:flex;gap:18px;flex-wrap:wrap">
+        <div style="text-align:center"><div style="font-size:20px;font-weight:900;color:${proyPct>=100?'#10b981':'#f59e0b'}">${proyMTot.toFixed(1)} m</div><div style="font-size:10px;color:var(--text3)">${mp>0?proyPct+'% de la meta':'metros totales'}</div></div>
+        <div style="text-align:center"><div style="font-size:20px;font-weight:900;color:#fbbf24">${proyCTot}</div><div style="font-size:10px;color:var(--text3)">cimbras</div></div>
+      </div>
     </div>
   </div>`;
 }
@@ -11244,23 +11279,30 @@ function renderTableroOp(){
   const fST=n=>'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:0,maximumFractionDigits:0});
 
   // ── Datos por frente (los 5 configurados en FRENTES) ──
+  const iniPeriodo=(typeof ventanaMes==='function')?ventanaMes(mesAct).ini:null;
   const datos=FRENTES.map(f=>{
     const hoyM=r1m(sumF(rgHoy,f.key,'metros'));
     const mesM=r1m(sumF(rgMes,f.key,'metros'));
     const meta=metaMensualFrente(f.id,dias)||0;
     const pc=meta>0?Math.round((mesM/meta)*100):0;
     const pers=(f.id===1||f.id===2)?Object.values(dist).filter(v=>String(v)===String(f.id)).length:0;
-    return {f, hoyM, mesM, meta, pc, pers,
-      cimbMes:sumF(rgMes,f.key,'cimbra'), cimbHoy:sumF(rgHoy,f.key,'cimbra'),
+    const cimbMes=sumF(rgMes,f.key,'cimbra');
+    const pronM=calcPronostico(mesM,dias,iniPeriodo);
+    const pronC=calcPronostico(cimbMes,dias,iniPeriodo);
+    return {f, hoyM, mesM, meta, pc, pers, cimbMes, cimbHoy:sumF(rgHoy,f.key,'cimbra'),
       tperfHoy:sumF(rgHoy,f.key,'tperf'), tcargHoy:sumF(rgHoy,f.key,'tcarg'),
       masasHoy:rgHoy.reduce((s,r)=>s+((r[f.key]&&r[f.key].masas)||[]).reduce((ss,m)=>ss+(m.cant||0),0),0),
       gastoExp:gastoExpPorFrente[f.id]||0,
+      proyM:pronM.proyeccion, proyC:pronC.proyeccion,
     };
   });
   const hoyTot=r1m(datos.reduce((s,d)=>s+d.hoyM,0));
   const mesTot=r1m(datos.reduce((s,d)=>s+d.mesM,0));
   const metaTot=datos.reduce((s,d)=>s+d.meta,0);
   const pcTot=metaTot>0?Math.round((mesTot/metaTot)*100):0;
+  const proyMTot=datos.reduce((s,d)=>s+d.proyM,0);
+  const proyCTot=Math.round(datos.reduce((s,d)=>s+d.proyC,0));
+  const proyPctTot=metaTot>0?Math.round(proyMTot/metaTot*100):0;
   const tperfHoy=datos.reduce((s,d)=>s+d.tperfHoy,0), tcargHoy=datos.reduce((s,d)=>s+d.tcargHoy,0);
   const persTot=datos.reduce((s,d)=>s+d.pers,0);
   const masasHoy=datos.reduce((s,d)=>s+d.masasHoy,0);
@@ -11281,7 +11323,8 @@ function renderTableroOp(){
     <div class="kpi-card"><div class="kpi-label">Gasto Explosivo Mes</div><div class="kpi-value gold">${fST(gastoExpTot)}</div><div class="kpi-sub">🟥 Brenda ${fST(gastoExpF1)} · 🟦 CRNE ${fST(gastoExpF2)}</div></div>
     <div class="kpi-card"><div class="kpi-label">Masas / Explosivos Hoy</div><div class="kpi-value blue">${masasHoy}</div><div class="kpi-sub">unidades consumidas</div></div>
     <div class="kpi-card"><div class="kpi-label">Cimbras Hoy</div><div class="kpi-value warn">${cimbHoyT}</div><div class="kpi-sub">de los 5 frentes</div></div>
-    <div class="kpi-card"><div class="kpi-label">Cimbras Mes</div><div class="kpi-value blue">${cimbMesT}</div><div class="kpi-sub">acumulado · 5 frentes</div></div>`;
+    <div class="kpi-card"><div class="kpi-label">Cimbras Mes</div><div class="kpi-value blue">${cimbMesT}</div><div class="kpi-sub">acumulado · 5 frentes</div></div>
+    <div class="kpi-card" style="border-color:rgba(139,92,246,.35)"><div class="kpi-label">🔮 Pronóstico Cierre de Mes</div><div class="kpi-value" style="color:${proyPctTot>=100?'#10b981':'#f59e0b'}">${proyMTot.toFixed(1)} m</div><div class="kpi-sub">${metaTot>0?proyPctTot+'% de meta · ':''}${proyCTot} cimbras · ${dias} días hábiles</div></div>`;
   // Frentes — tarjeta por cada uno de los 5
   const frenteCard=(d)=>{
     const f=d.f;
@@ -11302,6 +11345,7 @@ function renderTableroOp(){
         <div><div style="font-size:10px;color:var(--text3)">Explosivo mes</div><div style="font-size:13px;font-weight:700;color:#22d3a5">${d.gastoExp?fST(d.gastoExp):'—'}</div></div>
       </div>
       <div style="font-size:11px;color:var(--text3);margin-top:8px">Ritmo objetivo: ${d.meta>0?(d.meta/dias).toFixed(1):'—'} m/día</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">🔮 Cierre proyectado: <strong style="color:${d.meta>0&&d.proyM>=d.meta?'#10b981':'#f59e0b'}">${d.proyM.toFixed(1)} m</strong>${d.meta>0?` (${Math.round(d.proyM/d.meta*100)}%)`:''} · <strong style="color:#fbbf24">${Math.round(d.proyC)} cimbras</strong></div>
     </div>`;
   };
   const tf=document.getElementById('tab-frentes');
