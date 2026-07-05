@@ -2944,6 +2944,9 @@ select option{background:var(--coal3);}
       <div class="form-grid">
         <div class="form-group"><label>Meta mensual RA Brenda (m)</label><input type="number" id="meta-mensual-f1" placeholder="520" min="1"></div>
         <div class="form-group"><label>Meta mensual CRNE (m)</label><input type="number" id="meta-mensual-f2" placeholder="520" min="1"></div>
+        <div class="form-group"><label>Meta mensual GLSE-2 (m)</label><input type="number" id="meta-mensual-GLSE2" placeholder="0" min="0"></div>
+        <div class="form-group"><label>Meta mensual ESCM 4430 (m)</label><input type="number" id="meta-mensual-ESCM4430" placeholder="0" min="0"></div>
+        <div class="form-group"><label>Meta mensual ESCM 4410 (m)</label><input type="number" id="meta-mensual-ESCM4410" placeholder="0" min="0"></div>
         <div class="form-group"><label>Días hábiles del mes</label><input type="number" id="meta-dias" placeholder="26" min="1" max="31"></div>
       </div>
       <div class="btn-row"><button class="btn btn-gold" onclick="guardarMetas()">Guardar Metas</button></div>
@@ -3878,8 +3881,35 @@ select option{background:var(--coal3);}
       <div id="rg-cr-totales" style="margin-top:10px"></div>
     </div>
 
-    <!-- Frentes fijos: solo Brenda (Frente 1) y Cortada Noroeste (Frente 2).
-         La habilitación de nuevos frentes la gestiona el administrador. -->
+    <!-- ─── GLSE-2 ─── -->
+    <div class="card" style="margin-bottom:14px;border-left:3px solid #f59e0b">
+      <div class="section-title" style="margin-top:0;color:#f59e0b">🟧 GLSE-2</div>
+      <div class="form-group" style="margin-bottom:10px"><label>Trabajos ejecutados</label><textarea id="rg-g2-trabajos" rows="2" placeholder="Detalle de trabajos realizados en el turno..." style="width:100%;resize:vertical"></textarea></div>
+      <div id="rg-g2-disparos"></div>
+      <button class="btn btn-outline" style="font-size:12px;padding:7px 14px;margin-top:2px;border-style:dashed;width:100%" onclick="rgAddDisparo('g2')">➕ Agregar disparo</button>
+      <div id="rg-g2-totales" style="margin-top:10px"></div>
+    </div>
+
+    <!-- ─── ESCM 4430 ─── -->
+    <div class="card" style="margin-bottom:14px;border-left:3px solid #a855f7">
+      <div class="section-title" style="margin-top:0;color:#a855f7">🟪 ESCM 4430</div>
+      <div class="form-group" style="margin-bottom:10px"><label>Trabajos ejecutados</label><textarea id="rg-e43-trabajos" rows="2" placeholder="Detalle de trabajos realizados en el turno..." style="width:100%;resize:vertical"></textarea></div>
+      <div id="rg-e43-disparos"></div>
+      <button class="btn btn-outline" style="font-size:12px;padding:7px 14px;margin-top:2px;border-style:dashed;width:100%" onclick="rgAddDisparo('e43')">➕ Agregar disparo</button>
+      <div id="rg-e43-totales" style="margin-top:10px"></div>
+    </div>
+
+    <!-- ─── ESCM 4410 ─── -->
+    <div class="card" style="margin-bottom:14px;border-left:3px solid #ef4444">
+      <div class="section-title" style="margin-top:0;color:#ef4444">🟥 ESCM 4410</div>
+      <div class="form-group" style="margin-bottom:10px"><label>Trabajos ejecutados</label><textarea id="rg-e41-trabajos" rows="2" placeholder="Detalle de trabajos realizados en el turno..." style="width:100%;resize:vertical"></textarea></div>
+      <div id="rg-e41-disparos"></div>
+      <button class="btn btn-outline" style="font-size:12px;padding:7px 14px;margin-top:2px;border-style:dashed;width:100%" onclick="rgAddDisparo('e41')">➕ Agregar disparo</button>
+      <div id="rg-e41-totales" style="margin-top:10px"></div>
+    </div>
+
+    <!-- Frentes históricos ad-hoc de reportes antiguos (solo lectura al editar; ya no se
+         agregan nuevos desde aquí — los 5 frentes de arriba cubren toda la operación). -->
     <div id="rg-extra-frentes" style="display:none"></div>
 
     <div class="btn-row">
@@ -3976,6 +4006,37 @@ try {
     removeChannel: ()=>{},
   };
 }
+// ── FRENTES DE TRABAJO ──
+// Config central: agrega/edita frentes AQUÍ y se propagan a Reporte de Jefe de Guardia,
+// Ingeniero Residente (metas), Tablero de Operaciones y Dashboard general.
+// id: identificador estable guardado en state.perforacion[].frente (1 y 2 se mantienen
+// numéricos por compatibilidad con datos ya guardados; los nuevos usan código de texto).
+// key: nombre de la sub-clave dentro de cada reporte de guardia (rep[key] = {...}).
+// pfx: prefijo usado en los ids del DOM del modal de reporte (rg-<pfx>-...).
+const FRENTES=[
+  {id:1,        key:'brenda',   pfx:'br',  nombre:'RA Brenda',  emoji:'🟦', color:'#60a5fa'},
+  {id:2,        key:'crne',     pfx:'cr',  nombre:'CRNE',       emoji:'🟩', color:'#34d399'},
+  {id:'GLSE2',    key:'glse2',    pfx:'g2',  nombre:'GLSE-2',     emoji:'🟧', color:'#f59e0b'},
+  {id:'ESCM4430', key:'escm4430', pfx:'e43', nombre:'ESCM 4430',  emoji:'🟪', color:'#a855f7'},
+  {id:'ESCM4410', key:'escm4410', pfx:'e41', nombre:'ESCM 4410',  emoji:'🟥', color:'#ef4444'},
+];
+function frenteGet(id){ return FRENTES.find(f=>String(f.id)===String(id))||null; }
+function frenteNombre(id){ const f=frenteGet(id); return f?f.nombre:('Frente '+id); }
+// Meta mensual por frente: 1 y 2 conservan los campos legacy (mensualF1/mensualF2) para no
+// romper vistas existentes; los frentes nuevos usan state.metas.metasFrentes{id:meta}.
+function metaMensualFrente(id,dias){
+  const M=state.metas||{}; dias=dias||M.dias||26;
+  if(String(id)==='1') return M.mensualF1||(M.f1*dias)||0;
+  if(String(id)==='2') return M.mensualF2||(M.f2*dias)||0;
+  return (M.metasFrentes&&Number(M.metasFrentes[id]))||0;
+}
+function setMetaMensualFrente(id,val){
+  state.metas=state.metas||{};
+  if(String(id)==='1'){ state.metas.mensualF1=val; return; }
+  if(String(id)==='2'){ state.metas.mensualF2=val; return; }
+  state.metas.metasFrentes=state.metas.metasFrentes||{};
+  state.metas.metasFrentes[id]=val;
+}
 const state={
   personal:[],
   explosivos:{stock:{'M-1000':200,'M-3000':150,'M-5000':80,'Carmex (por metro)':500},historial:[]},
@@ -3986,7 +4047,7 @@ const state={
   perforacion:[],reportesGuardia:[],mantenimiento:[],mantRepuestos:[],horometros:[],tareas:[],
   ordenes:[],valorizaciones:[],valorizacionesLabor:[],
   compresorista:[],
-  metas:{f1:20,f2:20,dias:26,mensualF1:520,mensualF2:520},frenteActivo:1,
+  metas:{f1:20,f2:20,dias:26,mensualF1:520,mensualF2:520,metasFrentes:{}},frenteActivo:1,
   distribucion:{},reuniones:[],
   mesActivo:{ id:null, mes:null, año:null },
   mesesCerrados:[],
@@ -4751,8 +4812,7 @@ function renderStockRemanente(){
   };
   const repCards=reportes.map(r=>{
     const frentes=[
-      frenteCard('RA Brenda', r.brenda),
-      frenteCard('CRNE', r.crne),
+      ...FRENTES.map(fc=>frenteCard(fc.emoji+' '+fc.nombre, r[fc.key])),
       ...((r.frentesExtra||[]).map((f,i)=>frenteCard(f.nombre||('Frente extra '+(i+1)), f)))
     ].filter(Boolean).join('');
     if(!frentes)return'';
@@ -5070,24 +5130,23 @@ function renderDashEjecutivo(){
   const margen=val.total-costoTot;
   const pctMargen=val.total>0?Math.round(margen/val.total*100):0;
 
-  // ── METROS POR FRENTE (mes en curso) — solo Frente 1 (Brenda) y Frente 2 (Cortada) ──
-  const perfMes=(state.perforacion||[]).filter(p=>((typeof filtroMes==='function')?filtroMes(p.fecha,mes):(p.fecha||'').startsWith(mes))&&(p.frente===1||p.frente===2));
-  const frentes=[...new Set(perfMes.map(p=>p.frente))].sort();
+  // ── METROS POR FRENTE (mes en curso) — los 5 frentes configurados (FRENTES) ──
+  const idsFrentes=FRENTES.map(f=>String(f.id));
+  const perfMes=(state.perforacion||[]).filter(p=>((typeof filtroMes==='function')?filtroMes(p.fecha,mes):(p.fecha||'').startsWith(mes))&&idsFrentes.includes(String(p.frente)));
+  const frentesConDatos=FRENTES.filter(f=>perfMes.some(p=>String(p.frente)===String(f.id)));
   const r1m=n=>Math.round((Number(n)||0)*10)/10;   // redondeo a 1 decimal (evita 3.4000000004)
   const metrosTot=r1m(perfMes.reduce((s,p)=>s+(p.metros||0),0));
-  const maxFr=Math.max(1,...frentes.map(f=>perfMes.filter(p=>p.frente===f).reduce((s,p)=>s+(p.metros||0),0)));
-  const FCOL=['#5b6ef5','#10b981','#5b6ef5','#f59e0b','#ef4444'];
-  const FNOM={1:'Rampa',2:'Cortada'};
-  const frentesHtml=frentes.length?frentes.map((f,i)=>{
-    const mt=r1m(perfMes.filter(p=>p.frente===f).reduce((s,p)=>s+(p.metros||0),0));
-    const pct=Math.round(mt/maxFr*100);const col=FCOL[i%FCOL.length];
+  const maxFr=Math.max(1,...frentesConDatos.map(f=>perfMes.filter(p=>String(p.frente)===String(f.id)).reduce((s,p)=>s+(p.metros||0),0)));
+  const frentesHtml=frentesConDatos.length?frentesConDatos.map(f=>{
+    const mt=r1m(perfMes.filter(p=>String(p.frente)===String(f.id)).reduce((s,p)=>s+(p.metros||0),0));
+    const pct=Math.round(mt/maxFr*100);
     return `<div style="margin-bottom:13px">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
-        <span style="font-size:13px;font-weight:700;color:var(--text)">⛏ Frente ${f}${FNOM[f]?' · '+FNOM[f]:''}</span>
-        <span style="font-size:22px;font-weight:900;color:${col};letter-spacing:-1px">${mt} m</span>
+        <span style="font-size:13px;font-weight:700;color:var(--text)">${f.emoji} ${f.nombre}</span>
+        <span style="font-size:22px;font-weight:900;color:${f.color};letter-spacing:-1px">${mt} m</span>
       </div>
       <div style="background:rgba(255,255,255,.06);border-radius:99px;height:13px;overflow:hidden">
-        <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,${col},${col}cc);border-radius:99px;transition:width .7s"></div>
+        <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,${f.color},${f.color}cc);border-radius:99px;transition:width .7s"></div>
       </div>
     </div>`;
   }).join(''):`<div style="text-align:center;padding:18px;color:var(--text3);font-size:13px">Sin perforación registrada este mes</div>`;
@@ -5385,61 +5444,60 @@ function renderDashResumenHoy(){
 // Avance acumulado vs meta — barra grande tipo termómetro
 function renderDashAvanceMeta(){
   const cont=document.getElementById('d-avance-meta'); if(!cont)return;
-  const FNOM={1:'Rampa',2:'Cortada'};
-  const FCOL={1:'#5b6ef5',2:'#10b981'};
   const r1=n=>Math.round((Number(n)||0)*10)/10;   // redondeo a 1 decimal (evita 3.4000000004)
   const M=state.metas||{};
   const dias=M.dias||M.diasMes||26;
-  const metaF1=M.mensualF1||(M.mensual&&M.mensual.f1)||((M.f1||0)*dias)||0;
-  const metaF2=M.mensualF2||(M.mensual&&M.mensual.f2)||((M.f2||0)*dias)||0;
-  const tot=state.perforacion.reduce((s,p)=>s+(Number(p.metros)||0),0);
-  const mp=metaF1+metaF2;
-  const pct=mp>0?Math.round(tot/mp*100):0;
-  const ok=pct>=100;
-
-  // Cimbras instaladas — acumulado del mes por frente (reportes de Jefe de Guardia)
   const mesAct=(typeof finMesActual==='function')?finMesActual():hoy().slice(0,7);
   const rgMes=(state.reportesGuardia||[]).filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mesAct):((r.fecha||'').slice(0,7)===mesAct));
-  const cimbF={1:0,2:0}; let cimbExtra=0;
-  rgMes.forEach(r=>{ cimbF[1]+=(r.brenda?.cimbra||0); cimbF[2]+=(r.crne?.cimbra||0); (r.frentesExtra||[]).forEach(fx=>cimbExtra+=(fx.cimbra||0)); });
-  const cimbTot=cimbF[1]+cimbF[2]+cimbExtra;
-  // Gasto de explosivo del mes por frente (fuente: reportes del Compresorista)
+  // Gasto de explosivo del mes por frente (fuente: reportes del Compresorista; solo Brenda/CRNE
+  // tienen desglose rampa/galería por ahora)
   const preciosExpD=(typeof compGetPreciosExp==='function')?compGetPreciosExp():(typeof COMP_PRECIOS_EXP_DEFAULT!=='undefined'?COMP_PRECIOS_EXP_DEFAULT:{});
   const compMesD=(state.compresorista||[]).filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mesAct):((r.fecha||'').slice(0,7)===mesAct));
   const gastoExpD={1:0,2:0};
   compMesD.forEach(r=>(r.expFrente||[]).forEach(x=>{const pr=preciosExpD[x.codigo]||0; gastoExpD[1]+=(Number(x.rampa)||0)*pr; gastoExpD[2]+=(Number(x.galeria)||0)*pr;}));
   const fSexp=n=>'S/ '+Math.round(Number(n)||0).toLocaleString('es-PE');
 
-  // por frente
-  const filas=[1,2].map(f=>{
-    const real=state.perforacion.filter(p=>p.frente===f).reduce((s,p)=>s+(Number(p.metros)||0),0);
-    const meta=f===1?metaF1:metaF2;
-    const p=meta>0?Math.round(real/meta*100):0;
-    return `<div style="margin-bottom:14px">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
-        <span style="font-size:13px;font-weight:700;color:var(--text)">⛏ Frente ${f} · ${FNOM[f]} <span style="font-size:11px;color:#fbbf24;font-weight:600">· 🏗 ${cimbF[f]} cimbras</span> <span style="font-size:11px;color:#22d3a5;font-weight:600">· 💥 ${fSexp(gastoExpD[f])} expl.</span></span>
-        <span style="font-size:12px;color:var(--text3)"><strong style="color:${FCOL[f]};font-size:18px">${r1(real)} m</strong> / ${meta} m meta</span>
+  // Por frente — los 5 frentes configurados
+  let cimbExtra=0; rgMes.forEach(r=>(r.frentesExtra||[]).forEach(fx=>cimbExtra+=(fx.cimbra||0)));
+  const datos=FRENTES.map(f=>{
+    const real=r1(state.perforacion.filter(p=>String(p.frente)===String(f.id)).reduce((s,p)=>s+(Number(p.metros)||0),0));
+    const meta=metaMensualFrente(f.id,dias)||0;
+    const pc=meta>0?Math.round(real/meta*100):0;
+    const cimb=rgMes.reduce((s,r)=>s+((r[f.key]&&r[f.key].cimbra)||0),0);
+    const gastoExp=gastoExpD[f.id]||0;
+    return {f,real,meta,pc,cimb,gastoExp};
+  });
+  const tot=r1(datos.reduce((s,d)=>s+d.real,0));
+  const mp=datos.reduce((s,d)=>s+d.meta,0);
+  const pct=mp>0?Math.round(tot/mp*100):0;
+  const ok=pct>=100;
+  const cimbTot=datos.reduce((s,d)=>s+d.cimb,0)+cimbExtra;
+  const gastoExpTot=datos.reduce((s,d)=>s+d.gastoExp,0);
+
+  const filas=datos.map(d=>`<div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;flex-wrap:wrap;gap:4px">
+        <span style="font-size:13px;font-weight:700;color:var(--text)">${d.f.emoji} ${d.f.nombre} <span style="font-size:11px;color:#fbbf24;font-weight:600">· 🏗 ${d.cimb} cimbras</span>${d.gastoExp?` <span style="font-size:11px;color:#22d3a5;font-weight:600">· 💥 ${fSexp(d.gastoExp)} expl.</span>`:''}</span>
+        <span style="font-size:12px;color:var(--text3)"><strong style="color:${d.f.color};font-size:18px">${d.real.toFixed(1)} m</strong>${d.meta>0?` / ${d.meta} m meta`:' · sin meta asignada'}</span>
       </div>
       <div style="background:rgba(255,255,255,.06);border-radius:99px;height:16px;overflow:hidden;position:relative">
-        <div style="width:${Math.min(100,p)}%;height:100%;background:linear-gradient(90deg,${FCOL[f]},${FCOL[f]}bb);border-radius:99px;transition:width .7s"></div>
-        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.5)">${p}%</div>
+        <div style="width:${Math.min(100,d.pc)}%;height:100%;background:linear-gradient(90deg,${d.f.color},${d.f.color}bb);border-radius:99px;transition:width .7s"></div>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.5)">${d.meta>0?d.pc+'%':'—'}</div>
       </div>
-    </div>`;
-  }).join('');
+    </div>`).join('');
 
   cont.innerHTML=`
   <div style="background:var(--coal4);border:1px solid var(--border);border-radius:18px;padding:22px;margin-bottom:18px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
-      <div style="font-size:14px;font-weight:800;color:var(--text)">🎯 Avance vs Meta del Período</div>
+      <div style="font-size:14px;font-weight:800;color:var(--text)">🎯 Avance vs Meta del Período <span style="font-size:11px;color:var(--text3);font-weight:400">(5 frentes)</span></div>
       <div style="text-align:right">
         <div style="font-size:30px;font-weight:900;color:${ok?'#10b981':pct>=70?'#f59e0b':'#ef4444'};letter-spacing:-1px;line-height:1">${pct}%</div>
-        <div style="font-size:10px;color:var(--text3)">${r1(tot)} de ${mp} m</div>
+        <div style="font-size:10px;color:var(--text3)">${tot.toFixed(1)} de ${mp} m</div>
       </div>
     </div>
     ${filas}
     <div style="margin-top:6px;padding-top:14px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <span style="font-size:12px;color:${ok?'#10b981':'var(--text3)'}">${ok?'✅ Meta del período alcanzada':`Faltan <strong style="color:var(--text2)">${r1(Math.max(0,mp-tot))} m</strong> para la meta`}</span>
-      <span style="font-size:12px;color:var(--text3)">🏗 Cimbras: <strong style="color:#fbbf24;font-size:15px">${cimbTot}</strong>${cimbExtra?` <span style="color:var(--text3)">(+${cimbExtra} extra)</span>`:''} · 💥 Explosivo mes: <strong style="color:#22d3a5;font-size:15px">${fSexp(gastoExpD[1]+gastoExpD[2])}</strong></span>
+      <span style="font-size:12px;color:${ok?'#10b981':'var(--text3)'}">${ok?'✅ Meta del período alcanzada':`Faltan <strong style="color:var(--text2)">${r1(Math.max(0,mp-tot)).toFixed(1)} m</strong> para la meta`}</span>
+      <span style="font-size:12px;color:var(--text3)">🏗 Cimbras: <strong style="color:#fbbf24;font-size:15px">${cimbTot}</strong>${cimbExtra?` <span style="color:var(--text3)">(+${cimbExtra} extra)</span>`:''} · 💥 Explosivo mes: <strong style="color:#22d3a5;font-size:15px">${fSexp(gastoExpTot)}</strong></span>
     </div>
   </div>`;
 }
@@ -10710,10 +10768,10 @@ function sincronizarPerforacionReportes(){
   let perf=(state.perforacion||[]).filter(p=>!p._rg);
   (state.reportesGuardia||[]).forEach(rep=>{
     const fecha=rep.fecha, jefe=rep.jefe||'';
-    const br=(rep.brenda&&rep.brenda.metros)||0;
-    const cr=(rep.crne&&rep.crne.metros)||0;
-    if(br>0)perf.push({_rg:rep.id,fecha,frente:1,metros:br,personas:1,roca:'—',obs:'RA Brenda — '+jefe});
-    if(cr>0)perf.push({_rg:rep.id,fecha,frente:2,metros:cr,personas:1,roca:'—',obs:'CRNE — '+jefe});
+    FRENTES.forEach(f=>{
+      const m=(rep[f.key]&&rep[f.key].metros)||0;
+      if(m>0)perf.push({_rg:rep.id,fecha,frente:f.id,metros:m,personas:1,roca:'—',obs:f.nombre+' — '+jefe});
+    });
   });
   state.perforacion=perf;
 }
@@ -10721,29 +10779,32 @@ function sincronizarPerforacionReportes(){
 function renderAvance(){
   reportesGuardiaLoad();
   if(typeof metasLoad==='function')metasLoad();
+  const r1m=n=>Math.round((Number(n)||0)*10)/10;
   const ts=hoy(), mesAct=(typeof finMesActual==='function')?finMesActual():ts.slice(0,7);
   const rg=state.reportesGuardia||[];
   // Solo reportes del día actual → suma ambos turnos. Cambia de día = se reinicia.
   const hoyRep=rg.filter(r=>r.fecha===ts);
-  const sum=(f,k,arr)=>(arr||hoyRep).reduce((s,r)=>s+(r[f]?.[k]||0),0);
+  const sum=(key,k,arr)=>(arr||hoyRep).reduce((s,r)=>s+(r[key]?.[k]||0),0);
   const f1h=sum('brenda','metros'),f2h=sum('crne','metros');
+  // Avance de HOY sumando los 5 frentes (antes solo Brenda+CRNE, dejaba fuera los nuevos)
+  const hoyTotFrentes=r1m(FRENTES.reduce((s,f)=>s+sum(f.key,'metros'),0));
   const brCimbra=sum('brenda','cimbra');
   const crPerno=sum('crne','perno'),crMalla=sum('crne','malla');
   const brTperf=sum('brenda','tperf'),crTperf=sum('crne','tperf');
   const brTcarg=sum('brenda','tcarg'),crTcarg=sum('crne','tcarg');
-  const tperf=brTperf+crTperf,tcarg=brTcarg+crTcarg;
+  const tperf=FRENTES.reduce((s,f)=>s+sum(f.key,'tperf'),0), tcarg=FRENTES.reduce((s,f)=>s+sum(f.key,'tcarg'),0);
   const g=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
   g('op-fecha-hoy',fmtF(ts));
-  g('op-metros-hoy',(f1h+f2h).toFixed(1)+' m');
+  g('op-metros-hoy',hoyTotFrentes.toFixed(1)+' m');
   g('op-f1-hoy',f1h.toFixed(1)+' m');g('op-f2-hoy',f2h.toFixed(1)+' m');
   g('op-f1-sost',brCimbra>0?brCimbra+' cimbra':'sin cimbra');
   g('op-f2-sost',(crPerno||crMalla)?`${crPerno} perno · ${crMalla} malla`:'sin sost.');
   g('op-tperf-hoy',tperf);g('op-tperf-sub',`Brenda: ${brTperf} · CRNE: ${crTperf}`);
   g('op-tcarg-hoy',tcarg);g('op-tcarg-sub',`Brenda: ${brTcarg} · CRNE: ${crTcarg}`);
   g('op-rep-hoy',hoyRep.length);
-  // ── Cimbras instaladas HOY (suma de todos los frentes, incluye frentes extra) ──
+  // ── Cimbras instaladas HOY (suma de los 5 frentes + frentes extra históricos) ──
   const sumCimbras=(arr)=>(arr||[]).reduce((s,r)=>{
-    let c=(r.brenda?.cimbra||0)+(r.crne?.cimbra||0);
+    let c=FRENTES.reduce((ss,f)=>ss+((r[f.key]&&r[f.key].cimbra)||0),0);
     (r.frentesExtra||[]).forEach(f=>c+=(f.cimbra||0));
     return s+c;
   },0);
@@ -10755,16 +10816,15 @@ function renderAvance(){
   // ── Acumulado del mes por frente (misma fuente y misma meta que el Tablero de Operaciones) ──
   const mesLbl=document.getElementById('op-mes-label');if(mesLbl)mesLbl.textContent='· '+finNombreMes(mesAct);
   const rgMes=rg.filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mesAct):((r.fecha||'').slice(0,7)===mesAct));
-  const mesF1=sum('brenda','metros',rgMes),mesF2=sum('crne','metros',rgMes);
   const diasM=(state.metas&&state.metas.dias)||26;
-  const metaMesF1=(state.metas&&(state.metas.mensualF1||(state.metas.f1*diasM)))||520;
-  const metaMesF2=(state.metas&&(state.metas.mensualF2||(state.metas.f2*diasM)))||520;
-  const pcF1=metaMesF1>0?Math.round((mesF1/metaMesF1)*100):0;
-  const pcF2=metaMesF2>0?Math.round((mesF2/metaMesF2)*100):0;
-  const mesCard=(nom,color,mes,meta,pc,hoyM)=>`
-    <div class="card">
+  const mesCard=(f)=>{
+    const mes=r1m(sum(f.key,'metros',rgMes));
+    const hoyM=r1m(sum(f.key,'metros'));
+    const meta=metaMensualFrente(f.id,diasM)||0;
+    const pc=meta>0?Math.round((mes/meta)*100):0;
+    return `<div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div class="section-title" style="margin:0;font-size:13px;color:${color}">${nom}</div>
+        <div class="section-title" style="margin:0;font-size:13px;color:${f.color}">${f.emoji} ${f.nombre}</div>
         <span class="vs-pct ${pc>=100?'over':'under'}">${pc}%</span>
       </div>
       <div class="progress-row"><div class="progress-bar" style="height:8px"><div class="progress-fill ${pc>=100?'green':'red'}" style="width:${Math.min(100,pc)}%"></div></div></div>
@@ -10773,15 +10833,16 @@ function renderAvance(){
         <div><div style="font-size:10px;color:var(--text3)">Hoy</div><div style="font-size:13px;font-weight:700;color:var(--text)">${hoyM.toFixed(1)} m</div></div>
       </div>
     </div>`;
+  };
   const mf=document.getElementById('op-mes-frentes');
-  if(mf)mf.innerHTML=mesCard('🟦 RA Brenda','#60a5fa',mesF1,metaMesF1,pcF1,f1h)+mesCard('🟩 CRNE','#34d399',mesF2,metaMesF2,pcF2,f2h);
+  if(mf)mf.innerHTML=FRENTES.map(mesCard).join('');
 
   const wrap=document.getElementById('rg-lista');if(!wrap)return;
   const lista=[...rg].sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')||(b.creadoEn||0)-(a.creadoEn||0));
   if(!lista.length){wrap.innerHTML='<div class="card"><div class="empty-state">Sin reportes registrados. Genera el primero con el botón ➕.</div></div>';return;}
   wrap.innerHTML=lista.map(r=>{
     const b=r.brenda||{},c=r.crne||{};
-    const mt=((b.metros||0)+(c.metros||0)).toFixed(1);
+    const mt=r1m(FRENTES.reduce((s,f)=>s+((r[f.key]&&r[f.key].metros)||0),0)).toFixed(1);
     const cell=(lbl,val)=>`<div style="font-size:11px;color:var(--text3)">${lbl}</div><div style="font-size:13px;color:var(--text);font-weight:600">${val}</div>`;
     const rgid='rgd-'+r.id;
     return`<div class="card" style="margin-bottom:12px">
@@ -10799,8 +10860,7 @@ function renderAvance(){
         </div>
       </div>
       <div id="${rgid}" class="two-col" style="display:none;margin-top:12px">
-        ${rgFrenteDetalleHTML(b,'#60a5fa','🟦 RA Brenda')}
-        ${rgFrenteDetalleHTML(c,'#34d399','🟩 CRNE')}
+        ${FRENTES.map(fc=>rgFrenteDetalleHTML(r[fc.key],fc.color,fc.emoji+' '+fc.nombre)).join('')}
       </div>
     </div>`;
   }).join('');
@@ -10819,9 +10879,13 @@ function abrirModalReporteGuardia(){
   g('rg-turno').value='Día';g('rg-fecha').value=hoy();
   poblarSelectJefes('rg-jefe','');
   g('rg-br-trabajos').value='';g('rg-cr-trabajos').value='';
+  g('rg-g2-trabajos').value='';g('rg-e43-trabajos').value='';g('rg-e41-trabajos').value='';
   // Iniciar cada frente con un disparo vacío
   g('rg-br-disparos').innerHTML='';rgAddDisparo('br');
   g('rg-cr-disparos').innerHTML='';rgAddDisparo('cr');
+  g('rg-g2-disparos').innerHTML='';rgAddDisparo('g2');
+  g('rg-e43-disparos').innerHTML='';rgAddDisparo('e43');
+  g('rg-e41-disparos').innerHTML='';rgAddDisparo('e41');
   abrirModal('modal-reporte-guardia');
 }
 
@@ -10841,6 +10905,15 @@ function editarReporteGuardia(id){
   const crD=(c.disparos&&c.disparos.length)?c.disparos:[rgLegacyDisparo(c)];
   crD.forEach(d=>rgAddDisparo('cr',d));
   if(!document.querySelectorAll('#rg-cr-disparos .rg-disparo').length)rgAddDisparo('cr');
+  // Frentes nuevos (GLSE-2, ESCM 4430, ESCM 4410): mismo patrón que Brenda/CRNE
+  [['g2','glse2'],['e43','escm4430'],['e41','escm4410']].forEach(([pfx,key])=>{
+    const d0=r[key]||{};
+    g(`rg-${pfx}-trabajos`).value=d0.trabajos||'';
+    g(`rg-${pfx}-disparos`).innerHTML='';
+    const dd=(d0.disparos&&d0.disparos.length)?d0.disparos:[rgLegacyDisparo(d0)];
+    dd.forEach(d=>rgAddDisparo(pfx,d));
+    if(!document.querySelectorAll(`#rg-${pfx}-disparos .rg-disparo`).length)rgAddDisparo(pfx);
+  });
   abrirModal('modal-reporte-guardia');
 }
 
@@ -10950,26 +11023,23 @@ function guardarReporteGuardia(){
     const dup=(state.reportesGuardia||[]).find(r=>r.fecha===fecha && r.turno===turno);
     if(dup && !confirm(`Ya existe un reporte de ${turno} para ${fecha} (Jefe: ${dup.jefe||'—'}). ¿Registrar OTRO reporte igual? Esto puede duplicar los metros en el dashboard.`)) return;
   }
-  // Disparos por frente → totales automáticos
-  const brDisp=rgGetDisparos('br'), crDisp=rgGetDisparos('cr');
-  const brT=rgComputeFrenteTotals(brDisp), crT=rgComputeFrenteTotals(crDisp);
-  const brMetros=brT.metros, crMetros=crT.metros;
-  const rep={
-    id:idActual||'RG'+Date.now(),
-    fecha, turno, jefe,
-    brenda:{trabajos:g('rg-br-trabajos').value.trim(),disparos:brDisp,metros:brT.metros,sost:brT.sost,cimbra:brT.cimbra,perno:brT.perno,malla:brT.malla,tperf:brT.tperf,tcarg:brT.tcarg,masas:brT.masas},
-    crne:{trabajos:g('rg-cr-trabajos').value.trim(),disparos:crDisp,metros:crT.metros,sost:crT.sost,cimbra:crT.cimbra,perno:crT.perno,malla:crT.malla,tperf:crT.tperf,tcarg:crT.tcarg,masas:crT.masas},
-    frentesExtra:[],
-    creadoEn:Date.now()
-  };
+  // Disparos por frente → totales automáticos (los 5 frentes: Brenda, CRNE + los 3 nuevos)
+  const rep={ id:idActual||'RG'+Date.now(), fecha, turno, jefe, frentesExtra:[], creadoEn:Date.now() };
+  FRENTES.forEach(f=>{
+    const disp=rgGetDisparos(f.pfx);
+    const t=rgComputeFrenteTotals(disp);
+    rep[f.key]={trabajos:(g(`rg-${f.pfx}-trabajos`)?.value||'').trim(),disparos:disp,metros:t.metros,sost:t.sost,cimbra:t.cimbra,perno:t.perno,malla:t.malla,tperf:t.tperf,tcarg:t.tcarg,masas:t.masas};
+  });
   if(!state.reportesGuardia)state.reportesGuardia=[];
   const idx=state.reportesGuardia.findIndex(r=>r.id===rep.id);
   if(idx>=0){rep.creadoEn=state.reportesGuardia[idx].creadoEn||rep.creadoEn;state.reportesGuardia[idx]=rep;}
   else state.reportesGuardia.push(rep);
   // Sincronizar avance lineal (suma de disparos) con state.perforacion → dashboard y operaciones
   state.perforacion=(state.perforacion||[]).filter(p=>p._rg!==rep.id);
-  if(brMetros>0)state.perforacion.push({_rg:rep.id,fecha,frente:1,metros:brMetros,personas:1,roca:'—',obs:'RA Brenda — '+(rep.jefe||'')});
-  if(crMetros>0)state.perforacion.push({_rg:rep.id,fecha,frente:2,metros:crMetros,personas:1,roca:'—',obs:'CRNE — '+(rep.jefe||'')});
+  FRENTES.forEach(f=>{
+    const m=rep[f.key].metros;
+    if(m>0)state.perforacion.push({_rg:rep.id,fecha,frente:f.id,metros:m,personas:1,roca:'—',obs:f.nombre+' — '+(rep.jefe||'')});
+  });
   reportesGuardiaSave();
   cerrarModal('modal-reporte-guardia');renderAvance();
   // Vincular el reporte a todos los tableros: Operaciones y Dashboard general se refrescan en vivo
@@ -10997,6 +11067,9 @@ function renderResidente(){
   const g=id=>document.getElementById(id);
   if(g('meta-mensual-f1'))g('meta-mensual-f1').value=state.metas.mensualF1||(state.metas.f1*state.metas.dias)||'';
   if(g('meta-mensual-f2'))g('meta-mensual-f2').value=state.metas.mensualF2||(state.metas.f2*state.metas.dias)||'';
+  FRENTES.filter(f=>f.id!==1&&f.id!==2).forEach(f=>{
+    const el=g('meta-mensual-'+f.id); if(el) el.value=metaMensualFrente(f.id)||'';
+  });
   if(g('meta-dias'))g('meta-dias').value=state.metas.dias||26;
   renderVsProyectado();
   renderReuniones();
@@ -11004,25 +11077,19 @@ function renderResidente(){
 
 function renderVsProyectado(){
   const dias=parseInt(document.getElementById('meta-dias')?.value)||state.metas.dias||26;
-  const p1=parseInt(document.getElementById('meta-mensual-f1')?.value)||state.metas.mensualF1||(state.metas.f1*dias);
-  const p2=parseInt(document.getElementById('meta-mensual-f2')?.value)||state.metas.mensualF2||(state.metas.f2*dias);
-  const r1=state.perforacion.filter(p=>p.frente===1).reduce((s,p)=>s+p.metros,0);
-  const r2=state.perforacion.filter(p=>p.frente===2).reduce((s,p)=>s+p.metros,0);
-  const pc1=p1>0?Math.round((r1/p1)*100):0,pc2=p2>0?Math.round((r2/p2)*100):0;
   const cont=document.getElementById('vs-contenido');if(!cont)return;
-  cont.innerHTML=`
-    <div class="two-col">
-      <div class="card"><div class="section-title" style="font-size:12px">🟦 RA Brenda</div>
-        <div class="vs-row"><div class="vs-label">Real</div><div class="vs-real">${r1.toFixed(1)} m</div><div class="vs-proy">meta mes: ${p1} m</div><span class="vs-pct ${pc1>=100?'over':'under'}">${pc1}%</span></div>
-        <div class="progress-row"><div class="progress-bar" style="height:8px"><div class="progress-fill ${pc1>=100?'green':'red'}" style="width:${Math.min(100,pc1)}%"></div></div></div>
-        <div style="margin-top:8px;font-size:11px;color:var(--text3)">Diferencia: <span style="color:var(--text2)">${r1>=p1?'+':''}${(r1-p1).toFixed(1)} m</span> · ritmo objetivo ${(p1/dias).toFixed(1)} m/día</div>
-      </div>
-      <div class="card"><div class="section-title" style="font-size:12px">🟩 CRNE</div>
-        <div class="vs-row"><div class="vs-label">Real</div><div class="vs-real">${r2.toFixed(1)} m</div><div class="vs-proy">meta mes: ${p2} m</div><span class="vs-pct ${pc2>=100?'over':'under'}">${pc2}%</span></div>
-        <div class="progress-row"><div class="progress-bar" style="height:8px"><div class="progress-fill ${pc2>=100?'green':'red'}" style="width:${Math.min(100,pc2)}%"></div></div></div>
-        <div style="margin-top:8px;font-size:11px;color:var(--text3)">Diferencia: <span style="color:var(--text2)">${r2>=p2?'+':''}${(r2-p2).toFixed(1)} m</span> · ritmo objetivo ${(p2/dias).toFixed(1)} m/día</div>
-      </div>
-    </div>`;
+  const cards=FRENTES.map(f=>{
+    const metaEl=document.getElementById('meta-mensual-'+(f.id===1||f.id===2?('f'+f.id):f.id));
+    const p=parseInt(metaEl?.value)||metaMensualFrente(f.id,dias)||0;
+    const r=Math.round(state.perforacion.filter(x=>String(x.frente)===String(f.id)).reduce((s,x)=>s+(x.metros||0),0)*10)/10;
+    const pc=p>0?Math.round((r/p)*100):0;
+    return `<div class="card"><div class="section-title" style="font-size:12px">${f.emoji} ${f.nombre}</div>
+        <div class="vs-row"><div class="vs-label">Real</div><div class="vs-real">${r.toFixed(1)} m</div><div class="vs-proy">meta mes: ${p} m</div><span class="vs-pct ${pc>=100?'over':'under'}">${pc}%</span></div>
+        <div class="progress-row"><div class="progress-bar" style="height:8px"><div class="progress-fill ${pc>=100?'green':'red'}" style="width:${Math.min(100,pc)}%"></div></div></div>
+        <div style="margin-top:8px;font-size:11px;color:var(--text3)">Diferencia: <span style="color:var(--text2)">${r>=p?'+':''}${(r-p).toFixed(1)} m</span>${p>0?` · ritmo objetivo ${(p/dias).toFixed(1)} m/día`:''}</div>
+      </div>`;
+  }).join('');
+  cont.innerHTML=`<div class="two-col">${cards}</div>`;
 }
 function guardarMetas(){
   const dias=parseInt(document.getElementById('meta-dias').value)||26;
@@ -11031,8 +11098,17 @@ function guardarMetas(){
   state.metas.mensualF1=mens1;state.metas.mensualF2=mens2;state.metas.dias=dias;
   // Derivar metas diarias para mantener consistencia con finanzas/reportes
   state.metas.f1=Math.round(mens1/dias);state.metas.f2=Math.round(mens2/dias);
+  // Metas de los frentes nuevos (GLSE-2, ESCM 4430, ESCM 4410)
+  FRENTES.filter(f=>f.id!==1&&f.id!==2).forEach(f=>{
+    const val=parseInt(document.getElementById('meta-mensual-'+f.id)?.value)||0;
+    setMetaMensualFrente(f.id,val);
+  });
   metasSave();
-  renderVsProyectado();showNotif('✓ Metas mensuales guardadas');
+  renderVsProyectado();
+  // Las metas alimentan el % de cumplimiento del Tablero de Operaciones y del Dashboard general
+  try{ if(typeof renderTableroOp==='function') renderTableroOp(); }catch(e){}
+  try{ if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
+  showNotif('✓ Metas mensuales guardadas');
 }
 
 // ── DISTRIBUCIÓN DE PERSONAL (Ing. Residente) ──
@@ -11149,89 +11225,93 @@ function renderTableroOp(){
   if(typeof reportesGuardiaLoad==='function')reportesGuardiaLoad();
   if(typeof metasLoad==='function')metasLoad();
   if(typeof distribLoad==='function')distribLoad();
+  const r1m=n=>Math.round((Number(n)||0)*10)/10;
   const ts=hoy(), mesAct=(typeof finMesActual==='function')?finMesActual():ts.slice(0,7);
   const rg=(state.reportesGuardia||[]);
   const rgMes=rg.filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mesAct):((r.fecha||'').slice(0,7)===mesAct));
   const rgHoy=rg.filter(r=>r.fecha===ts);
-  const sumF=(arr,f,k)=>arr.reduce((s,r)=>s+(r[f]?.[k]||0),0);
-  // Avance
-  const hoyF1=sumF(rgHoy,'brenda','metros'),hoyF2=sumF(rgHoy,'crne','metros');
-  const mesF1=sumF(rgMes,'brenda','metros'),mesF2=sumF(rgMes,'crne','metros');
+  const sumF=(arr,key,k)=>arr.reduce((s,r)=>s+(r[key]?.[k]||0),0);
   const dias=state.metas.dias||26;
-  const metaMesF1=state.metas.mensualF1||(state.metas.f1*dias)||520;
-  const metaMesF2=state.metas.mensualF2||(state.metas.f2*dias)||520;
-  const pcF1=metaMesF1>0?Math.round((mesF1/metaMesF1)*100):0;
-  const pcF2=metaMesF2>0?Math.round((mesF2/metaMesF2)*100):0;
-  const pcTot=(metaMesF1+metaMesF2)>0?Math.round(((mesF1+mesF2)/(metaMesF1+metaMesF2))*100):0;
-  // Taladros hoy
-  const tperfHoy=sumF(rgHoy,'brenda','tperf')+sumF(rgHoy,'crne','tperf');
-  const tcargHoy=sumF(rgHoy,'brenda','tcarg')+sumF(rgHoy,'crne','tcarg');
-  // Cimbras instaladas (reportadas por los Jefes de Guardia): hoy y acumulado del mes, por frente
-  const sumCimbrasT=(arr)=>arr.reduce((s,r)=>{
-    let c=(r.brenda?.cimbra||0)+(r.crne?.cimbra||0);
-    (r.frentesExtra||[]).forEach(f=>c+=(f.cimbra||0));
-    return s+c;
-  },0);
-  const cimbHoyT=sumCimbrasT(rgHoy), cimbMesT=sumCimbrasT(rgMes);
-  const cimbMesF1=sumF(rgMes,'brenda','cimbra'), cimbMesF2=sumF(rgMes,'crne','cimbra');
-  const cimbHoyF1=sumF(rgHoy,'brenda','cimbra'), cimbHoyF2=sumF(rgHoy,'crne','cimbra');
-  // Gasto de explosivo por frente (acumulado del mes) — proviene del Historial del Compresorista
+  // Personal distribuido (por ahora solo Frente 1/2 tienen asignación de personal)
+  const dist=state.distribucion||{};
+  // Gasto de explosivo por frente (acumulado del mes) — solo Brenda/CRNE tienen desglose
+  // rampa/galería en el reporte del Compresorista; los frentes nuevos aún no tienen esa fuente.
   const preciosExpT=(typeof compGetPreciosExp==='function')?compGetPreciosExp():(typeof COMP_PRECIOS_EXP_DEFAULT!=='undefined'?COMP_PRECIOS_EXP_DEFAULT:{});
   const compMesT=(state.compresorista||[]).filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mesAct):((r.fecha||'').slice(0,7)===mesAct));
   let gastoExpF1=0,gastoExpF2=0;
   compMesT.forEach(r=>(r.expFrente||[]).forEach(x=>{const pr=preciosExpT[x.codigo]||0; gastoExpF1+=(Number(x.rampa)||0)*pr; gastoExpF2+=(Number(x.galeria)||0)*pr;}));
+  const gastoExpPorFrente={1:gastoExpF1,2:gastoExpF2};
   const fST=n=>'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:0,maximumFractionDigits:0});
-  // Personal distribuido
-  const dist=state.distribucion||{};
-  const persF1=Object.values(dist).filter(f=>f==1).length;
-  const persF2=Object.values(dist).filter(f=>f==2).length;
-  // Masas / explosivos consumidos hoy (de los reportes de guardia)
-  const masasHoy=rgHoy.reduce((s,r)=>s+(r.brenda?.masas||[]).reduce((ss,m)=>ss+(m.cant||0),0)+(r.crne?.masas||[]).reduce((ss,m)=>ss+(m.cant||0),0),0);
+
+  // ── Datos por frente (los 5 configurados en FRENTES) ──
+  const datos=FRENTES.map(f=>{
+    const hoyM=r1m(sumF(rgHoy,f.key,'metros'));
+    const mesM=r1m(sumF(rgMes,f.key,'metros'));
+    const meta=metaMensualFrente(f.id,dias)||0;
+    const pc=meta>0?Math.round((mesM/meta)*100):0;
+    const pers=(f.id===1||f.id===2)?Object.values(dist).filter(v=>String(v)===String(f.id)).length:0;
+    return {f, hoyM, mesM, meta, pc, pers,
+      cimbMes:sumF(rgMes,f.key,'cimbra'), cimbHoy:sumF(rgHoy,f.key,'cimbra'),
+      tperfHoy:sumF(rgHoy,f.key,'tperf'), tcargHoy:sumF(rgHoy,f.key,'tcarg'),
+      masasHoy:rgHoy.reduce((s,r)=>s+((r[f.key]&&r[f.key].masas)||[]).reduce((ss,m)=>ss+(m.cant||0),0),0),
+      gastoExp:gastoExpPorFrente[f.id]||0,
+    };
+  });
+  const hoyTot=r1m(datos.reduce((s,d)=>s+d.hoyM,0));
+  const mesTot=r1m(datos.reduce((s,d)=>s+d.mesM,0));
+  const metaTot=datos.reduce((s,d)=>s+d.meta,0);
+  const pcTot=metaTot>0?Math.round((mesTot/metaTot)*100):0;
+  const tperfHoy=datos.reduce((s,d)=>s+d.tperfHoy,0), tcargHoy=datos.reduce((s,d)=>s+d.tcargHoy,0);
+  const persTot=datos.reduce((s,d)=>s+d.pers,0);
+  const masasHoy=datos.reduce((s,d)=>s+d.masasHoy,0);
+  const cimbHoyT=datos.reduce((s,d)=>s+d.cimbHoy,0), cimbMesT=datos.reduce((s,d)=>s+d.cimbMes,0);
+  const gastoExpTot=datos.reduce((s,d)=>s+d.gastoExp,0);
+  const subFrentesM=(campo)=>datos.filter(d=>d[campo]>0).map(d=>`${d.f.emoji} ${d.f.nombre.split(' ')[0]} ${d[campo].toFixed(1)}m`).join(' · ')||'sin avance';
   // Días transcurridos hábiles (aprox por fecha del mes)
   const diaDelMes=parseInt(ts.slice(8,10),10);
   const lbl=document.getElementById('tab-mes-label');if(lbl)lbl.textContent=`mes ${mesAct} · día ${diaDelMes}`;
-  // KPIs
+  // KPIs (conjunto de los 5 frentes)
   const kpis=document.getElementById('tab-kpis');
   if(kpis)kpis.innerHTML=`
-    <div class="kpi-card"><div class="kpi-label">Avance Hoy</div><div class="kpi-value gold">${(hoyF1+hoyF2).toFixed(1)} m</div><div class="kpi-sub">Brenda ${hoyF1.toFixed(1)} · CRNE ${hoyF2.toFixed(1)}</div></div>
-    <div class="kpi-card"><div class="kpi-label">Avance Mes</div><div class="kpi-value blue">${(mesF1+mesF2).toFixed(1)} m</div><div class="kpi-sub">meta ${metaMesF1+metaMesF2} m</div></div>
-    <div class="kpi-card"><div class="kpi-label">Cumplimiento Mes</div><div class="kpi-value ${pcTot>=100?'green':(pcTot>=60?'warn':'red')}">${pcTot}%</div><div class="kpi-sub">del programa</div></div>
+    <div class="kpi-card"><div class="kpi-label">Avance Hoy</div><div class="kpi-value gold">${hoyTot.toFixed(1)} m</div><div class="kpi-sub">${subFrentesM('hoyM')}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Avance Mes</div><div class="kpi-value blue">${mesTot.toFixed(1)} m</div><div class="kpi-sub">meta ${metaTot} m</div></div>
+    <div class="kpi-card"><div class="kpi-label">Cumplimiento Mes</div><div class="kpi-value ${pcTot>=100?'green':(pcTot>=60?'warn':'red')}">${pcTot}%</div><div class="kpi-sub">del programa (conjunto)</div></div>
     <div class="kpi-card"><div class="kpi-label">Taladros Hoy</div><div class="kpi-value warn">${tperfHoy} / ${tcargHoy}</div><div class="kpi-sub">perf. / carg.</div></div>
-    <div class="kpi-card"><div class="kpi-label">Personal en Frentes</div><div class="kpi-value blue">${persF1+persF2}</div><div class="kpi-sub">Brenda ${persF1} · CRNE ${persF2}</div></div>
-    <div class="kpi-card"><div class="kpi-label">Gasto Explosivo Mes por Frente</div><div class="kpi-value gold">${fST(gastoExpF1+gastoExpF2)}</div><div class="kpi-sub">🟥 Brenda ${fST(gastoExpF1)} · 🟦 CRNE ${fST(gastoExpF2)}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Personal en Frentes</div><div class="kpi-value blue">${persTot}</div><div class="kpi-sub">Brenda ${datos[0].pers} · CRNE ${datos[1].pers}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Gasto Explosivo Mes</div><div class="kpi-value gold">${fST(gastoExpTot)}</div><div class="kpi-sub">🟥 Brenda ${fST(gastoExpF1)} · 🟦 CRNE ${fST(gastoExpF2)}</div></div>
     <div class="kpi-card"><div class="kpi-label">Masas / Explosivos Hoy</div><div class="kpi-value blue">${masasHoy}</div><div class="kpi-sub">unidades consumidas</div></div>
-    <div class="kpi-card"><div class="kpi-label">Cimbras Hoy</div><div class="kpi-value warn">${cimbHoyT}</div><div class="kpi-sub">Brenda ${cimbHoyF1} · CRNE ${cimbHoyF2}</div></div>
-    <div class="kpi-card"><div class="kpi-label">Cimbras Mes</div><div class="kpi-value blue">${cimbMesT}</div><div class="kpi-sub">acumulado · Brenda ${cimbMesF1} · CRNE ${cimbMesF2}</div></div>`;
-  // Frentes
-  const frenteCard=(nom,color,mes,meta,pc,hoyM,pers,ritmoObj,cimbMes,cimbHoy,gastoExp)=>`
-    <div class="card">
+    <div class="kpi-card"><div class="kpi-label">Cimbras Hoy</div><div class="kpi-value warn">${cimbHoyT}</div><div class="kpi-sub">de los 5 frentes</div></div>
+    <div class="kpi-card"><div class="kpi-label">Cimbras Mes</div><div class="kpi-value blue">${cimbMesT}</div><div class="kpi-sub">acumulado · 5 frentes</div></div>`;
+  // Frentes — tarjeta por cada uno de los 5
+  const frenteCard=(d)=>{
+    const f=d.f;
+    return `<div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div class="section-title" style="margin:0;font-size:13px;color:${color}">${nom}</div>
-        <span class="vs-pct ${pc>=100?'over':'under'}">${pc}%</span>
+        <div class="section-title" style="margin:0;font-size:13px;color:${f.color}">${f.emoji} ${f.nombre}</div>
+        <span class="vs-pct ${d.pc>=100?'over':'under'}">${d.pc}%</span>
       </div>
-      <div class="progress-row"><div class="progress-bar" style="height:8px"><div class="progress-fill ${pc>=100?'green':'red'}" style="width:${Math.min(100,pc)}%"></div></div></div>
+      <div class="progress-row"><div class="progress-bar" style="height:8px"><div class="progress-fill ${d.pc>=100?'green':'red'}" style="width:${Math.min(100,d.pc)}%"></div></div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px">
-        <div><div style="font-size:10px;color:var(--text3)">Avance mes</div><div style="font-size:13px;font-weight:700;color:var(--text)">${mes.toFixed(1)} / ${meta} m</div></div>
-        <div><div style="font-size:10px;color:var(--text3)">Hoy</div><div style="font-size:13px;font-weight:700;color:var(--text)">${hoyM.toFixed(1)} m</div></div>
-        <div><div style="font-size:10px;color:var(--text3)">Personal</div><div style="font-size:13px;font-weight:700;color:var(--text)">${pers}</div></div>
+        <div><div style="font-size:10px;color:var(--text3)">Avance mes</div><div style="font-size:13px;font-weight:700;color:var(--text)">${d.mesM.toFixed(1)} / ${d.meta} m</div></div>
+        <div><div style="font-size:10px;color:var(--text3)">Hoy</div><div style="font-size:13px;font-weight:700;color:var(--text)">${d.hoyM.toFixed(1)} m</div></div>
+        <div><div style="font-size:10px;color:var(--text3)">Personal</div><div style="font-size:13px;font-weight:700;color:var(--text)">${d.pers}</div></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px;border-top:1px solid var(--border);padding-top:8px">
-        <div><div style="font-size:10px;color:var(--text3)">Cimbras mes</div><div style="font-size:13px;font-weight:700;color:#fbbf24">${cimbMes}</div></div>
-        <div><div style="font-size:10px;color:var(--text3)">Cimbras hoy</div><div style="font-size:13px;font-weight:700;color:var(--text)">${cimbHoy}</div></div>
-        <div><div style="font-size:10px;color:var(--text3)">Explosivo mes</div><div style="font-size:13px;font-weight:700;color:#22d3a5">${fST(gastoExp)}</div></div>
+        <div><div style="font-size:10px;color:var(--text3)">Cimbras mes</div><div style="font-size:13px;font-weight:700;color:#fbbf24">${d.cimbMes}</div></div>
+        <div><div style="font-size:10px;color:var(--text3)">Cimbras hoy</div><div style="font-size:13px;font-weight:700;color:var(--text)">${d.cimbHoy}</div></div>
+        <div><div style="font-size:10px;color:var(--text3)">Explosivo mes</div><div style="font-size:13px;font-weight:700;color:#22d3a5">${d.gastoExp?fST(d.gastoExp):'—'}</div></div>
       </div>
-      <div style="font-size:11px;color:var(--text3);margin-top:8px">Ritmo objetivo: ${ritmoObj} m/día</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:8px">Ritmo objetivo: ${d.meta>0?(d.meta/dias).toFixed(1):'—'} m/día</div>
     </div>`;
+  };
   const tf=document.getElementById('tab-frentes');
-  if(tf)tf.innerHTML='<div class="two-col">'+
-    frenteCard('🟦 RA Brenda','#60a5fa',mesF1,metaMesF1,pcF1,hoyF1,persF1,(metaMesF1/dias).toFixed(1),cimbMesF1,cimbHoyF1,gastoExpF1)+
-    frenteCard('🟩 CRNE','#34d399',mesF2,metaMesF2,pcF2,hoyF2,persF2,(metaMesF2/dias).toFixed(1),cimbMesF2,cimbHoyF2,gastoExpF2)+
-    '</div>';
+  if(tf)tf.innerHTML='<div class="two-col">'+datos.map(frenteCard).join('')+'</div>';
   // Alertas
   const alertas=[];
   const avanceEsperado=diaDelMes/dias; // proporción ideal del mes
-  if(metaMesF1>0 && (mesF1/metaMesF1) < avanceEsperado-0.1) alertas.push(`🟦 RA Brenda atrasada: ${pcF1}% avanzado vs ${Math.round(avanceEsperado*100)}% esperado a la fecha.`);
-  if(metaMesF2>0 && (mesF2/metaMesF2) < avanceEsperado-0.1) alertas.push(`🟩 CRNE atrasada: ${pcF2}% avanzado vs ${Math.round(avanceEsperado*100)}% esperado a la fecha.`);
+  datos.forEach(d=>{
+    if(d.meta>0 && (d.mesM/d.meta) < avanceEsperado-0.1) alertas.push(`${d.f.emoji} ${d.f.nombre} atrasado: ${d.pc}% avanzado vs ${Math.round(avanceEsperado*100)}% esperado a la fecha.`);
+  });
   if(!rgHoy.length) alertas.push('📋 Aún no se registra el Reporte de Jefe de Guardia de hoy.');
   if(!Object.keys(dist).length) alertas.push('👥 No hay distribución de personal definida por el Ing. Residente.');
   const ta=document.getElementById('tab-alertas');
@@ -14205,23 +14285,14 @@ async function initSistema(){
   try{ const p=JSON.parse(localStorage.getItem(PERSONAL_KEY)||'[]'); if(Array.isArray(p)&&p.length) state.personal=p; }catch(e){}
   try{ const t=JSON.parse(localStorage.getItem(TAREAS_KEY)||'[]'); if(Array.isArray(t)&&t.length) state.tareas=t; }catch(e){}
   await cargarDesdeSB();
-  // Eliminar Frente 3 / frentes extra: solo se permiten Frente 1 (Brenda) y Frente 2 (Cortada).
-  // Se filtra en memoria en cada carga, así no reaparece aunque venga de la nube.
-  try{
-    state.perforacion=(state.perforacion||[]).filter(p=>p.frente===1||p.frente===2);
-    let cambioRep=false;
-    (state.reportesGuardia||[]).forEach(r=>{ if(r.frentesExtra&&r.frentesExtra.length){r.frentesExtra=[];cambioRep=true;} });
-    if(cambioRep){ try{reportesGuardiaSave();}catch(e){} }
-  }catch(e){}
-  // Anclar el panel ejecutivo a la valorización más reciente guardada, para que
-  // el ingreso no aparezca vacío al entrar (sin tener que ir a Guardar de nuevo).
-  try{
-    const vals=(state.valorizacionesLabor||[]).filter(v=>v.mesNum&&v.anio);
-    if(vals.length){
-      vals.sort((a,b)=>(b.anio*100+b.mesNum)-(a.anio*100+a.mesNum));
-      _ejecMes=vals[0].anio+'-'+String(vals[0].mesNum).padStart(2,'0');
-    }
-  }catch(e){}
+  // Se habilitaron 5 frentes fijos (Brenda, CRNE, GLSE-2, ESCM 4430, ESCM 4410) — ya NO se
+  // filtran del estado en memoria. Solo se reconstruye la perforación derivada de los reportes
+  // de guardia para que quede en sincronía con los 5 frentes tras cargar la nube.
+  try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){}
+  // El Panel Ejecutivo siempre abre en el MES ACTUAL (no se ancla a la última valorización
+  // guardada, aunque sea de un mes pasado). _ejecMes queda null → renderDashEjecutivo usa
+  // finMesActual(). Si el mes actual no tiene valorización aún, se ve "S/ 0" correctamente.
+  _ejecMes=null;
   poblarSelects();
   if(state.maquinas) poblarSelectMaquinas();
   actualizarBadgeMes();
