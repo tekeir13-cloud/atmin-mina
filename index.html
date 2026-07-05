@@ -4034,7 +4034,7 @@ function metaMensualFrente(id,dias){
 // (fechas distintas con reporte, no el calendario transcurrido), proyectado a los "días hábiles
 // del mes" que define el Ingeniero Residente. Usar días con actividad evita inflar el ritmo
 // cuando hay pocos días trabajados o cuando alguna fecha de reporte supera la fecha del sistema.
-// Ej: 47.2 m en 10 días con reporte = 4.72 m/día → a 26 días hábiles = 122.7 m.
+// Ej: 47.2 m en 10 días con reporte = 4.72 m/día → a 30 días del periodo = 141.6 m.
 // El pronóstico nunca puede ser MENOR que lo ya avanzado (si ya se superó, se mantiene lo real).
 function calcPronostico(valorAlaFecha, diasHabiles, diasConActividad){
   diasHabiles=Number(diasHabiles)||26;
@@ -4043,6 +4043,17 @@ function calcPronostico(valorAlaFecha, diasHabiles, diasConActividad){
   const ritmo=val/base;
   const proyeccion=Math.max(val, ritmo*diasHabiles);   // nunca proyecta menos de lo ya hecho
   return { ritmo, diasConActividad:base, proyeccion };
+}
+// Número de días CALENDARIO del periodo (ventana 26→25): normalmente 30, a veces 31 o 28.
+// Es el horizonte al que proyecta el pronóstico de cierre de mes.
+function diasDelPeriodo(mesYM){
+  try{
+    if(typeof ventanaMes!=='function') return 30;
+    const w=ventanaMes(mesYM);
+    const a=new Date(w.ini+'T00:00:00'), b=new Date(w.fin+'T00:00:00');
+    const d=Math.round((b-a)/86400000)+1;
+    return d>0?d:30;
+  }catch(e){ return 30; }
 }
 function setMetaMensualFrente(id,val){
   state.metas=state.metas||{};
@@ -5166,16 +5177,17 @@ function renderDashEjecutivo(){
   }).join(''):`<div style="text-align:center;padding:18px;color:var(--text3);font-size:13px">Sin perforación registrada este mes</div>`;
   const diasPerf=[...new Set(perfMes.map(p=>p.fecha))].length||1;
   const rendProm=(metrosTot/diasPerf).toFixed(1);
-  // ── Pronóstico de cierre del mes (metros + cimbras) al ritmo diario real, proyectado a los
-  // días hábiles que define el Ing. Residente ──
-  const diasHabEjec=(state.metas&&state.metas.dias)||26;
+  // ── Pronóstico de cierre del mes (metros + cimbras): ritmo diario real × días del periodo
+  // 26→25 (≈30, a veces 31 o 28) ──
+  const diasHabEjec=(state.metas&&state.metas.dias)||26;   // para derivar metas de F1/F2
+  const diasPeriodoEjec=diasDelPeriodo(mes);               // horizonte real del pronóstico
   const rgMesEjec=(state.reportesGuardia||[]).filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mes):((r.fecha||'').slice(0,7)===mes));
   const cimbrasMesEjec=rgMesEjec.reduce((s,r)=>{ let c=FRENTES.reduce((ss,f)=>ss+((r[f.key]&&r[f.key].cimbra)||0),0); (r.frentesExtra||[]).forEach(fx=>c+=(fx.cimbra||0)); return s+c; },0);
-  // Días con actividad = fechas distintas de reporte en el mes (para no inflar el ritmo)
+  // Días con actividad = fechas distintas de reporte en el periodo (para no inflar el ritmo)
   const diasActEjec=[...new Set(rgMesEjec.map(r=>r.fecha))].length || diasPerf || 1;
   const metaTotalEjec=FRENTES.reduce((s,f)=>s+(metaMensualFrente(f.id,diasHabEjec)||0),0);
-  const _pronMEjec=calcPronostico(metrosTot,diasHabEjec,diasPerf).proyeccion;
-  const _pronCEjec=Math.round(calcPronostico(cimbrasMesEjec,diasHabEjec,diasActEjec).proyeccion);
+  const _pronMEjec=calcPronostico(metrosTot,diasPeriodoEjec,diasPerf).proyeccion;
+  const _pronCEjec=Math.round(calcPronostico(cimbrasMesEjec,diasPeriodoEjec,diasActEjec).proyeccion);
   const _pronPctEjec=metaTotalEjec>0?Math.min(100,Math.round(_pronMEjec/metaTotalEjec*100)):0;
 
   // ── P&L POR EQUIPO ──
@@ -5297,7 +5309,7 @@ function renderDashEjecutivo(){
         <div style="background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.35);border-radius:11px;padding:12px 14px">
           <div style="font-size:10.5px;color:#a78bfa;text-transform:uppercase;letter-spacing:.5px">🔮 Pronóstico Cierre de Mes</div>
           <div style="font-size:25px;font-weight:900;color:${_pronPctEjec>=100||metaTotalEjec===0?'#10b981':'#f59e0b'};letter-spacing:-1px;margin-top:2px">${_pronMEjec.toFixed(1)} m</div>
-          <div style="font-size:10px;color:var(--text3)">${metaTotalEjec>0?_pronPctEjec+'% de meta · ':''}${_pronCEjec} cimbras · a ${diasHabEjec} días hábiles</div>
+          <div style="font-size:10px;color:var(--text3)">${metaTotalEjec>0?_pronPctEjec+'% de meta · ':''}${_pronCEjec} cimbras · periodo de ${diasPeriodoEjec} días (26→25)</div>
         </div>
       </div>
     </div>
@@ -5478,6 +5490,7 @@ function renderDashAvanceMeta(){
   const M=state.metas||{};
   const dias=M.dias||M.diasMes||26;
   const mesAct=(typeof finMesActual==='function')?finMesActual():hoy().slice(0,7);
+  const diasPeriodo=diasDelPeriodo(mesAct);   // horizonte del pronóstico (30/31/28 días 26→25)
   const rgMes=(state.reportesGuardia||[]).filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mesAct):((r.fecha||'').slice(0,7)===mesAct));
   // Gasto de explosivo del mes por frente (fuente: reportes del Compresorista; solo Brenda/CRNE
   // tienen desglose rampa/galería por ahora)
@@ -5499,8 +5512,8 @@ function renderDashAvanceMeta(){
     const gastoExp=gastoExpD[f.id]||0;
     // Días con actividad del frente = fechas distintas con avance de ese frente en el periodo
     const diasActF=[...new Set(perfF.map(p=>p.fecha))].length;
-    const pronM=calcPronostico(real,dias,diasActF);
-    const pronC=calcPronostico(cimb,dias,diasActF);
+    const pronM=calcPronostico(real,diasPeriodo,diasActF);
+    const pronC=calcPronostico(cimb,diasPeriodo,diasActF);
     return {f,real,meta,pc,cimb,gastoExp,proyM:pronM.proyeccion,proyC:pronC.proyeccion};
   });
   const tot=r1(datos.reduce((s,d)=>s+d.real,0));
@@ -5544,7 +5557,7 @@ function renderDashAvanceMeta(){
     </div>
     <div style="margin-top:14px;padding:14px 16px;background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.3);border-radius:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
       <div>
-        <div style="font-size:12px;font-weight:800;color:#a78bfa">🔮 Pronóstico al cierre del mes (${dias} días hábiles definidos por Ing. Residente)</div>
+        <div style="font-size:12px;font-weight:800;color:#a78bfa">🔮 Pronóstico al cierre del mes (periodo de ${diasPeriodo} días · 26→25)</div>
         <div style="font-size:11px;color:var(--text3);margin-top:2px">Al ritmo diario real de avance a la fecha, así cerraría el mes</div>
       </div>
       <div style="display:flex;gap:18px;flex-wrap:wrap">
@@ -11285,6 +11298,7 @@ function renderTableroOp(){
   const rgHoy=rg.filter(r=>r.fecha===ts);
   const sumF=(arr,key,k)=>arr.reduce((s,r)=>s+(r[key]?.[k]||0),0);
   const dias=state.metas.dias||26;
+  const diasPeriodo=diasDelPeriodo(mesAct);   // horizonte del pronóstico (30/31/28 días 26→25)
   // Personal distribuido (por ahora solo Frente 1/2 tienen asignación de personal)
   const dist=state.distribucion||{};
   // Gasto de explosivo por frente (acumulado del mes) — solo Brenda/CRNE tienen desglose
@@ -11306,8 +11320,8 @@ function renderTableroOp(){
     const cimbMes=sumF(rgMes,f.key,'cimbra');
     // Días con actividad del frente = fechas distintas con avance de ese frente en el mes
     const diasActF=[...new Set(rgMes.filter(r=>((r[f.key]&&r[f.key].metros)||0)>0).map(r=>r.fecha))].length;
-    const pronM=calcPronostico(mesM,dias,diasActF);
-    const pronC=calcPronostico(cimbMes,dias,diasActF);
+    const pronM=calcPronostico(mesM,diasPeriodo,diasActF);
+    const pronC=calcPronostico(cimbMes,diasPeriodo,diasActF);
     return {f, hoyM, mesM, meta, pc, pers, cimbMes, cimbHoy:sumF(rgHoy,f.key,'cimbra'),
       tperfHoy:sumF(rgHoy,f.key,'tperf'), tcargHoy:sumF(rgHoy,f.key,'tcarg'),
       masasHoy:rgHoy.reduce((s,r)=>s+((r[f.key]&&r[f.key].masas)||[]).reduce((ss,m)=>ss+(m.cant||0),0),0),
@@ -11343,7 +11357,7 @@ function renderTableroOp(){
     <div class="kpi-card"><div class="kpi-label">Masas / Explosivos Hoy</div><div class="kpi-value blue">${masasHoy}</div><div class="kpi-sub">unidades consumidas</div></div>
     <div class="kpi-card"><div class="kpi-label">Cimbras Hoy</div><div class="kpi-value warn">${cimbHoyT}</div><div class="kpi-sub">de los 5 frentes</div></div>
     <div class="kpi-card"><div class="kpi-label">Cimbras Mes</div><div class="kpi-value blue">${cimbMesT}</div><div class="kpi-sub">acumulado · 5 frentes</div></div>
-    <div class="kpi-card" style="border-color:rgba(139,92,246,.35)"><div class="kpi-label">🔮 Pronóstico Cierre de Mes</div><div class="kpi-value" style="color:${proyPctTot>=100?'#10b981':'#f59e0b'}">${proyMTot.toFixed(1)} m</div><div class="kpi-sub">${metaTot>0?proyPctTot+'% de meta · ':''}${proyCTot} cimbras · ${dias} días hábiles</div></div>`;
+    <div class="kpi-card" style="border-color:rgba(139,92,246,.35)"><div class="kpi-label">🔮 Pronóstico Cierre de Mes</div><div class="kpi-value" style="color:${proyPctTot>=100?'#10b981':'#f59e0b'}">${proyMTot.toFixed(1)} m</div><div class="kpi-sub">${metaTot>0?proyPctTot+'% de meta · ':''}${proyCTot} cimbras · periodo de ${diasPeriodo} días</div></div>`;
   // Frentes — tarjeta por cada uno de los 5
   const frenteCard=(d)=>{
     const f=d.f;
