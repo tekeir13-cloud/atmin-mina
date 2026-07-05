@@ -5167,6 +5167,16 @@ function renderDashEjecutivo(){
   }).join(''):`<div style="text-align:center;padding:18px;color:var(--text3);font-size:13px">Sin perforación registrada este mes</div>`;
   const diasPerf=[...new Set(perfMes.map(p=>p.fecha))].length||1;
   const rendProm=(metrosTot/diasPerf).toFixed(1);
+  // ── Pronóstico de cierre del mes (metros + cimbras) al ritmo diario real, proyectado a los
+  // días hábiles que define el Ing. Residente ──
+  const diasHabEjec=(state.metas&&state.metas.dias)||26;
+  const iniEjec=(typeof ventanaMes==='function')?ventanaMes(mes).ini:null;
+  const rgMesEjec=(state.reportesGuardia||[]).filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mes):((r.fecha||'').slice(0,7)===mes));
+  const cimbrasMesEjec=rgMesEjec.reduce((s,r)=>{ let c=FRENTES.reduce((ss,f)=>ss+((r[f.key]&&r[f.key].cimbra)||0),0); (r.frentesExtra||[]).forEach(fx=>c+=(fx.cimbra||0)); return s+c; },0);
+  const metaTotalEjec=FRENTES.reduce((s,f)=>s+(metaMensualFrente(f.id,diasHabEjec)||0),0);
+  const _pronMEjec=calcPronostico(metrosTot,diasHabEjec,iniEjec).proyeccion;
+  const _pronCEjec=Math.round(calcPronostico(cimbrasMesEjec,diasHabEjec,iniEjec).proyeccion);
+  const _pronPctEjec=metaTotalEjec>0?Math.round(_pronMEjec/metaTotalEjec*100):0;
 
   // ── P&L POR EQUIPO ──
   const compMes=(state.compresorista||[]).filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mes):(r.fecha||'').startsWith(mes));
@@ -5283,6 +5293,11 @@ function renderDashEjecutivo(){
           <div style="font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Costo por Metro</div>
           <div style="font-size:25px;font-weight:900;color:var(--text);letter-spacing:-1px;margin-top:2px">${metrosTot>0?S(costoTot/metrosTot):'—'}</div>
           <div style="font-size:10px;color:var(--text3)">gasto total ÷ metros</div>
+        </div>
+        <div style="background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.35);border-radius:11px;padding:12px 14px">
+          <div style="font-size:10.5px;color:#a78bfa;text-transform:uppercase;letter-spacing:.5px">🔮 Pronóstico Cierre de Mes</div>
+          <div style="font-size:25px;font-weight:900;color:${_pronPctEjec>=100||metaTotalEjec===0?'#10b981':'#f59e0b'};letter-spacing:-1px;margin-top:2px">${_pronMEjec.toFixed(1)} m</div>
+          <div style="font-size:10px;color:var(--text3)">${metaTotalEjec>0?_pronPctEjec+'% de meta · ':''}${_pronCEjec} cimbras · a ${diasHabEjec} días hábiles</div>
         </div>
       </div>
     </div>
