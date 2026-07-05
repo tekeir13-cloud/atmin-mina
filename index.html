@@ -5490,13 +5490,15 @@ function renderDashAvanceMeta(){
   // Por frente — los 5 frentes configurados
   let cimbExtra=0; rgMes.forEach(r=>(r.frentesExtra||[]).forEach(fx=>cimbExtra+=(fx.cimbra||0)));
   const datos=FRENTES.map(f=>{
-    const real=r1(state.perforacion.filter(p=>String(p.frente)===String(f.id)).reduce((s,p)=>s+(Number(p.metros)||0),0));
+    // Solo perforación del PERIODO actual (ventana 26→25), coherente con el pronóstico
+    const perfF=state.perforacion.filter(p=>String(p.frente)===String(f.id)&&((typeof filtroMes==='function')?filtroMes(p.fecha,mesAct):true));
+    const real=r1(perfF.reduce((s,p)=>s+(Number(p.metros)||0),0));
     const meta=metaMensualFrente(f.id,dias)||0;
     const pc=meta>0?Math.round(real/meta*100):0;
     const cimb=rgMes.reduce((s,r)=>s+((r[f.key]&&r[f.key].cimbra)||0),0);
     const gastoExp=gastoExpD[f.id]||0;
-    // Días con actividad del frente = fechas distintas con avance de ese frente en el mes
-    const diasActF=[...new Set(state.perforacion.filter(p=>String(p.frente)===String(f.id)&&((typeof filtroMes==='function')?filtroMes(p.fecha,mesAct):true)).map(p=>p.fecha))].length;
+    // Días con actividad del frente = fechas distintas con avance de ese frente en el periodo
+    const diasActF=[...new Set(perfF.map(p=>p.fecha))].length;
     const pronM=calcPronostico(real,dias,diasActF);
     const pronC=calcPronostico(cimb,dias,diasActF);
     return {f,real,meta,pc,cimb,gastoExp,proyM:pronM.proyeccion,proyC:pronC.proyeccion};
@@ -16134,9 +16136,9 @@ function ventanaMes(mesYM){
 }
 function enVentana(fecha, mesYM){ const f=(fecha||'').slice(0,10); if(!f) return false; const w=ventanaMes(mesYM); return f>=w.ini && f<=w.fin; }
 // Filtro de mes UNIFORME para toda la app: si 'mes' es un periodo YYYY-MM respeta la ventana
-// del ciclo (mes calendario hasta jul-2026; 26→25 desde ago-2026). Si es un prefijo más largo
-// (un día YYYY-MM-DD) compara por prefijo. Reemplaza los antiguos startsWith(mes) que se
-// desalineaban del resto de vistas al empezar el ciclo 26→25.
+// del ciclo 26→25 (activo desde jul-2026: cada periodo va del 26 del mes anterior al 25 del mes
+// de cierre). Si es un prefijo más largo (un día YYYY-MM-DD) compara por prefijo. Reemplaza los
+// antiguos startsWith(mes) que se desalineaban del resto de vistas.
 function filtroMes(fecha, mes){
   const m=String(mes||''); if(!m) return true;
   const f=String(fecha||'');
@@ -18362,7 +18364,8 @@ const _origRenderTabla = typeof renderTablaCompresorista === 'function' ? render
 // Periodo de valorización = del 26 de un mes al 25 del siguiente (noche).
 // Etiquetado por el MES DEL CIERRE (ej: 26-jun→25-jul = "Julio").
 // Se ACTIVA en agosto; en julio es solo prueba (los cortes 26→25 no se usan aún).
-const CICLO_2625_DESDE = '2026-08';   // periodo (YYYY-MM) desde el que el ciclo 26→25 está activo
+const CICLO_2625_DESDE = '2026-07';   // periodo (YYYY-MM) desde el que el ciclo 26→25 está activo
+                                      // Julio 2026 = 26 jun → 25 jul (calendario operativo real de la mina)
 function cicloActivo(){ try{ return periodoActual() >= CICLO_2625_DESDE; }catch(e){ return false; } }
 function periodoActual(){
   const d=new Date(); let y=d.getFullYear(), m=d.getMonth(); // m 0-indexado
