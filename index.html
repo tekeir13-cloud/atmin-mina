@@ -4055,6 +4055,22 @@ function diasDelPeriodo(mesYM){
     return d>0?d:30;
   }catch(e){ return 30; }
 }
+// Días CALENDARIO transcurridos del periodo (desde el 26 del mes anterior hasta hoy, o hasta el
+// 25 de cierre si el periodo ya terminó). Es el divisor del ritmo diario real: usar solo "días con
+// reporte" infla el pronóstico cuando hay pocos días reportados al inicio del ciclo (ej. día 6 del
+// mes calendario puede ser en realidad el día 11 del periodo 26→25). Como días con actividad ⊆ días
+// transcurridos, este divisor siempre es igual o mayor, dando un ritmo más conservador y realista.
+function diasTranscurridosPeriodo(mesYM){
+  try{
+    if(typeof ventanaMes!=='function') return 1;
+    const w=ventanaMes(mesYM);
+    const ini=new Date(w.ini+'T00:00:00'), fin=new Date(w.fin+'T00:00:00');
+    const hoyD=new Date(hoy()+'T00:00:00');
+    const ref=hoyD<fin?hoyD:fin;
+    const d=Math.round((ref-ini)/86400000)+1;
+    return Math.max(1, Math.min(d, diasDelPeriodo(mesYM)));
+  }catch(e){ return 1; }
+}
 function setMetaMensualFrente(id,val){
   state.metas=state.metas||{};
   if(String(id)==='1'){ state.metas.mensualF1=val; return; }
@@ -5183,11 +5199,10 @@ function renderDashEjecutivo(){
   const diasPeriodoEjec=diasDelPeriodo(mes);               // horizonte real del pronóstico
   const rgMesEjec=(state.reportesGuardia||[]).filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mes):((r.fecha||'').slice(0,7)===mes));
   const cimbrasMesEjec=rgMesEjec.reduce((s,r)=>{ let c=FRENTES.reduce((ss,f)=>ss+((r[f.key]&&r[f.key].cimbra)||0),0); (r.frentesExtra||[]).forEach(fx=>c+=(fx.cimbra||0)); return s+c; },0);
-  // Días con actividad = fechas distintas de reporte en el periodo (para no inflar el ritmo)
-  const diasActEjec=[...new Set(rgMesEjec.map(r=>r.fecha))].length || diasPerf || 1;
   const metaTotalEjec=FRENTES.reduce((s,f)=>s+(metaMensualFrente(f.id,diasHabEjec)||0),0);
-  const _pronMEjec=calcPronostico(metrosTot,diasPeriodoEjec,diasPerf).proyeccion;
-  const _pronCEjec=Math.round(calcPronostico(cimbrasMesEjec,diasPeriodoEjec,diasActEjec).proyeccion);
+  const diasTranscEjec=diasTranscurridosPeriodo(mes);
+  const _pronMEjec=calcPronostico(metrosTot,diasPeriodoEjec,diasTranscEjec).proyeccion;
+  const _pronCEjec=Math.round(calcPronostico(cimbrasMesEjec,diasPeriodoEjec,diasTranscEjec).proyeccion);
   const _pronPctEjec=metaTotalEjec>0?Math.min(100,Math.round(_pronMEjec/metaTotalEjec*100)):0;
 
   // ── P&L POR EQUIPO ──
@@ -5505,7 +5520,7 @@ function renderDashAvanceMeta(){
   // Días OPERADOS del periodo = fechas distintas con avance en cualquier frente (divisor único
   // del ritmo diario, para que los frentes sumen el total y no se infle el pronóstico).
   const perfPeriodo=state.perforacion.filter(p=>(typeof filtroMes==='function')?filtroMes(p.fecha,mesAct):true);
-  const diasOperados=[...new Set(perfPeriodo.map(p=>p.fecha))].length||1;
+  const diasTransc=diasTranscurridosPeriodo(mesAct);
   const datos=FRENTES.map(f=>{
     const perfF=perfPeriodo.filter(p=>String(p.frente)===String(f.id));
     const real=r1(perfF.reduce((s,p)=>s+(Number(p.metros)||0),0));
@@ -5513,8 +5528,8 @@ function renderDashAvanceMeta(){
     const pc=meta>0?Math.round(real/meta*100):0;
     const cimb=rgMes.reduce((s,r)=>s+((r[f.key]&&r[f.key].cimbra)||0),0);
     const gastoExp=gastoExpD[f.id]||0;
-    const pronM=calcPronostico(real,diasPeriodo,diasOperados);
-    const pronC=calcPronostico(cimb,diasPeriodo,diasOperados);
+    const pronM=calcPronostico(real,diasPeriodo,diasTransc);
+    const pronC=calcPronostico(cimb,diasPeriodo,diasTransc);
     return {f,real,meta,pc,cimb,gastoExp,proyM:pronM.proyeccion,proyC:pronC.proyeccion};
   });
   const tot=r1(datos.reduce((s,d)=>s+d.real,0));
@@ -11312,9 +11327,9 @@ function renderTableroOp(){
   const fST=n=>'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:0,maximumFractionDigits:0});
 
   // ── Datos por frente (los 5 configurados en FRENTES) ──
-  // Días OPERADOS del periodo = fechas distintas con avance en cualquier frente (divisor único
-  // del ritmo diario, para no inflar el pronóstico ni descuadrar frentes vs total).
-  const diasOperados=[...new Set(rgMes.filter(r=>FRENTES.some(f=>((r[f.key]&&r[f.key].metros)||0)>0)).map(r=>r.fecha))].length||1;
+  // Divisor del ritmo diario = días CALENDARIO transcurridos del periodo 26→25 (no solo días con
+  // reporte), para no inflar el pronóstico al inicio del ciclo ni descuadrar frentes vs total.
+  const diasTransc=diasTranscurridosPeriodo(mesAct);
   const datos=FRENTES.map(f=>{
     const hoyM=r1m(sumF(rgHoy,f.key,'metros'));
     const mesM=r1m(sumF(rgMes,f.key,'metros'));
@@ -11322,8 +11337,8 @@ function renderTableroOp(){
     const pc=meta>0?Math.round((mesM/meta)*100):0;
     const pers=(f.id===1||f.id===2)?Object.values(dist).filter(v=>String(v)===String(f.id)).length:0;
     const cimbMes=sumF(rgMes,f.key,'cimbra');
-    const pronM=calcPronostico(mesM,diasPeriodo,diasOperados);
-    const pronC=calcPronostico(cimbMes,diasPeriodo,diasOperados);
+    const pronM=calcPronostico(mesM,diasPeriodo,diasTransc);
+    const pronC=calcPronostico(cimbMes,diasPeriodo,diasTransc);
     return {f, hoyM, mesM, meta, pc, pers, cimbMes, cimbHoy:sumF(rgHoy,f.key,'cimbra'),
       tperfHoy:sumF(rgHoy,f.key,'tperf'), tcargHoy:sumF(rgHoy,f.key,'tcarg'),
       masasHoy:rgHoy.reduce((s,r)=>s+((r[f.key]&&r[f.key].masas)||[]).reduce((ss,m)=>ss+(m.cant||0),0),0),
@@ -11346,7 +11361,7 @@ function renderTableroOp(){
   const subFrentesM=(campo)=>datos.filter(d=>d[campo]>0).map(d=>`${d.f.emoji} ${d.f.nombre.split(' ')[0]} ${d[campo].toFixed(1)}m`).join(' · ')||'sin avance';
   // Días transcurridos hábiles (aprox por fecha del mes)
   const diaDelMes=parseInt(ts.slice(8,10),10);
-  const lbl=document.getElementById('tab-mes-label');if(lbl)lbl.textContent=`mes ${mesAct} · día ${diaDelMes}`;
+  const lbl=document.getElementById('tab-mes-label');if(lbl)lbl.textContent=`mes ${mesAct} · día ${diasTransc} de ${diasPeriodo} del periodo`;
   // KPIs (conjunto de los 5 frentes)
   const kpis=document.getElementById('tab-kpis');
   if(kpis)kpis.innerHTML=`
