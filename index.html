@@ -5502,18 +5502,19 @@ function renderDashAvanceMeta(){
 
   // Por frente — los 5 frentes configurados
   let cimbExtra=0; rgMes.forEach(r=>(r.frentesExtra||[]).forEach(fx=>cimbExtra+=(fx.cimbra||0)));
+  // Días OPERADOS del periodo = fechas distintas con avance en cualquier frente (divisor único
+  // del ritmo diario, para que los frentes sumen el total y no se infle el pronóstico).
+  const perfPeriodo=state.perforacion.filter(p=>(typeof filtroMes==='function')?filtroMes(p.fecha,mesAct):true);
+  const diasOperados=[...new Set(perfPeriodo.map(p=>p.fecha))].length||1;
   const datos=FRENTES.map(f=>{
-    // Solo perforación del PERIODO actual (ventana 26→25), coherente con el pronóstico
-    const perfF=state.perforacion.filter(p=>String(p.frente)===String(f.id)&&((typeof filtroMes==='function')?filtroMes(p.fecha,mesAct):true));
+    const perfF=perfPeriodo.filter(p=>String(p.frente)===String(f.id));
     const real=r1(perfF.reduce((s,p)=>s+(Number(p.metros)||0),0));
     const meta=metaMensualFrente(f.id,dias)||0;
     const pc=meta>0?Math.round(real/meta*100):0;
     const cimb=rgMes.reduce((s,r)=>s+((r[f.key]&&r[f.key].cimbra)||0),0);
     const gastoExp=gastoExpD[f.id]||0;
-    // Días con actividad del frente = fechas distintas con avance de ese frente en el periodo
-    const diasActF=[...new Set(perfF.map(p=>p.fecha))].length;
-    const pronM=calcPronostico(real,diasPeriodo,diasActF);
-    const pronC=calcPronostico(cimb,diasPeriodo,diasActF);
+    const pronM=calcPronostico(real,diasPeriodo,diasOperados);
+    const pronC=calcPronostico(cimb,diasPeriodo,diasOperados);
     return {f,real,meta,pc,cimb,gastoExp,proyM:pronM.proyeccion,proyC:pronC.proyeccion};
   });
   const tot=r1(datos.reduce((s,d)=>s+d.real,0));
@@ -11311,6 +11312,9 @@ function renderTableroOp(){
   const fST=n=>'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:0,maximumFractionDigits:0});
 
   // ── Datos por frente (los 5 configurados en FRENTES) ──
+  // Días OPERADOS del periodo = fechas distintas con avance en cualquier frente (divisor único
+  // del ritmo diario, para no inflar el pronóstico ni descuadrar frentes vs total).
+  const diasOperados=[...new Set(rgMes.filter(r=>FRENTES.some(f=>((r[f.key]&&r[f.key].metros)||0)>0)).map(r=>r.fecha))].length||1;
   const datos=FRENTES.map(f=>{
     const hoyM=r1m(sumF(rgHoy,f.key,'metros'));
     const mesM=r1m(sumF(rgMes,f.key,'metros'));
@@ -11318,10 +11322,8 @@ function renderTableroOp(){
     const pc=meta>0?Math.round((mesM/meta)*100):0;
     const pers=(f.id===1||f.id===2)?Object.values(dist).filter(v=>String(v)===String(f.id)).length:0;
     const cimbMes=sumF(rgMes,f.key,'cimbra');
-    // Días con actividad del frente = fechas distintas con avance de ese frente en el mes
-    const diasActF=[...new Set(rgMes.filter(r=>((r[f.key]&&r[f.key].metros)||0)>0).map(r=>r.fecha))].length;
-    const pronM=calcPronostico(mesM,diasPeriodo,diasActF);
-    const pronC=calcPronostico(cimbMes,diasPeriodo,diasActF);
+    const pronM=calcPronostico(mesM,diasPeriodo,diasOperados);
+    const pronC=calcPronostico(cimbMes,diasPeriodo,diasOperados);
     return {f, hoyM, mesM, meta, pc, pers, cimbMes, cimbHoy:sumF(rgHoy,f.key,'cimbra'),
       tperfHoy:sumF(rgHoy,f.key,'tperf'), tcargHoy:sumF(rgHoy,f.key,'tcarg'),
       masasHoy:rgHoy.reduce((s,r)=>s+((r[f.key]&&r[f.key].masas)||[]).reduce((ss,m)=>ss+(m.cant||0),0),0),
