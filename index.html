@@ -2831,6 +2831,7 @@ select option{background:var(--coal3);}
             <th style="color:#fff;text-align:center;padding:10px 12px">Jornal/día</th>
             <th style="color:#fff;text-align:center;padding:10px 12px">Tareas</th>
             <th style="color:#fff;text-align:center;padding:10px 12px">Días</th>
+            <th style="color:#fff;text-align:center;padding:10px 12px">Días Libres</th>
             <th style="color:#fff;text-align:center;padding:10px 12px">x1</th>
             <th style="color:#fff;text-align:center;padding:10px 12px">x1.5</th>
             <th style="color:#fff;text-align:center;padding:10px 12px">x2</th>
@@ -9763,20 +9764,23 @@ function renderCostoRRHH(){
   const tMes=state.tareas.filter(t=>filtroMes(t.fecha,mes));
   const todos=state.personal; // todos, incluyendo bajas
   const tbody=g('cr-tabla-tbody');if(!tbody) return;
-  let totTotal=0,totTareas=0,totDias=0;
+  let totTotal=0,totTareas=0,totDias=0,totLibres=0;
   const filas=todos.map((p,i)=>{
     const pts=tMes.filter(t=>String(t.trabajadorId)===String(p.id));
     const dias=new Set(pts.map(t=>t.fecha)).size;
     const n1=pts.filter(t=>Number(t.mult||1)===1).length;
     const n15=pts.filter(t=>Number(t.mult||1)===1.5).length;
     const n2=pts.filter(t=>Number(t.mult||1)===2).length;
-    const total=pts.reduce((s,t)=>{const j=t.jornal??p.jornal;return s+j*(t.mult||1);},0);
+    // Días libres ganados: por cada 2 días trabajados, 1 día libre pagado al jornal base.
+    const diasLibres=Math.floor(dias/2);
+    const pagoLibres=diasLibres*(p.jornal||0);
+    const total=pts.reduce((s,t)=>{const j=t.jornal??p.jornal;return s+j*(t.mult||1);},0)+pagoLibres;
     const reservado=esSueldoReservado(p.rol);
     if(!reservado) totTotal+=total;  // el total visible excluye sueldos reservados
-    totTareas+=pts.length;totDias+=dias;
-    return{p,pts:pts.length,dias,n1,n15,n2,total,reservado,idx:i+1};
+    totTareas+=pts.length;totDias+=dias;totLibres+=diasLibres;
+    return{p,pts:pts.length,dias,diasLibres,n1,n15,n2,total,reservado,idx:i+1};
   }).sort((a,b)=>b.total-a.total||a.p.nombre.localeCompare(b.p.nombre));
-  tbody.innerHTML=filas.map(({p,pts,dias,n1,n15,n2,total,reservado},i)=>{
+  tbody.innerHTML=filas.map(({p,pts,dias,diasLibres,n1,n15,n2,total,reservado},i)=>{
     const baja=p.estado==='baja';
     const rowStyle=baja?'opacity:0.5':'';
     const totalColor=total>0?'color:var(--gold-light);font-weight:800':'color:var(--text3)';
@@ -9788,6 +9792,7 @@ function renderCostoRRHH(){
       <td style="text-align:center;font-family:'DM Mono',monospace;font-size:12px">${reservado?lock:fmtS(p.jornal)}</td>
       <td style="text-align:center;font-weight:700;color:${pts>0?'#a78bfa':'var(--text3)'}">${pts||'—'}</td>
       <td style="text-align:center;font-weight:700;color:${dias>0?'var(--positive)':'var(--text3)'}">${dias||'—'}</td>
+      <td style="text-align:center;font-weight:700;color:${diasLibres>0?'#22d3a5':'var(--text3)'}">${diasLibres||'—'}</td>
       <td style="text-align:center;color:#60a5fa">${n1||'—'}</td>
       <td style="text-align:center;color:#f59e0b">${n15||'—'}</td>
       <td style="text-align:center;color:#f87171">${n2||'—'}</td>
@@ -9797,6 +9802,7 @@ function renderCostoRRHH(){
     <td colspan="4" style="font-weight:800;color:var(--gold);padding:10px 12px">TOTAL MES ${mes}</td>
     <td style="text-align:center;font-weight:700;color:#a78bfa">${totTareas}</td>
     <td style="text-align:center;font-weight:700;color:var(--positive)">${totDias}</td>
+    <td style="text-align:center;font-weight:700;color:#22d3a5">${totLibres}</td>
     <td colspan="3"></td>
     <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:900;font-size:15px;color:var(--gold-light)">${fmtS(totTotal)}</td>
   </tr>`;
@@ -10605,7 +10611,7 @@ function exportarPlanillaExcel(){
 
   // ════ HOJA 1: RESUMEN MES ════
   const ws1=makeWS();
-  const headers=['N°','APELLIDOS Y NOMBRES','DNI','CARGO','FRENTE','JORNAL/DÍA','DÍAS','×1','×1.5','×2','TOTAL S/','ESTADO'];
+  const headers=['N°','APELLIDOS Y NOMBRES','DNI','CARGO','FRENTE','JORNAL/DÍA','DÍAS','DÍAS LIBRES','×1','×1.5','×2','TOTAL S/','ESTADO'];
   const COL=headers.length-1;
   // Título
   applyRow(ws1,0,[{v:`PLANILLA DE PERSONAL — ${nombreMes.toUpperCase()} ${anio}`,s:S.titulo},...Array(COL).fill({v:'',s:S.titulo})]);
@@ -10622,11 +10628,14 @@ function exportarPlanillaExcel(){
     const n1=pts.filter(t=>Number(t.mult||1)===1).length;
     const n15=pts.filter(t=>Number(t.mult||1)===1.5).length;
     const n2=pts.filter(t=>Number(t.mult||1)===2).length;
-    const total=pts.reduce((s,t)=>{const j=t.jornal??p.jornal;return s+j*(t.mult||1);},0);
+    // Días libres ganados: por cada 2 días trabajados, 1 día libre pagado al jornal base.
+    const diasLibres=Math.floor(dias/2);
+    const pagoLibres=diasLibres*(p.jornal||0);
+    const total=pts.reduce((s,t)=>{const j=t.jornal??p.jornal;return s+j*(t.mult||1);},0)+pagoLibres;
     const baja=p.estado==='baja';
-    return{p,dias,n1,n15,n2,total,baja,idx:i+1};
+    return{p,dias,diasLibres,n1,n15,n2,total,baja,idx:i+1};
   }).sort((a,b)=>b.total-a.total||a.p.nombre.localeCompare(b.p.nombre));
-  filas.forEach(({p,dias,n1,n15,n2,total,baja,idx},ri)=>{
+  filas.forEach(({p,dias,diasLibres,n1,n15,n2,total,baja,idx},ri)=>{
     const r=4+ri;
     const bg=ri%2===1?'F0F4FF':'FFFFFF';
     const ts=baja?S.baja:{fill:{fgColor:{rgb:bg}}};
@@ -10639,6 +10648,7 @@ function exportarPlanillaExcel(){
       {v:p.dni||'—',s:{...ts,alignment:{horizontal:'center'}}},
       {v:p.rol,s:ts},{v:FL[p.frente]||'—',s:{...ts,alignment:{horizontal:'center'}}},
       {v:p.jornal,s:ns},{v:dias,s:{...ts,alignment:{horizontal:'center'}}},
+      {v:diasLibres,s:{...ts,alignment:{horizontal:'center'}}},
       {v:n1||0,s:{...ts,alignment:{horizontal:'center'}}},
       {v:n15||0,s:{...ts,alignment:{horizontal:'center'}}},
       {v:n2||0,s:{...ts,alignment:{horizontal:'center'}}},
@@ -10650,16 +10660,18 @@ function exportarPlanillaExcel(){
   const rTot=4+filas.length;
   const totTotal=filas.reduce((s,f)=>s+f.total,0);
   const totDias=filas.reduce((s,f)=>s+f.dias,0);
+  const totLibres=filas.reduce((s,f)=>s+f.diasLibres,0);
   applyRow(ws1,rTot,[
     {v:'',s:S.totLbl},{v:'TOTAL MES',s:S.totLbl},{v:'',s:S.totLbl},{v:'',s:S.totLbl},{v:'',s:S.totLbl},
     {v:'',s:S.totLbl},{v:totDias,s:{...S.tot,alignment:{horizontal:'center'}}},
+    {v:totLibres,s:{...S.tot,alignment:{horizontal:'center'}}},
     {v:'',s:S.tot},{v:'',s:S.tot},{v:'',s:S.tot},
     {v:+totTotal.toFixed(2),s:S.gold},{v:'',s:S.totLbl},
   ]);
   // Firmas
-  applyRow(ws1,rTot+2,[null,{v:'Firma Administrador del Proyecto:',s:{}},null,null,null,null,null,{v:'Firma Jefe de Finanzas:',s:{}}]);
-  applyRow(ws1,rTot+4,[null,{v:'___________________________',s:{}},null,null,null,null,null,{v:'___________________________',s:{}}]);
-  ws1['!cols']=[{wch:4},{wch:30},{wch:13},{wch:26},{wch:12},{wch:13},{wch:7},{wch:6},{wch:7},{wch:6},{wch:14},{wch:11}];
+  applyRow(ws1,rTot+2,[null,{v:'Firma Administrador del Proyecto:',s:{}},null,null,null,null,null,null,{v:'Firma Jefe de Finanzas:',s:{}}]);
+  applyRow(ws1,rTot+4,[null,{v:'___________________________',s:{}},null,null,null,null,null,null,{v:'___________________________',s:{}}]);
+  ws1['!cols']=[{wch:4},{wch:30},{wch:13},{wch:26},{wch:12},{wch:13},{wch:7},{wch:11},{wch:6},{wch:7},{wch:6},{wch:14},{wch:11}];
   ws1['!rows']=[{hpt:28},{hpt:18},{hpt:6},{hpt:20}];
   // Actualizar ref
   ws1['!ref']=`A1:${XLSX.utils.encode_cell({r:rTot+4,c:COL})}`;
