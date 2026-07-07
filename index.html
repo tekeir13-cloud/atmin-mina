@@ -9761,7 +9761,9 @@ async function eliminarPersonal(id){
 function renderCostoRRHH(){
   const g=id=>document.getElementById(id);
   const mes=g('costo-mes-sel')?.value||hoy().slice(0,7);
-  const tMes=state.tareas.filter(t=>filtroMes(t.fecha,mes));
+  // La planilla se paga por MES CALENDARIO (1 al 30/31), a diferencia del costo operativo del
+  // dashboard que sigue el ciclo minero 26→25. No usar filtroMes/enVentana aquí.
+  const tMes=state.tareas.filter(t=>(t.fecha||'').slice(0,7)===mes);
   const todos=state.personal; // todos, incluyendo bajas
   const tbody=g('cr-tabla-tbody');if(!tbody) return;
   let totTotal=0,totTareas=0,totDias=0,totLibres=0;
@@ -10525,7 +10527,8 @@ async function servReporteMensual(){
   ws.getRow(r).height=24;
 
   // ── HOJA ANEXA: PLANILLA COMPLETA del mismo período (tareos × jornal) ──
-  const tareosMes=(state.tareas||[]).filter(t=>mesSelec?filtroMes(t.fecha,mesSelec):true)
+  // La planilla se paga por MES CALENDARIO (1 al 30/31), no por el ciclo minero 26→25.
+  const tareosMes=(state.tareas||[]).filter(t=>mesSelec?(t.fecha||'').slice(0,7)===mesSelec:true)
     .sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
   const wp=wb.addWorksheet('Planilla',{pageSetup:{paperSize:9,orientation:'landscape',fitToPage:true,fitToWidth:1}});
   wp.columns=[{width:5},{width:14},{width:10},{width:34},{width:22},{width:12},{width:8},{width:14}];
@@ -10588,7 +10591,8 @@ function exportarPlanillaExcel(){
   const mes=document.getElementById('costo-mes-sel')?.value||hoy().slice(0,7);
   const [anio,mesN]=mes.split('-');
   const nombreMes=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][parseInt(mesN)-1]||mes;
-  const tMes=state.tareas.filter(t=>filtroMes(t.fecha,mes));
+  // La planilla se paga por MES CALENDARIO (1 al 30/31), no por el ciclo minero 26→25.
+  const tMes=state.tareas.filter(t=>(t.fecha||'').slice(0,7)===mes);
   const todos=state.personal;
   // ── Estilos ──
   const S={
