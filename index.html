@@ -4521,11 +4521,9 @@ async function cargarAlmacenCombustibleSB(){
     {
       try{ if(typeof compCargarLocal==='function') compCargarLocal(); }catch(e){}
       const cNube=await sbLoadModulo('compresorista');
-      const keyOf=r=>(r.fecha||'')+'|'+(r.turno||'');
-      const byKey={};
-      (Array.isArray(cNube)?cNube:[]).forEach(r=>{ if(r&&r.fecha) byKey[keyOf(r)]=r; });
-      (state.compresorista||[]).forEach(r=>{ if(r&&r.fecha) byKey[keyOf(r)]=r; }); // local gana en conflicto
-      const cMerged=Object.values(byKey).sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+      // Fusiona nube + local por fecha|turno; gana la edición MÁS RECIENTE (_ts), no siempre la
+      // local. Así un equipo con copia vieja ya no re-sube su versión y pisa una corrección remota.
+      const cMerged=_compMergeByTs(Array.isArray(cNube)?cNube:[], state.compresorista||[]);
       if(cMerged.length){
         state.compresorista=cMerged;
         try{localStorage.setItem(COMP_STORAGE_KEY,JSON.stringify(cMerged));}catch(e){}
@@ -5818,7 +5816,7 @@ function _rtAplicarModulo(modulo, data){
     case 'reportes_guardia':   if(Array.isArray(data)){ state.reportesGuardia=M(data, state.reportesGuardia||[]); setLS('atmin_reportes_guardia', state.reportesGuardia); try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){} } break;
     case 'mant_kits':          if(Array.isArray(data)){ state.mantenimiento=(typeof mergeMantKits==='function')?mergeMantKits(state.mantenimiento||[], data):M(data, state.mantenimiento||[]); setLS('atmin_mant_kits', state.mantenimiento); } break;
     case 'mant_repuestos':     if(Array.isArray(data)){ state.mantRepuestos=data; setLS('atmin_mant_repuestos', data); } break;
-    case 'compresorista':      if(Array.isArray(data)){ const kof=r=>(r.fecha||'')+'|'+(r.turno||''); const by={}; (state.compresorista||[]).forEach(r=>{by[kof(r)]=r;}); data.forEach(r=>{by[kof(r)]=r;}); state.compresorista=Object.values(by); setLS('atmin_compresorista', state.compresorista); } break;
+    case 'compresorista':      if(Array.isArray(data)){ state.compresorista=(typeof _compMergeByTs==='function')?_compMergeByTs(state.compresorista||[], data):data; setLS('atmin_compresorista', state.compresorista); } break;
     case 'val_labor':          if(Array.isArray(data)){ state.valorizacionesLabor=data; setLS('atmin_valorizaciones_labor', data); } break;
     case 'distribucion':       if(data&&typeof data==='object'){ state.distribucion=data; setLS('atmin_distribucion', data); } break;
     case 'metas':              if(data&&typeof data==='object'){ state.metas=Object.assign(state.metas||{}, data); setLS('atmin_metas', state.metas); } break;
@@ -17087,6 +17085,17 @@ let _compTurnoSeleccionado = '';
 
 // ── Persistencia local (acumula reportes del mes) ──
 const COMP_STORAGE_KEY = 'atmin_compresorista';
+// Une dos listas de reportes de compresorista por fecha|turno. En conflicto gana el de _ts más
+// reciente (la última edición). Los reportes viejos sin _ts se tratan como los más antiguos, así
+// que cualquier reporte guardado con la app nueva los reemplaza. En empate gana el segundo
+// argumento, por eso el orden de los args importa: (fuente_vieja, fuente_nueva).
+function _compMergeByTs(a, b){
+  const kof=r=>(r.fecha||'')+'|'+(r.turno||'');
+  const by={};
+  const put=r=>{ if(!r||!r.fecha) return; const k=kof(r); const ex=by[k]; if(!ex || (Number(r._ts)||0) >= (Number(ex._ts)||0)) by[k]=r; };
+  (a||[]).forEach(put); (b||[]).forEach(put);
+  return Object.values(by).sort((x,y)=>(x.fecha||'').localeCompare(y.fecha||''));
+}
 function compGuardarLocal() {
   try { localStorage.setItem(COMP_STORAGE_KEY, JSON.stringify(state.compresorista)); } catch(e){}
   try { sbSyncModulo('compresorista', state.compresorista||[]); } catch(e){}  // nube: trazabilidad NV2820 + combustible
@@ -17421,6 +17430,7 @@ function guardarReporteComp() {
   const obs = document.getElementById('comp-obs').value.trim();
 
   const reporte = {fecha, turno:_compTurnoSeleccionado, nombre, dni, materialesAlmacen, explosivos, expFrente, aceros, consumoRampa, consumoGaleria, petroleo, gasolina, horometros, obs,
+    _ts:Date.now(),   // marca de tiempo: al sincronizar entre equipos gana la edición MÁS RECIENTE
     _precios:{pet:compGetPrecioPet(), gas:compGetPrecioGas(), explosivos:compGetPreciosExp(), aceros:compGetPreciosAce()}
   };
 
