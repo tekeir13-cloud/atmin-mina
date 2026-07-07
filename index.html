@@ -5471,8 +5471,10 @@ function renderDashResumenHoy(){
       : state.tareas.filter(t=>filtroMes(t.fecha,pre)).reduce((s,t)=>{const p=state.personal.find(x=>x.id===t.trabajadorId);return s+((t.jornal??p?.jornal??0)*(t.mult||1));},0);
   // Logística → salidas de almacén general
   const fLogistica = pre => (typeof finCostoLogistica==='function') ? finCostoLogistica(pre) : 0;
-  // Petróleo → salidas de combustible (pestaña Combustible)
-  const fPetroleo = pre => { try{ return (combCargar('pet')||[]).filter(r=>filtroMes(r.fecha,pre)).reduce((s,r)=>s+(Number(r.cantidad)||0),0); }catch(e){ return 0; } };
+  // Petróleo CONSUMIDO → galones que el Compresorista reporta consumidos por equipo (coincide con
+  // la etiqueta "consumo del día / consumo acumulado"). Antes leía los galones INGRESADOS (compras),
+  // por eso salía 0 aunque el compresorista sí reportaba gasto.
+  const fPetroleo = pre => { try{ return (state.compresorista||[]).filter(r=>filtroMes(r.fecha,pre)).reduce((s,r)=>s+((r.petroleo||[]).reduce((ss,p)=>ss+(Number(p.gln)||0),0)),0); }catch(e){ return 0; } };
   // Explosivos → salidas de explosivos NV3190
   const fExplos = pre => (typeof finCostoExplosivos==='function') ? finCostoExplosivos(pre) : 0;
   // Mantenimiento → kits de mantenimiento aprobados por logística
