@@ -4402,6 +4402,10 @@ async function cargarAlmacenCombustibleSB(){
       // Conservar el bloqueo del stock de explosivos: si CUALQUIER equipo lo activó, queda activo
       // (protege el stock NV3190 de que una migración lo vuelva a sobrescribir/borrar).
       if(almNube.exploLock||almLocalPrev.exploLock) state.almacen.exploLock=true;
+      // Conservar la BASE del stock real de explosivos (objeto), venga de nube o local, para que el
+      // saldo correcto se vea igual en todos los dispositivos y no lo pise la data vieja.
+      if(!state.almacen.exploStockBase && (almNube.exploStockBase||almLocalPrev.exploStockBase)) state.almacen.exploStockBase=almNube.exploStockBase||almLocalPrev.exploStockBase;
+      { const mx=Math.max(Number(almNube.exploStockBaseV||0), Number(almLocalPrev.exploStockBaseV||0)); if(mx) state.almacen.exploStockBaseV=mx; }
       // La nube viene sin fotos (se suben ligeras); devolver las fotos guardadas en este equipo
       try{ if(typeof _almRestaurarFotos==='function') state.almacen=_almRestaurarFotos(state.almacen); }catch(e){}
       try{localStorage.setItem(ALM_KEY,JSON.stringify(state.almacen));}catch(e){}
@@ -4412,6 +4416,7 @@ async function cargarAlmacenCombustibleSB(){
       await sbSyncModulo('almacen', {...state.almacen, productos:state.almacen.productos||[]});
     }
     // Apertura de explosivos NV3190 (una sola vez): fija el stock nuevo con 0 movimientos
+    try{ if(typeof aplicarStockBaseExplosivos==='function') aplicarStockBaseExplosivos(); }catch(e){}
     try{ if(typeof bloquearStockExplosivosSiReal==='function') bloquearStockExplosivosSiReal(); }catch(e){}
     try{ if(typeof aplicarAperturaExplosivos==='function') aplicarAperturaExplosivos(); }catch(e){}
     try{ if(typeof aplicarAperturaRemanente==='function') aplicarAperturaRemanente(); }catch(e){}
@@ -6017,6 +6022,7 @@ function almacenLoad(){
       almacenSeedInventarioInicial();
     }
     // Apertura de explosivos NV3190 (una sola vez) — cubre también el modo offline
+    try{ if(typeof aplicarStockBaseExplosivos==='function') aplicarStockBaseExplosivos(); }catch(e){}
     try{ if(typeof bloquearStockExplosivosSiReal==='function') bloquearStockExplosivosSiReal(); }catch(e){}
     try{ if(typeof aplicarAperturaExplosivos==='function') aplicarAperturaExplosivos(); }catch(e){}
     try{ if(typeof aplicarAperturaRemanente==='function') aplicarAperturaRemanente(); }catch(e){}
@@ -7731,6 +7737,25 @@ function exploGetCat(id){return EXPLO_CATALOGO.find(c=>c.id===id)||null;}
 // Se aplica UNA sola vez (control por versión). Para volver a resetear, sube EXPLO_APERTURA_V.
 const EXPLO_APERTURA_V=1;
 const EXPLO_APERTURA_STOCK={ M3000:2101, M1000:224, NEITHER:889, M5000:1579, FAMECORTE:538, CARMEX240:343, CARMEX18:581 };
+// ── RECUPERACIÓN del stock REAL NV3190 (confirmado por el usuario en foto) ────────────────────
+// Una migración vieja re-sembró la apertura y descuadró el stock. Estos son los valores REALES.
+// Se guardan como BASE (objeto simple que se sincroniza sin unión, a diferencia de ingresos/
+// salidas), y exploStockActual los usa + solo los movimientos posteriores al corte. Así el stock
+// queda correcto en TODOS los dispositivos y no lo puede volver a borrar ninguna migración.
+const EXPLO_STOCK_BASE_V=1;
+const EXPLO_STOCK_BASE_REAL={ M1000:0, M3000:6259, M5000:6751, CARMEX18:683, CARMEX240:558, FAMECORTE:538, NEITHER:729 };
+function aplicarStockBaseExplosivos(){
+  try{
+    state.almacen=state.almacen||{};
+    if((state.almacen.exploStockBaseV||0)>=EXPLO_STOCK_BASE_V) return false;
+    state.almacen.exploStockBase={...EXPLO_STOCK_BASE_REAL};
+    state.almacen.exploStockBaseV=EXPLO_STOCK_BASE_V;
+    state.almacen.exploLock=true;   // y bloquear para que las migraciones no lo toquen
+    try{ localStorage.setItem(ALM_KEY, JSON.stringify(state.almacen)); }catch(e){}
+    try{ if(typeof sbSyncModulo==='function') sbSyncModulo('almacen', (typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
+    return true;
+  }catch(e){ return false; }
+}
 // BLOQUEO del stock de explosivos NV3190: cuando el inventario ya es REAL (tiene ingresos), se
 // marca exploLock para que NINGUNA migración determinista (apertura/fijación/ajuste/prueba) lo
 // vuelva a sobrescribir. Así el stock no se puede borrar aunque un equipo pierda los flags de
@@ -7978,11 +8003,24 @@ function migrarEppSalidas2820(){
     return cambios>0;
   }catch(e){ return false; }
 }
+// Corte de la BASE de stock: los movimientos SIN _ts o con _ts anterior a este instante ya están
+// reflejados dentro del saldo base (state.almacen.exploStockBase). Solo los movimientos NUEVOS
+// (con _ts posterior) se suman/restan encima. Así la base real no se puede "descuadrar" con la
+// data vieja/corrupta, y los ingresos/salidas que registres de ahora en adelante sí ajustan.
+const EXPLO_STOCK_BASE_CUT=(typeof Date!=='undefined'&&Date.parse)?Date.parse('2026-07-07T00:00:00Z'):1783382400000;
 function exploStockActual(){
   const exp=state.almacen.explosivos||{ingresos:[],salidas:[]};
+  const base=(state.almacen&&state.almacen.exploStockBase)||null;
   const map={};EXPLO_CATALOGO.forEach(c=>{map[c.id]=0;});
-  (exp.ingresos||[]).forEach(i=>{map[i.producto]=(map[i.producto]||0)+i.totalUnidades;});
-  (exp.salidas||[]).forEach(s=>{map[s.producto]=(map[s.producto]||0)-s.totalUnidades;});
+  if(base){
+    // Saldo REAL confirmado + solo movimientos posteriores al corte (los viejos ya están en la base).
+    Object.entries(base).forEach(([id,q])=>{ map[id]=(map[id]||0)+(Number(q)||0); });
+    (exp.ingresos||[]).forEach(i=>{ if((Number(i._ts)||0)>EXPLO_STOCK_BASE_CUT) map[i.producto]=(map[i.producto]||0)+(Number(i.totalUnidades)||0); });
+    (exp.salidas||[]).forEach(s=>{ if((Number(s._ts)||0)>EXPLO_STOCK_BASE_CUT) map[s.producto]=(map[s.producto]||0)-(Number(s.totalUnidades)||0); });
+  }else{
+    (exp.ingresos||[]).forEach(i=>{map[i.producto]=(map[i.producto]||0)+i.totalUnidades;});
+    (exp.salidas||[]).forEach(s=>{map[s.producto]=(map[s.producto]||0)-s.totalUnidades;});
+  }
   return map;
 }
 function renderExploTab(){renderExploStock();renderExploHistorial();}
@@ -8106,7 +8144,7 @@ async function guardarExploIngreso(){
   if(total<=0){showNotif('⚠ Ingresa cajas o unidades','error');return;}
   if(!state.almacen.explosivos)state.almacen.explosivos={ingresos:[],salidas:[]};
   const reg={
-    id:'EI'+Date.now(),fecha:g('exi-fecha').value||hoy(),vale,
+    id:'EI'+Date.now(),_ts:Date.now(),fecha:g('exi-fecha').value||hoy(),vale,
     producto:prodId,cajas:parseInt(g('exi-cajas').value)||0,
     unidades:parseInt(g('exi-unidades').value)||0,totalUnidades:total,
     origen:'Polvorin Santa Maria'
@@ -8180,7 +8218,7 @@ async function guardarExploSalida(){
   if(total>(stock[prodId]||0)){showNotif(`⚠ Stock insuficiente. Disponible: ${stock[prodId]||0} ${exploGetCat(prodId)?.unidad||'und'}`,'error');return;}
   if(!state.almacen.explosivos)state.almacen.explosivos={ingresos:[],salidas:[]};
   const reg={
-    id:'ES'+Date.now(),fecha:g('exs-fecha').value||hoy(),vale,
+    id:'ES'+Date.now(),_ts:Date.now(),fecha:g('exs-fecha').value||hoy(),vale,
     producto:prodId,cajas:parseInt(g('exs-cajas').value)||0,
     unidades:parseInt(g('exs-unidades').value)||0,totalUnidades:total,
     destino:'Almacen NV2820'
