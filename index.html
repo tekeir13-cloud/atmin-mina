@@ -3780,20 +3780,17 @@ select option{background:var(--coal3);}
       <div class="modal-title" style="margin-bottom:0;color:#f59e0b">📤 Salida de Stock Remanente</div>
       <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-rem-salida')">✕</button>
     </div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:14px">Movimiento de control de logística. Descuenta del stock remanente · No afecta NV3190.</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:14px">Movimiento de control de logística. Descuenta del Stock Remanente · No afecta NV3190.</div>
     <div class="form-grid">
-      <div class="form-group"><label>Explosivo</label><select id="rem-producto" onchange="remSalAutofill()"><option value="">— Seleccionar —</option></select></div>
-      <div class="form-group"><label>Cantidad</label><input type="number" id="rem-cantidad" min="0" step="any" placeholder="0"><div id="rem-disp" style="font-size:10px;color:var(--text3);margin-top:3px">Disponible: —</div></div>
-      <div class="form-group"><label>Autoriza el movimiento</label><input type="text" id="rem-autoriza" placeholder="Nombre de quien autoriza"></div>
-      <div class="form-group"><label>Ubicación destino</label><input type="text" id="rem-ubicacion" placeholder="Ej: NV2820 / Frente Brenda"></div>
-      <div class="form-group"><label>Registra (nombre)</label><input type="text" id="rem-registra"></div>
-      <div class="form-group"><label>DNI de quien registra</label><input type="text" id="rem-dni" maxlength="8" placeholder="12345678"></div>
+      <div class="form-group"><label>Explosivo</label><select id="rem-producto" onchange="remSalAutofill()"><option value="">— Seleccionar —</option></select><div id="rem-disp" style="font-size:10px;color:var(--text3);margin-top:3px">Disponible: —</div></div>
+      <div class="form-group"><label>Cantidad</label><input type="number" id="rem-cantidad" min="0" step="any" placeholder="0"></div>
+      <div class="form-group"><label>Solicitante (Supervisor de Materiales)</label><select id="rem-solicitante" onchange="remToggleOtro('solicitante')"><option value="">— Seleccionar —</option></select><input type="text" id="rem-solic-otro" placeholder="Nombre del solicitante" style="display:none;margin-top:6px"></div>
+      <div class="form-group"><label>Destino</label><select id="rem-destino" onchange="remToggleOtro('destino')"></select><input type="text" id="rem-dest-otro" placeholder="Escribe el destino" style="display:none;margin-top:6px"></div>
       <div class="form-group"><label>Fecha</label><input type="date" id="rem-fecha"></div>
       <div class="form-group"><label>Hora</label><input type="time" id="rem-hora"></div>
-      <div class="form-group" style="grid-column:1/-1"><label>Observación (opcional)</label><input type="text" id="rem-obs" placeholder="Detalle del movimiento"></div>
     </div>
     <div class="btn-row" style="margin-top:10px">
-      <button class="btn btn-gold" onclick="guardarRemSalida()">✓ Registrar Salida</button>
+      <button class="btn btn-gold" onclick="guardarRemSalida()">✓ Dar Salida</button>
       <button class="btn btn-outline" onclick="cerrarModal('modal-rem-salida')">Cancelar</button>
     </div>
   </div>
@@ -4394,8 +4391,11 @@ async function cargarAlmacenCombustibleSB(){
       // Conservar el valor MÁS ALTO de cada flag de migración (nube o local) para que las
       // migraciones de explosivos (apertura, ajuste, fijación) NO se vuelvan a ejecutar en
       // cada carga y borren las salidas nuevas registradas por Logística.
-      ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV']
+      ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV']
         .forEach(k=>{ const mx=Math.max(Number(almNube[k]||0), Number(almLocalPrev[k]||0)); if(mx) state.almacen[k]=mx; });
+      // Conservar el saldo/corte de apertura del remanente (objeto + timestamp), venga de nube o local.
+      if(!state.almacen.remApertura && (almNube.remApertura||almLocalPrev.remApertura)) state.almacen.remApertura=almNube.remApertura||almLocalPrev.remApertura;
+      if(!state.almacen.remAperturaTs) state.almacen.remAperturaTs=Number(almNube.remAperturaTs||almLocalPrev.remAperturaTs||0)||state.almacen.remAperturaTs;
       // La nube viene sin fotos (se suben ligeras); devolver las fotos guardadas en este equipo
       try{ if(typeof _almRestaurarFotos==='function') state.almacen=_almRestaurarFotos(state.almacen); }catch(e){}
       try{localStorage.setItem(ALM_KEY,JSON.stringify(state.almacen));}catch(e){}
@@ -4407,6 +4407,7 @@ async function cargarAlmacenCombustibleSB(){
     }
     // Apertura de explosivos NV3190 (una sola vez): fija el stock nuevo con 0 movimientos
     try{ if(typeof aplicarAperturaExplosivos==='function') aplicarAperturaExplosivos(); }catch(e){}
+    try{ if(typeof aplicarAperturaRemanente==='function') aplicarAperturaRemanente(); }catch(e){}
     // Fija las salidas de explosivos con un set DETERMINISTA idéntico en todos los equipos
     // (mismo stock 164/1292/680/323/343/538/804 en cualquier dispositivo, sin depender de sync)
     try{ if(typeof fijarSalidasExplosivosDefinitivo==='function') fijarSalidasExplosivosDefinitivo(); }catch(e){}
@@ -4809,115 +4810,103 @@ function renderStockRemanente(){
   const cont=document.getElementById('log-stockremanente');
   if(!cont)return;
   const fmtN=n=>(Math.round((n||0)*100)/100).toLocaleString('es-PE');
-
-  // ── Stock Remanente = SOLO lo que el Compresorista reporta como Egreso (campo E) ──
-  // Se rellena únicamente cuando el Compresorista registra un egreso de explosivos en su
-  // reporte. Se acumula por código de explosivo a lo largo de todos sus reportes.
-  const egresoPorExp={};
-  (state.compresorista||[]).forEach(rep=>{
-    (rep && rep.explosivos || []).forEach(x=>{
-      if(x && x.codigo!=null){ egresoPorExp[x.codigo]=(egresoPorExp[x.codigo]||0)+(Number(x.E)||0); }
-    });
-  });
-  const catExp=(typeof EXPLO_CATALOGO!=='undefined')?EXPLO_CATALOGO:[];
-  const expCards=catExp.filter(c=>(egresoPorExp[c.id]||0)>0).map(c=>{
-    const disp=egresoPorExp[c.id]||0;
-    const col=disp>50?'#22c55e':(disp>0?'#f59e0b':'#ef4444');
-    const fig=(typeof exploFig==='function')?exploFig(c.id):'🧨';
-    // Mecha rápida (NEITHER): el egreso está en METROS. Se muestra en metros + equivalente en rollos.
-    const esMecha=c.unidad==='rollo';
-    const mPorR=c.mPorRollo||150;
-    const um=esMecha?'m':'und';
-    const _rollos=Math.floor(disp/mPorR), _restoM=Math.round((disp-_rollos*mPorR)*100)/100;
-    const rollosLine=esMecha?`<div style="font-size:11px;color:#60a5fa;margin-top:3px;font-weight:700">${_rollos} rollo${_rollos!==1?'s':''} + ${fmtN(_restoM)} m <span style="color:var(--text3);font-weight:400;font-size:9px">(1 rollo = ${mPorR} m)</span></div>`:'';
-    return `<div style="background:var(--coal3);border:1px solid var(--border);border-radius:14px;padding:14px;text-align:center;position:relative;overflow:hidden">
-      <div style="position:absolute;top:0;right:0;width:54px;height:54px;background:${col}14;border-radius:0 14px 0 54px"></div>
-      <div style="font-size:30px;line-height:1;margin-bottom:6px">${fig}</div>
-      <div style="font-size:13px;font-weight:800;color:var(--text)">${c.nombre}</div>
-      <div style="font-size:10px;color:var(--text3);margin-bottom:8px;font-family:monospace">${c.id}</div>
-      <div style="font-size:22px;font-weight:900;color:${col};letter-spacing:-1px;line-height:1">${fmtN(disp)}</div>
-      <div style="font-size:10px;color:var(--text3);margin-top:2px">${um} de egreso</div>
-      ${rollosLine}
-    </div>`;
-  }).join('') || `<div style="grid-column:1/-1;padding:18px;text-align:center;color:var(--text3)">Aún no hay egresos reportados por el Compresorista.</div>`;
-
-  // ── Historial de salidas de remanente (movimientos de logística) ──
-  const remSalidas=[...(state.remanenteSalidas||[])].sort((a,b)=>((b.fecha||'')+(b.hora||'')).localeCompare((a.fecha||'')+(a.hora||'')));
-  const remHist=remSalidas.length?`<div class="table-wrap"><table style="width:100%;font-size:12px">
-    <thead><tr style="color:var(--text3);text-align:left"><th style="padding:6px 8px">Fecha · Hora</th><th style="padding:6px 8px">Explosivo</th><th style="padding:6px 8px;text-align:right">Cant.</th><th style="padding:6px 8px">Ubicación</th><th style="padding:6px 8px">Autoriza</th><th style="padding:6px 8px">Registra (DNI)</th><th style="padding:6px 8px"></th></tr></thead>
-    <tbody>${remSalidas.map(s=>`<tr style="border-top:1px solid var(--border)">
-      <td style="padding:6px 8px">${fechaFmt(s.fecha)} ${s.hora||''}</td>
-      <td style="padding:6px 8px">${nombreExp(s.producto)}</td>
-      <td style="padding:6px 8px;text-align:right;font-weight:700;color:#f59e0b">${fmtN(s.cantidad)}</td>
-      <td style="padding:6px 8px">${s.ubicacion||'—'}</td>
-      <td style="padding:6px 8px">${s.autoriza||'—'}</td>
-      <td style="padding:6px 8px">${s.registra||'—'}${s.dni?` · ${s.dni}`:''}</td>
-      <td style="padding:6px 8px"><button onclick="eliminarRemSalida('${s.id}')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:13px">🗑</button></td>
-    </tr>`).join('')}</tbody></table></div>`:'<div style="padding:14px;text-align:center;color:var(--text3);font-size:12px">Sin salidas de remanente registradas.</div>';
-
-  // ── (2) Historial Jefe de Guardia ──
   const nombreExp=id=>(typeof exploNombre==='function')?exploNombre(id):id;
   const fechaFmt=d=>(typeof fmtF==='function')?fmtF(d):d;
-  const reportes=[...(state.reportesGuardia||[])].sort((a,b)=>{
-    const fa=a.fecha||'',fb=b.fecha||''; if(fa!==fb)return fb.localeCompare(fa);
-    return (b.creadoEn||0)-(a.creadoEn||0);
-  });
-  const frenteCard=(titulo,f)=>{
-    if(!f)return'';
-    const tperf=f.tperf||0, tcarg=f.tcarg||0;
-    const masas=(f.masas||[]).filter(m=>m.cant>0);
-    if(!tperf&&!tcarg&&!masas.length)return'';
-    const expTxt=masas.length?masas.map(m=>`${nombreExp(m.id)} ×${fmtN(m.cant)}`).join(' · '):'—';
-    return `<div style="background:var(--coal3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-top:8px">
-      <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:5px">${titulo}</div>
-      <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;color:var(--text2)">
-        <span>🔩 Taladros: <strong style="color:var(--text)">${fmtN(tperf)}</strong> perf / <strong style="color:var(--text)">${fmtN(tcarg)}</strong> carg</span>
-        <span>🧨 Explosivo: <strong style="color:#fbbf24">${expTxt}</strong></span>
-      </div>
+  const cat=(typeof EXPLO_CATALOGO!=='undefined')?EXPLO_CATALOGO:[];
+  const stock=remStockActual();
+
+  // ── Tarjetas: stock actual por explosivo (mismos nombres/etiquetas que NV3190: cajas + und) ──
+  const seedIds=Object.keys((state.almacen&&state.almacen.remApertura)||{});
+  const cards=cat.filter(c=>(stock[c.id]||0)!==0 || seedIds.includes(c.id)).map(c=>{
+    const q=stock[c.id]||0;
+    const col=q>20?'#22c55e':(q>0?'#f59e0b':'#ef4444');
+    const fig=(typeof exploFig==='function')?exploFig(c.id):'🧨';
+    return `<div class="kpi-card" style="padding:14px 16px">
+      <div style="display:flex;align-items:center;gap:8px"><span style="font-size:20px;line-height:1">${fig}</span><div class="kpi-label" style="font-size:11px">${c.nombre}</div></div>
+      <div style="font-size:24px;font-weight:800;color:${col};font-family:'DM Mono',monospace;margin:6px 0">${fmtN(q)} <span style="font-size:11px;color:var(--text3);font-weight:600">${c.id==='NEITHER'?'m':'und'}</span></div>
+      <div style="font-size:11px;color:var(--text3)">${remLabelCajas(c.id,q)}</div>
     </div>`;
-  };
-  const repCards=reportes.map(r=>{
-    const frentes=[
-      ...FRENTES.map(fc=>frenteCard(fc.emoji+' '+fc.nombre, r[fc.key])),
-      ...((r.frentesExtra||[]).map((f,i)=>frenteCard(f.nombre||('Frente extra '+(i+1)), f)))
-    ].filter(Boolean).join('');
-    if(!frentes)return'';
-    const turnoTxt=r.turno==='noche'?'🌙 Noche':(r.turno==='dia'?'☀ Día':r.turno||'');
-    return `<div style="background:var(--coal4);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:12px">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;border-bottom:1px solid var(--border);padding-bottom:8px">
-        <div style="font-size:13px;font-weight:800;color:var(--text)">📅 ${fechaFmt(r.fecha)} · ${turnoTxt}</div>
-        <div style="font-size:11px;color:var(--text3)">Jefe: <strong style="color:var(--text2)">${r.jefe||'—'}</strong></div>
-      </div>
-      ${frentes}
-    </div>`;
-  }).filter(Boolean).join('') || `<div style="padding:18px;text-align:center;color:var(--text3)">Aún no hay reportes de Jefe de Guardia registrados</div>`;
+  }).join('') || `<div style="grid-column:1/-1;padding:18px;text-align:center;color:var(--text3)">Sin stock de remanente.</div>`;
+
+  // ── Historial: apertura (saldo inicial) + egresos reportados (entradas) + salidas dadas ──
+  const eventos=[];
+  const ap=(state.almacen&&state.almacen.remApertura)||{};
+  const apFecha=(state.almacen&&state.almacen.remAperturaFecha)||'';
+  Object.entries(ap).forEach(([id,q])=>{ if((Number(q)||0)>0) eventos.push({t:'apertura',fecha:apFecha,ts:0,producto:id,cant:Number(q)||0}); });
+  remEgresosContables().forEach(e=>eventos.push({t:'egreso',fecha:e.fecha,ts:e.ts,producto:e.codigo,cant:e.cant,turno:e.turno,nombre:e.nombre}));
+  (state.remanenteSalidas||[]).forEach(s=>eventos.push({t:'salida',fecha:s.fecha,ts:Number(s._ts)||0,hora:s.hora,producto:s.producto,cant:Number(s.cantidad)||0,solicitante:s.solicitante||s.autoriza||'—',destino:s.destino||s.ubicacion||'—',id:s.id}));
+  eventos.sort((a,b)=>((b.fecha||'')+String(b.ts||0)).localeCompare((a.fecha||'')+String(a.ts||0)));
+  const turnoTxt=t=>t==='noche'?'🌙 Noche':(t==='dia'?'☀ Día':(t||''));
+  const histRows=eventos.length?eventos.map(ev=>{
+    if(ev.t==='apertura') return `<tr style="border-top:1px solid var(--border);background:rgba(96,165,250,.06)">
+      <td style="padding:7px 8px">${ev.fecha?fechaFmt(ev.fecha):'—'}</td>
+      <td style="padding:7px 8px"><span style="color:#60a5fa;font-weight:700">◆ Apertura</span></td>
+      <td style="padding:7px 8px">${nombreExp(ev.producto)}</td>
+      <td style="padding:7px 8px;text-align:right;font-weight:700;color:#60a5fa">+${fmtN(ev.cant)}</td>
+      <td style="padding:7px 8px;color:var(--text3)">${remLabelCajas(ev.producto,ev.cant)}</td>
+      <td style="padding:7px 8px" colspan="2">Saldo inicial</td></tr>`;
+    if(ev.t==='egreso') return `<tr style="border-top:1px solid var(--border)">
+      <td style="padding:7px 8px">${ev.fecha?fechaFmt(ev.fecha):'—'}</td>
+      <td style="padding:7px 8px"><span style="color:#22c55e;font-weight:700">⬇ Egreso compresorista</span></td>
+      <td style="padding:7px 8px">${nombreExp(ev.producto)}</td>
+      <td style="padding:7px 8px;text-align:right;font-weight:700;color:#22c55e">+${fmtN(ev.cant)}</td>
+      <td style="padding:7px 8px;color:var(--text3)">${remLabelCajas(ev.producto,ev.cant)}</td>
+      <td style="padding:7px 8px" colspan="2">Reporte ${turnoTxt(ev.turno)}${ev.nombre?' · '+ev.nombre:''}</td></tr>`;
+    return `<tr style="border-top:1px solid var(--border)">
+      <td style="padding:7px 8px">${ev.fecha?fechaFmt(ev.fecha):'—'}${ev.hora?' '+ev.hora:''}</td>
+      <td style="padding:7px 8px"><span style="color:#f87171;font-weight:700">⬆ Salida</span></td>
+      <td style="padding:7px 8px">${nombreExp(ev.producto)}</td>
+      <td style="padding:7px 8px;text-align:right;font-weight:700;color:#f87171">−${fmtN(ev.cant)}</td>
+      <td style="padding:7px 8px;color:var(--text3)">Solic.: ${ev.solicitante}</td>
+      <td style="padding:7px 8px">→ ${ev.destino}</td>
+      <td style="padding:7px 8px"><button onclick="eliminarRemSalida('${ev.id}')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:13px" title="Eliminar salida">🗑</button></td></tr>`;
+  }).join('') : `<tr><td colspan="7" style="padding:16px;text-align:center;color:var(--text3)">Sin movimientos.</td></tr>`;
 
   cont.innerHTML=`
-    <div class="section-title" style="margin-top:0">📉 Stock Remanente</div>
-    <div style="font-size:12px;color:var(--text3);margin:-6px 0 18px">Esta ventana se rellena <strong style="color:var(--text2)">únicamente cuando el Compresorista reporta un egreso</strong> de explosivos en su reporte. Muestra el egreso acumulado por explosivo (campo E de sus reportes).</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div class="section-title" style="margin:0">📉 Stock Remanente</div>
+      <button class="btn btn-gold" onclick="abrirRemSalida()">📤 Dar Salida</button>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin:6px 0 16px">Arranca con el saldo de apertura y <strong style="color:var(--text2)">suma cada egreso que reporta el Compresorista</strong>. Al <strong style="color:var(--text2)">Dar Salida</strong> (con solicitante y destino) se descuenta del stock. Solo control · no afecta NV3190.</div>
 
     <div style="background:var(--coal2);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:18px">
-      <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:12px">🧨 Explosivos — Egreso reportado por Compresorista</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px">${expCards}</div>
+      <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:12px">🧨 Stock actual por explosivo</div>
+      <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:0">${cards}</div>
+    </div>
+
+    <div style="background:var(--coal2);border:1px solid var(--border);border-radius:16px;padding:16px">
+      <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:10px">🧾 Historial de movimientos</div>
+      <div class="table-wrap"><table style="width:100%;font-size:12px;border-collapse:collapse">
+        <thead><tr style="color:var(--text3);text-align:left">
+          <th style="padding:6px 8px">Fecha</th><th style="padding:6px 8px">Movimiento</th><th style="padding:6px 8px">Explosivo</th>
+          <th style="padding:6px 8px;text-align:right">Cant.</th><th style="padding:6px 8px">Detalle</th><th style="padding:6px 8px">Destino</th><th style="padding:6px 8px"></th>
+        </tr></thead>
+        <tbody>${histRows}</tbody>
+      </table></div>
     </div>
   `;
 }
 // ── Salida de Stock Remanente ──
 function remDisponible(id){
-  const exp=(typeof exploStockTotal==='function')?exploStockTotal():[];
-  const e=exp.find(x=>x.id===id); const base=e?(e.stock||0):0;
-  const sal=(state.remanenteSalidas||[]).filter(s=>s.producto===id).reduce((s,r)=>s+(Number(r.cantidad)||0),0);
-  return Math.max(0,base-sal);
+  const stock=(typeof remStockActual==='function')?remStockActual():{};
+  return Math.max(0, Number(stock[id])||0);
 }
 function abrirRemSalida(){
   try{ if(typeof remSalLoad==='function') remSalLoad(); }catch(e){}
   const g=id=>document.getElementById(id);
-  const exp=(typeof exploStockTotal==='function')?exploStockTotal():[];
+  const cat=(typeof EXPLO_CATALOGO!=='undefined')?EXPLO_CATALOGO:[];
   const sel=g('rem-producto');
-  if(sel) sel.innerHTML='<option value="">— Seleccionar —</option>'+exp.map(e=>`<option value="${e.id}">${e.nombre} (rem.: ${remDisponible(e.id)})</option>`).join('');
-  g('rem-cantidad').value='';g('rem-autoriza').value='';g('rem-ubicacion').value='';
-  g('rem-registra').value=(typeof usuarioActivo!=='undefined'&&usuarioActivo&&usuarioActivo.nombre)?usuarioActivo.nombre:'';
-  g('rem-dni').value='';g('rem-obs').value='';
+  if(sel) sel.innerHTML='<option value="">— Seleccionar —</option>'+cat.filter(c=>remDisponible(c.id)>0).map(c=>`<option value="${c.id}">${c.nombre} — ${remLabelCajas(c.id,remDisponible(c.id))}</option>`).join('');
+  // Solicitante = Supervisores de Materiales
+  const sup=(typeof remSupervisores==='function')?remSupervisores():[];
+  const selS=g('rem-solicitante');
+  if(selS) selS.innerHTML='<option value="">— Seleccionar —</option>'+sup.map(p=>`<option value="${p.nombre}">${p.nombre}</option>`).join('')+'<option value="__otro__">Otro…</option>';
+  // Destino
+  const selD=g('rem-destino');
+  if(selD) selD.innerHTML=(typeof REM_DESTINOS!=='undefined'?REM_DESTINOS:['NV2820','Otro']).map(d=>`<option value="${d}">${d}</option>`).join('');
+  g('rem-cantidad').value='';
+  const so=g('rem-solic-otro'); if(so){ so.value=''; so.style.display='none'; }
+  const dOtro=g('rem-dest-otro'); if(dOtro){ dOtro.value=''; dOtro.style.display=(selD&&selD.value==='Otro')?'block':'none'; }
   g('rem-fecha').value=hoy();
   try{ const d=new Date(); g('rem-hora').value=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }catch(e){}
   g('rem-disp').textContent='Disponible: —';
@@ -4925,7 +4914,12 @@ function abrirRemSalida(){
 }
 function remSalAutofill(){
   const id=document.getElementById('rem-producto').value;
-  document.getElementById('rem-disp').textContent='Disponible: '+(id?remDisponible(id):'—');
+  document.getElementById('rem-disp').textContent=id?('Disponible: '+remLabelCajas(id,remDisponible(id))):'Disponible: —';
+}
+// Muestra el campo de texto libre cuando se elige "Otro…" en solicitante o destino.
+function remToggleOtro(campo){
+  if(campo==='solicitante'){ const v=document.getElementById('rem-solicitante').value; const o=document.getElementById('rem-solic-otro'); if(o) o.style.display=(v==='__otro__')?'block':'none'; }
+  if(campo==='destino'){ const v=document.getElementById('rem-destino').value; const o=document.getElementById('rem-dest-otro'); if(o) o.style.display=(v==='Otro')?'block':'none'; }
 }
 function guardarRemSalida(){
   const g=id=>document.getElementById(id);
@@ -4934,25 +4928,24 @@ function guardarRemSalida(){
   const cantidad=parseFloat(g('rem-cantidad').value)||0;
   if(cantidad<=0){showNotif('⚠ Ingresa una cantidad válida','error');return;}
   const disp=remDisponible(producto);
-  if(cantidad>disp){showNotif(`⚠ Cantidad mayor al remanente disponible (${disp})`,'error');return;}
-  const autoriza=g('rem-autoriza').value.trim();
-  const ubicacion=g('rem-ubicacion').value.trim();
-  const registra=g('rem-registra').value.trim();
-  const dni=g('rem-dni').value.trim();
-  if(!autoriza){showNotif('⚠ Indica quién autoriza','error');return;}
-  if(!ubicacion){showNotif('⚠ Indica la ubicación destino','error');return;}
-  if(!registra||!dni){showNotif('⚠ Indica quién registra y su DNI','error');return;}
+  if(cantidad>disp){showNotif(`⚠ Cantidad mayor al stock disponible (${remLabelCajas(producto,disp)})`,'error');return;}
+  let solicitante=g('rem-solicitante').value;
+  if(solicitante==='__otro__') solicitante=(g('rem-solic-otro').value||'').trim();
+  if(!solicitante){showNotif('⚠ Indica el solicitante','error');return;}
+  let destino=g('rem-destino').value;
+  if(destino==='Otro'){ const o=(g('rem-dest-otro').value||'').trim(); if(!o){showNotif('⚠ Escribe el otro destino','error');return;} destino=o; }
+  if(!destino){showNotif('⚠ Indica el destino','error');return;}
   if(!state.remanenteSalidas)state.remanenteSalidas=[];
   state.remanenteSalidas.push({
-    id:'RS'+Date.now(), producto, cantidad,
-    autoriza, ubicacion, registra, dni,
-    fecha:g('rem-fecha').value||hoy(), hora:g('rem-hora').value||'',
-    obs:g('rem-obs').value.trim()
+    id:'RS'+Date.now(), _ts:(typeof Date!=='undefined')?Date.now():0, producto, cantidad,
+    solicitante, destino,
+    registra:(typeof usuarioActivo!=='undefined'&&usuarioActivo&&usuarioActivo.nombre)?usuarioActivo.nombre:'',
+    fecha:g('rem-fecha').value||hoy(), hora:g('rem-hora').value||''
   });
   remSalSave();
   cerrarModal('modal-rem-salida');
   renderStockRemanente();
-  showNotif('✓ Salida de remanente registrada');
+  showNotif('✓ Salida registrada · stock descontado');
 }
 function eliminarRemSalida(id){
   if(!confirm('¿Eliminar esta salida de remanente?'))return;
@@ -5981,6 +5974,7 @@ function almacenLoad(){
     }
     // Apertura de explosivos NV3190 (una sola vez) — cubre también el modo offline
     try{ if(typeof aplicarAperturaExplosivos==='function') aplicarAperturaExplosivos(); }catch(e){}
+    try{ if(typeof aplicarAperturaRemanente==='function') aplicarAperturaRemanente(); }catch(e){}
     try{ if(typeof migrarEppSalidas2820==='function') migrarEppSalidas2820(); }catch(e){}
   }catch(e){}
 }
@@ -7706,6 +7700,64 @@ function aplicarAperturaExplosivos(){
     try{ if(typeof sbSyncModulo==='function') sbSyncModulo('almacen', (typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
     return true;
   }catch(e){ return false; }
+}
+// ── APERTURA del STOCK REMANENTE (una sola vez) ──────────────────────────────────────────────
+// El Stock Remanente arranca con este saldo (conteo físico real a la fecha de apertura). De aquí
+// EN ADELANTE cada egreso (campo E) que reporte el Compresorista SUMA, y cada salida registrada por
+// Logística RESTA. Los egresos de reportes ANTERIORES a la apertura NO se cuentan (ya están dentro
+// de este saldo). Mecha (NEITHER) va en METROS. Para volver a resetear el saldo, sube REM_APERTURA_V.
+const REM_APERTURA_V=1;
+const REM_APERTURA_STOCK={ M1000:2376, M3000:981, M5000:392, NEITHER:1140, CARMEX18:328, CARMEX240:1 };
+function aplicarAperturaRemanente(){
+  try{
+    state.almacen=state.almacen||{};
+    if((state.almacen.remAperturaV||0)>=REM_APERTURA_V) return false; // ya aplicada
+    state.almacen.remApertura={...REM_APERTURA_STOCK};
+    state.almacen.remAperturaTs=(typeof Date!=='undefined')?Date.now():0; // corte: solo egresos posteriores suman
+    state.almacen.remAperturaFecha=(typeof hoy==='function')?hoy():'';
+    state.almacen.remAperturaV=REM_APERTURA_V;
+    try{ localStorage.setItem(ALM_KEY, JSON.stringify(state.almacen)); }catch(e){}
+    try{ if(typeof sbSyncModulo==='function') sbSyncModulo('almacen', (typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
+    return true;
+  }catch(e){ return false; }
+}
+// Egresos de compresorista que cuentan para el remanente: SOLO los de reportes guardados DESPUÉS
+// de la apertura (por marca de tiempo _ts). Devuelve lista de {codigo, cant, fecha, turno, nombre, ts}.
+function remEgresosContables(){
+  const cut=(state.almacen&&state.almacen.remAperturaTs)||0;
+  const out=[];
+  (state.compresorista||[]).forEach(rep=>{
+    if(!rep) return;
+    if(cut && !((Number(rep._ts)||0) > cut)) return; // reporte anterior/igual a la apertura → ya en el saldo
+    (rep.explosivos||[]).forEach(x=>{
+      const e=Number(x&&x.E)||0;
+      if(x && x.codigo!=null && e>0) out.push({codigo:x.codigo, cant:e, fecha:rep.fecha, turno:rep.turno, nombre:rep.nombre||'', ts:Number(rep._ts)||0});
+    });
+  });
+  return out;
+}
+// Stock remanente actual por explosivo = apertura + egresos contables − salidas registradas.
+function remStockActual(){
+  const map={}; (typeof EXPLO_CATALOGO!=='undefined'?EXPLO_CATALOGO:[]).forEach(c=>{ map[c.id]=0; });
+  const ap=(state.almacen&&state.almacen.remApertura)||{};
+  Object.entries(ap).forEach(([id,q])=>{ map[id]=(map[id]||0)+(Number(q)||0); });
+  remEgresosContables().forEach(e=>{ map[e.codigo]=(map[e.codigo]||0)+(Number(e.cant)||0); });
+  (state.remanenteSalidas||[]).forEach(s=>{ map[s.producto]=(map[s.producto]||0)-(Number(s.cantidad)||0); });
+  return map;
+}
+// Destinos posibles de una salida de remanente (solo control). "Otro" habilita texto libre.
+const REM_DESTINOS=['NV2820','NV3190','Otro'];
+// Lista de Supervisores de Materiales (para el selector "Solicitante" de las salidas).
+function remSupervisores(){
+  return (state.personal||[]).filter(p=>String(p.rol||'').trim().toLowerCase()==='supervisor de materiales'&&p.estado!=='baja');
+}
+// Etiqueta cajas + unidades igual que NV3190 (mecha en metros + rollos).
+function remLabelCajas(id,q){
+  const c=(typeof exploGetCat==='function')?exploGetCat(id):null; q=Number(q)||0;
+  if(!c) return q+' und';
+  if(c.id==='NEITHER'){ const mpr=c.mPorRollo||150, r=Math.floor(q/mpr), rst=Math.round((q-r*mpr)*100)/100; return `${q} m · ${r} rollo${r!==1?'s':''} + ${rst} m`; }
+  const cajas=Math.floor(q/c.upCaja), und=q%c.upCaja;
+  return `${cajas} caj${cajas!==1?'as':'a'} + ${und} und`;
 }
 // Migración (una sola vez): reconstruye las salidas de explosivos NV3190 que se perdieron
 // (se registraron con foto del vale, la cuota de almacenamiento rompió el guardado y nunca
