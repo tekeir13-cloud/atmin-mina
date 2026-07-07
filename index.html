@@ -5191,7 +5191,6 @@ function renderDashEjecutivo(){
       </div>
     </div>`;
   }).join(''):`<div style="text-align:center;padding:18px;color:var(--text3);font-size:13px">Sin perforación registrada este mes</div>`;
-  const diasPerf=[...new Set(perfMes.map(p=>p.fecha))].length||1;
   // ── Pronóstico de cierre del mes (metros + cimbras): ritmo diario real × días del periodo
   // 26→25 (≈30, a veces 31 o 28) ──
   const diasHabEjec=(state.metas&&state.metas.dias)||26;   // para derivar metas de F1/F2
@@ -5200,10 +5199,9 @@ function renderDashEjecutivo(){
   const cimbrasMesEjec=rgMesEjec.reduce((s,r)=>{ let c=FRENTES.reduce((ss,f)=>ss+((r[f.key]&&r[f.key].cimbra)||0),0); (r.frentesExtra||[]).forEach(fx=>c+=(fx.cimbra||0)); return s+c; },0);
   const metaTotalEjec=FRENTES.reduce((s,f)=>s+(metaMensualFrente(f.id,diasHabEjec)||0),0);
   const diasTranscEjec=diasTranscurridosPeriodo(mes);
-  // Rendimiento promedio = metros ÷ días CON REPORTE (indicador de "cuánto avanzamos los
-  // días que sí trabajamos"). El pronóstico, en cambio, usa días transcurridos del periodo
-  // (más abajo) para no proyectar a futuro con un ritmo inflado por los días sin reporte.
-  const rendProm=(metrosTot/diasPerf).toFixed(1);
+  // Rendimiento promedio = metros ÷ días CALENDARIO transcurridos del periodo 26→25 (haya o
+  // no reporte ese día), igual criterio que el pronóstico de cierre.
+  const rendProm=(metrosTot/diasTranscEjec).toFixed(1);
   const _pronMEjec=calcPronostico(metrosTot,diasPeriodoEjec,diasTranscEjec).proyeccion;
   const _pronCEjec=Math.round(calcPronostico(cimbrasMesEjec,diasPeriodoEjec,diasTranscEjec).proyeccion);
   const _pronPctEjec=metaTotalEjec>0?Math.min(100,Math.round(_pronMEjec/metaTotalEjec*100)):0;
@@ -5317,7 +5315,7 @@ function renderDashEjecutivo(){
         <div style="background:var(--coal3);border-radius:11px;padding:12px 14px">
           <div style="font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Rendimiento Promedio</div>
           <div style="font-size:25px;font-weight:900;color:#f59e0b;letter-spacing:-1px;margin-top:2px">${rendProm} m/día</div>
-          <div style="font-size:10px;color:var(--text3)">${diasPerf} días con actividad</div>
+          <div style="font-size:10px;color:var(--text3)">día ${diasTranscEjec} de ${diasPeriodoEjec} del periodo (26→25)</div>
         </div>
         <div style="background:var(--coal3);border-radius:11px;padding:12px 14px">
           <div style="font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Costo por Metro</div>
