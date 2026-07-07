@@ -1164,9 +1164,13 @@ select option{background:var(--coal3);}
   /* EMPTY STATE */
   .empty-state { padding: 32px 16px !important; font-size: 12px !important; }
 
-  /* NOTIF */
+  /* NOTIF — toast arriba (bajo el topbar). Debe fijar top Y bottom:auto para no estirarse:
+     antes otra regla ponia bottom y esta top, y el elemento se estiraba de arriba a abajo. */
   .notif {
-    bottom: 80px !important;   /* encima del bottom nav */
+    top: 60px !important;
+    bottom: auto !important;
+    height: auto !important;
+    max-height: none !important;
     right: 12px !important;
     left: 12px !important;
     font-size: 12px !important;
@@ -7810,14 +7814,15 @@ function aplicarAperturaRemanente(){
     return true;
   }catch(e){ return false; }
 }
-// Egresos de compresorista que cuentan para el remanente: SOLO los de reportes guardados DESPUÉS
-// de la apertura (por marca de tiempo _ts). Devuelve lista de {codigo, cant, fecha, turno, nombre, ts}.
+// Egresos de compresorista que cuentan para el remanente: los de reportes del DÍA DE APERTURA en
+// adelante (por fecha, tengan o no marca de tiempo). Los anteriores ya están dentro del saldo de
+// apertura, por eso se excluyen. Devuelve {codigo, cant, fecha, turno, nombre, ts}.
 function remEgresosContables(){
-  const cut=(state.almacen&&state.almacen.remAperturaTs)||0;
+  const apFecha=(state.almacen&&state.almacen.remAperturaFecha)||'';
   const out=[];
   (state.compresorista||[]).forEach(rep=>{
     if(!rep) return;
-    if(cut && !((Number(rep._ts)||0) > cut)) return; // reporte anterior/igual a la apertura → ya en el saldo
+    if(apFecha && String(rep.fecha||'') < apFecha) return; // reporte anterior a la apertura → ya en el saldo
     (rep.explosivos||[]).forEach(x=>{
       const e=Number(x&&x.E)||0;
       if(x && x.codigo!=null && e>0) out.push({codigo:x.codigo, cant:e, fecha:rep.fecha, turno:rep.turno, nombre:rep.nombre||'', ts:Number(rep._ts)||0});
