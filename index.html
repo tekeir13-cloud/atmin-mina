@@ -9962,6 +9962,15 @@ function _tareoCell(tid,fecha){
   if(t.tipo==='falta') return 'F';
   const m=Number(t.mult||1); return m===1.5?'1.5':(m===2?'2':'1');
 }
+function _tareoColVal(v){ return v==='1'?'#16a34a': v==='1.5'?'#d97706': v==='2'?'#dc2626': v==='DL'?'#2563eb': v==='F'?'#4b5563':'transparent'; }
+function _tareoPintaCelda(td,v){ if(!td)return; td.textContent=v; td.style.background=_tareoColVal(v); td.style.color=(v===''?'#39415a':'#fff'); }
+// Actualiza SOLO las celdas de resumen de una fila (sin redibujar la grilla → el scroll no salta).
+function _tareoActualizaResumen(tid,mes){
+  const r=tareoResumen(tid,mes), pago=(typeof tareoPago==='function')?tareoPago(tid,mes):0;
+  const set=(campo,val)=>{ const el=document.querySelector('[data-ts="'+campo+'|'+tid+'"]'); if(el) el.textContent=val; };
+  set('trab', r.diasTrab); set('tareas', r.tareas); set('gan', r.ganados);
+  set('tom', r.dlTomados||'—'); set('compr', r.comprados); set('pago', fmtS(pago));
+}
 function tareoGridSet(tid,fecha){
   const cur=_tareoCell(tid,fecha);
   const next=TAREO_CICLO[(TAREO_CICLO.indexOf(cur)+1)%TAREO_CICLO.length];
@@ -9975,7 +9984,12 @@ function tareoGridSet(tid,fecha){
   }
   try{ guardarEstado(); }catch(e){}
   try{ tareasSave(); }catch(e){}
-  renderTareoMensual();
+  // Actualización PUNTUAL: solo la celda tocada + el resumen de su fila (no re-render → sin salto).
+  try{
+    const td=document.querySelector('[data-tc="'+tid+'|'+fecha+'"]');
+    _tareoPintaCelda(td, _tareoCell(tid,fecha));
+    _tareoActualizaResumen(tid, (fecha||'').slice(0,7));
+  }catch(e){ renderTareoMensual(); }
 }
 function tareoResumen(tid,mes){
   const ents=(state.tareas||[]).filter(t=>String(t.trabajadorId)===String(tid)&&(t.fecha||'').slice(0,7)===mes);
@@ -10002,7 +10016,6 @@ function renderTareoMensual(){
   const nombreMes=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][mm-1]||mes;
   const trabajadores=(state.personal||[]).filter(p=>p.estado!=='baja'&&p.estado!=='inactivo');
   const meses=[...new Set([...(state.tareas||[]).map(t=>(t.fecha||'').slice(0,7)).filter(Boolean), hoy().slice(0,7)])].sort().reverse();
-  const colVal=v=> v==='1'?'#16a34a': v==='1.5'?'#d97706': v==='2'?'#dc2626': v==='DL'?'#2563eb': v==='F'?'#4b5563':'transparent';
   let head='<th style="position:sticky;left:0;background:#1a2744;z-index:2;text-align:left;padding:6px 10px;min-width:170px">Trabajador</th>';
   for(let d=1;d<=nDias;d++) head+=`<th style="padding:4px 0;min-width:24px;text-align:center;font-size:10px">${d}</th>`;
   head+='<th style="padding:4px 6px;min-width:38px">Trab</th><th style="padding:4px 6px;min-width:44px">Tareas</th><th style="padding:4px 6px;min-width:38px">Gan</th><th style="padding:4px 6px;min-width:38px">Tom</th><th style="padding:4px 6px;min-width:50px">Compr</th><th style="padding:4px 8px;min-width:82px;text-align:right">Pago S/</th>';
@@ -10011,19 +10024,19 @@ function renderTareoMensual(){
     for(let d=1;d<=nDias;d++){
       const fecha=`${mes}-${String(d).padStart(2,'0')}`;
       const v=_tareoCell(p.id,fecha);
-      cells+=`<td onclick="tareoGridSet('${p.id}','${fecha}')" title="${fecha}" style="cursor:pointer;text-align:center;font-size:10px;font-weight:800;padding:5px 0;background:${colVal(v)};color:${v===''?'#39415a':'#fff'};border:1px solid var(--border);-webkit-tap-highlight-color:transparent">${v}</td>`;
+      cells+=`<td data-tc="${p.id}|${fecha}" onclick="tareoGridSet('${p.id}','${fecha}')" title="${fecha}" style="cursor:pointer;text-align:center;font-size:10px;font-weight:800;padding:5px 0;background:${_tareoColVal(v)};color:${v===''?'#39415a':'#fff'};border:1px solid var(--border);-webkit-tap-highlight-color:transparent">${v}</td>`;
     }
     const r=tareoResumen(p.id,mes), pago=tareoPago(p.id,mes);
     const stick=i%2?'#141821':'#0f131b';
     return `<tr>
       <td style="position:sticky;left:0;background:${stick};z-index:1;padding:5px 10px;font-size:12px;font-weight:600;white-space:nowrap">${p.nombre}<div style="font-size:9px;color:var(--text3)">${p.rol||''}</div></td>
       ${cells}
-      <td style="text-align:center;font-weight:700;color:var(--positive)">${r.diasTrab}</td>
-      <td style="text-align:center;font-weight:700;color:#a78bfa">${r.tareas}</td>
-      <td style="text-align:center;color:#60a5fa">${r.ganados}</td>
-      <td style="text-align:center;color:#3b82f6">${r.dlTomados||'—'}</td>
-      <td style="text-align:center;font-weight:800;color:#22d3a5">${r.comprados}</td>
-      <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:800;color:var(--gold-light);padding-right:8px">${fmtS(pago)}</td>
+      <td data-ts="trab|${p.id}" style="text-align:center;font-weight:700;color:var(--positive)">${r.diasTrab}</td>
+      <td data-ts="tareas|${p.id}" style="text-align:center;font-weight:700;color:#a78bfa">${r.tareas}</td>
+      <td data-ts="gan|${p.id}" style="text-align:center;color:#60a5fa">${r.ganados}</td>
+      <td data-ts="tom|${p.id}" style="text-align:center;color:#3b82f6">${r.dlTomados||'—'}</td>
+      <td data-ts="compr|${p.id}" style="text-align:center;font-weight:800;color:#22d3a5">${r.comprados}</td>
+      <td data-ts="pago|${p.id}" style="text-align:right;font-family:'DM Mono',monospace;font-weight:800;color:var(--gold-light);padding-right:8px">${fmtS(pago)}</td>
     </tr>`;
   }).join('');
   cont.innerHTML=`
