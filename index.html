@@ -4484,7 +4484,7 @@ async function cargarAlmacenCombustibleSB(){
       // Combina memoria + localStorage + nube por id, conservando la versión de _ts MÁS RECIENTE
       // (última edición). Así una edición hecha en OTRO equipo (nube) gana sobre la copia local
       // vieja, y una edición local aún no subida también gana si es más nueva.
-      const merged=mergeById_ts(mergeById_ts(state.reportesGuardia||[], rLocal), Array.isArray(rNube)?rNube:[]);
+      const merged=mergeById_ts(mergeById_ts(state.reportesGuardia||[], rLocal, _rgMetros), Array.isArray(rNube)?rNube:[], _rgMetros);
       if(merged.length){
         state.reportesGuardia=merged;
         try{localStorage.setItem(RG_KEY,JSON.stringify(merged));}catch(e){}
@@ -5886,7 +5886,7 @@ function _rtAplicarModulo(modulo, data){
     case 'almacen':            if(data&&typeof data==='object'){ const prevAlm=state.almacen||{}; let a=Object.assign({}, prevAlm, data); if(typeof mergeSnapById==='function'){ a.ingresos=mergeSnapById(data.ingresos||[], prevAlm.ingresos||[]); a.salidas=mergeSnapById(data.salidas||[], prevAlm.salidas||[]); const exN=data.explosivos||prevAlm.explosivos||{ingresos:[],salidas:[]}, exP=prevAlm.explosivos||{ingresos:[],salidas:[]}; a.explosivos={...exN, ingresos:mergeSnapById(exN.ingresos||[], exP.ingresos||[]), salidas:mergeSnapById(exN.salidas||[], exP.salidas||[])}; } try{ if(typeof _almRestaurarFotos==='function') a=_almRestaurarFotos(a); }catch(e){} state.almacen=a; setLS('atmin_almacen', state.almacen); } break;
     case 'personal':           if(Array.isArray(data)){ state.personal=data; setLS('atmin_personal_snap', data); } break;
     case 'tareas':             if(Array.isArray(data)){ state.tareas=data; setLS('atmin_tareas_snap', data); } break;
-    case 'reportes_guardia':   if(Array.isArray(data)){ state.reportesGuardia=(typeof mergeById_ts==='function')?mergeById_ts(state.reportesGuardia||[], data):M(data, state.reportesGuardia||[]); setLS('atmin_reportes_guardia', state.reportesGuardia); try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){} } break;
+    case 'reportes_guardia':   if(Array.isArray(data)){ state.reportesGuardia=(typeof mergeById_ts==='function')?mergeById_ts(state.reportesGuardia||[], data, (typeof _rgMetros==='function'?_rgMetros:null)):M(data, state.reportesGuardia||[]); setLS('atmin_reportes_guardia', state.reportesGuardia); try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){} } break;
     case 'mant_kits':          if(Array.isArray(data)){ state.mantenimiento=(typeof mergeMantKits==='function')?mergeMantKits(state.mantenimiento||[], data):M(data, state.mantenimiento||[]); setLS('atmin_mant_kits', state.mantenimiento); } break;
     case 'mant_repuestos':     if(Array.isArray(data)){ state.mantRepuestos=data; setLS('atmin_mant_repuestos', data); } break;
     case 'compresorista':      if(Array.isArray(data)){ state.compresorista=(typeof _compMergeByTs==='function')?_compMergeByTs(state.compresorista||[], data):data; setLS('atmin_compresorista', state.compresorista); } break;
@@ -11012,12 +11012,34 @@ function mergeSnapById(a,b){
   (a||[]).forEach(add); (b||[]).forEach(add);
   return out;
 }
+// Metros totales de un reporte de guardia (suma de los 5 frentes + frentes extra). Se usa como
+// desempate para que el avance NUNCA retroceda por una sincronización ambigua.
+function _rgMetros(rep){
+  if(!rep) return 0; let m=0;
+  try{
+    (typeof FRENTES!=='undefined'?FRENTES:[]).forEach(f=>{ m+=Number(rep[f.key]&&rep[f.key].metros)||0; });
+    (rep.frentesExtra||[]).forEach(fx=>{ m+=Number(fx&&fx.metros)||0; });
+  }catch(e){}
+  return m;
+}
 // Como mergeSnapById pero por ID conservando la versión de _ts MÁS RECIENTE (última edición).
-// Sirve para registros que se EDITAN (reportes de guardia): así la edición de un equipo gana sobre
-// la copia vieja de otro, sin importar el orden. Empate de _ts → gana el 2º argumento.
-function mergeById_ts(a,b){
+// Sirve para registros que se EDITAN (reportes de guardia): la edición de un equipo gana sobre la
+// copia vieja de otro. `tie` (opcional) desempata cuando el _ts es igual o falta: se conserva el de
+// MAYOR valor (para reportes = más metros), de modo que un empate JAMÁS haga retroceder el avance.
+function mergeById_ts(a,b,tie){
   const by={}, order=[];
-  const put=r=>{ if(!r)return; if(r.id!=null&&typeof tombHas==='function'&&tombHas(r.id))return; const k=(r.id!=null)?('id:'+r.id):('j:'+JSON.stringify(r)); if(!(k in by)) order.push(k); const ex=by[k]; if(ex===undefined || (Number(r._ts)||0)>=(Number(ex._ts)||0)) by[k]=r; };
+  const put=r=>{
+    if(!r) return;
+    if(r.id!=null && typeof tombHas==='function' && tombHas(r.id)) return;
+    const k=(r.id!=null)?('id:'+r.id):('j:'+JSON.stringify(r));
+    if(!(k in by)){ order.push(k); by[k]=r; return; }
+    const ex=by[k]; const tr=Number(r._ts)||0, te=Number(ex._ts)||0;
+    if(tr>te){ by[k]=r; }                                   // edición más reciente gana
+    else if(tr===te){                                       // empate de _ts (o ambos sin marca):
+      if(tie){ if(tie(r)>=tie(ex)) by[k]=r; }               //   gana el de MAYOR valor (más metros)
+      else by[k]=r;                                          //   sin desempate → gana el 2º argumento
+    }
+  };
   (a||[]).forEach(put); (b||[]).forEach(put);
   return order.map(k=>by[k]);
 }
