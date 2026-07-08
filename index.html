@@ -4481,9 +4481,10 @@ async function cargarAlmacenCombustibleSB(){
     {
       const rNube=await sbLoadModulo('reportes_guardia');
       let rLocal=[]; try{rLocal=JSON.parse(localStorage.getItem(RG_KEY)||'[]')||[];}catch(e){}
-      // Combina lo que ya hay en memoria + localStorage + nube, sin duplicar (por id).
-      // Prioriza la versión local en conflicto (ediciones de este dispositivo aún no subidas).
-      const merged=mergeSnapById(mergeSnapById(state.reportesGuardia||[], rLocal), Array.isArray(rNube)?rNube:[]);
+      // Combina memoria + localStorage + nube por id, conservando la versión de _ts MÁS RECIENTE
+      // (última edición). Así una edición hecha en OTRO equipo (nube) gana sobre la copia local
+      // vieja, y una edición local aún no subida también gana si es más nueva.
+      const merged=mergeById_ts(mergeById_ts(state.reportesGuardia||[], rLocal), Array.isArray(rNube)?rNube:[]);
       if(merged.length){
         state.reportesGuardia=merged;
         try{localStorage.setItem(RG_KEY,JSON.stringify(merged));}catch(e){}
@@ -5885,7 +5886,7 @@ function _rtAplicarModulo(modulo, data){
     case 'almacen':            if(data&&typeof data==='object'){ const prevAlm=state.almacen||{}; let a=Object.assign({}, prevAlm, data); if(typeof mergeSnapById==='function'){ a.ingresos=mergeSnapById(data.ingresos||[], prevAlm.ingresos||[]); a.salidas=mergeSnapById(data.salidas||[], prevAlm.salidas||[]); const exN=data.explosivos||prevAlm.explosivos||{ingresos:[],salidas:[]}, exP=prevAlm.explosivos||{ingresos:[],salidas:[]}; a.explosivos={...exN, ingresos:mergeSnapById(exN.ingresos||[], exP.ingresos||[]), salidas:mergeSnapById(exN.salidas||[], exP.salidas||[])}; } try{ if(typeof _almRestaurarFotos==='function') a=_almRestaurarFotos(a); }catch(e){} state.almacen=a; setLS('atmin_almacen', state.almacen); } break;
     case 'personal':           if(Array.isArray(data)){ state.personal=data; setLS('atmin_personal_snap', data); } break;
     case 'tareas':             if(Array.isArray(data)){ state.tareas=data; setLS('atmin_tareas_snap', data); } break;
-    case 'reportes_guardia':   if(Array.isArray(data)){ state.reportesGuardia=M(data, state.reportesGuardia||[]); setLS('atmin_reportes_guardia', state.reportesGuardia); try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){} } break;
+    case 'reportes_guardia':   if(Array.isArray(data)){ state.reportesGuardia=(typeof mergeById_ts==='function')?mergeById_ts(state.reportesGuardia||[], data):M(data, state.reportesGuardia||[]); setLS('atmin_reportes_guardia', state.reportesGuardia); try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){} } break;
     case 'mant_kits':          if(Array.isArray(data)){ state.mantenimiento=(typeof mergeMantKits==='function')?mergeMantKits(state.mantenimiento||[], data):M(data, state.mantenimiento||[]); setLS('atmin_mant_kits', state.mantenimiento); } break;
     case 'mant_repuestos':     if(Array.isArray(data)){ state.mantRepuestos=data; setLS('atmin_mant_repuestos', data); } break;
     case 'compresorista':      if(Array.isArray(data)){ state.compresorista=(typeof _compMergeByTs==='function')?_compMergeByTs(state.compresorista||[], data):data; setLS('atmin_compresorista', state.compresorista); } break;
@@ -5927,7 +5928,7 @@ function _rtIndicador(){ const n=Date.now(); if(n-_rtLastNotif>4000){ _rtLastNot
 
 // Indicador PERMANENTE del estado del tiempo real (esquina inferior izquierda, siempre visible)
 // Versión visible del build → sirve para confirmar que se cargó la versión nueva (no la de caché).
-const APP_BUILD='v2026.07.07-2';
+const APP_BUILD='v2026.07.07-3';
 function _rtSetStatus(txt, color){
   let el=document.getElementById('rt-status-badge');
   if(!el){
@@ -5936,7 +5937,7 @@ function _rtSetStatus(txt, color){
     el.style.cssText='position:fixed;left:10px;bottom:10px;z-index:9999;font-size:11px;font-weight:700;padding:5px 10px;border-radius:20px;background:rgba(0,0,0,.7);border:1px solid rgba(255,255,255,.15);color:#fff;display:flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(0,0,0,.4);cursor:default';
     document.body.appendChild(el);
   }
-  el.innerHTML='<span style="width:8px;height:8px;border-radius:50%;background:'+color+';box-shadow:0 0 6px '+color+'"></span>'+txt+'<span style="opacity:.5;font-weight:400;margin-left:4px">'+APP_BUILD+'</span>';
+  el.innerHTML='<span style="width:8px;height:8px;border-radius:50%;background:'+color+';box-shadow:0 0 6px '+color+'"></span>'+txt;
 }
 function iniciarRealtime(){
   if(!SB_ONLINE || !sb || typeof sb.channel!=='function'){ _rtSetStatus('Sin nube', '#9ca3af'); return; }
@@ -11011,6 +11012,15 @@ function mergeSnapById(a,b){
   (a||[]).forEach(add); (b||[]).forEach(add);
   return out;
 }
+// Como mergeSnapById pero por ID conservando la versión de _ts MÁS RECIENTE (última edición).
+// Sirve para registros que se EDITAN (reportes de guardia): así la edición de un equipo gana sobre
+// la copia vieja de otro, sin importar el orden. Empate de _ts → gana el 2º argumento.
+function mergeById_ts(a,b){
+  const by={}, order=[];
+  const put=r=>{ if(!r)return; if(r.id!=null&&typeof tombHas==='function'&&tombHas(r.id))return; const k=(r.id!=null)?('id:'+r.id):('j:'+JSON.stringify(r)); if(!(k in by)) order.push(k); const ex=by[k]; if(ex===undefined || (Number(r._ts)||0)>=(Number(ex._ts)||0)) by[k]=r; };
+  (a||[]).forEach(put); (b||[]).forEach(put);
+  return order.map(k=>by[k]);
+}
 // Merge específico para kits de mantenimiento: combina aprobaciones por id de modo que
 // una decisión (✅ ok / ❌ rechazado) SIEMPRE gane sobre un estado pendiente, sin importar
 // si vino del local o de la nube. Evita que una copia local vieja "pise" la aprobación que
@@ -11309,7 +11319,9 @@ function guardarReporteGuardia(){
     if(dup && !confirm(`Ya existe un reporte de ${turno} para ${fecha} (Jefe: ${dup.jefe||'—'}). ¿Registrar OTRO reporte igual? Esto puede duplicar los metros en el dashboard.`)) return;
   }
   // Disparos por frente → totales automáticos (los 5 frentes: Brenda, CRNE + los 3 nuevos)
-  const rep={ id:idActual||'RG'+Date.now(), fecha, turno, jefe, frentesExtra:[], creadoEn:Date.now() };
+  // creadoEn = cuándo se creó (se conserva al editar). _ts = última edición (cambia en CADA guardado)
+  // → al sincronizar entre equipos gana la versión con _ts más reciente, no la copia local vieja.
+  const rep={ id:idActual||'RG'+Date.now(), fecha, turno, jefe, frentesExtra:[], creadoEn:Date.now(), _ts:Date.now() };
   FRENTES.forEach(f=>{
     const disp=rgGetDisparos(f.pfx);
     const t=rgComputeFrenteTotals(disp);
