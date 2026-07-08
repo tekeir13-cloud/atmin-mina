@@ -2863,7 +2863,7 @@ select option{background:var(--coal3);}
             <th style="color:#fff;text-align:center;padding:10px 12px">Jornal/día</th>
             <th style="color:#fff;text-align:center;padding:10px 12px">Tareas</th>
             <th style="color:#fff;text-align:center;padding:10px 12px">Días</th>
-            <th style="color:#fff;text-align:center;padding:10px 12px">Días Libres</th>
+            <th style="color:#fff;text-align:center;padding:10px 12px" title="Días libres comprados (ganados − tomados)">Libres Compr.</th>
             <th style="color:#fff;text-align:center;padding:10px 12px">x1</th>
             <th style="color:#fff;text-align:center;padding:10px 12px">x1.5</th>
             <th style="color:#fff;text-align:center;padding:10px 12px">x2</th>
@@ -10052,19 +10052,20 @@ function renderCostoRRHH(){
   const tbody=g('cr-tabla-tbody');if(!tbody) return;
   let totTotal=0,totTareas=0,totDias=0,totLibres=0;
   const filas=todos.map((p,i)=>{
-    const pts=tMes.filter(t=>String(t.trabajadorId)===String(p.id));
-    const dias=new Set(pts.map(t=>t.fecha)).size;
+    const pts=tMes.filter(t=>String(t.trabajadorId)===String(p.id)&&t.tipo!=='libre'&&t.tipo!=='falta');
+    // Mismo cálculo que la grilla de Tareo Mensual (regla de días libres comprados, fórmula B).
+    const r=(typeof tareoResumen==='function')?tareoResumen(p.id,mes):{diasTrab:0,tareas:0,comprados:0};
+    const dias=r.diasTrab;                 // días de calendario trabajados
+    const tareasPago=r.tareas;             // unidades de pago (suma de multiplicadores)
+    const diasLibres=r.comprados;          // días libres COMPRADOS (los que se pagan aparte)
     const n1=pts.filter(t=>Number(t.mult||1)===1).length;
     const n15=pts.filter(t=>Number(t.mult||1)===1.5).length;
     const n2=pts.filter(t=>Number(t.mult||1)===2).length;
-    // Días libres ganados: por cada 2 días trabajados, 1 día libre pagado al jornal base.
-    const diasLibres=Math.floor(dias/2);
-    const pagoLibres=diasLibres*(p.jornal||0);
-    const total=pts.reduce((s,t)=>{const j=t.jornal??p.jornal;return s+j*(t.mult||1);},0)+pagoLibres;
+    const total=(typeof tareoPago==='function')?tareoPago(p.id,mes):0;   // (tareas + tomados + comprados) × jornal
     const reservado=esSueldoReservado(p.rol);
     if(!reservado) totTotal+=total;  // el total visible excluye sueldos reservados
-    totTareas+=pts.length;totDias+=dias;totLibres+=diasLibres;
-    return{p,pts:pts.length,dias,diasLibres,n1,n15,n2,total,reservado,idx:i+1};
+    totTareas+=tareasPago;totDias+=dias;totLibres+=diasLibres;
+    return{p,pts:tareasPago,dias,diasLibres,n1,n15,n2,total,reservado,idx:i+1};
   }).sort((a,b)=>b.total-a.total||a.p.nombre.localeCompare(b.p.nombre));
   tbody.innerHTML=filas.map(({p,pts,dias,diasLibres,n1,n15,n2,total,reservado},i)=>{
     const baja=p.estado==='baja';
