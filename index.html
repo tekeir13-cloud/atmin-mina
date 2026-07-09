@@ -9352,8 +9352,8 @@ function abrirSetupTareo(){
         <div style="font-size:10px;color:var(--text3)">${p.rol} · S/${p.jornal}/día</div>
       </div>
       <select class="tareo-labor" data-pid="${p.id}" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
-        <option value="1" ${labor==1?'selected':''}>RA Brenda</option>
-        <option value="2" ${labor==2?'selected':''}>CRNE</option>
+        ${FRENTES.map(f=>`<option value="${f.id}" ${String(labor)===String(f.id)?'selected':''}>${f.emoji} ${f.nombre}</option>`).join('')}
+        <option value="MARGINAL" ${labor==='MARGINAL'?'selected':''}>📊 Costeo Marginal</option>
       </select>
     </div>`;
   }).join('');
@@ -9404,7 +9404,8 @@ function cargarHojaTareo(){
     const val = t?String(t.mult):'';
     const obs = t?(t.obs||''):'';
     const bg  = idx%2===0?'#ffffff':'#f5f5f5';
-    const labor = sel.frente===2?'Cortada':'Rampa';
+    const frenteObj=frenteGet(sel.frente);
+    const labor = sel.frente==='MARGINAL'?'📊 Costeo Marginal':(frenteObj?`${frenteObj.emoji} ${frenteObj.nombre}`:'Frente '+sel.frente);
     const mkBtn=(v,lbl)=>{const s=val===v;return `<button onclick="selTareoBtn(this)" data-pid="${p.id}" data-val="${v}" style="padding:4px 9px;border-radius:4px;border:2px solid ${s?'#1a2744':'#bbb'};cursor:pointer;font-weight:700;font-size:11px;background:${s?'#1a2744':'#fff'};color:${s?'#fff':'#444'};touch-action:manipulation">${lbl}</button>`;};
     return `<tr data-pid="${p.id}" data-frente="${sel.frente}" class="tareo-row" style="background:${bg}">
       <td style="padding:7px 10px;border:1px solid #ddd;text-align:center;font-size:11px;font-weight:700;color:#000;white-space:nowrap">${turno}</td>
@@ -11601,8 +11602,8 @@ function abrirModalDistribucion(){
         <div style="font-size:10px;color:var(--text3)">${p.rol} · S/${p.jornal}/día</div>
       </div>
       <select class="dist-frente" data-pid="${p.id}" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
-        <option value="1" ${frente==1?'selected':''}>🟦 RA Brenda</option>
-        <option value="2" ${frente==2?'selected':''}>🟩 CRNE</option>
+        ${FRENTES.map(f=>`<option value="${f.id}" ${frente==f.id||String(frente)===String(f.id)?'selected':''}>${f.emoji} ${f.nombre}</option>`).join('')}
+        <option value="MARGINAL" ${frente==='MARGINAL'?'selected':''}>📊 Costeo Marginal</option>
       </select>
     </div>`;
   }).join('');
@@ -11615,7 +11616,8 @@ function guardarDistribucion(){
     if(chk.checked){
       const pid=chk.dataset.pid;
       const fsel=document.querySelector(`.dist-frente[data-pid="${pid}"]`);
-      const frente=parseInt(fsel?.value||'1',10);
+      const val=fsel?.value||'1';
+      const frente=isNaN(val)?val:parseInt(val,10);
       nueva[pid]=frente;
       // Sincronizar frente del trabajador
       const p=state.personal.find(x=>String(x.id)===String(pid));
@@ -12474,9 +12476,18 @@ function rgGetMasas(frente){
   return masas;
 }
 function renderDistribucion(){
-  [1,2].forEach(f=>{
-    const ws=state.personal.filter(p=>p.frente===f&&p.estado==='activo');
-    document.getElementById(`dist-f${f}`).innerHTML=ws.length?ws.map(p=>`<div class="planilla-row"><div class="planilla-nombre">${p.nombre}</div><div class="planilla-rol">${p.rol}</div><div class="planilla-costo">${fmtS(p.jornal)}/día</div></div>`).join(''):'<div class="empty-state">Sin personal</div>';
+  const allFrentes = [...FRENTES.map(f=>f.id), 'MARGINAL'];
+  allFrentes.forEach(f=>{
+    const el=document.getElementById(`dist-f${f}`);
+    if(!el) return;
+    let ws;
+    if(f==='MARGINAL'){
+      ws=state.personal.filter(p=>p.frente==='MARGINAL'&&p.estado==='activo');
+    } else {
+      ws=state.personal.filter(p=>p.frente===f&&p.estado==='activo');
+    }
+    const frenteNm = f==='MARGINAL'?'Costeo Marginal':(frenteGet(f)?.nombre||'Frente '+f);
+    el.innerHTML=ws.length?ws.map(p=>`<div class="planilla-row"><div class="planilla-nombre">${p.nombre}</div><div class="planilla-rol">${p.rol}</div><div class="planilla-costo">${fmtS(p.jornal)}/día</div></div>`).join(''):'<div class="empty-state">Sin personal</div>';
   });
   const br={};state.personal.filter(p=>p.estado==='activo').forEach(p=>{if(!br[p.rol])br[p.rol]=0;br[p.rol]++;});
   const tot=state.personal.filter(p=>p.estado==='activo').length||1;
