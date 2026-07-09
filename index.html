@@ -2364,6 +2364,13 @@ select option{background:var(--coal3);}
   </div>
 </div>
 
+<button id="btn-fullscreen" onclick="toggleFullscreen()" title="Pantalla completa"
+  style="position:fixed;top:12px;right:12px;z-index:9999;width:38px;height:38px;border-radius:10px;
+  background:rgba(30,30,40,0.7);border:1px solid rgba(255,255,255,0.12);color:#e5e7eb;cursor:pointer;
+  font-size:17px;line-height:1;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);
+  box-shadow:0 4px 14px rgba(0,0,0,0.35);transition:background .15s,transform .15s"
+  onmouseover="this.style.background='rgba(50,50,65,0.9)'" onmouseout="this.style.background='rgba(30,30,40,0.7)'">⛶</button>
+
 <aside class="sidebar">
   <div class="logo">
     <div class="logo-icon" style="background:none;box-shadow:none">
@@ -4854,6 +4861,8 @@ function renderStockRemanente(){
   const apFecha=(state.almacen&&state.almacen.remAperturaFecha)||'';
   Object.entries(ap).forEach(([id,q])=>{ if((Number(q)||0)>0) eventos.push({t:'apertura',fecha:apFecha,ts:0,producto:id,cant:Number(q)||0}); });
   remEgresosContables().forEach(e=>eventos.push({t:'egreso',fecha:e.fecha,ts:e.ts,producto:e.codigo,cant:e.cant,turno:e.turno,nombre:e.nombre}));
+  // Egresos de los 3 días previos a la apertura: solo contexto, NO suman al stock (ya en el saldo).
+  remEgresosPrevios(3).forEach(e=>eventos.push({t:'egreso-prev',fecha:e.fecha,ts:e.ts,producto:e.codigo,cant:e.cant,turno:e.turno,nombre:e.nombre}));
   (state.remanenteSalidas||[]).forEach(s=>eventos.push({t:'salida',fecha:s.fecha,ts:Number(s._ts)||0,hora:s.hora,producto:s.producto,cant:Number(s.cantidad)||0,solicitante:s.solicitante||s.autoriza||'—',destino:s.destino||s.ubicacion||'—',id:s.id}));
   eventos.sort((a,b)=>((b.fecha||'')+String(b.ts||0)).localeCompare((a.fecha||'')+String(a.ts||0)));
   const turnoTxt=t=>t==='noche'?'🌙 Noche':(t==='dia'?'☀ Día':(t||''));
@@ -4872,6 +4881,13 @@ function renderStockRemanente(){
       <td style="padding:7px 8px;text-align:right;font-weight:700;color:#22c55e">+${fmtN(ev.cant)}</td>
       <td style="padding:7px 8px;color:var(--text3)">${remLabelCajas(ev.producto,ev.cant)}</td>
       <td style="padding:7px 8px" colspan="2">Reporte ${turnoTxt(ev.turno)}${ev.nombre?' · '+ev.nombre:''}</td></tr>`;
+    if(ev.t==='egreso-prev') return `<tr style="border-top:1px solid var(--border);opacity:.6">
+      <td style="padding:7px 8px">${ev.fecha?fechaFmt(ev.fecha):'—'}</td>
+      <td style="padding:7px 8px"><span style="color:#94a3b8;font-weight:700">⬇ Egreso previo</span></td>
+      <td style="padding:7px 8px">${nombreExp(ev.producto)}</td>
+      <td style="padding:7px 8px;text-align:right;font-weight:700;color:#94a3b8">${fmtN(ev.cant)}</td>
+      <td style="padding:7px 8px;color:var(--text3)">${remLabelCajas(ev.producto,ev.cant)}</td>
+      <td style="padding:7px 8px" colspan="2">Reporte ${turnoTxt(ev.turno)}${ev.nombre?' · '+ev.nombre:''} · <em style="color:var(--text3)">previo a apertura (no suma)</em></td></tr>`;
     return `<tr style="border-top:1px solid var(--border)">
       <td style="padding:7px 8px">${ev.fecha?fechaFmt(ev.fecha):'—'}${ev.hora?' '+ev.hora:''}</td>
       <td style="padding:7px 8px"><span style="color:#f87171;font-weight:700">⬆ Salida</span></td>
@@ -7827,6 +7843,24 @@ function remEgresosContables(){
   (state.compresorista||[]).forEach(rep=>{
     if(!rep) return;
     if(apFecha && String(rep.fecha||'') < apFecha) return; // reporte anterior a la apertura → ya en el saldo
+    (rep.explosivos||[]).forEach(x=>{
+      const e=Number(x&&x.E)||0;
+      if(x && x.codigo!=null && e>0) out.push({codigo:x.codigo, cant:e, fecha:rep.fecha, turno:rep.turno, nombre:rep.nombre||'', ts:Number(rep._ts)||0});
+    });
+  });
+  return out;
+}
+// Egresos de los N días ANTERIORES a la apertura. SOLO para mostrar en el historial (contexto
+// reciente); NO suman al stock, porque ese consumo ya está dentro del saldo de apertura.
+function remEgresosPrevios(dias){
+  const apFecha=(state.almacen&&state.almacen.remAperturaFecha)||'';
+  if(!apFecha) return [];
+  const desde=(function(){ try{ const d=new Date(apFecha+'T00:00:00'); d.setDate(d.getDate()-(dias||3)); return d.toISOString().slice(0,10); }catch(e){ return ''; } })();
+  const out=[];
+  (state.compresorista||[]).forEach(rep=>{
+    if(!rep) return;
+    const f=String(rep.fecha||'');
+    if(!(f<apFecha && f>=desde)) return; // solo la ventana [apertura-N, apertura)
     (rep.explosivos||[]).forEach(x=>{
       const e=Number(x&&x.E)||0;
       if(x && x.codigo!=null && e>0) out.push({codigo:x.codigo, cant:e, fecha:rep.fecha, turno:rep.turno, nombre:rep.nombre||'', ts:Number(rep._ts)||0});
@@ -12541,22 +12575,29 @@ function renderMantenimiento(){
 }
 
 // ── Solicitud de Kit de Mantenimiento ──
-function kitRepOptions(sel){
+function kitRepOptions(sel,saved){
   // SOLO lo que hay en el almacén de Mantenimiento (stock disponible)
   const prods=(typeof calcStock==='function'?calcStock():[])
     .filter(p=>p.almacen==='Mantenimiento'&&p.stock>0)
     .sort((a,b)=>String(a.producto||a.descripcion||'').localeCompare(String(b.producto||b.descripcion||'')));
+  // Si la pieza ya guardada fue despachada (stock 0), ya no aparece en el stock disponible.
+  // La inyectamos igual para poder mostrarla seleccionada al editar una solicitud aprobada.
+  if(saved&&saved.key&&!prods.some(p=>p.key===saved.key)){
+    prods.push({key:saved.key,producto:saved.nombre||saved.descripcion||'',descripcion:saved.nombre||'',
+      precio:saved.costo!=null?saved.costo:(saved.precio||0),unidad:saved.unidad||'UND',stock:0,_despachada:true});
+  }
   return prods.map(p=>{
     const nombre=p.producto||p.descripcion||'';
-    return `<option value="${escAttr(p.key)}" data-precio="${p.precio||0}" data-unidad="${p.unidad||'UND'}" data-nombre="${escAttr(nombre)}" ${sel===p.key?'selected':''}>${nombre} — ${p.unidad||'UND'} (stock ${p.stock})</option>`;
+    const etiqueta=p._despachada?'(despachada)':`stock ${p.stock}`;
+    return `<option value="${escAttr(p.key)}" data-precio="${p.precio||0}" data-unidad="${p.unidad||'UND'}" data-nombre="${escAttr(nombre)}" ${sel===p.key?'selected':''}>${nombre} — ${p.unidad||'UND'} (${etiqueta})</option>`;
   }).join('');
 }
-function kitAddPiezaRow(id,cant){
+function kitAddPiezaRow(id,cant,saved){
   const wrap=document.getElementById('kit-piezas-rows');if(!wrap)return;
   const div=document.createElement('div');
   div.className='kit-pieza-row';
   div.style.cssText='display:grid;grid-template-columns:2fr 1fr auto;gap:8px;margin-bottom:6px';
-  div.innerHTML=`<select class="kit-pieza-id" onchange="kitRecalcCosto()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px"><option value="">— Pieza —</option>${kitRepOptions(id)}</select>
+  div.innerHTML=`<select class="kit-pieza-id" onchange="kitRecalcCosto()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px"><option value="">— Pieza —</option>${kitRepOptions(id,saved)}</select>
     <input type="number" class="kit-pieza-cant" min="0" step="1" placeholder="Cant." value="${cant||''}" oninput="kitRecalcCosto()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
     <button class="btn btn-outline" style="font-size:11px;padding:4px 10px;color:#f87171;border-color:#f87171" onclick="this.parentElement.remove();kitRecalcCosto()">✕</button>`;
   wrap.appendChild(div);
@@ -12610,7 +12651,7 @@ function editarKitMant(id){
   g('kit-resp').value=m.resp||'';g('kit-desc').value=m.desc||'';g('kit-manoobra').value=m.horasMant||'';g('kit-estado').value=m.estado||'ok';
   kitEquipoChange(); if(g('kit-jackleg')) g('kit-jackleg').value=m.maquinaCodigo||'';
   g('kit-piezas-rows').innerHTML='';
-  (m.repuestos&&m.repuestos.length?m.repuestos:[{}]).forEach(p=>kitAddPiezaRow(p.id,p.cant));
+  (m.repuestos&&m.repuestos.length?m.repuestos:[{}]).forEach(p=>kitAddPiezaRow(p.key,p.cant,p));
   kitRecalcCosto();
   abrirModal('modal-kit-mant');
 }
@@ -17777,6 +17818,9 @@ function guardarReporteComp() {
   state.compresorista.sort((a,b)=>a.fecha.localeCompare(b.fecha));
   compGuardarLocal();
   renderTablaCompresorista();
+  // Refrescar Stock Remanente: el egreso (campo E) de este reporte debe verse al instante
+  // en su historial de movimientos si esa pestaña está montada.
+  try{ if(document.getElementById('log-stockremanente') && typeof renderStockRemanente==='function') renderStockRemanente(); }catch(e){}
   mostrarResumenComp(reporte);
   if(typeof visorPoblarMeses==='function') visorPoblarMeses();
   // Apuntar el visor al mes del reporte recién guardado
@@ -19006,6 +19050,27 @@ function abrirHistorialPeriodos(){
   const prev=document.getElementById('modal-historial-periodos'); if(prev) prev.remove();
   document.body.insertAdjacentHTML('beforeend',html);
 }
+
+// ── Pantalla completa ──
+function toggleFullscreen(){
+  const doc=document, el=doc.documentElement;
+  const enFull=doc.fullscreenElement||doc.webkitFullscreenElement;
+  if(!enFull){
+    const req=el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen;
+    if(req) req.call(el).catch(()=>{});
+  }else{
+    const exit=doc.exitFullscreen||doc.webkitExitFullscreen||doc.msExitFullscreen;
+    if(exit) exit.call(doc).catch(()=>{});
+  }
+}
+function _syncFullscreenBtn(){
+  const b=document.getElementById('btn-fullscreen'); if(!b) return;
+  const enFull=document.fullscreenElement||document.webkitFullscreenElement;
+  b.textContent=enFull?'⛗':'⛶';
+  b.title=enFull?'Salir de pantalla completa':'Pantalla completa';
+}
+document.addEventListener('fullscreenchange',_syncFullscreenBtn);
+document.addEventListener('webkitfullscreenchange',_syncFullscreenBtn);
 
 </script>
 
