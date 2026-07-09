@@ -4861,6 +4861,8 @@ function renderStockRemanente(){
   const apFecha=(state.almacen&&state.almacen.remAperturaFecha)||'';
   Object.entries(ap).forEach(([id,q])=>{ if((Number(q)||0)>0) eventos.push({t:'apertura',fecha:apFecha,ts:0,producto:id,cant:Number(q)||0}); });
   remEgresosContables().forEach(e=>eventos.push({t:'egreso',fecha:e.fecha,ts:e.ts,producto:e.codigo,cant:e.cant,turno:e.turno,nombre:e.nombre}));
+  // Egresos de los 3 días previos a la apertura: solo contexto, NO suman al stock (ya en el saldo).
+  remEgresosPrevios(3).forEach(e=>eventos.push({t:'egreso-prev',fecha:e.fecha,ts:e.ts,producto:e.codigo,cant:e.cant,turno:e.turno,nombre:e.nombre}));
   (state.remanenteSalidas||[]).forEach(s=>eventos.push({t:'salida',fecha:s.fecha,ts:Number(s._ts)||0,hora:s.hora,producto:s.producto,cant:Number(s.cantidad)||0,solicitante:s.solicitante||s.autoriza||'—',destino:s.destino||s.ubicacion||'—',id:s.id}));
   eventos.sort((a,b)=>((b.fecha||'')+String(b.ts||0)).localeCompare((a.fecha||'')+String(a.ts||0)));
   const turnoTxt=t=>t==='noche'?'🌙 Noche':(t==='dia'?'☀ Día':(t||''));
@@ -4879,6 +4881,13 @@ function renderStockRemanente(){
       <td style="padding:7px 8px;text-align:right;font-weight:700;color:#22c55e">+${fmtN(ev.cant)}</td>
       <td style="padding:7px 8px;color:var(--text3)">${remLabelCajas(ev.producto,ev.cant)}</td>
       <td style="padding:7px 8px" colspan="2">Reporte ${turnoTxt(ev.turno)}${ev.nombre?' · '+ev.nombre:''}</td></tr>`;
+    if(ev.t==='egreso-prev') return `<tr style="border-top:1px solid var(--border);opacity:.6">
+      <td style="padding:7px 8px">${ev.fecha?fechaFmt(ev.fecha):'—'}</td>
+      <td style="padding:7px 8px"><span style="color:#94a3b8;font-weight:700">⬇ Egreso previo</span></td>
+      <td style="padding:7px 8px">${nombreExp(ev.producto)}</td>
+      <td style="padding:7px 8px;text-align:right;font-weight:700;color:#94a3b8">${fmtN(ev.cant)}</td>
+      <td style="padding:7px 8px;color:var(--text3)">${remLabelCajas(ev.producto,ev.cant)}</td>
+      <td style="padding:7px 8px" colspan="2">Reporte ${turnoTxt(ev.turno)}${ev.nombre?' · '+ev.nombre:''} · <em style="color:var(--text3)">previo a apertura (no suma)</em></td></tr>`;
     return `<tr style="border-top:1px solid var(--border)">
       <td style="padding:7px 8px">${ev.fecha?fechaFmt(ev.fecha):'—'}${ev.hora?' '+ev.hora:''}</td>
       <td style="padding:7px 8px"><span style="color:#f87171;font-weight:700">⬆ Salida</span></td>
@@ -7834,6 +7843,24 @@ function remEgresosContables(){
   (state.compresorista||[]).forEach(rep=>{
     if(!rep) return;
     if(apFecha && String(rep.fecha||'') < apFecha) return; // reporte anterior a la apertura → ya en el saldo
+    (rep.explosivos||[]).forEach(x=>{
+      const e=Number(x&&x.E)||0;
+      if(x && x.codigo!=null && e>0) out.push({codigo:x.codigo, cant:e, fecha:rep.fecha, turno:rep.turno, nombre:rep.nombre||'', ts:Number(rep._ts)||0});
+    });
+  });
+  return out;
+}
+// Egresos de los N días ANTERIORES a la apertura. SOLO para mostrar en el historial (contexto
+// reciente); NO suman al stock, porque ese consumo ya está dentro del saldo de apertura.
+function remEgresosPrevios(dias){
+  const apFecha=(state.almacen&&state.almacen.remAperturaFecha)||'';
+  if(!apFecha) return [];
+  const desde=(function(){ try{ const d=new Date(apFecha+'T00:00:00'); d.setDate(d.getDate()-(dias||3)); return d.toISOString().slice(0,10); }catch(e){ return ''; } })();
+  const out=[];
+  (state.compresorista||[]).forEach(rep=>{
+    if(!rep) return;
+    const f=String(rep.fecha||'');
+    if(!(f<apFecha && f>=desde)) return; // solo la ventana [apertura-N, apertura)
     (rep.explosivos||[]).forEach(x=>{
       const e=Number(x&&x.E)||0;
       if(x && x.codigo!=null && e>0) out.push({codigo:x.codigo, cant:e, fecha:rep.fecha, turno:rep.turno, nombre:rep.nombre||'', ts:Number(rep._ts)||0});
