@@ -12541,22 +12541,29 @@ function renderMantenimiento(){
 }
 
 // ── Solicitud de Kit de Mantenimiento ──
-function kitRepOptions(sel){
+function kitRepOptions(sel,saved){
   // SOLO lo que hay en el almacén de Mantenimiento (stock disponible)
   const prods=(typeof calcStock==='function'?calcStock():[])
     .filter(p=>p.almacen==='Mantenimiento'&&p.stock>0)
     .sort((a,b)=>String(a.producto||a.descripcion||'').localeCompare(String(b.producto||b.descripcion||'')));
+  // Si la pieza ya guardada fue despachada (stock 0), ya no aparece en el stock disponible.
+  // La inyectamos igual para poder mostrarla seleccionada al editar una solicitud aprobada.
+  if(saved&&saved.key&&!prods.some(p=>p.key===saved.key)){
+    prods.push({key:saved.key,producto:saved.nombre||saved.descripcion||'',descripcion:saved.nombre||'',
+      precio:saved.costo!=null?saved.costo:(saved.precio||0),unidad:saved.unidad||'UND',stock:0,_despachada:true});
+  }
   return prods.map(p=>{
     const nombre=p.producto||p.descripcion||'';
-    return `<option value="${escAttr(p.key)}" data-precio="${p.precio||0}" data-unidad="${p.unidad||'UND'}" data-nombre="${escAttr(nombre)}" ${sel===p.key?'selected':''}>${nombre} — ${p.unidad||'UND'} (stock ${p.stock})</option>`;
+    const etiqueta=p._despachada?'(despachada)':`stock ${p.stock}`;
+    return `<option value="${escAttr(p.key)}" data-precio="${p.precio||0}" data-unidad="${p.unidad||'UND'}" data-nombre="${escAttr(nombre)}" ${sel===p.key?'selected':''}>${nombre} — ${p.unidad||'UND'} (${etiqueta})</option>`;
   }).join('');
 }
-function kitAddPiezaRow(id,cant){
+function kitAddPiezaRow(id,cant,saved){
   const wrap=document.getElementById('kit-piezas-rows');if(!wrap)return;
   const div=document.createElement('div');
   div.className='kit-pieza-row';
   div.style.cssText='display:grid;grid-template-columns:2fr 1fr auto;gap:8px;margin-bottom:6px';
-  div.innerHTML=`<select class="kit-pieza-id" onchange="kitRecalcCosto()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px"><option value="">— Pieza —</option>${kitRepOptions(id)}</select>
+  div.innerHTML=`<select class="kit-pieza-id" onchange="kitRecalcCosto()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px"><option value="">— Pieza —</option>${kitRepOptions(id,saved)}</select>
     <input type="number" class="kit-pieza-cant" min="0" step="1" placeholder="Cant." value="${cant||''}" oninput="kitRecalcCosto()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
     <button class="btn btn-outline" style="font-size:11px;padding:4px 10px;color:#f87171;border-color:#f87171" onclick="this.parentElement.remove();kitRecalcCosto()">✕</button>`;
   wrap.appendChild(div);
@@ -12610,7 +12617,7 @@ function editarKitMant(id){
   g('kit-resp').value=m.resp||'';g('kit-desc').value=m.desc||'';g('kit-manoobra').value=m.horasMant||'';g('kit-estado').value=m.estado||'ok';
   kitEquipoChange(); if(g('kit-jackleg')) g('kit-jackleg').value=m.maquinaCodigo||'';
   g('kit-piezas-rows').innerHTML='';
-  (m.repuestos&&m.repuestos.length?m.repuestos:[{}]).forEach(p=>kitAddPiezaRow(p.key,p.cant));
+  (m.repuestos&&m.repuestos.length?m.repuestos:[{}]).forEach(p=>kitAddPiezaRow(p.key,p.cant,p));
   kitRecalcCosto();
   abrirModal('modal-kit-mant');
 }
