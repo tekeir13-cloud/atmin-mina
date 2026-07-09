@@ -10017,6 +10017,8 @@ function _tareoActualizaResumen(tid,mes){
   set('tom', r.dlTomados||'—'); set('compr', r.comprados); set('pago', fmtS(pago));
 }
 function tareoGridSet(tid,fecha){
+  const cont=document.getElementById('rrhh-tareomes');
+  if(!cont || cont.dataset.editing!=='true') return;
   const cur=_tareoCell(tid,fecha);
   const next=TAREO_CICLO[(TAREO_CICLO.indexOf(cur)+1)%TAREO_CICLO.length];
   state.tareas=(state.tareas||[]).filter(t=>!(String(t.trabajadorId)===String(tid)&&t.fecha===fecha));
@@ -10029,12 +10031,34 @@ function tareoGridSet(tid,fecha){
   }
   try{ guardarEstado(); }catch(e){}
   try{ tareasSave(); }catch(e){}
-  // Actualización PUNTUAL: solo la celda tocada + el resumen de su fila (no re-render → sin salto).
   try{
     const td=document.querySelector('[data-tc="'+tid+'|'+fecha+'"]');
     _tareoPintaCelda(td, _tareoCell(tid,fecha));
     _tareoActualizaResumen(tid, (fecha||'').slice(0,7));
   }catch(e){ renderTareoMensual(); }
+}
+
+function tareoMensualGuardar(mes){
+  try{ guardarEstado(); }catch(e){}
+  try{ tareasSave(); }catch(e){}
+  showNotif('✓ Tareo mensual guardado correctamente');
+  document.getElementById('rrhh-tareomes').dataset.editing='false';
+  renderTareoMensual();
+  // Mostrar opción de generar planilla
+  setTimeout(()=>{
+    const overlay=document.createElement('div');
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9998;display:flex;align-items:center;justify-content:center;padding:16px';
+    overlay.innerHTML=`
+      <div style="background:var(--coal2);border-radius:16px;width:min(420px,96vw);padding:24px;border:1px solid var(--border);text-align:center">
+        <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:12px">Tareo guardado ✓</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:20px">¿Deseas generar la planilla de operarios ahora?</div>
+        <div style="display:flex;gap:10px;justify-content:center">
+          <button onclick="this.closest('[style*=position]').remove()" class="btn btn-outline">Más tarde</button>
+          <button onclick="this.closest('[style*=position]').remove();modTab('rrhh','costorrhh',this)" class="btn btn-gold">📋 Ir a Costo RRHH</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+  },300);
 }
 function tareoResumen(tid,mes){
   const ents=(state.tareas||[]).filter(t=>String(t.trabajadorId)===String(tid)&&(t.fecha||'').slice(0,7)===mes);
@@ -10084,16 +10108,25 @@ function renderTareoMensual(){
       <td data-ts="pago|${p.id}" style="text-align:right;font-family:'DM Mono',monospace;font-weight:800;color:var(--gold-light);padding-right:8px">${fmtS(pago)}</td>
     </tr>`;
   }).join('');
+  const isEditing=cont.dataset.editing==='true';
   cont.innerHTML=`
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">
       <div class="section-title" style="margin:0">🗓 Tareo Mensual — ${nombreMes} ${y}</div>
       <select id="tareomes-sel" onchange="renderTareoMensual()" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:13px;font-weight:600">
         ${meses.map(m=>`<option value="${m}"${m===mes?' selected':''}>${m}</option>`).join('')}
       </select>
+      <div style="display:flex;gap:8px;margin-left:auto">
+        ${isEditing?`
+          <button class="btn btn-outline" onclick="document.getElementById('rrhh-tareomes').dataset.editing='false';renderTareoMensual()">Cancelar</button>
+          <button class="btn btn-gold" onclick="tareoMensualGuardar('${mes}')">💾 Guardar</button>
+        `:`
+          <button class="btn btn-gold" onclick="document.getElementById('rrhh-tareomes').dataset.editing='true';renderTareoMensual()">✏️ Editar</button>
+        `}
+      </div>
     </div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6">Toca una celda para cambiar: vacío → <b style="color:#16a34a">1</b> → <b style="color:#d97706">1.5</b> → <b style="color:#dc2626">2</b> → <b style="color:#2563eb">DL</b> (día libre) → <b style="color:#4b5563">F</b> (falta) → vacío.<br><b>Trab</b>=días trabajados · <b>Tareas</b>=unidades de pago · <b>Gan</b>=libres ganados (trab÷2) · <b>Tom</b>=libres tomados (DL) · <b>Compr</b>=comprados (ganados−tomados). &nbsp;<b>Pago = (tareas + tomados + comprados) × jornal.</b></div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6">${isEditing?'<b style="color:var(--gold)">✏️ Modo edición activado</b> — Toca una celda para cambiar: vacío → <b style="color:#16a34a">1</b> → <b style="color:#d97706">1.5</b> → <b style="color:#dc2626">2</b> → <b style="color:#2563eb">DL</b> (día libre) → <b style="color:#4b5563">F</b> (falta) → vacío.<br>':'Lectura — haz clic en Editar para modificar.<br>'}<b>Trab</b>=días trabajados · <b>Tareas</b>=unidades de pago · <b>Gan</b>=libres ganados (trab÷2) · <b>Tom</b>=libres tomados (DL) · <b>Compr</b>=comprados (ganados−tomados). &nbsp;<b>Pago = (tareas + tomados + comprados) × jornal.</b></div>
     <div class="table-wrap" style="max-height:72vh;overflow:auto;border:1px solid var(--border);border-radius:10px">
-      <table style="border-collapse:collapse;font-size:11px;min-width:100%">
+      <table style="border-collapse:collapse;font-size:11px;min-width:100%;${isEditing?'':'pointer-events:none;opacity:0.8;'}">
         <thead><tr style="background:#1a2744;color:#fff;position:sticky;top:0;z-index:3">${head}</tr></thead>
         <tbody>${rows||'<tr><td style="padding:16px;color:var(--text3)">Sin trabajadores activos.</td></tr>'}</tbody>
       </table>
@@ -10222,6 +10255,7 @@ function renderPlanillaIntegrada(){
       <td style="padding:8px 12px;color:var(--text3);font-size:12px">${r.rol||'—'}</td>
       <td style="padding:8px 12px;text-align:right;font-family:'DM Mono',monospace;color:var(--gold-light)">${fmtS(r.monto)}</td>
     </tr>`).join(''):`<tr><td colspan="3" style="padding:16px;text-align:center;color:var(--text3)">Sin planilla de supervisión para este mes. Pulsa "Ingresar Planilla Supervisión".</td></tr>`;
+  const isEditingPI=el.dataset.editing==='true';
   el.innerHTML=`
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px">
       <select id="pi-mes-sel" onchange="document.getElementById('rrhh-planillaint').dataset.mes=this.value;renderPlanillaIntegrada()"
@@ -10229,8 +10263,13 @@ function renderPlanillaIntegrada(){
         ${meses.map(m=>`<option value="${m}" ${m===mesSel?'selected':''}>${m}</option>`).join('')}
       </select>
       <div style="flex:1"></div>
-      <button class="btn" style="padding:8px 16px;font-size:12px;background:rgba(139,92,246,0.18);color:#a78bfa;border:1px solid rgba(139,92,246,0.4)" onclick="abrirPlanillaSupervision()">➕ Ingresar Planilla Supervisión</button>
-      <button class="btn btn-gold" style="padding:8px 16px;font-size:12px" onclick="exportarPlanillaIntegradaExcel()">📊 Exportar Planilla Integrada</button>
+      ${isEditingPI?`
+        <button class="btn btn-outline" onclick="document.getElementById('rrhh-planillaint').dataset.editing='false';renderPlanillaIntegrada()" style="padding:8px 16px;font-size:12px">Cancelar</button>
+        <button class="btn btn-gold" style="padding:8px 16px;font-size:12px" onclick="planillaIntegradaGuardar('${mesSel}')">💾 Guardar</button>
+      `:`
+        <button class="btn" style="padding:8px 16px;font-size:12px;background:rgba(139,92,246,0.18);color:#a78bfa;border:1px solid rgba(139,92,246,0.4)" onclick="document.getElementById('rrhh-planillaint').dataset.editing='true';abrirPlanillaSupervision()">✏️ Editar Supervisión</button>
+        <button class="btn btn-gold" style="padding:8px 16px;font-size:12px" onclick="exportarPlanillaIntegradaExcel()">📊 Exportar Planilla</button>
+      `}
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:18px">
       <div style="flex:1;min-width:160px;background:var(--coal4);border:1px solid var(--border);border-radius:14px;padding:16px">
@@ -10311,6 +10350,13 @@ function guardarPlanillaSupervision(mes){
   renderPlanillaIntegrada();
   try{ if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
   showNotif('💾 Planilla de supervisión guardada para '+mes+' — costo operativo actualizado','ok');
+}
+
+function planillaIntegradaGuardar(mes){
+  document.getElementById('rrhh-planillaint').dataset.editing='false';
+  renderPlanillaIntegrada();
+  showNotif('✓ Planilla integrada guardada correctamente');
+  try{ if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
 }
 
 async function exportarPlanillaIntegradaExcel(){
