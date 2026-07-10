@@ -1,0 +1,59 @@
+// ═══════════ MUKICLOUD — Service Worker (modo offline) ═══════════
+// Estrategia: la app es un solo index.html.
+//  · Navegaciones: red primero (para recibir versiones nuevas al instante) y,
+//    si no hay señal, se sirve la última copia buena desde caché → la app abre en interior mina.
+//  · Supabase y demás peticiones de datos: solo red (la app ya maneja sus fallos y su cola offline).
+// Al desplegar una versión nueva basta con cambiar CACHE_V: el SW viejo se limpia solo.
+const CACHE_V = 'mukicloud-v2026.07.10-3';
+
+self.addEventListener('install', (e) => {
+  e.waitUntil(
+    caches.open(CACHE_V)
+      .then(c => c.addAll(['./', './index.html']).catch(() => {}))
+      .then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener('activate', (e) => {
+  e.waitUntil(
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE_V).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', (e) => {
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+
+  // Datos (Supabase u otros orígenes): solo red — nunca cachear datos de la operación.
+  if (url.origin !== self.location.origin) return;
+
+  // App shell (index.html y navegaciones): red primero, caché de respaldo.
+  if (req.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('/index.html')) {
+    e.respondWith(
+      fetch(req)
+        .then(res => {
+          if (res && res.ok) {
+            const copia = res.clone();
+            caches.open(CACHE_V).then(c => c.put(req, copia)).catch(() => {});
+          }
+          return res;
+        })
+        .catch(() => caches.match(req).then(r => r || caches.match('./index.html')))
+    );
+    return;
+  }
+
+  // Otros recursos propios (manifest, íconos): caché primero, red de respaldo.
+  e.respondWith(
+    caches.match(req).then(r => r || fetch(req).then(res => {
+      if (res && res.ok) {
+        const copia = res.clone();
+        caches.open(CACHE_V).then(c => c.put(req, copia)).catch(() => {});
+      }
+      return res;
+    }))
+  );
+});

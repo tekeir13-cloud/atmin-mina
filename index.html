@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>MUKICLOUD — Operaciones Mineras Inteligentes</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#12151c">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -2391,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.10-2</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.10-3</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5848,7 +5851,12 @@ function renderDashAlertas(){
 // (conexión intermitente de mina) o si aún no estaba CLOUD_SYNC_READY, el dato NO se subía y
 // NUNCA se reintentaba → los demás dispositivos jamás veían el reporte (bug de "no se guarda").
 // Ahora se guarda el pendiente y se reintenta al reconectar / recuperar foco / activarse el sync.
-const _sbPend={};
+// La cola sobrevive al cierre de la app (clave para modo offline en mina): se persiste en
+// localStorage y se recarga al arrancar, así un tareo capturado sin señal se sube aunque el
+// celular se haya apagado en el camino a superficie.
+const SBPEND_KEY='atmin_sb_pend';
+const _sbPend=(function(){ try{ const d=JSON.parse(localStorage.getItem(SBPEND_KEY)||'{}'); return (d&&typeof d==='object')?d:{}; }catch(e){ return {}; } })();
+function _sbPendSave(){ try{ localStorage.setItem(SBPEND_KEY, JSON.stringify(_sbPend)); }catch(e){} try{ if(typeof actualizarChipConexion==='function') actualizarChipConexion(); }catch(e){} }
 let _sbFallo=0;
 async function _sbSubirModulo(modulo){
   if(!SB_ONLINE || !CLOUD_SYNC_READY) return false;
@@ -5864,7 +5872,7 @@ async function _sbSubirModulo(modulo){
       );
       err=r&&r.error;
     }catch(e){ err=e||new Error('upsert'); }
-    if(!err){ if(_sbPend[modulo]===dataObj) delete _sbPend[modulo]; return true; }  // ok (si no llegó algo más nuevo)
+    if(!err){ if(_sbPend[modulo]===dataObj){ delete _sbPend[modulo]; _sbPendSave(); } return true; }  // ok (si no llegó algo más nuevo)
     await new Promise(res=>setTimeout(res, 500*(intento+1)));                        // backoff 0.5s,1s,1.5s
   }
   console.warn('[sync] no se pudo subir "'+modulo+'" (queda pendiente, se reintentará)');
@@ -5874,6 +5882,7 @@ async function _sbSubirModulo(modulo){
 async function sbSyncModulo(modulo, dataObj){
   if(!SB_ONLINE) return;                 // sin nube: el dato ya quedó en localStorage
   _sbPend[modulo]=dataObj;               // recordar SIEMPRE el último estado a subir
+  _sbPendSave();                         // persistir: la cola sobrevive si cierran la app sin señal
   if(!CLOUD_SYNC_READY) return;          // aún no cargó la nube: se subirá en el primer flush
   await _sbSubirModulo(modulo);
 }
@@ -5891,6 +5900,10 @@ try{
 }catch(e){}
 async function sbLoadModulo(modulo){
   if(!SB_ONLINE) return null;
+  // Si este módulo tiene un cambio LOCAL pendiente de subir (capturado sin señal), lo local es
+  // más nuevo que la nube: no devolver la copia de la nube para que "la nube manda" no pise el
+  // dato offline. El pendiente se subirá en el flush y la nube quedará al día.
+  if(modulo in _sbPend) return null;
   try{
     const { data } = await sb.from('app_modulos').select('data').eq('modulo', modulo).single();
     return data ? data.data : null;
@@ -5905,6 +5918,8 @@ let _rtChannel=null, _rtLastNotif=0, _rtRerenderT=null;
 
 // Aplica al estado local un módulo que cambió en la nube (SIN re-subir → evita bucles).
 function _rtAplicarModulo(modulo, data){
+  // Cambio local pendiente de subir → lo local es más nuevo: ignorar el eco de la nube.
+  if(typeof _sbPend!=='undefined' && (modulo in _sbPend)) return;
   const setLS=(k,v)=>{ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} };
   const M=(typeof mergeSnapById==='function')?mergeSnapById:((a,b)=>b||a||[]);
   switch(modulo){
@@ -19280,6 +19295,53 @@ function _syncFullscreenBtn(){
 document.addEventListener('fullscreenchange',_syncFullscreenBtn);
 document.addEventListener('webkitfullscreenchange',_syncFullscreenBtn);
 
+// ═══════════ MODO OFFLINE — Service Worker + indicador de conexión ═══════════
+// El SW cachea la app para que abra SIN señal (interior mina). Los datos capturados
+// offline quedan en localStorage + cola _sbPend persistida, y suben al recuperar señal.
+(function(){
+  if(!('serviceWorker' in navigator)) return;
+  if(location.protocol==='file:') return;   // en pruebas locales no aplica
+  navigator.serviceWorker.register('sw.js').then(reg=>{
+    // Aviso de versión nueva: cuando hay un SW en espera, ofrecer actualizar con un toque.
+    function avisarNueva(){
+      if(document.getElementById('sw-update-bar')) return;
+      const bar=document.createElement('div');
+      bar.id='sw-update-bar';
+      bar.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:10000;background:#1a1f2e;border:1px solid #8b5cf6;border-radius:12px;padding:10px 16px;display:flex;gap:12px;align-items:center;box-shadow:0 8px 28px rgba(0,0,0,0.5);font-size:13px;color:#ece7da';
+      bar.innerHTML='✨ Hay una versión nueva de MukiCloud <button style="background:#8b5cf6;color:#fff;border:none;border-radius:8px;padding:7px 16px;font-weight:800;cursor:pointer;font-size:12px" onclick="location.reload()">Actualizar</button>';
+      document.body.appendChild(bar);
+    }
+    if(reg.waiting) avisarNueva();
+    reg.addEventListener('updatefound',()=>{
+      const nuevo=reg.installing;
+      if(nuevo) nuevo.addEventListener('statechange',()=>{ if(nuevo.state==='installed'&&navigator.serviceWorker.controller) avisarNueva(); });
+    });
+  }).catch(()=>{});
+})();
+
+// Chip de estado de conexión: visible solo cuando NO hay señal o hay datos pendientes de subir.
+function actualizarChipConexion(){
+  let chip=document.getElementById('conexion-chip');
+  const pend=(typeof _sbPend!=='undefined')?Object.keys(_sbPend).length:0;
+  const off=!navigator.onLine;
+  if(!off && !pend){ if(chip) chip.remove(); return; }
+  if(!chip){
+    chip=document.createElement('div');
+    chip.id='conexion-chip';
+    chip.style.cssText='position:fixed;left:12px;bottom:12px;z-index:9996;border-radius:999px;padding:6px 14px;font-size:11px;font-weight:800;display:flex;gap:6px;align-items:center;box-shadow:0 4px 16px rgba(0,0,0,0.4);pointer-events:none';
+    document.body.appendChild(chip);
+  }
+  if(off){
+    chip.style.background='rgba(220,38,38,0.92)'; chip.style.color='#fff';
+    chip.textContent='📴 Sin conexión — trabajando offline'+(pend?' · '+pend+' por subir':'');
+  }else{
+    chip.style.background='rgba(245,158,11,0.92)'; chip.style.color='#1c1a14';
+    chip.textContent='📤 Subiendo '+pend+' cambio'+(pend!==1?'s':'')+' pendiente'+(pend!==1?'s':'')+'…';
+  }
+}
+window.addEventListener('online',()=>{ actualizarChipConexion(); try{ showNotif('✓ Conexión recuperada — sincronizando'); }catch(e){} });
+window.addEventListener('offline',()=>{ actualizarChipConexion(); try{ showNotif('📴 Sin señal: tus registros se guardan y subirán solos','warn'); }catch(e){} });
+try{ actualizarChipConexion(); }catch(e){}
 </script>
 
 </body>
