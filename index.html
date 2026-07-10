@@ -7819,15 +7819,19 @@ function aplicarAperturaExplosivos(){
 // EN ADELANTE cada egreso (campo E) que reporte el Compresorista SUMA, y cada salida registrada por
 // Logística RESTA. Los egresos de reportes ANTERIORES a la apertura NO se cuentan (ya están dentro
 // de este saldo). Mecha (NEITHER) va en METROS. Para volver a resetear el saldo, sube REM_APERTURA_V.
-const REM_APERTURA_V=1;
-const REM_APERTURA_STOCK={ M1000:2376, M3000:981, M5000:392, NEITHER:1140, CARMEX18:328, CARMEX240:1 };
+// Conteo físico 2026-07-10: EMULNOR 1000 = 9 cajas (9×264=2376) · EMULNOR 3000 = 2 cajas + 19 und
+// (2×228+19=475) · EMULNOR 5000 = 43 und · CARMEX 1.8 = 441 und · CARMEX 2.40 = 69 und ·
+// MECHA RÁPIDA = 60 m. Desde esta fecha los egresos del compresorista vuelven a sumar desde cero.
+const REM_APERTURA_V=2;
+const REM_APERTURA_FECHA='2026-07-10';
+const REM_APERTURA_STOCK={ M1000:2376, M3000:475, M5000:43, CARMEX18:441, CARMEX240:69, NEITHER:60 };
 function aplicarAperturaRemanente(){
   try{
     state.almacen=state.almacen||{};
     if((state.almacen.remAperturaV||0)>=REM_APERTURA_V) return false; // ya aplicada
     state.almacen.remApertura={...REM_APERTURA_STOCK};
     state.almacen.remAperturaTs=(typeof Date!=='undefined')?Date.now():0; // corte: solo egresos posteriores suman
-    state.almacen.remAperturaFecha=(typeof hoy==='function')?hoy():'';
+    state.almacen.remAperturaFecha=(typeof REM_APERTURA_FECHA!=='undefined')?REM_APERTURA_FECHA:((typeof hoy==='function')?hoy():'');
     state.almacen.remAperturaV=REM_APERTURA_V;
     try{ localStorage.setItem(ALM_KEY, JSON.stringify(state.almacen)); }catch(e){}
     try{ if(typeof sbSyncModulo==='function') sbSyncModulo('almacen', (typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
@@ -7869,12 +7873,18 @@ function remEgresosPrevios(dias){
   return out;
 }
 // Stock remanente actual por explosivo = apertura + egresos contables − salidas registradas.
+// Las salidas ANTERIORES a la fecha de apertura no restan: ya están dentro del conteo físico
+// (mismo criterio que los egresos del compresorista).
 function remStockActual(){
   const map={}; (typeof EXPLO_CATALOGO!=='undefined'?EXPLO_CATALOGO:[]).forEach(c=>{ map[c.id]=0; });
   const ap=(state.almacen&&state.almacen.remApertura)||{};
+  const apFecha=(state.almacen&&state.almacen.remAperturaFecha)||'';
   Object.entries(ap).forEach(([id,q])=>{ map[id]=(map[id]||0)+(Number(q)||0); });
   remEgresosContables().forEach(e=>{ map[e.codigo]=(map[e.codigo]||0)+(Number(e.cant)||0); });
-  (state.remanenteSalidas||[]).forEach(s=>{ map[s.producto]=(map[s.producto]||0)-(Number(s.cantidad)||0); });
+  (state.remanenteSalidas||[]).forEach(s=>{
+    if(apFecha && String(s.fecha||'') < apFecha) return; // anterior a la apertura → ya en el saldo
+    map[s.producto]=(map[s.producto]||0)-(Number(s.cantidad)||0);
+  });
   return map;
 }
 // Destinos posibles de una salida de remanente (solo control). "Otro" habilita texto libre.
