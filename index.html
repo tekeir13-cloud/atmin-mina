@@ -2694,14 +2694,20 @@ select option{background:var(--coal3);}
       <div class="section-title" style="margin-top:0">Configurar Tareo</div>
       <div class="form-grid">
         <div class="form-group"><label>Fecha <span style="color:var(--text3);font-size:10px">(selecciona fechas actuales o anteriores)</span></label><input type="date" id="tareo-fecha"></div>
-        <div class="form-group"><label>Turno</label><select id="tareo-turno"><option value="DIA">DÍA</option><option value="NOCHE">NOCHE</option></select></div>
+        <div class="form-group"><label>Turno</label><select id="tareo-turno" onchange="tareoTurnoCambia()"><option value="DIA">DÍA</option><option value="NOCHE">NOCHE</option></select></div>
         <div class="form-group"><label>Nivel</label><input type="text" id="tareo-nivel" value="Nv 2820"></div>
         <div class="form-group"><label>Jefe de Turno</label><select id="tareo-jefe"><option value="">— Seleccionar —</option></select></div>
       </div>
       <div style="margin-top:14px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
           <label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px">Seleccionar Personal y Labor</label>
-          <div style="display:flex;gap:6px">
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <select id="tareo-gfiltro" onchange="tareoFiltraGuardia()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:11px">
+              <option value="">👥 Todas las guardias</option>
+              <option value="dia">🌞 Guardia Día</option>
+              <option value="noche">🌙 Guardia Noche</option>
+              <option value="libre">🏖️ Días Libres</option>
+            </select>
             <button class="btn btn-outline" style="padding:4px 10px;font-size:11px" onclick="marcarTodoTareo(true)">Todos</button>
             <button class="btn btn-outline" style="padding:4px 10px;font-size:11px" onclick="marcarTodoTareo(false)">Ninguno</button>
           </div>
@@ -7819,12 +7825,13 @@ function aplicarAperturaExplosivos(){
 // EN ADELANTE cada egreso (campo E) que reporte el Compresorista SUMA, y cada salida registrada por
 // Logística RESTA. Los egresos de reportes ANTERIORES a la apertura NO se cuentan (ya están dentro
 // de este saldo). Mecha (NEITHER) va en METROS. Para volver a resetear el saldo, sube REM_APERTURA_V.
-// Conteo físico 2026-07-10: EMULNOR 1000 = 9 cajas (9×264=2376) · EMULNOR 3000 = 2 cajas + 19 und
-// (2×228+19=475) · EMULNOR 5000 = 43 und · CARMEX 1.8 = 441 und · CARMEX 2.40 = 69 und ·
-// MECHA RÁPIDA = 60 m. Desde esta fecha los egresos del compresorista vuelven a sumar desde cero.
-const REM_APERTURA_V=2;
+// Conteo físico 2026-07-10 (corregido): EMULNOR 1000 = 9 cajas (9×264=2376) · EMULNOR 3000 =
+// 2 cajas + 19 und (2×228+19=475) · EMULNOR 5000 = 1 caja + 43 und (216+43=259) ·
+// CARMEX 1.8 = 56 und · CARMEX 2.40 = 6 und · MECHA RÁPIDA = 1200 m.
+// Desde esta fecha los egresos del compresorista vuelven a sumar desde cero.
+const REM_APERTURA_V=3;
 const REM_APERTURA_FECHA='2026-07-10';
-const REM_APERTURA_STOCK={ M1000:2376, M3000:475, M5000:43, CARMEX18:441, CARMEX240:69, NEITHER:60 };
+const REM_APERTURA_STOCK={ M1000:2376, M3000:475, M5000:259, CARMEX18:56, CARMEX240:6, NEITHER:1200 };
 function aplicarAperturaRemanente(){
   try{
     state.almacen=state.almacen||{};
@@ -9350,16 +9357,18 @@ function abrirSetupTareo(){
   }
   const hint=document.getElementById('tareo-dist-hint');
   if(hint)hint.style.display=hayDist?'block':'none';
+  const GUARDIA_ICO={dia:'🌞 Día',noche:'🌙 Noche',libre:'🏖️ Libre'};
   list.innerHTML=activos.map(p=>{
     const asignado=Object.prototype.hasOwnProperty.call(dist,p.id);
     const labor=asignado?dist[p.id]:(p.frente||1);
+    const g=p.guardia||'';
     // Si hay distribución activa, solo se pre-marcan los asignados; si no hay, ninguno
     const marcado=asignado;
-    return `<div class="tareo-sel-row" data-pid="${p.id}" style="display:flex;align-items:center;gap:10px;background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px">
+    return `<div class="tareo-sel-row" data-pid="${p.id}" data-guardia="${g}" style="display:flex;align-items:center;gap:10px;background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px">
       <input type="checkbox" class="tareo-chk" data-pid="${p.id}" ${marcado?'checked':''} style="width:18px;height:18px;accent-color:var(--gold);cursor:pointer">
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.nombre}${asignado?' <span style="font-size:9px;color:var(--gold)">● asignado</span>':''}</div>
-        <div style="font-size:10px;color:var(--text3)">${p.rol} · S/${p.jornal}/día</div>
+        <div style="font-size:10px;color:var(--text3)">${p.rol} · S/${p.jornal}/día${g?' · '+GUARDIA_ICO[g]:''}</div>
       </div>
       <select class="tareo-labor" data-pid="${p.id}" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
         ${FRENTES.map(f=>`<option value="${f.id}" ${String(labor)===String(f.id)?'selected':''}>${f.emoji} ${f.nombre}</option>`).join('')}
@@ -9367,10 +9376,33 @@ function abrirSetupTareo(){
       </select>
     </div>`;
   }).join('');
+  // Filtro inicial según el turno elegido (DIA→Guardia Día, NOCHE→Guardia Noche)
+  tareoTurnoCambia();
+}
+
+// El turno de la hoja controla el filtro: al elegir DÍA se muestra la gente de guardia día, etc.
+function tareoTurnoCambia(){
+  const t=document.getElementById('tareo-turno')?.value||'';
+  const f=document.getElementById('tareo-gfiltro');
+  if(f) f.value=(t==='DIA')?'dia':(t==='NOCHE')?'noche':'';
+  tareoFiltraGuardia();
+}
+// Muestra solo las filas de la guardia elegida. Los trabajadores SIN guardia asignada
+// se muestran siempre (para no ocultar personal hasta que el Ing. Residente los clasifique).
+function tareoFiltraGuardia(){
+  const g=document.getElementById('tareo-gfiltro')?.value||'';
+  document.querySelectorAll('.tareo-sel-row').forEach(r=>{
+    const pg=r.dataset.guardia||'';
+    r.style.display=(!g||!pg||pg===g)?'flex':'none';
+  });
 }
 
 function marcarTodoTareo(val){
-  document.querySelectorAll('.tareo-chk').forEach(c=>c.checked=val);
+  // Solo afecta a las filas visibles (respeta el filtro de guardia)
+  document.querySelectorAll('.tareo-sel-row').forEach(r=>{
+    if(r.style.display==='none')return;
+    const c=r.querySelector('.tareo-chk'); if(c)c.checked=val;
+  });
 }
 
 function cancelarSetupTareo(){
@@ -9388,11 +9420,14 @@ function cargarHojaTareo(){
   const jefe  = document.getElementById('tareo-jefe')?.value  || '—';
   // Recolectar personal seleccionado con su labor
   const seleccionados=[];
-  document.querySelectorAll('.tareo-chk').forEach(chk=>{
-    if(chk.checked){
+  document.querySelectorAll('.tareo-sel-row').forEach(r=>{
+    if(r.style.display==='none')return; // oculto por el filtro de guardia → no entra a la hoja
+    const chk=r.querySelector('.tareo-chk');
+    if(chk&&chk.checked){
       const pid=chk.dataset.pid;
       const laborSel=document.querySelector(`.tareo-labor[data-pid="${pid}"]`);
-      seleccionados.push({pid, frente:parseInt(laborSel?.value||'1',10)});
+      const val=laborSel?.value||'1';
+      seleccionados.push({pid, frente:isNaN(val)?val:parseInt(val,10)});
     }
   });
   if(!seleccionados.length){ showNotif('Selecciona al menos un trabajador','error'); return; }
@@ -11722,7 +11757,8 @@ function abrirModalDistribucion(){
   list.innerHTML=activos.map(p=>{
     const asignado=Object.prototype.hasOwnProperty.call(state.distribucion,p.id);
     const frente=asignado?state.distribucion[p.id]:(p.frente||1);
-    return `<div class="dist-row" data-pid="${p.id}" style="display:flex;align-items:center;gap:10px;background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:6px">
+    const guardia=p.guardia||'dia';
+    return `<div class="dist-row" data-pid="${p.id}" style="display:flex;align-items:center;gap:10px;background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:6px;flex-wrap:wrap">
       <input type="checkbox" class="dist-chk" data-pid="${p.id}" ${asignado?'checked':''} style="width:18px;height:18px;accent-color:var(--gold);cursor:pointer">
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.nombre}</div>
@@ -11732,6 +11768,11 @@ function abrirModalDistribucion(){
         ${FRENTES.map(f=>`<option value="${f.id}" ${frente==f.id||String(frente)===String(f.id)?'selected':''}>${f.emoji} ${f.nombre}</option>`).join('')}
         <option value="MARGINAL" ${frente==='MARGINAL'?'selected':''}>📊 Costeo Marginal</option>
       </select>
+      <select class="dist-guardia" data-pid="${p.id}" title="Guardia" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
+        <option value="dia" ${guardia==='dia'?'selected':''}>🌞 Día</option>
+        <option value="noche" ${guardia==='noche'?'selected':''}>🌙 Noche</option>
+        <option value="libre" ${guardia==='libre'?'selected':''}>🏖️ Días Libres</option>
+      </select>
     </div>`;
   }).join('');
   abrirModal('modal-distribucion');
@@ -11740,22 +11781,26 @@ function distMarcarTodos(val){document.querySelectorAll('.dist-chk').forEach(c=>
 function guardarDistribucion(){
   const nueva={};
   document.querySelectorAll('.dist-chk').forEach(chk=>{
+    const pid=chk.dataset.pid;
+    const p=state.personal.find(x=>String(x.id)===String(pid));
+    // La guardia es un atributo del trabajador: se guarda esté o no asignado a un frente
+    const gsel=document.querySelector(`.dist-guardia[data-pid="${pid}"]`);
+    if(p&&gsel)p.guardia=gsel.value||'dia';
     if(chk.checked){
-      const pid=chk.dataset.pid;
       const fsel=document.querySelector(`.dist-frente[data-pid="${pid}"]`);
       const val=fsel?.value||'1';
       const frente=isNaN(val)?val:parseInt(val,10);
       nueva[pid]=frente;
       // Sincronizar frente del trabajador
-      const p=state.personal.find(x=>String(x.id)===String(pid));
       if(p)p.frente=frente;
     }
   });
   state.distribucion=nueva;
   distribSave();
+  try{ if(typeof personalSave==='function')personalSave(); }catch(e){}
   cerrarModal('modal-distribucion');
   if(typeof renderDistribucion==='function'){try{renderDistribucion();}catch(e){}}
-  showNotif('✓ Distribución guardada — aplicada al tareo diario');
+  showNotif('✓ Distribución guardada — frentes y guardias aplicados al tareo diario');
 }
 
 // ── REPORTES DE REUNIÓN DIARIA ──
