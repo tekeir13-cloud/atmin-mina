@@ -7220,7 +7220,7 @@ function renderStockVigente(){
     const almBadge=r.almacen==='Mantenimiento'?'<span style="font-size:9px;background:rgba(201,168,76,0.2);color:#d4b75e;border-radius:4px;padding:1px 5px;margin-left:4px">MANT</span>':'<span style="font-size:9px;background:rgba(96,165,250,0.2);color:#60a5fa;border-radius:4px;padding:1px 5px;margin-left:4px">GEN</span>';
     return `<div style="margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px">
-        <div style="font-size:12px;font-weight:600;color:var(--text1)">${r.producto||r.descripcion.slice(0,35)}${almBadge}</div>
+        <div style="font-size:12px;font-weight:600;color:var(--text1)">${r.producto||r.descripcion.slice(0,35)}${almBadge}${r.codigo?`<span style="font-size:10px;color:var(--text3);font-weight:400;margin-left:6px">(${r.codigo})</span>`:''}</div>
         <div style="font-size:12px;font-family:'DM Mono',monospace;color:${color};font-weight:700;white-space:nowrap;margin-left:8px">${fmt3(r.stock)} ${r.unidad}</div>
       </div>
       <div style="background:var(--coal4);border-radius:4px;height:8px;overflow:hidden">
@@ -7370,7 +7370,7 @@ function poblarProductosSalida(){
   const alm=document.getElementById('sa-almacen').value;
   const stock=calcStock().filter(r=>r.almacen===alm&&r.stock>0).sort((a,b)=>(a.producto||a.descripcion).localeCompare(b.producto||b.descripcion));
   const sel=document.getElementById('sa-producto');
-  sel.innerHTML='<option value="">— Seleccionar —</option>'+stock.map(r=>`<option value="${escAttr(r.key)}">${r.producto?r.producto+' — ':''}${r.descripcion} (stock: ${fmt3(r.stock)} ${r.unidad})</option>`).join('');
+  sel.innerHTML='<option value="">— Seleccionar —</option>'+stock.map(r=>`<option value="${escAttr(r.key)}">${r.producto?r.producto+' — ':''}${r.descripcion}${r.codigo?' ('+r.codigo+')':''} (stock: ${fmt3(r.stock)} ${r.unidad})</option>`).join('');
   document.getElementById('sa-unidad').value='';
   document.getElementById('sa-precio').value='';document.getElementById('sa-stock-disp').textContent='—';
   if(!stock.length) sel.innerHTML='<option value="">Sin productos con stock en este almacén</option>';
@@ -9352,8 +9352,8 @@ function abrirSetupTareo(){
         <div style="font-size:10px;color:var(--text3)">${p.rol} · S/${p.jornal}/día</div>
       </div>
       <select class="tareo-labor" data-pid="${p.id}" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
-        <option value="1" ${labor==1?'selected':''}>RA Brenda</option>
-        <option value="2" ${labor==2?'selected':''}>CRNE</option>
+        ${FRENTES.map(f=>`<option value="${f.id}" ${String(labor)===String(f.id)?'selected':''}>${f.emoji} ${f.nombre}</option>`).join('')}
+        <option value="MARGINAL" ${labor==='MARGINAL'?'selected':''}>📊 Costeo Marginal</option>
       </select>
     </div>`;
   }).join('');
@@ -9404,7 +9404,8 @@ function cargarHojaTareo(){
     const val = t?String(t.mult):'';
     const obs = t?(t.obs||''):'';
     const bg  = idx%2===0?'#ffffff':'#f5f5f5';
-    const labor = sel.frente===2?'Cortada':'Rampa';
+    const frenteObj=frenteGet(sel.frente);
+    const labor = sel.frente==='MARGINAL'?'📊 Costeo Marginal':(frenteObj?`${frenteObj.emoji} ${frenteObj.nombre}`:'Frente '+sel.frente);
     const mkBtn=(v,lbl)=>{const s=val===v;return `<button onclick="selTareoBtn(this)" data-pid="${p.id}" data-val="${v}" style="padding:4px 9px;border-radius:4px;border:2px solid ${s?'#1a2744':'#bbb'};cursor:pointer;font-weight:700;font-size:11px;background:${s?'#1a2744':'#fff'};color:${s?'#fff':'#444'};touch-action:manipulation">${lbl}</button>`;};
     return `<tr data-pid="${p.id}" data-frente="${sel.frente}" class="tareo-row" style="background:${bg}">
       <td style="padding:7px 10px;border:1px solid #ddd;text-align:center;font-size:11px;font-weight:700;color:#000;white-space:nowrap">${turno}</td>
@@ -9997,7 +9998,7 @@ async function eliminarPersonal(id){
 //  · 2 días TRABAJADOS = 1 día libre GANADO (las tareas extra NO ganan días libres, solo los días).
 //  · Un día puede valer 1 / 1.5 / 2 TAREAS (se pagan como tal), pero sigue siendo 1 día trabajado.
 //  · Días libres COMPRADOS = ganados − tomados (DL). Pago = (tareas + tomados + comprados) × jornal.
-const TAREO_CICLO=['','1','1.5','2','DL','F'];
+const TAREO_CICLO=['','1','1.25','1.5','1.75','2','2.5','3','DL'];
 function tareoMesSel(){ const s=document.getElementById('tareomes-sel'); return (s&&s.value)||hoy().slice(0,7); }
 function _tareoCell(tid,fecha){
   const t=(state.tareas||[]).find(t=>String(t.trabajadorId)===String(tid)&&t.fecha===fecha);
@@ -10006,7 +10007,10 @@ function _tareoCell(tid,fecha){
   if(t.tipo==='falta') return 'F';
   const m=Number(t.mult||1); return m===1.5?'1.5':(m===2?'2':'1');
 }
-function _tareoColVal(v){ return v==='1'?'#16a34a': v==='1.5'?'#d97706': v==='2'?'#dc2626': v==='DL'?'#2563eb': v==='F'?'#4b5563':'transparent'; }
+function _tareoColVal(v){
+  const colorMap={'1':'#16a34a','1.25':'#84cc16','1.5':'#d97706','1.75':'#f59e0b','2':'#dc2626','2.5':'#ec4899','3':'#8b5cf6','DL':'#2563eb'};
+  return colorMap[v]||'transparent';
+}
 function _tareoPintaCelda(td,v){ if(!td)return; td.textContent=v; td.style.background=_tareoColVal(v); td.style.color=(v===''?'#39415a':'#fff'); }
 // Actualiza SOLO las celdas de resumen de una fila (sin redibujar la grilla → el scroll no salta).
 function _tareoActualizaResumen(tid,mes){
@@ -10015,25 +10019,123 @@ function _tareoActualizaResumen(tid,mes){
   set('trab', r.diasTrab); set('tareas', r.tareas); set('gan', r.ganados);
   set('tom', r.dlTomados||'—'); set('compr', r.comprados); set('pago', fmtS(pago));
 }
-function tareoGridSet(tid,fecha){
-  const cur=_tareoCell(tid,fecha);
-  const next=TAREO_CICLO[(TAREO_CICLO.indexOf(cur)+1)%TAREO_CICLO.length];
+function tareoGridSet(tid,fecha,val){
+  const cont=document.getElementById('rrhh-tareomes');
+  if(!cont || cont.dataset.editing!=='true') return;
   state.tareas=(state.tareas||[]).filter(t=>!(String(t.trabajadorId)===String(tid)&&t.fecha===fecha));
   const p=(state.personal||[]).find(x=>String(x.id)===String(tid));
-  if(next!==''){
+  if(val!==''){
     const base={fecha,trabajadorId:tid,id:'T'+Date.now()+Math.random().toString(36).slice(2),_ts:Date.now(),jornal:p?p.jornal:0};
-    if(next==='DL') state.tareas.push({...base,tipo:'libre',mult:0,tarea:'Día libre'});
-    else if(next==='F') state.tareas.push({...base,tipo:'falta',mult:0,tarea:'Falta'});
-    else state.tareas.push({...base,tipo:'trabajo',mult:parseFloat(next),tarea:'Tareo diario',frente:p?p.frente:1});
+    if(val==='DL') state.tareas.push({...base,tipo:'libre',mult:0,tarea:'Día libre'});
+    else if(val==='F') state.tareas.push({...base,tipo:'falta',mult:0,tarea:'Falta',paga:false});
+    else state.tareas.push({...base,tipo:'trabajo',mult:parseFloat(val),tarea:'Tareo diario',frente:p?p.frente:1});
   }
-  try{ guardarEstado(); }catch(e){}
-  try{ tareasSave(); }catch(e){}
-  // Actualización PUNTUAL: solo la celda tocada + el resumen de su fila (no re-render → sin salto).
   try{
     const td=document.querySelector('[data-tc="'+tid+'|'+fecha+'"]');
     _tareoPintaCelda(td, _tareoCell(tid,fecha));
     _tareoActualizaResumen(tid, (fecha||'').slice(0,7));
   }catch(e){ renderTareoMensual(); }
+}
+
+function tareoGridShowModal(tid,fecha){
+  const cont=document.getElementById('rrhh-tareomes');
+  if(!cont || cont.dataset.editing!=='true') return;
+  const cur=_tareoCell(tid,fecha);
+  const p=state.personal.find(x=>String(x.id)===String(tid));
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9997;display:flex;align-items:center;justify-content:center';
+  overlay.onclick=(e)=>{if(e.target===overlay)overlay.remove();};
+  const opciones=['1','1.25','1.5','1.75','2','2.5','3','DL','F',''];
+  const etiquetas=['×1','×1.25','×1.5','×1.75','×2','×2.5','×3','Día Libre','Falta','Vacío'];
+  overlay.innerHTML=`
+    <div style="background:var(--coal2);border-radius:12px;padding:20px;border:1px solid var(--border);max-width:320px;box-shadow:0 8px 32px rgba(0,0,0,0.6)">
+      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">${p?.nombre||'Trabajador'}</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:14px">${fecha}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+        ${opciones.map((o,i)=>`
+          <button onclick="tareoGridSet('${tid}','${fecha}','${o}');document.querySelector('[style*=position]').parentElement.remove()"
+            style="padding:8px;border-radius:6px;border:1px solid ${cur===o?'var(--gold)':'var(--border)'};background:${cur===o?'rgba(201,168,76,0.2)':'var(--coal3)'};color:var(--text);font-size:11px;font-weight:600;cursor:pointer;transition:all .2s">
+            ${etiquetas[i]}
+          </button>
+        `).join('')}
+      </div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:10px;color:var(--text3)">
+        <div>• <b>1-3</b> = tareas ese día</div>
+        <div>• <b>DL</b> = día libre</div>
+        <div>• <b>F</b> = falta (no paga)</div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+let _tareoGridDragData={start:null,celdas:[]};
+function tareoGridDragStart(e){
+  const cont=document.getElementById('rrhh-tareomes');
+  if(!cont || cont.dataset.editing!=='true') {e.preventDefault();return;}
+  const td=e.target;
+  const v=td.textContent;
+  if(v!=='DL') {e.preventDefault();return;}
+  _tareoGridDragData.start=td;
+  _tareoGridDragData.celdas=[td];
+  e.dataTransfer.effectAllowed='copy';
+  td.style.opacity='0.5';
+}
+function tareoGridDragOver(e){
+  const cont=document.getElementById('rrhh-tareomes');
+  if(!cont || cont.dataset.editing!=='true') return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect='copy';
+  if(_tareoGridDragData.start && e.target.dataset.tc){
+    if(!_tareoGridDragData.celdas.includes(e.target)){
+      _tareoGridDragData.celdas.push(e.target);
+      e.target.style.opacity='0.7';
+      e.target.style.border='2px dashed #2563eb';
+    }
+  }
+}
+function tareoGridDragLeave(e){
+  const cont=document.getElementById('rrhh-tareomes');
+  if(!cont || cont.dataset.editing!=='true') return;
+  e.target.style.opacity='';
+  e.target.style.border='';
+}
+function tareoGridDrop(e,pid,fecha){
+  const cont=document.getElementById('rrhh-tareomes');
+  if(!cont || cont.dataset.editing!=='true') return;
+  e.preventDefault();
+  if(!_tareoGridDragData.start || _tareoGridDragData.start.textContent!=='DL') return;
+  const v=_tareoGridDragData.start.textContent;
+  _tareoGridDragData.celdas.forEach(td=>{
+    const [tpid,tfecha]=td.dataset.tc.split('|');
+    if(tpid && tfecha) tareoGridSet(tpid, tfecha);
+    td.style.opacity='';
+    td.style.border='';
+  });
+  _tareoGridDragData={start:null,celdas:[]};
+  showNotif('✓ Días libres aplicados');
+}
+
+function tareoMensualGuardar(mes){
+  try{ guardarEstado(); }catch(e){}
+  try{ tareasSave(); }catch(e){}
+  showNotif('✓ Tareo mensual guardado correctamente');
+  document.getElementById('rrhh-tareomes').dataset.editing='false';
+  renderTareoMensual();
+  // Mostrar opción de generar planilla
+  setTimeout(()=>{
+    const overlay=document.createElement('div');
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9998;display:flex;align-items:center;justify-content:center;padding:16px';
+    overlay.innerHTML=`
+      <div style="background:var(--coal2);border-radius:16px;width:min(420px,96vw);padding:24px;border:1px solid var(--border);text-align:center">
+        <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:12px">Tareo guardado ✓</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:20px">¿Deseas generar la planilla de operarios ahora?</div>
+        <div style="display:flex;gap:10px;justify-content:center">
+          <button onclick="this.closest('[style*=position]').remove()" class="btn btn-outline">Más tarde</button>
+          <button onclick="this.closest('[style*=position]').remove();modTab('rrhh','costorrhh',this)" class="btn btn-gold">📋 Ir a Costo RRHH</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+  },300);
 }
 function tareoResumen(tid,mes){
   const ents=(state.tareas||[]).filter(t=>String(t.trabajadorId)===String(tid)&&(t.fecha||'').slice(0,7)===mes);
@@ -10068,7 +10170,7 @@ function renderTareoMensual(){
     for(let d=1;d<=nDias;d++){
       const fecha=`${mes}-${String(d).padStart(2,'0')}`;
       const v=_tareoCell(p.id,fecha);
-      cells+=`<td data-tc="${p.id}|${fecha}" onclick="tareoGridSet('${p.id}','${fecha}')" title="${fecha}" style="cursor:pointer;text-align:center;font-size:10px;font-weight:800;padding:5px 0;background:${_tareoColVal(v)};color:${v===''?'#39415a':'#fff'};border:1px solid var(--border);-webkit-tap-highlight-color:transparent">${v}</td>`;
+      cells+=`<td data-tc="${p.id}|${fecha}" data-pid="${p.id}" data-fecha="${fecha}" onclick="${isEditing?`tareoGridShowModal('${p.id}','${fecha}')`:''}" draggable="${isEditing}" ondragstart="tareoGridDragStart(event)" ondragover="tareoGridDragOver(event)" ondrop="tareoGridDrop(event,'${p.id}','${fecha}')" ondragleave="tareoGridDragLeave(event)" title="${fecha}" style="${isEditing?'cursor:cell;':'cursor:default;pointer-events:none;opacity:0.7;'}text-align:center;font-size:10px;font-weight:800;padding:5px 0;background:${_tareoColVal(v)};color:${v===''?'#39415a':'#fff'};border:1px solid var(--border);-webkit-tap-highlight-color:transparent;user-select:none">${v}</td>`;
     }
     const r=tareoResumen(p.id,mes), pago=tareoPago(p.id,mes);
     const stick=i%2?'#141821':'#0f131b';
@@ -10083,16 +10185,25 @@ function renderTareoMensual(){
       <td data-ts="pago|${p.id}" style="text-align:right;font-family:'DM Mono',monospace;font-weight:800;color:var(--gold-light);padding-right:8px">${fmtS(pago)}</td>
     </tr>`;
   }).join('');
+  const isEditing=cont.dataset.editing==='true';
   cont.innerHTML=`
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">
       <div class="section-title" style="margin:0">🗓 Tareo Mensual — ${nombreMes} ${y}</div>
       <select id="tareomes-sel" onchange="renderTareoMensual()" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:13px;font-weight:600">
         ${meses.map(m=>`<option value="${m}"${m===mes?' selected':''}>${m}</option>`).join('')}
       </select>
+      <div style="display:flex;gap:8px;margin-left:auto">
+        ${isEditing?`
+          <button class="btn btn-outline" onclick="document.getElementById('rrhh-tareomes').dataset.editing='false';renderTareoMensual()">Cancelar</button>
+          <button class="btn btn-gold" onclick="tareoMensualGuardar('${mes}')">💾 Guardar</button>
+        `:`
+          <button class="btn btn-gold" onclick="document.getElementById('rrhh-tareomes').dataset.editing='true';renderTareoMensual()">✏️ Editar</button>
+        `}
+      </div>
     </div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6">Toca una celda para cambiar: vacío → <b style="color:#16a34a">1</b> → <b style="color:#d97706">1.5</b> → <b style="color:#dc2626">2</b> → <b style="color:#2563eb">DL</b> (día libre) → <b style="color:#4b5563">F</b> (falta) → vacío.<br><b>Trab</b>=días trabajados · <b>Tareas</b>=unidades de pago · <b>Gan</b>=libres ganados (trab÷2) · <b>Tom</b>=libres tomados (DL) · <b>Compr</b>=comprados (ganados−tomados). &nbsp;<b>Pago = (tareas + tomados + comprados) × jornal.</b></div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6">${isEditing?'<b style="color:var(--gold)">✏️ Modo edición activado</b> — Toca una celda para cambiar: vacío → <b style="color:#16a34a">1</b> → <b style="color:#84cc16">1.25</b> → <b style="color:#d97706">1.5</b> → <b style="color:#f59e0b">1.75</b> → <b style="color:#dc2626">2</b> → <b style="color:#ec4899">2.5</b> → <b style="color:#8b5cf6">3</b> → <b style="color:#2563eb">DL</b> (día libre) → vacío. Puedes <b>arrastrar una celda con DL</b> a otras para aplicar día libre rápidamente.<br>':'Lectura — haz clic en Editar para modificar.<br>'}<b>Trab</b>=días trabajados · <b>Tareas</b>=unidades de pago · <b>Gan</b>=libres ganados (trab÷2) · <b>Tom</b>=libres tomados (DL) · <b>Compr</b>=comprados (ganados−tomados). &nbsp;<b>Pago = (tareas + tomados + comprados) × jornal.</b></div>
     <div class="table-wrap" style="max-height:72vh;overflow:auto;border:1px solid var(--border);border-radius:10px">
-      <table style="border-collapse:collapse;font-size:11px;min-width:100%">
+      <table style="border-collapse:collapse;font-size:11px;min-width:100%;${isEditing?'':'pointer-events:none;opacity:0.8;'}">
         <thead><tr style="background:#1a2744;color:#fff;position:sticky;top:0;z-index:3">${head}</tr></thead>
         <tbody>${rows||'<tr><td style="padding:16px;color:var(--text3)">Sin trabajadores activos.</td></tr>'}</tbody>
       </table>
@@ -10221,6 +10332,7 @@ function renderPlanillaIntegrada(){
       <td style="padding:8px 12px;color:var(--text3);font-size:12px">${r.rol||'—'}</td>
       <td style="padding:8px 12px;text-align:right;font-family:'DM Mono',monospace;color:var(--gold-light)">${fmtS(r.monto)}</td>
     </tr>`).join(''):`<tr><td colspan="3" style="padding:16px;text-align:center;color:var(--text3)">Sin planilla de supervisión para este mes. Pulsa "Ingresar Planilla Supervisión".</td></tr>`;
+  const isEditingPI=el.dataset.editing==='true';
   el.innerHTML=`
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px">
       <select id="pi-mes-sel" onchange="document.getElementById('rrhh-planillaint').dataset.mes=this.value;renderPlanillaIntegrada()"
@@ -10228,8 +10340,13 @@ function renderPlanillaIntegrada(){
         ${meses.map(m=>`<option value="${m}" ${m===mesSel?'selected':''}>${m}</option>`).join('')}
       </select>
       <div style="flex:1"></div>
-      <button class="btn" style="padding:8px 16px;font-size:12px;background:rgba(139,92,246,0.18);color:#a78bfa;border:1px solid rgba(139,92,246,0.4)" onclick="abrirPlanillaSupervision()">➕ Ingresar Planilla Supervisión</button>
-      <button class="btn btn-gold" style="padding:8px 16px;font-size:12px" onclick="exportarPlanillaIntegradaExcel()">📊 Exportar Planilla Integrada</button>
+      ${isEditingPI?`
+        <button class="btn btn-outline" onclick="document.getElementById('rrhh-planillaint').dataset.editing='false';renderPlanillaIntegrada()" style="padding:8px 16px;font-size:12px">Cancelar</button>
+        <button class="btn btn-gold" style="padding:8px 16px;font-size:12px" onclick="planillaIntegradaGuardar('${mesSel}')">💾 Guardar</button>
+      `:`
+        <button class="btn" style="padding:8px 16px;font-size:12px;background:rgba(139,92,246,0.18);color:#a78bfa;border:1px solid rgba(139,92,246,0.4)" onclick="document.getElementById('rrhh-planillaint').dataset.editing='true';abrirPlanillaSupervision()">✏️ Editar Supervisión</button>
+        <button class="btn btn-gold" style="padding:8px 16px;font-size:12px" onclick="exportarPlanillaIntegradaExcel()">📊 Exportar Planilla</button>
+      `}
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:18px">
       <div style="flex:1;min-width:160px;background:var(--coal4);border:1px solid var(--border);border-radius:14px;padding:16px">
@@ -10310,6 +10427,13 @@ function guardarPlanillaSupervision(mes){
   renderPlanillaIntegrada();
   try{ if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
   showNotif('💾 Planilla de supervisión guardada para '+mes+' — costo operativo actualizado','ok');
+}
+
+function planillaIntegradaGuardar(mes){
+  document.getElementById('rrhh-planillaint').dataset.editing='false';
+  renderPlanillaIntegrada();
+  showNotif('✓ Planilla integrada guardada correctamente');
+  try{ if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
 }
 
 async function exportarPlanillaIntegradaExcel(){
@@ -11601,8 +11725,8 @@ function abrirModalDistribucion(){
         <div style="font-size:10px;color:var(--text3)">${p.rol} · S/${p.jornal}/día</div>
       </div>
       <select class="dist-frente" data-pid="${p.id}" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
-        <option value="1" ${frente==1?'selected':''}>🟦 RA Brenda</option>
-        <option value="2" ${frente==2?'selected':''}>🟩 CRNE</option>
+        ${FRENTES.map(f=>`<option value="${f.id}" ${frente==f.id||String(frente)===String(f.id)?'selected':''}>${f.emoji} ${f.nombre}</option>`).join('')}
+        <option value="MARGINAL" ${frente==='MARGINAL'?'selected':''}>📊 Costeo Marginal</option>
       </select>
     </div>`;
   }).join('');
@@ -11615,7 +11739,8 @@ function guardarDistribucion(){
     if(chk.checked){
       const pid=chk.dataset.pid;
       const fsel=document.querySelector(`.dist-frente[data-pid="${pid}"]`);
-      const frente=parseInt(fsel?.value||'1',10);
+      const val=fsel?.value||'1';
+      const frente=isNaN(val)?val:parseInt(val,10);
       nueva[pid]=frente;
       // Sincronizar frente del trabajador
       const p=state.personal.find(x=>String(x.id)===String(pid));
@@ -12474,9 +12599,18 @@ function rgGetMasas(frente){
   return masas;
 }
 function renderDistribucion(){
-  [1,2].forEach(f=>{
-    const ws=state.personal.filter(p=>p.frente===f&&p.estado==='activo');
-    document.getElementById(`dist-f${f}`).innerHTML=ws.length?ws.map(p=>`<div class="planilla-row"><div class="planilla-nombre">${p.nombre}</div><div class="planilla-rol">${p.rol}</div><div class="planilla-costo">${fmtS(p.jornal)}/día</div></div>`).join(''):'<div class="empty-state">Sin personal</div>';
+  const allFrentes = [...FRENTES.map(f=>f.id), 'MARGINAL'];
+  allFrentes.forEach(f=>{
+    const el=document.getElementById(`dist-f${f}`);
+    if(!el) return;
+    let ws;
+    if(f==='MARGINAL'){
+      ws=state.personal.filter(p=>p.frente==='MARGINAL'&&p.estado==='activo');
+    } else {
+      ws=state.personal.filter(p=>p.frente===f&&p.estado==='activo');
+    }
+    const frenteNm = f==='MARGINAL'?'Costeo Marginal':(frenteGet(f)?.nombre||'Frente '+f);
+    el.innerHTML=ws.length?ws.map(p=>`<div class="planilla-row"><div class="planilla-nombre">${p.nombre}</div><div class="planilla-rol">${p.rol}</div><div class="planilla-costo">${fmtS(p.jornal)}/día</div></div>`).join(''):'<div class="empty-state">Sin personal</div>';
   });
   const br={};state.personal.filter(p=>p.estado==='activo').forEach(p=>{if(!br[p.rol])br[p.rol]=0;br[p.rol]++;});
   const tot=state.personal.filter(p=>p.estado==='activo').length||1;
@@ -12599,7 +12733,7 @@ function kitRepOptions(sel,saved){
   return prods.map(p=>{
     const nombre=p.producto||p.descripcion||'';
     const etiqueta=p._despachada?'(despachada)':`stock ${p.stock}`;
-    return `<option value="${escAttr(p.key)}" data-precio="${p.precio||0}" data-unidad="${p.unidad||'UND'}" data-nombre="${escAttr(nombre)}" ${sel===p.key?'selected':''}>${nombre} — ${p.unidad||'UND'} (${etiqueta})</option>`;
+    return `<option value="${escAttr(p.key)}" data-precio="${p.precio||0}" data-unidad="${p.unidad||'UND'}" data-nombre="${escAttr(nombre)}" ${sel===p.key?'selected':''}>${nombre}${p.codigo?' ('+p.codigo+')':''} — ${p.unidad||'UND'} (${etiqueta})</option>`;
   }).join('');
 }
 function kitAddPiezaRow(id,cant,saved){
