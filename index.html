@@ -10041,79 +10041,73 @@ function tareoGridShowModal(tid,fecha){
   const cont=document.getElementById('rrhh-tareomes');
   if(!cont || cont.dataset.editing!=='true') return;
   const cur=_tareoCell(tid,fecha);
-  const p=state.personal.find(x=>String(x.id)===String(tid));
+  const p=(state.personal||[]).find(x=>String(x.id)===String(tid));
+  document.getElementById('tareo-cell-modal')?.remove();
   const overlay=document.createElement('div');
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9997;display:flex;align-items:center;justify-content:center';
+  overlay.id='tareo-cell-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9997;display:flex;align-items:center;justify-content:center;padding:16px';
   overlay.onclick=(e)=>{if(e.target===overlay)overlay.remove();};
-  const opciones=['1','1.25','1.5','1.75','2','2.5','3','DL','F',''];
-  const etiquetas=['×1','×1.25','×1.5','×1.75','×2','×2.5','×3','Día Libre','Falta','Vacío'];
+  const opciones=[
+    {v:'1',l:'1',c:'#16a34a'},{v:'1.25',l:'1.25',c:'#84cc16'},{v:'1.5',l:'1.5',c:'#d97706'},
+    {v:'1.75',l:'1.75',c:'#f59e0b'},{v:'2',l:'2',c:'#dc2626'},{v:'2.5',l:'2.5',c:'#ec4899'},
+    {v:'3',l:'3',c:'#8b5cf6'},{v:'DL',l:'DL · Día libre',c:'#2563eb'},{v:'F',l:'F · Falta',c:'#6b7280'},
+    {v:'',l:'Vacío',c:''}
+  ];
+  const btn=o=>`<button onclick="tareoGridSet('${tid}','${fecha}','${o.v}');document.getElementById('tareo-cell-modal').remove()"
+      style="padding:10px 4px;border-radius:8px;border:2px solid ${cur===o.v?'var(--gold)':(o.c?'transparent':'var(--border)')};background:${o.c||'var(--coal3)'};color:${o.c?'#fff':'var(--text3)'};font-size:12px;font-weight:800;cursor:pointer">${o.l}</button>`;
   overlay.innerHTML=`
-    <div style="background:var(--coal2);border-radius:12px;padding:20px;border:1px solid var(--border);max-width:320px;box-shadow:0 8px 32px rgba(0,0,0,0.6)">
-      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">${p?.nombre||'Trabajador'}</div>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:14px">${fecha}</div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
-        ${opciones.map((o,i)=>`
-          <button onclick="tareoGridSet('${tid}','${fecha}','${o}');document.querySelector('[style*=position]').remove()"
-            style="padding:8px;border-radius:6px;border:1px solid ${cur===o?'var(--gold)':'var(--border)'};background:${cur===o?'rgba(201,168,76,0.2)':'var(--coal3)'};color:var(--text);font-size:11px;font-weight:600;cursor:pointer;transition:all .2s">
-            ${etiquetas[i]}
-          </button>
-        `).join('')}
-      </div>
-      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:10px;color:var(--text3)">
-        <div>• <b>1-3</b> = tareas ese día</div>
-        <div>• <b>DL</b> = día libre</div>
-        <div>• <b>F</b> = falta (no paga)</div>
+    <div style="background:var(--coal2);border-radius:14px;padding:20px;border:1px solid var(--border);width:min(340px,94vw);box-shadow:0 8px 32px rgba(0,0,0,0.6)" onclick="event.stopPropagation()">
+      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">${p?.nombre||'Trabajador'}</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:14px">📅 ${fecha}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">${opciones.slice(0,7).map(btn).join('')}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px">${opciones.slice(7).map(btn).join('')}</div>
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);line-height:1.7">
+        • <b>1 a 3</b> = tareas hechas ese día (cada casillero = 1 día trabajado)<br>
+        • <b>DL</b> = día libre tomado · <b>F</b> = falta (no se paga)<br>
+        💡 Mantén presionado y <b>arrastra</b> sobre la fila para copiar el valor (como Excel)
       </div>
     </div>`;
   document.body.appendChild(overlay);
 }
 
-let _tareoGridDragData={start:null,celdas:[]};
-function tareoGridDragStart(e){
-  const cont=document.getElementById('rrhh-tareomes');
-  if(!cont || cont.dataset.editing!=='true') {e.preventDefault();return;}
-  const td=e.target;
-  const v=td.textContent;
-  if(v!=='DL') {e.preventDefault();return;}
-  _tareoGridDragData.start=td;
-  _tareoGridDragData.celdas=[td];
-  e.dataTransfer.effectAllowed='copy';
-  td.style.opacity='0.5';
-}
-function tareoGridDragOver(e){
+// ── Arrastre tipo Excel: mantener presionado en una celda y arrastrar por la fila copia su valor ──
+let _tareoFill={activo:false,arrastro:false,val:null,tid:null,celdas:[]};
+function _tareoFillLimpia(celdas){ celdas.forEach(td=>{td.style.outline='';td.style.outlineOffset='';}); }
+function tareoFillDown(e,tid,fecha){
   const cont=document.getElementById('rrhh-tareomes');
   if(!cont || cont.dataset.editing!=='true') return;
+  if(e.button!==0) return;
   e.preventDefault();
-  e.dataTransfer.dropEffect='copy';
-  if(_tareoGridDragData.start && e.target.dataset.tc){
-    if(!_tareoGridDragData.celdas.includes(e.target)){
-      _tareoGridDragData.celdas.push(e.target);
-      e.target.style.opacity='0.7';
-      e.target.style.border='2px dashed #2563eb';
-    }
+  _tareoFill={activo:true,arrastro:false,val:_tareoCell(tid,fecha),tid:String(tid),celdas:[e.currentTarget]};
+  e.currentTarget.style.outline='2px solid var(--gold)';
+  e.currentTarget.style.outlineOffset='-2px';
+}
+function tareoFillOver(e,tid,fecha){
+  if(!_tareoFill.activo || String(tid)!==_tareoFill.tid) return;
+  const td=e.currentTarget;
+  if(!_tareoFill.celdas.includes(td)){
+    _tareoFill.arrastro=true;
+    _tareoFill.celdas.push(td);
+    td.style.outline='2px dashed var(--gold)';
+    td.style.outlineOffset='-2px';
   }
 }
-function tareoGridDragLeave(e){
-  const cont=document.getElementById('rrhh-tareomes');
-  if(!cont || cont.dataset.editing!=='true') return;
-  e.target.style.opacity='';
-  e.target.style.border='';
-}
-function tareoGridDrop(e,pid,fecha){
-  const cont=document.getElementById('rrhh-tareomes');
-  if(!cont || cont.dataset.editing!=='true') return;
-  e.preventDefault();
-  if(!_tareoGridDragData.start || _tareoGridDragData.start.textContent!=='DL') return;
-  const v=_tareoGridDragData.start.textContent;
-  _tareoGridDragData.celdas.forEach(td=>{
-    const [tpid,tfecha]=td.dataset.tc.split('|');
-    if(tpid && tfecha) tareoGridSet(tpid, tfecha, v);
-    td.style.opacity='';
-    td.style.border='';
+function tareoFillUp(e,tid,fecha){
+  if(!_tareoFill.activo) return;
+  const f=_tareoFill;
+  _tareoFill={activo:false,arrastro:false,val:null,tid:null,celdas:[]};
+  _tareoFillLimpia(f.celdas);
+  if(!f.arrastro){ if(f.celdas[0]===e.currentTarget) tareoGridShowModal(tid,fecha); return; }   // clic simple → abrir selector
+  if(f.val==='') return;                                       // arrastrar desde celda vacía no borra nada
+  f.celdas.forEach(td=>{
+    const tc=td.dataset.tc||''; const sep=tc.indexOf('|');
+    if(sep>0) tareoGridSet(tc.slice(0,sep), tc.slice(sep+1), f.val);
   });
-  _tareoGridDragData={start:null,celdas:[]};
-  showNotif('✓ Días libres aplicados');
+  showNotif('✓ '+(f.val==='DL'?'Días libres aplicados':f.val==='F'?'Faltas aplicadas':'Tareas ×'+f.val+' aplicadas')+' ('+f.celdas.length+' días)');
 }
+document.addEventListener('mouseup',()=>{  // soltar fuera de la grilla cancela sin aplicar
+  if(_tareoFill.activo){ _tareoFillLimpia(_tareoFill.celdas); _tareoFill={activo:false,arrastro:false,val:null,tid:null,celdas:[]}; }
+});
 
 function tareoMensualGuardar(mes){
   try{ guardarEstado(); }catch(e){}
@@ -10163,15 +10157,15 @@ function renderTareoMensual(){
   const nombreMes=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][mm-1]||mes;
   const trabajadores=(state.personal||[]).filter(p=>p.estado!=='baja'&&p.estado!=='inactivo');
   const meses=[...new Set([...(state.tareas||[]).map(t=>(t.fecha||'').slice(0,7)).filter(Boolean), hoy().slice(0,7)])].sort().reverse();
-  let head='<th style="position:sticky;left:0;background:#1a2744;z-index:2;text-align:left;padding:6px 10px;min-width:170px">Trabajador</th>';
-  for(let d=1;d<=nDias;d++) head+=`<th style="padding:4px 0;min-width:24px;text-align:center;font-size:10px">${d}</th>`;
-  head+='<th style="padding:4px 6px;min-width:38px">Trab</th><th style="padding:4px 6px;min-width:44px">Tareas</th><th style="padding:4px 6px;min-width:38px">Gan</th><th style="padding:4px 6px;min-width:38px">Tom</th><th style="padding:4px 6px;min-width:50px">Compr</th><th style="padding:4px 8px;min-width:82px;text-align:right">Pago S/</th>';
+  let head='<th style="position:sticky;left:0;background:#1a2744;z-index:2;text-align:left;padding:6px 10px;width:170px;min-width:170px">Trabajador</th>';
+  for(let d=1;d<=nDias;d++) head+=`<th style="padding:4px 0;width:24px;min-width:24px;text-align:center;font-size:10px">${d}</th>`;
+  head+='<th style="padding:4px 6px;width:38px;min-width:38px">Trab</th><th style="padding:4px 6px;width:44px;min-width:44px">Tareas</th><th style="padding:4px 6px;width:38px;min-width:38px">Gan</th><th style="padding:4px 6px;width:38px;min-width:38px">Tom</th><th style="padding:4px 6px;width:50px;min-width:50px">Compr</th><th style="padding:4px 8px;width:82px;min-width:82px;text-align:right">Pago S/</th>';
   const rows=trabajadores.map((p,i)=>{
     let cells='';
     for(let d=1;d<=nDias;d++){
       const fecha=`${mes}-${String(d).padStart(2,'0')}`;
       const v=_tareoCell(p.id,fecha);
-      cells+=`<td data-tc="${p.id}|${fecha}" data-pid="${p.id}" data-fecha="${fecha}" onclick="${isEditing?`tareoGridShowModal('${p.id}','${fecha}')`:''}" draggable="${isEditing}" ondragstart="tareoGridDragStart(event)" ondragover="tareoGridDragOver(event)" ondrop="tareoGridDrop(event,'${p.id}','${fecha}')" ondragleave="tareoGridDragLeave(event)" title="${fecha}" style="${isEditing?'cursor:cell;':'cursor:default;pointer-events:none;opacity:0.7;'}text-align:center;font-size:10px;font-weight:800;padding:5px 0;background:${_tareoColVal(v)};color:${v===''?'#39415a':'#fff'};border:1px solid var(--border);-webkit-tap-highlight-color:transparent;user-select:none">${v}</td>`;
+      cells+=`<td data-tc="${p.id}|${fecha}" ${isEditing?`onmousedown="tareoFillDown(event,'${p.id}','${fecha}')" onmouseenter="tareoFillOver(event,'${p.id}','${fecha}')" onmouseup="tareoFillUp(event,'${p.id}','${fecha}')"`:''} title="${fecha}" style="${isEditing?'cursor:cell;':'cursor:default;'}text-align:center;font-size:10px;font-weight:800;padding:5px 0;width:24px;min-width:24px;max-width:24px;background:${_tareoColVal(v)};color:${v===''?'#39415a':'#fff'};border:1px solid var(--border);-webkit-tap-highlight-color:transparent;user-select:none">${v}</td>`;
     }
     const r=tareoResumen(p.id,mes), pago=tareoPago(p.id,mes);
     const stick=i%2?'#141821':'#0f131b';
@@ -10201,9 +10195,9 @@ function renderTareoMensual(){
         `}
       </div>
     </div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6">${isEditing?'<b style="color:var(--gold)">✏️ Modo edición activado</b> — Toca una celda para cambiar: vacío → <b style="color:#16a34a">1</b> → <b style="color:#84cc16">1.25</b> → <b style="color:#d97706">1.5</b> → <b style="color:#f59e0b">1.75</b> → <b style="color:#dc2626">2</b> → <b style="color:#ec4899">2.5</b> → <b style="color:#8b5cf6">3</b> → <b style="color:#2563eb">DL</b> (día libre) → vacío. Puedes <b>arrastrar una celda con DL</b> a otras para aplicar día libre rápidamente.<br>':'Lectura — haz clic en Editar para modificar.<br>'}<b>Trab</b>=días trabajados · <b>Tareas</b>=unidades de pago · <b>Gan</b>=libres ganados (trab÷2) · <b>Tom</b>=libres tomados (DL) · <b>Compr</b>=comprados (ganados−tomados). &nbsp;<b>Pago = (tareas + tomados + comprados) × jornal.</b></div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6">${isEditing?'<b style="color:var(--gold)">✏️ Modo edición activado</b> — Haz <b>clic en una celda</b> para elegir: <b style="color:#16a34a">1</b>, <b style="color:#84cc16">1.25</b>, <b style="color:#d97706">1.5</b>, <b style="color:#f59e0b">1.75</b>, <b style="color:#dc2626">2</b>, <b style="color:#ec4899">2.5</b>, <b style="color:#8b5cf6">3</b> (tareas del día), <b style="color:#2563eb">DL</b> (día libre) o <b style="color:#9ca3af">F</b> (falta, no paga). Para copiar como en Excel: <b>mantén presionado y arrastra</b> sobre la fila.<br>':'Lectura — haz clic en Editar para modificar.<br>'}<b>Trab</b>=días trabajados · <b>Tareas</b>=unidades de pago · <b>Gan</b>=libres ganados (trab÷2) · <b>Tom</b>=libres tomados (DL) · <b>Compr</b>=comprados (ganados−tomados). &nbsp;<b>Pago = (tareas + tomados + comprados) × jornal.</b></div>
     <div class="table-wrap" style="max-height:72vh;overflow:auto;border:1px solid var(--border);border-radius:10px">
-      <table style="border-collapse:collapse;font-size:11px;min-width:100%;${isEditing?'':'pointer-events:none;opacity:0.8;'}">
+      <table style="border-collapse:collapse;font-size:11px;min-width:100%;table-layout:fixed;width:max-content">
         <thead><tr style="background:#1a2744;color:#fff;position:sticky;top:0;z-index:3">${head}</tr></thead>
         <tbody>${rows||'<tr><td style="padding:16px;color:var(--text3)">Sin trabajadores activos.</td></tr>'}</tbody>
       </table>
