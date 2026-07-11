@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.10-6</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.10-7</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -16364,7 +16364,7 @@ function _iaRespuestaLocal(texto){
 
   // ── Cimbras (hoy y mes) — fuente: reportes de guardia, mismo cálculo que el Dashboard ──
   if(has('cimbra')){
-    const _hoyF=hoy(), _mesYM=_hoyF.slice(0,7);
+    const _hoyF=hoy(), _mesYM=(typeof finMesActual==='function')?finMesActual():_hoyF.slice(0,7);
     const _cimbDe=r=>{ let c=(typeof FRENTES!=='undefined'?FRENTES:[]).reduce((s,f)=>s+((r[f.key]&&Number(r[f.key].cimbra))||0),0); (r.frentesExtra||[]).forEach(fx=>c+=Number(fx&&fx.cimbra)||0); return c; };
     const _rgs=state.reportesGuardia||[];
     const cimbHoy=_rgs.filter(r=>r.fecha===_hoyF).reduce((s,r)=>s+_cimbDe(r),0);
@@ -16372,15 +16372,34 @@ function _iaRespuestaLocal(texto){
     return `${SR}hoy se han instalado ${cimbHoy} cimbra${cimbHoy!==1?'s':''} y en el mes van ${cimbMes} cimbra${cimbMes!==1?'s':''} acumuladas (periodo minero 26→25). Puede ver el detalle por frente en el Dashboard.`;
   }
 
-  // ── Gasto de explosivos (hoy y mes) — fuente: consumo (C) del cardex del Compresorista × precio ──
+  // ── Gasto de explosivos (hoy y mes) — MISMA fórmula que el KPI "Gasto Explosivo Mes" del
+  // Dashboard: explosivo por frente (rampa/galería) del Compresorista × precios vigentes ──
   if(has('explosiv') && has('gasto','gast','costo','consumo','cuanto','cuánto','hoy','mes')){
-    const _hoyF=hoy(), _mesYM=_hoyF.slice(0,7);
+    const _hoyF=hoy(), _mesYM=(typeof finMesActual==='function')?finMesActual():_hoyF.slice(0,7);
     const _precios=(typeof compGetPreciosExp==='function')?compGetPreciosExp():(typeof COMP_PRECIOS_EXP_DEFAULT!=='undefined'?COMP_PRECIOS_EXP_DEFAULT:{});
-    const _gastoDe=r=>(r.explosivos||[]).reduce((s,x)=>s+((Number(x&&x.C)||0)*(_precios[x.codigo]||0)),0);
+    const _gastoDe=r=>(r.expFrente||[]).reduce((s,x)=>s+(((Number(x&&x.rampa)||0)+(Number(x&&x.galeria)||0))*(_precios[x.codigo]||0)),0);
     const _comps=state.compresorista||[];
     const expHoy=_comps.filter(r=>r.fecha===_hoyF).reduce((s,r)=>s+_gastoDe(r),0);
-    const expMes=_comps.filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,_mesYM):((r.fecha||'').slice(0,7)===_mesYM)).reduce((s,r)=>s+_gastoDe(r),0);
-    return `${SR}el gasto de explosivos de hoy es ${fS(expHoy)} y el acumulado del mes es ${fS(expMes)} (periodo minero 26→25), calculado sobre el consumo reportado por el Compresorista a precios vigentes.`;
+    const _compMes=_comps.filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,_mesYM):((r.fecha||'').slice(0,7)===_mesYM));
+    let expF1=0, expF2=0;
+    _compMes.forEach(r=>(r.expFrente||[]).forEach(x=>{const pr=_precios[x.codigo]||0; expF1+=(Number(x.rampa)||0)*pr; expF2+=(Number(x.galeria)||0)*pr;}));
+    return `${SR}el gasto de explosivos de hoy es ${fS(expHoy)} y el acumulado del mes es ${fS(expF1+expF2)} (Brenda ${fS(expF1)} · Cortada Noroeste ${fS(expF2)}, periodo minero 26→25) — mismas cifras del Dashboard, según lo reportado por el Compresorista a precios vigentes.`;
+  }
+
+  // ── Reporte del Jefe de Guardia (hoy) — resumen con datos reales del parte ──
+  if(has('jefe de guardia','reporte de guardia','parte de guardia','reporte del dia','reporte del día','reporte de hoy','que reporto','qué reportó')){
+    const _hoyF=hoy();
+    const _reps=(state.reportesGuardia||[]).filter(r=>r.fecha===_hoyF);
+    if(!_reps.length) return `${SR}aún no hay reporte de Jefe de Guardia registrado hoy. Solicite al jefe de turno que lo ingrese en el módulo Reporte.`;
+    const _fr=(typeof FRENTES!=='undefined')?FRENTES:[];
+    const _det=_reps.map(r=>{
+      const partes=_fr.map(f=>{ const d=r[f.key]||{}; const m=Number(d.metros)||0, c=Number(d.cimbra)||0; return (m||c)?`${f.nombre} ${m?m+' m':''}${m&&c?' + ':''}${c?c+' cimbra'+(c!==1?'s':''):''}`:null; }).filter(Boolean);
+      (r.frentesExtra||[]).forEach(fx=>{ const m=Number(fx.metros)||0, c=Number(fx.cimbra)||0; if(m||c) partes.push(`${fx.nombre||'Frente extra'} ${m?m+' m':''}${m&&c?' + ':''}${c?c+' cimbra'+(c!==1?'s':''):''}`); });
+      return `Turno ${r.turno||'—'} (Jefe: ${r.jefe||'—'}): ${partes.length?partes.join(' · '):'sin avance registrado'}`;
+    });
+    const _totM=_reps.reduce((s,r)=>s+_fr.reduce((ss,f)=>ss+((r[f.key]&&Number(r[f.key].metros))||0),0),0);
+    const _totC=_reps.reduce((s,r)=>{ let c=_fr.reduce((ss,f)=>ss+((r[f.key]&&Number(r[f.key].cimbra))||0),0); (r.frentesExtra||[]).forEach(fx=>c+=Number(fx&&fx.cimbra)||0); return s+c; },0);
+    return `${SR}hoy hay ${_reps.length} reporte${_reps.length!==1?'s':''} de guardia:\n\n${_det.join('\n')}\n\nTotal del día: ${Math.round(_totM*10)/10} m de avance y ${_totC} cimbra${_totC!==1?'s':''}.`;
   }
 
   // ── Top 5 de trabajadores del mes — por unidades de pago (tareas × multiplicador) ──
