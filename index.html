@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-5</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-6</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -19586,6 +19586,99 @@ function actualizarChipConexion(){
 window.addEventListener('online',()=>{ actualizarChipConexion(); try{ showNotif('✓ Conexión recuperada — sincronizando'); }catch(e){} });
 window.addEventListener('offline',()=>{ actualizarChipConexion(); try{ showNotif('📴 Sin señal: tus registros se guardan y subirán solos','warn'); }catch(e){} });
 try{ actualizarChipConexion(); }catch(e){}
+
+// ═══════════ DIAGNÓSTICO DE SINCRONIZACIÓN ═══════════
+// Clic en la versión (bajo el logo) → panel que compara ESTE equipo contra la NUBE, módulo por
+// módulo, y permite forzar una sincronización completa. Para encontrar por qué una computadora
+// muestra números distintos: aquí se ve al instante qué módulo tiene menos registros que la nube.
+function _diagCuenta(v){
+  if(Array.isArray(v)) return v.length;
+  if(v&&typeof v==='object') return Object.keys(v).length;
+  return v==null?0:1;
+}
+async function abrirDiagSync(){
+  document.getElementById('diag-sync-modal')?.remove();
+  const ov=document.createElement('div');
+  ov.id='diag-sync-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9998;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.onclick=e=>{ if(e.target===ov) ov.remove(); };
+  const pendientes=Object.keys((typeof _sbPend!=='undefined'&&_sbPend)||{});
+  const rtBadge=document.getElementById('rt-status-badge');
+  ov.innerHTML=`<div style="background:var(--coal2);border:1px solid var(--border);border-radius:14px;width:min(560px,96vw);max-height:88vh;overflow:auto;padding:22px" onclick="event.stopPropagation()">
+    <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px">🩺 Diagnóstico de sincronización</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:14px">Versión <b>${document.getElementById('app-version')?.textContent||'—'}</b> · Nube: <b style="color:${(typeof SB_ONLINE!=='undefined'&&SB_ONLINE)?'#22c55e':'#ef4444'}">${(typeof SB_ONLINE!=='undefined'&&SB_ONLINE)?'conectada':'SIN CONEXIÓN'}</b> · Tiempo real: <b>${rtBadge?rtBadge.textContent:'—'}</b> · Pendientes por subir: <b style="color:${pendientes.length?'#f59e0b':'#22c55e'}">${pendientes.length?pendientes.join(', '):'ninguno'}</b> · Hora del equipo: <b>${new Date().toLocaleString('es-PE')}</b></div>
+    <div id="diag-sync-tabla" style="font-size:12px;color:var(--text3)">Cargando comparación con la nube…</div>
+    <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+      <button class="btn btn-gold" onclick="forzarSincronizacion()">🔄 Forzar sincronización completa</button>
+      <button class="btn btn-outline" onclick="document.getElementById('diag-sync-modal').remove()">Cerrar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  // Comparación local vs nube por módulo
+  try{
+    const defs=[
+      ['almacen','Almacén (ingresos+salidas)',()=>((state.almacen?.ingresos||[]).length+(state.almacen?.salidas||[]).length),d=>((d?.ingresos||[]).length+(d?.salidas||[]).length)],
+      ['almacen','Maestro de productos',()=>(state.almacen?.productos||[]).length,d=>(d?.productos||[]).length],
+      ['tareas','Tareos',()=>(state.tareas||[]).length,d=>_diagCuenta(d)],
+      ['personal','Personal',()=>(state.personal||[]).length,d=>_diagCuenta(d)],
+      ['reportes_guardia','Reportes de guardia',()=>(state.reportesGuardia||[]).length,d=>_diagCuenta(d)],
+      ['compresorista','Reportes compresorista',()=>(state.compresorista||[]).length,d=>_diagCuenta(d)],
+      ['comb_pet','Combustible petróleo',()=>{try{return (combCargar('pet')||[]).length;}catch(e){return '—';}},d=>_diagCuenta(d)],
+      ['planilla_supervision','Planilla supervisión (meses)',()=>{try{return Object.keys(planillaSupLoad()||{}).length;}catch(e){return '—';}},d=>_diagCuenta(d)],
+      ['remanente_salidas','Salidas remanente',()=>(state.remanenteSalidas||[]).length,d=>_diagCuenta(d)],
+      ['mant_kits','Kits mantenimiento',()=>(state.mantenimiento||[]).length,d=>_diagCuenta(d)],
+      ['servicios_terceros','Servicios terceros',()=>{try{return (JSON.parse(localStorage.getItem('atmin_servicios_terceros')||'[]')).length;}catch(e){return '—';}},d=>_diagCuenta(d)],
+      ['tombstones','Borrados registrados',()=>{try{return Object.keys(tombLoad()||{}).length;}catch(e){return '—';}},d=>_diagCuenta(d)],
+    ];
+    const mods=[...new Set(defs.map(d=>d[0]))];
+    const nube={};
+    let errNube='';
+    try{
+      if(typeof sb!=='undefined'&&sb){
+        const { data, error }=await sb.from('app_modulos').select('modulo,data,updated_at').in('modulo',mods);
+        if(error) errNube=String(error.message||error);
+        (data||[]).forEach(r=>{ nube[r.modulo]={data:r.data,upd:r.updated_at}; });
+      }else{ errNube='sin cliente de nube en este equipo'; }
+    }catch(e){ errNube=String(e&&e.message||e); }
+    const filas=defs.map(([mod,label,fnLoc,fnNube])=>{
+      let loc; try{ loc=fnLoc(); }catch(e){ loc='—'; }
+      let nb='—'; try{ if(nube[mod]) nb=fnNube(nube[mod].data); }catch(e){}
+      const igual=(String(loc)===String(nb));
+      return `<tr>
+        <td style="padding:5px 8px;color:var(--text)">${label}</td>
+        <td style="padding:5px 8px;text-align:center;font-family:monospace">${loc}</td>
+        <td style="padding:5px 8px;text-align:center;font-family:monospace">${nb}</td>
+        <td style="padding:5px 8px;text-align:center">${nb==='—'?'':(igual?'<span style="color:#22c55e">✓</span>':'<span style="color:#ef4444;font-weight:800">≠</span>')}</td>
+      </tr>`;
+    }).join('');
+    const t=document.getElementById('diag-sync-tabla');
+    if(t) t.innerHTML=`<table style="width:100%;border-collapse:collapse">
+      <thead><tr style="color:var(--text3);font-size:10px;text-transform:uppercase"><th style="text-align:left;padding:5px 8px">Módulo</th><th style="padding:5px 8px">Este equipo</th><th style="padding:5px 8px">Nube</th><th style="padding:5px 8px"></th></tr></thead>
+      <tbody>${filas}</tbody></table>
+      ${errNube?`<div style="font-size:10px;color:#ef4444;margin-top:8px">⚠ No se pudo leer la nube desde este equipo: ${errNube}. Esta puede ser la causa de que los números difieran aquí.</div>`:''}
+      <div style="font-size:10px;color:var(--text3);margin-top:8px">Si un módulo marca <b style="color:#ef4444">≠</b>, este equipo no está al día: usa "Forzar sincronización completa". Si la nube dice "—", ese módulo aún no existe en la nube.</div>`;
+  }catch(e){
+    const t=document.getElementById('diag-sync-tabla');
+    if(t) t.textContent='Error del diagnóstico: '+(e&&e.message||e);
+  }
+}
+async function forzarSincronizacion(){
+  showNotif('🔄 Sincronizando todo…');
+  try{ if(typeof sbFlushPendientes==='function') await sbFlushPendientes(); }catch(e){}
+  try{ if(typeof cargarAlmacenCombustibleSB==='function') await cargarAlmacenCombustibleSB(); }catch(e){}
+  try{ if(typeof cargarConfigsSimplesSB==='function') await cargarConfigsSimplesSB(); }catch(e){}
+  try{ if(typeof tombPurgarState==='function') tombPurgarState(); }catch(e){}
+  try{ if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
+  try{ if(typeof renderAlmacen==='function') renderAlmacen(); }catch(e){}
+  try{ if(typeof renderStockVigente==='function') renderStockVigente(); }catch(e){}
+  showNotif('✓ Sincronización completa terminada');
+  try{ abrirDiagSync(); }catch(e){}   // refrescar el panel con los números nuevos
+}
+// La versión bajo el logo abre el diagnóstico
+try{
+  const vEl=document.getElementById('app-version');
+  if(vEl){ vEl.style.cursor='pointer'; vEl.title='Clic: diagnóstico de sincronización'; vEl.onclick=abrirDiagSync; }
+}catch(e){}
 </script>
 
 </body>
