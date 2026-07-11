@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-2</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-3</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -4439,8 +4439,9 @@ async function cargarAlmacenCombustibleSB(){
       // La nube viene sin fotos (se suben ligeras); devolver las fotos guardadas en este equipo
       try{ if(typeof _almRestaurarFotos==='function') state.almacen=_almRestaurarFotos(state.almacen); }catch(e){}
       try{localStorage.setItem(ALM_KEY,JSON.stringify(state.almacen));}catch(e){}
-      // Si el catálogo era obsoleto, forzar subida a nube con catálogo nuevo
-      if(catalogoObsoleto) await sbSyncModulo('almacen',{...state.almacen});
+      // Subir SIEMPRE la unión resultante (read-merge-write la protege): así la nube converge y
+      // los movimientos que este equipo tenía solo en local llegan a los demás dispositivos.
+      await sbSyncModulo('almacen',(typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen});
     }else{
       // Nube vacía: subir lo que tiene este dispositivo (ya sembrado a full)
       await sbSyncModulo('almacen', {...state.almacen, productos:state.almacen.productos||[]});
@@ -5871,7 +5872,28 @@ let _sbFallo=0;
 async function _sbSubirModulo(modulo){
   if(!SB_ONLINE || !CLOUD_SYNC_READY) return false;
   if(!(modulo in _sbPend)) return true;
-  const dataObj=_sbPend[modulo];
+  let dataObj=_sbPend[modulo];
+  // READ-MERGE-WRITE para 'almacen': antes de subir, fusionar con lo que ya hay en la nube para
+  // que esta subida NUNCA pise los movimientos que registró otra computadora. Sin esto, un
+  // snapshot con "el último gana" podía borrar del stock lo que otro equipo acababa de ingresar.
+  if(modulo==='almacen' && typeof _almMergeSnaps==='function'){
+    try{
+      const { data:cloudRow } = await sb.from('app_modulos').select('data').eq('modulo','almacen').single();
+      if(cloudRow && cloudRow.data){
+        const merged=_almMergeSnaps(cloudRow.data, dataObj);
+        dataObj=(typeof _almClonLight==='function')?_almClonLight(merged):merged;
+        if(_sbPend['almacen']!=null) _sbPend['almacen']=dataObj;   // reflejar la unión en la cola
+        // Aplicar la unión al estado local para que ESTE equipo también vea lo de los demás.
+        try{
+          let full=merged;
+          if(typeof _almRestaurarFotos==='function') full=_almRestaurarFotos({...merged});
+          state.almacen=full;
+          try{ localStorage.setItem(ALM_KEY, JSON.stringify(state.almacen)); }catch(e){}
+          if(typeof renderStockVigente==='function' && document.getElementById('stock-vigente-wrap')) renderStockVigente();
+        }catch(e){}
+      }
+    }catch(e){}
+  }
   try{ _rtSelfWrite[modulo]=Date.now(); }catch(e){}   // marca escritura propia (evita eco realtime)
   for(let intento=0;intento<3;intento++){
     let err=null;
@@ -5908,12 +5930,16 @@ try{
     document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ try{ sbFlushPendientes(); }catch(e){} } });
   }
 }catch(e){}
+// Módulos cuya carga FUSIONA por id (unión), no reemplaza: para ellos SIEMPRE se trae la nube
+// aunque haya un pendiente, porque fusionar nunca pierde lo local y sí recupera lo de otros
+// equipos. Para los módulos de REEMPLAZO (personal, tareas…) sí se protege el dato offline.
+const _sbModulosFusion=new Set(['almacen','reportes_guardia','mant_kits','compresorista','reuniones','remanente_salidas','servicios_terceros','tombstones']);
 async function sbLoadModulo(modulo){
   if(!SB_ONLINE) return null;
   // Si este módulo tiene un cambio LOCAL pendiente de subir (capturado sin señal), lo local es
   // más nuevo que la nube: no devolver la copia de la nube para que "la nube manda" no pise el
-  // dato offline. El pendiente se subirá en el flush y la nube quedará al día.
-  if(modulo in _sbPend) return null;
+  // dato offline. EXCEPCIÓN: los módulos de fusión sí se traen (su carga une por id).
+  if((modulo in _sbPend) && !_sbModulosFusion.has(modulo)) return null;
   try{
     const { data } = await sb.from('app_modulos').select('data').eq('modulo', modulo).single();
     return data ? data.data : null;
@@ -6036,6 +6062,31 @@ function _almClonLight(alm){
   return { ...alm, productos: alm.productos||[],
     ingresos: strip(alm.ingresos), salidas: strip(alm.salidas),
     explosivos: { ...ex, ingresos: strip(ex.ingresos), salidas: strip(ex.salidas) } };
+}
+// Fusiona dos snapshots de almacén (a=base, b=otro) en la UNIÓN de sus datos. Los movimientos
+// se unen por id (ninguno se pierde), el maestro gana el de productosTs más reciente, y los flags
+// de migración/apertura se quedan con el valor más alto o el que exista. Es la MISMA regla que el
+// arranque, extraída para usarla también al SUBIR (read-merge-write) y evitar que un snapshot pise
+// los movimientos de otra computadora.
+function _almMergeSnaps(a,b){
+  a=a||{}; b=b||{};
+  const M=(x,y)=>(typeof mergeSnapById==='function')?mergeSnapById(x||[], y||[]):(((x&&x.length)?x:y)||[]);
+  const exA=a.explosivos||{ingresos:[],salidas:[]}, exB=b.explosivos||{ingresos:[],salidas:[]};
+  let productos=a.productos||[], productosTs=Number(a.productosTs||0);
+  if(Number(b.productosTs||0) > productosTs){ productos=b.productos||productos; productosTs=Number(b.productosTs||0); }
+  else if(!productos.length && (b.productos||[]).length){ productos=b.productos; }
+  const out={ ...a, ...b,
+    ingresos:M(a.ingresos,b.ingresos), salidas:M(a.salidas,b.salidas),
+    inventarioInicial:M(a.inventarioInicial,b.inventarioInicial),
+    explosivos:{ ...exA, ...exB, ingresos:M(exA.ingresos,exB.ingresos), salidas:M(exA.salidas,exB.salidas) },
+    productos, productosTs };
+  ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','exploStockBaseV','catalogVersion']
+    .forEach(k=>{ const mx=Math.max(Number(a[k]||0), Number(b[k]||0)); if(mx) out[k]=mx; });
+  if(a.exploLock||b.exploLock) out.exploLock=true;
+  out.remApertura=a.remApertura||b.remApertura||out.remApertura;
+  out.remAperturaTs=Number(a.remAperturaTs||b.remAperturaTs||0)||out.remAperturaTs;
+  out.exploStockBase=a.exploStockBase||b.exploStockBase||out.exploStockBase;
+  return out;
 }
 // Al cargar desde la nube (que viene sin fotos), re-adjunta las fotos guardadas localmente,
 // emparejando por id. NO resucita registros borrados — solo devuelve la imagen a los que existen.
