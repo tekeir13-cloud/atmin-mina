@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-3</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-4</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -4400,6 +4400,7 @@ async function cargarAlmacenCombustibleSB(){
         productosFinales=almLocalPrev.productos||productosFinales;
         productosTsFinal=Number(almLocalPrev.productosTs||0);
       }
+      if(typeof _prodsVivos==='function') productosFinales=_prodsVivos(productosFinales);   // borrados no reviven
       // Unir movimientos de nube + locales (por id) → recupera lo que un equipo tenga y la nube haya perdido
       ingFinal = (typeof mergeSnapById==='function') ? mergeSnapById(ingFinal, almLocalPrev.ingresos||[]) : ingFinal;
       salFinal = (typeof mergeSnapById==='function') ? mergeSnapById(salFinal, almLocalPrev.salidas||[]) : salFinal;
@@ -5962,7 +5963,7 @@ function _rtAplicarModulo(modulo, data){
   const setLS=(k,v)=>{ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} };
   const M=(typeof mergeSnapById==='function')?mergeSnapById:((a,b)=>b||a||[]);
   switch(modulo){
-    case 'almacen':            if(data&&typeof data==='object'){ const prevAlm=state.almacen||{}; let a=Object.assign({}, prevAlm, data); if(typeof mergeSnapById==='function'){ a.ingresos=mergeSnapById(data.ingresos||[], prevAlm.ingresos||[]); a.salidas=mergeSnapById(data.salidas||[], prevAlm.salidas||[]); const exN=data.explosivos||prevAlm.explosivos||{ingresos:[],salidas:[]}, exP=prevAlm.explosivos||{ingresos:[],salidas:[]}; a.explosivos={...exN, ingresos:mergeSnapById(exN.ingresos||[], exP.ingresos||[]), salidas:mergeSnapById(exN.salidas||[], exP.salidas||[])}; } if(Number(prevAlm.productosTs||0)>Number(data.productosTs||0)){ a.productos=prevAlm.productos; a.productosTs=prevAlm.productosTs; } try{ if(typeof _almRestaurarFotos==='function') a=_almRestaurarFotos(a); }catch(e){} state.almacen=a; setLS('atmin_almacen', state.almacen); if(typeof _sbPend!=='undefined' && ('almacen' in _sbPend)){ try{ _sbPend['almacen']=(typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}; _sbPendSave(); }catch(e){} } } break;
+    case 'almacen':            if(data&&typeof data==='object'){ const prevAlm=state.almacen||{}; let a=Object.assign({}, prevAlm, data); if(typeof mergeSnapById==='function'){ a.ingresos=mergeSnapById(data.ingresos||[], prevAlm.ingresos||[]); a.salidas=mergeSnapById(data.salidas||[], prevAlm.salidas||[]); const exN=data.explosivos||prevAlm.explosivos||{ingresos:[],salidas:[]}, exP=prevAlm.explosivos||{ingresos:[],salidas:[]}; a.explosivos={...exN, ingresos:mergeSnapById(exN.ingresos||[], exP.ingresos||[]), salidas:mergeSnapById(exN.salidas||[], exP.salidas||[])}; } if(Number(prevAlm.productosTs||0)>Number(data.productosTs||0)){ a.productos=prevAlm.productos; a.productosTs=prevAlm.productosTs; } if(typeof _prodsVivos==='function') a.productos=_prodsVivos(a.productos); try{ if(typeof _almRestaurarFotos==='function') a=_almRestaurarFotos(a); }catch(e){} state.almacen=a; setLS('atmin_almacen', state.almacen); if(typeof _sbPend!=='undefined' && ('almacen' in _sbPend)){ try{ _sbPend['almacen']=(typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}; _sbPendSave(); }catch(e){} } } break;
     case 'personal':           if(Array.isArray(data)){ state.personal=data; setLS('atmin_personal_snap', data); } break;
     case 'tareas':             if(Array.isArray(data)){ state.tareas=data; setLS('atmin_tareas_snap', data); } break;
     case 'reportes_guardia':   if(Array.isArray(data)){ state.reportesGuardia=(typeof mergeById_ts==='function')?mergeById_ts(state.reportesGuardia||[], data, (typeof _rgMetros==='function'?_rgMetros:null)):M(data, state.reportesGuardia||[]); setLS('atmin_reportes_guardia', state.reportesGuardia); try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){} } break;
@@ -6075,6 +6076,7 @@ function _almMergeSnaps(a,b){
   let productos=a.productos||[], productosTs=Number(a.productosTs||0);
   if(Number(b.productosTs||0) > productosTs){ productos=b.productos||productos; productosTs=Number(b.productosTs||0); }
   else if(!productos.length && (b.productos||[]).length){ productos=b.productos; }
+  if(typeof _prodsVivos==='function') productos=_prodsVivos(productos);   // borrados no reviven
   const out={ ...a, ...b,
     ingresos:M(a.ingresos,b.ingresos), salidas:M(a.salidas,b.salidas),
     inventarioInicial:M(a.inventarioInicial,b.inventarioInicial),
@@ -6241,6 +6243,8 @@ function eliminarProducto(id){
   if(!confirm('¿Eliminar este producto del catálogo?'))return;
   state.almacen.productos=(state.almacen.productos||[]).filter(p=>p.id!==id);
   state.almacen.productosTs=Date.now();
+  // Lápida: el borrado se impone en todos los equipos (inmune a fusiones y relojes distintos)
+  try{ if(typeof tombAdd==='function') tombAdd('prod:'+id); }catch(e){}
   almacenSave();renderProductos();
 }
 function guardarPrecioInline(id,val){
@@ -11507,11 +11511,20 @@ function tombMerge(remote){
 }
 // Purga del estado en memoria los registros ya marcados como borrados (para arrays que se
 // reemplazan al por mayor y no pasan por mergeSnapById).
+// Productos del maestro VIVOS = sin lápida. Al eliminar un producto se registra la lápida
+// 'prod:'+id (los ids del catálogo son iguales en todos los equipos porque nacen de una sola
+// importación sincronizada), así el borrado se impone en TODOS los dispositivos sin depender
+// de marcas de tiempo ni del reloj de cada computadora. Re-agregar a mano crea un id nuevo,
+// por eso un producto borrado sí se puede volver a crear intencionalmente.
+function _prodsVivos(prods){
+  try{ return (prods||[]).filter(p=>!(p&&p.id!=null&&tombHas('prod:'+p.id))); }catch(e){ return prods||[]; }
+}
 function tombPurgarState(){
   try{
     const f=arr=>(arr||[]).filter(r=>!(r&&r.id!=null&&tombHas(r.id)));
     if(state.almacen){
       state.almacen.ingresos=f(state.almacen.ingresos); state.almacen.salidas=f(state.almacen.salidas);
+      state.almacen.productos=_prodsVivos(state.almacen.productos);
       if(state.almacen.explosivos){ state.almacen.explosivos.ingresos=f(state.almacen.explosivos.ingresos); state.almacen.explosivos.salidas=f(state.almacen.explosivos.salidas); }
     }
     state.reportesGuardia=f(state.reportesGuardia);
