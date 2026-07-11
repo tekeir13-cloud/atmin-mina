@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-1</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-2</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -4638,6 +4638,8 @@ async function cargarAlmacenCombustibleSB(){
         }
       }catch(e){}
     }
+    // ── CONFIGURACIONES SIMPLES — precios, adelantos, meses cerrados, finanzas, jefes ──
+    try{ if(typeof cargarConfigsSimplesSB==='function') await cargarConfigsSimplesSB(); }catch(e){}
     // Purga final: descarta del estado en memoria cualquier registro marcado como borrado
     // (cubre los módulos que se reemplazan al por mayor y no pasan por mergeSnapById)
     try{ if(typeof tombPurgarState==='function') tombPurgarState(); }catch(e){}
@@ -5948,6 +5950,8 @@ function _rtAplicarModulo(modulo, data){
     case 'remanente_salidas':  if(Array.isArray(data)){ state.remanenteSalidas=M(data, state.remanenteSalidas||[]); setLS('atmin_remanente_salidas', state.remanenteSalidas); } break;
     case 'servicios_terceros': if(Array.isArray(data)){ let loc=[]; try{loc=JSON.parse(localStorage.getItem('atmin_servicios_terceros')||'[]');}catch(e){} setLS('atmin_servicios_terceros', M(data, loc)); } break;
     case 'planilla_supervision': if(data&&typeof data==='object'){ setLS('atmin_planilla_supervision', data); } break;
+    case 'params_precios': case 'adelantos': case 'meses_cerrados': case 'fin_config': case 'personal_jefe':
+      if(typeof _cfgAplicar==='function'&&data&&typeof data==='object'){ _cfgAplicar(modulo,data); try{ localStorage.setItem('atmin_cfg_ts_'+modulo,String(Number(data._ts)||0)); }catch(e){} } break;
     case 'comb_pet':           if(Array.isArray(data)){ setLS('atmin_comb_petroleo', data); } break;
     case 'comb_gas':           if(Array.isArray(data)){ setLS('atmin_comb_gasolina', data); } break;
     case 'fin_ing_maq':        if(data&&typeof data==='object'){ try{ if(typeof _fimMigrarNombres==='function') _fimMigrarNombres(data); }catch(e){} setLS('atmin_fin_ing_maq', data); } break;
@@ -6064,7 +6068,11 @@ function almacenSave(){
 function almacenLoad(){
   try{
     const raw=localStorage.getItem(ALM_KEY);
-    if(raw){const d=JSON.parse(raw);state.almacen={ingresos:d.ingresos||[],salidas:d.salidas||[],inventarioInicial:d.inventarioInicial||[],historialMeses:d.historialMeses||[],productos:d.productos||[],solicitudesCompra:d.solicitudesCompra||[],explosivos:d.explosivos||{ingresos:[],salidas:[]}};}
+    // IMPORTANTE: conservar TODOS los campos guardados (spread de d), no solo las listas.
+    // Antes se descartaban catalogVersion, productosTs y los flags de migración → en cada
+    // arranque el sistema creía que el catálogo era viejo, RESEMBRABA los 380 productos de
+    // fábrica (resucitando los borrados del maestro) y subía esa versión a la nube.
+    if(raw){const d=JSON.parse(raw);state.almacen={...d,ingresos:d.ingresos||[],salidas:d.salidas||[],inventarioInicial:d.inventarioInicial||[],historialMeses:d.historialMeses||[],productos:d.productos||[],solicitudesCompra:d.solicitudesCompra||[],explosivos:d.explosivos||{ingresos:[],salidas:[]}};}
     // Sembrar demo si está totalmente vacío (incluye visitas previas que guardaron arrays vacíos)
     // Migración v5: catálogo de 380 productos + STOCK INICIAL del Excel (Insumos/Mantenimiento), baseline limpio
     const catalogoObsoletoLocal=(state.almacen.catalogVersion||0)<8;
@@ -9373,7 +9381,7 @@ const JEFES_TURNO_CARGOS = ['Capataz','Jefe de Guardia','Asistente de Residente'
 const PJEFE_KEY='atmin_personal_jefe';
 let _pJefeMap=null;
 function pJefeLoad(){ if(_pJefeMap)return _pJefeMap; try{_pJefeMap=JSON.parse(localStorage.getItem(PJEFE_KEY)||'{}')||{};}catch(e){_pJefeMap={};} return _pJefeMap; }
-function pJefeSet(dni,jefe){ const m=pJefeLoad(); m[String(dni)]=jefe; try{localStorage.setItem(PJEFE_KEY,JSON.stringify(m));}catch(e){} }
+function pJefeSet(dni,jefe){ const m=pJefeLoad(); m[String(dni)]=jefe; try{localStorage.setItem(PJEFE_KEY,JSON.stringify(m));}catch(e){} try{ if(typeof configSync==='function')configSync('personal_jefe'); }catch(e){} }
 function pJefeApply(){ const m=pJefeLoad(); (state.personal||[]).forEach(p=>{ if(p.dni&&m[String(p.dni)]!=null) p.jefe=m[String(p.dni)]; }); }
 // Lista de personal (RRHH) que puede actuar como Jefe de Guardia/Turno
 function jefesTurnoLista(){
@@ -10391,6 +10399,7 @@ function renderCostoRRHH(){
 function saveState(){
   try{localStorage.setItem('atmin_mesesCerrados',JSON.stringify(state.mesesCerrados||[]));}catch(e){}
   try{localStorage.setItem('atmin_adelantos',JSON.stringify(state.adelantos||{}));}catch(e){}
+  try{ if(typeof configSync==='function'){ configSync('meses_cerrados'); configSync('adelantos'); } }catch(e){}
 }
 
 function cerrarMes(){
@@ -10417,6 +10426,69 @@ function reabrirMes(){
 const PLANILLA_SUP_KEY='atmin_planilla_supervision';
 function planillaSupLoad(){ try{ return JSON.parse(localStorage.getItem(PLANILLA_SUP_KEY)||'{}')||{}; }catch(e){ return {}; } }
 function planillaSupSave(obj){ try{ localStorage.setItem(PLANILLA_SUP_KEY,JSON.stringify(obj||{})); }catch(e){} try{ sbSyncModulo('planilla_supervision', obj||{}); }catch(e){} }
+
+// ════════ CONFIGURACIONES SINCRONIZADAS EN LA NUBE (última escritura gana por _ts) ════════
+// Antes estos datos vivían SOLO en el dispositivo que los editaba y los demás usuarios nunca
+// los veían: precios de combustible/explosivos/aceites, adelantos de personal, meses cerrados,
+// configuración de Finanzas (presupuesto/proyección/proyecto/split) y jefe por trabajador.
+const CONFIG_SYNC_MODS=['params_precios','adelantos','meses_cerrados','fin_config','personal_jefe'];
+function _cfgLS(k,def){ try{ const v=JSON.parse(localStorage.getItem(k)); return (v===null||v===undefined)?def:v; }catch(e){ return def; } }
+function _cfgSetLS(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+function _cfgSnapshot(m){
+  switch(m){
+    case 'params_precios': return { comb:_cfgLS(PARAMS_COMB_KEY,null), exp:_cfgLS(PARAMS_EXP_KEY,null), ace:_cfgLS(PARAMS_ACE_KEY,null) };
+    case 'adelantos':      return { data: state.adelantos||{} };
+    case 'meses_cerrados': return { data: state.mesesCerrados||[] };
+    case 'fin_config':     return { presupuesto: localStorage.getItem('atmin_fin_presupuesto')||null,
+                                    proyeccion:_cfgLS('atmin_fin_proyeccion',{}),
+                                    proyecto: localStorage.getItem('atmin_fin_proyecto')||null,
+                                    split:_cfgLS('atmin_fin_split',null) };
+    case 'personal_jefe':  return { data: _cfgLS(PJEFE_KEY,{}) };
+  }
+  return {};
+}
+function _cfgAplicar(m,d){
+  if(!d||typeof d!=='object') return;
+  switch(m){
+    case 'params_precios':
+      if(d.comb)_cfgSetLS(PARAMS_COMB_KEY,d.comb);
+      if(d.exp)_cfgSetLS(PARAMS_EXP_KEY,d.exp);
+      if(d.ace)_cfgSetLS(PARAMS_ACE_KEY,d.ace);
+      break;
+    case 'adelantos':      if(d.data){ state.adelantos=d.data; _cfgSetLS('atmin_adelantos',d.data); } break;
+    case 'meses_cerrados': if(d.data){ state.mesesCerrados=d.data; _cfgSetLS('atmin_mesesCerrados',d.data); } break;
+    case 'fin_config':
+      if(d.presupuesto!=null) try{localStorage.setItem('atmin_fin_presupuesto',String(d.presupuesto));}catch(e){}
+      if(d.proyeccion) _cfgSetLS('atmin_fin_proyeccion',d.proyeccion);
+      if(d.proyecto!=null) try{localStorage.setItem('atmin_fin_proyecto',String(d.proyecto));}catch(e){}
+      if(d.split) _cfgSetLS('atmin_fin_split',d.split);
+      break;
+    case 'personal_jefe':  if(d.data){ try{_pJefeMap=d.data;}catch(e){} _cfgSetLS(PJEFE_KEY,d.data); } break;
+  }
+}
+const _cfgTsKey=m=>'atmin_cfg_ts_'+m;
+// Subir la config local a la nube estampando la hora de edición.
+function configSync(m){
+  const ts=Date.now();
+  try{ localStorage.setItem(_cfgTsKey(m),String(ts)); }catch(e){}
+  try{ sbSyncModulo(m, {..._cfgSnapshot(m), _ts:ts}); }catch(e){}
+}
+// Al arrancar: aplicar la config de la nube si es más reciente; si la nube está vacía o más
+// vieja, subir la de este dispositivo.
+async function cargarConfigsSimplesSB(){
+  for(const m of CONFIG_SYNC_MODS){
+    try{
+      const nube=await sbLoadModulo(m);
+      const locTs=Number(localStorage.getItem(_cfgTsKey(m))||0);
+      if(nube&&typeof nube==='object'&&Number(nube._ts||0)>=locTs){
+        _cfgAplicar(m,nube);
+        try{ localStorage.setItem(_cfgTsKey(m),String(nube._ts||0)); }catch(e){}
+      }else{
+        configSync(m);
+      }
+    }catch(e){}
+  }
+}
 function planillaSupMes(mesYM){ const o=planillaSupLoad(); return Array.isArray(o[mesYM])?o[mesYM]:[]; }
 function planillaSupTotal(mesYM){ return planillaSupMes(mesYM).reduce((s,r)=>s+(Number(r.monto)||0),0); }
 // Total operarios del mes (tareos, excluye sueldos reservados) — para la planilla integrada
@@ -17109,7 +17181,7 @@ function renderFinDashboard(){
 
 function finGuardarPresupuesto(){
   const v=document.getElementById('fin-presup-input');
-  if(v){localStorage.setItem('atmin_fin_presupuesto',v.value);renderFinDashboard();}
+  if(v){localStorage.setItem('atmin_fin_presupuesto',v.value);try{if(typeof configSync==='function')configSync('fin_config');}catch(e){}renderFinDashboard();}
 }
 
 function finInicializarGraficos(){
@@ -17276,7 +17348,7 @@ function finActualizarResumenProy(presup){
 
 function finGuardarProyeccion(){
   const {obj,val}=finProyValores();
-  localStorage.setItem('atmin_fin_proyeccion',JSON.stringify({...obj,val}));
+  localStorage.setItem('atmin_fin_proyeccion',JSON.stringify({...obj,val}));try{if(typeof configSync==='function')configSync('fin_config');}catch(e){}
   showNotif('Proyección guardada','ok');
 }
 
@@ -17332,7 +17404,7 @@ function renderFinInforme(){
 function finGenerarInforme(){
   const mes=document.getElementById('fin-inf-mes').value;
   const proyecto=document.getElementById('fin-inf-proyecto').value||'Proyecto Minero';
-  localStorage.setItem('atmin_fin_proyecto',proyecto);
+  localStorage.setItem('atmin_fin_proyecto',proyecto);try{if(typeof configSync==='function')configSync('fin_config');}catch(e){}
   const val=finValorizacionMes(mes);
   const valBruta=val.total+(val.descuento||0);
   const desg=finDesgloseGastos(mes);
@@ -17590,7 +17662,7 @@ function finRenderSplit(tot,b,c){
 function finGuardarSplit(){
   const b=parseFloat(document.getElementById('fin-split-b')?.value)||60;
   const c=parseFloat(document.getElementById('fin-split-c')?.value)||40;
-  localStorage.setItem('atmin_fin_split',JSON.stringify({brenda:b,crne:c}));
+  localStorage.setItem('atmin_fin_split',JSON.stringify({brenda:b,crne:c}));try{if(typeof configSync==='function')configSync('fin_config');}catch(e){}
   showNotif('Split guardado','ok');
 }
 function renderFinIngresosMaq(){
@@ -17867,9 +17939,9 @@ function paramsGetExp(){
 function paramsGetAce(){
   try{ const d=JSON.parse(localStorage.getItem(PARAMS_ACE_KEY)); return d&&Object.keys(d).length?d:null; }catch(e){return null;}
 }
-function paramsSetComb(obj){ localStorage.setItem(PARAMS_COMB_KEY,JSON.stringify(obj)); }
-function paramsSetExp(obj){ localStorage.setItem(PARAMS_EXP_KEY,JSON.stringify(obj)); }
-function paramsSetAce(obj){ localStorage.setItem(PARAMS_ACE_KEY,JSON.stringify(obj)); }
+function paramsSetComb(obj){ localStorage.setItem(PARAMS_COMB_KEY,JSON.stringify(obj)); try{ if(typeof configSync==='function')configSync('params_precios'); }catch(e){} }
+function paramsSetExp(obj){ localStorage.setItem(PARAMS_EXP_KEY,JSON.stringify(obj)); try{ if(typeof configSync==='function')configSync('params_precios'); }catch(e){} }
+function paramsSetAce(obj){ localStorage.setItem(PARAMS_ACE_KEY,JSON.stringify(obj)); try{ if(typeof configSync==='function')configSync('params_precios'); }catch(e){} }
 
 function compGetPrecioPet(){
   const c=paramsGetComb(); if(c&&c.pet) return c.pet;
