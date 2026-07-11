@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-6</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-7</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -19545,15 +19545,27 @@ document.addEventListener('webkitfullscreenchange',_syncFullscreenBtn);
 (function(){
   if(!('serviceWorker' in navigator)) return;
   if(location.protocol==='file:') return;   // en pruebas locales no aplica
+  // AUTO-ACTUALIZACIÓN: cuando un SW nuevo toma el control, recargar la página una sola vez.
+  // Así ningún equipo se queda pegado en una versión vieja: al publicar una nueva, se actualiza
+  // solo sin que nadie tenga que borrar caché ni tocar nada.
+  let _recargando=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(_recargando) return; _recargando=true; location.reload();
+  });
   navigator.serviceWorker.register('sw.js').then(reg=>{
+    // Buscar versión nueva de inmediato y cada 30 min (por si el equipo queda abierto días).
+    try{ reg.update(); }catch(e){}
+    setInterval(()=>{ try{ reg.update(); }catch(e){} }, 30*60*1000);
     // Aviso de versión nueva: cuando hay un SW en espera, ofrecer actualizar con un toque.
     function avisarNueva(){
       if(document.getElementById('sw-update-bar')) return;
       const bar=document.createElement('div');
       bar.id='sw-update-bar';
       bar.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:10000;background:#1a1f2e;border:1px solid #8b5cf6;border-radius:12px;padding:10px 16px;display:flex;gap:12px;align-items:center;box-shadow:0 8px 28px rgba(0,0,0,0.5);font-size:13px;color:#ece7da';
-      bar.innerHTML='✨ Hay una versión nueva de MukiCloud <button style="background:#8b5cf6;color:#fff;border:none;border-radius:8px;padding:7px 16px;font-weight:800;cursor:pointer;font-size:12px" onclick="location.reload()">Actualizar</button>';
+      bar.innerHTML='✨ Actualizando MukiCloud a la versión nueva…';
       document.body.appendChild(bar);
+      // El SW nuevo se activa solo (skipWaiting) y controllerchange recarga; esto es solo aviso.
+      try{ if(reg.waiting) reg.waiting.postMessage&&reg.waiting.postMessage('skip'); }catch(e){}
     }
     if(reg.waiting) avisarNueva();
     reg.addEventListener('updatefound',()=>{
