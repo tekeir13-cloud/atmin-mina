@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-9/span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-10/span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-9/span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-10/span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-9/span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-10/span></div>
     </div>
   </div>
   <nav class="nav">
@@ -2483,6 +2483,12 @@ select option{background:var(--coal3);}
                 color:#22c55e;border-radius:4px;padding:6px 12px;cursor:pointer;
                 font-size:11px;font-family:'Syne',sans-serif;font-weight:700;letter-spacing:0.3px">
           💾 Respaldo
+        </button>
+        <button id="btn-sincronizar" onclick="abrirDiagSync()" title="Sincronizar equipos / diagnóstico"
+                style="background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.45);
+                color:#a78bfa;border-radius:4px;padding:6px 12px;cursor:pointer;
+                font-size:11px;font-family:'Syne',sans-serif;font-weight:700;letter-spacing:0.3px">
+          🔄 Sincronizar
         </button>
         <button id="btn-cerrar-periodo" onclick="abrirCerrarPeriodo()" title="Cerrar periodo de valorización (26→25)"
                 style="display:none;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);
@@ -19551,13 +19557,15 @@ document.addEventListener('webkitfullscreenchange',_syncFullscreenBtn);
   // Así ningún equipo se queda pegado en una versión vieja: al publicar una nueva, se actualiza
   // solo sin que nadie tenga que borrar caché ni tocar nada.
   let _recargando=false;
-  navigator.serviceWorker.addEventListener('controllerchange',()=>{
-    if(_recargando) return; _recargando=true; location.reload();
-  });
+  const _recargarUnaVez=()=>{ if(_recargando) return; _recargando=true; try{ location.reload(); }catch(e){} };
+  navigator.serviceWorker.addEventListener('controllerchange', _recargarUnaVez);
+  // El SW nuevo avisa "sw-updated" al activarse → recargar para tomar el código nuevo.
+  navigator.serviceWorker.addEventListener('message',(ev)=>{ if(ev&&ev.data&&ev.data.type==='sw-updated') _recargarUnaVez(); });
   navigator.serviceWorker.register('sw.js').then(reg=>{
-    // Buscar versión nueva de inmediato y cada 30 min (por si el equipo queda abierto días).
+    // Buscar versión nueva: al abrir, al enfocar la ventana, y cada 5 min.
     try{ reg.update(); }catch(e){}
-    setInterval(()=>{ try{ reg.update(); }catch(e){} }, 30*60*1000);
+    document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ try{ reg.update(); }catch(e){} } });
+    setInterval(()=>{ try{ reg.update(); }catch(e){} }, 5*60*1000);
     // Aviso de versión nueva: cuando hay un SW en espera, ofrecer actualizar con un toque.
     function avisarNueva(){
       if(document.getElementById('sw-update-bar')) return;
