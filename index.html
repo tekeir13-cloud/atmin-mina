@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes</div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-8</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes</div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-8</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-7</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-8</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -19663,12 +19663,36 @@ async function abrirDiagSync(){
         <td style="padding:5px 8px;text-align:center">${nb==='—'?'':(igual?'<span style="color:#22c55e">✓</span>':'<span style="color:#ef4444;font-weight:800">≠</span>')}</td>
       </tr>`;
     }).join('');
+    // Equipos conectados: qué versión corre cada computadora (evidencia, no teoría)
+    let equiposHtml='';
+    try{
+      if(typeof sb!=='undefined'&&sb){
+        const { data:eqRow }=await sb.from('app_modulos').select('data').eq('modulo','diag_equipos').single();
+        const eqs=(eqRow&&eqRow.data)||{};
+        const miId=(typeof _diagDeviceId==='function')?_diagDeviceId():'';
+        const filEq=Object.entries(eqs).sort((a,b)=>(b[1].ts||0)-(a[1].ts||0)).map(([id,e])=>{
+          const hace=Math.round((Date.now()-(e.ts||0))/60000);
+          return `<tr>
+            <td style="padding:4px 8px;font-family:monospace;color:var(--text)">${id}${id===miId?' <b style="color:#22c55e">(este equipo)</b>':''}</td>
+            <td style="padding:4px 8px;text-align:center;font-family:monospace;font-weight:700;color:${String(e.v||'').includes('v2026')?'var(--text)':'#ef4444'}">${e.v||'?'}</td>
+            <td style="padding:4px 8px">${e.usuario||'—'}</td>
+            <td style="padding:4px 8px;text-align:right;color:var(--text3)">${hace<2?'ahora':'hace '+(hace<60?hace+' min':Math.round(hace/60)+' h')}</td>
+          </tr>`;
+        }).join('');
+        if(filEq) equiposHtml=`<div style="font-size:12px;font-weight:800;color:var(--text);margin:16px 0 6px">🖥 Equipos conectados</div>
+          <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="color:var(--text3);font-size:10px;text-transform:uppercase"><th style="text-align:left;padding:4px 8px">Equipo</th><th style="padding:4px 8px">Versión</th><th style="text-align:left;padding:4px 8px">Último usuario</th><th style="text-align:right;padding:4px 8px">Última conexión</th></tr></thead>
+          <tbody>${filEq}</tbody></table>
+          <div style="font-size:10px;color:var(--text3);margin-top:6px">Todos los equipos deben mostrar la MISMA versión. Uno en <b style="color:#ef4444">rojo</b> o con versión distinta corre código viejo: en ese equipo hay que renovar la app una vez.</div>`;
+      }
+    }catch(e){}
     const t=document.getElementById('diag-sync-tabla');
     if(t) t.innerHTML=`<table style="width:100%;border-collapse:collapse">
       <thead><tr style="color:var(--text3);font-size:10px;text-transform:uppercase"><th style="text-align:left;padding:5px 8px">Módulo</th><th style="padding:5px 8px">Este equipo</th><th style="padding:5px 8px">Nube</th><th style="padding:5px 8px"></th></tr></thead>
       <tbody>${filas}</tbody></table>
       ${errNube?`<div style="font-size:10px;color:#ef4444;margin-top:8px">⚠ No se pudo leer la nube desde este equipo: ${errNube}. Esta puede ser la causa de que los números difieran aquí.</div>`:''}
-      <div style="font-size:10px;color:var(--text3);margin-top:8px">Si un módulo marca <b style="color:#ef4444">≠</b>, este equipo no está al día: usa "Forzar sincronización completa". Si la nube dice "—", ese módulo aún no existe en la nube.</div>`;
+      <div style="font-size:10px;color:var(--text3);margin-top:8px">Si un módulo marca <b style="color:#ef4444">≠</b>, este equipo no está al día: usa "Forzar sincronización completa". Si la nube dice "—", ese módulo aún no existe en la nube.</div>
+      ${equiposHtml}`;
   }catch(e){
     const t=document.getElementById('diag-sync-tabla');
     if(t) t.textContent='Error del diagnóstico: '+(e&&e.message||e);
@@ -19690,6 +19714,36 @@ async function forzarSincronizacion(){
 try{
   const vEl=document.getElementById('app-version');
   if(vEl){ vEl.style.cursor='pointer'; vEl.title='Clic: diagnóstico de sincronización'; vEl.onclick=abrirDiagSync; }
+}catch(e){}
+
+// ═══════════ REGISTRO DE EQUIPOS CONECTADOS (heartbeat) ═══════════
+// Cada equipo reporta a la nube su versión, usuario y última conexión. Así se ve con EVIDENCIA
+// qué versión corre cada computadora (panel de diagnóstico → "Equipos conectados"), sin adivinar.
+function _diagDeviceId(){
+  try{
+    let id=localStorage.getItem('atmin_device_id');
+    if(!id){ id='EQ-'+Math.random().toString(36).slice(2,8).toUpperCase(); localStorage.setItem('atmin_device_id',id); }
+    return id;
+  }catch(e){ return 'EQ-?'; }
+}
+async function _diagHeartbeat(){
+  try{
+    if(typeof sb==='undefined'||!sb||!SB_ONLINE) return;
+    const ver=(document.getElementById('app-version')?.textContent||'').trim()||'(sin versión)';
+    const { data }=await sb.from('app_modulos').select('data').eq('modulo','diag_equipos').single();
+    const mapa=(data&&data.data&&typeof data.data==='object')?data.data:{};
+    mapa[_diagDeviceId()]={
+      v:ver,
+      usuario:(typeof usuarioActivo!=='undefined'&&usuarioActivo)?(usuarioActivo.nombre||usuarioActivo.rol||'?'):'(sin sesión)',
+      ts:Date.now(),
+      nav:(navigator.userAgent.match(/(Chrome|Edg|Safari|Firefox)\/[\d.]+/)||['?'])[0]
+    };
+    await sb.from('app_modulos').upsert({ modulo:'diag_equipos', data:mapa, updated_at:new Date().toISOString() },{ onConflict:'modulo' });
+  }catch(e){}
+}
+try{
+  setTimeout(_diagHeartbeat, 6000);                 // al abrir (tras cargar la nube)
+  setInterval(_diagHeartbeat, 10*60*1000);          // y cada 10 minutos
 }catch(e){}
 </script>
 
