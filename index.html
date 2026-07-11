@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.10-4</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.10-5</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -7172,6 +7172,22 @@ function calcStock(){
   Object.values(map).forEach(r=>r.stock=r.ingreso-r.salida);
   return Object.values(map);
 }
+// EL MAESTRO DE PRODUCTOS MANDA: solo existen los productos cuyo código está en el maestro.
+// Si un código se elimina del maestro, su existencia desaparece del stock al instante (queda en 0).
+// Regla: si el movimiento tiene código → ese código debe existir en el maestro; si no tiene
+// código → se acepta por nombre exacto (productos antiguos registrados sin código).
+function filtrarPorMaestro(stock){
+  const maestro=(state.almacen&&state.almacen.productos)||[];
+  if(!maestro.length) return stock;   // maestro vacío: no ocultar nada (bootstrap)
+  const cods=new Set(), noms=new Set();
+  maestro.forEach(p=>{ if(p.codigo)cods.add(String(p.codigo).trim().toLowerCase()); if(p.nombre)noms.add(String(p.nombre).trim().toLowerCase()); });
+  return stock.filter(r=>{
+    const c=String(r.codigo||'').trim().toLowerCase();
+    if(c) return cods.has(c);
+    const n=String(r.producto||r.descripcion||'').trim().toLowerCase();
+    return n&&noms.has(n);
+  });
+}
 function fmt3(n){return (Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:0,maximumFractionDigits:3});}
 function fmtS2(n){return 'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2});}
 
@@ -7196,7 +7212,7 @@ function renderStockVigente(){
   const almFil=document.getElementById('stock-alm-fil')?.value||'';
   const soloCon=document.getElementById('stock-solo-con')?.checked||false;
 
-  let stock=calcStock();
+  let stock=filtrarPorMaestro(calcStock());
   if(almFil) stock=stock.filter(r=>r.almacen===almFil);
   if(q) stock=stock.filter(r=>(r.producto||r.descripcion||'').toLowerCase().includes(q)||(r.descripcion||'').toLowerCase().includes(q));
   if(soloCon) stock=stock.filter(r=>r.stock>0);
@@ -7389,7 +7405,7 @@ function toggleOperarioSalida(){
 }
 function poblarProductosSalida(){
   const alm=document.getElementById('sa-almacen').value;
-  const stock=calcStock().filter(r=>r.almacen===alm&&r.stock>0).sort((a,b)=>(a.producto||a.descripcion).localeCompare(b.producto||b.descripcion));
+  const stock=filtrarPorMaestro(calcStock()).filter(r=>r.almacen===alm&&r.stock>0).sort((a,b)=>(a.producto||a.descripcion).localeCompare(b.producto||b.descripcion));
   const sel=document.getElementById('sa-producto');
   sel.innerHTML='<option value="">— Seleccionar —</option>'+stock.map(r=>`<option value="${escAttr(r.key)}">${r.producto?r.producto+' — ':''}${r.descripcion}${r.codigo?' ('+r.codigo+')':''} (stock: ${fmt3(r.stock)} ${r.unidad})</option>`).join('');
   document.getElementById('sa-unidad').value='';
