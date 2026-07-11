@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-8</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-9/span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-8</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-9/span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-8</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-9/span></div>
     </div>
   </div>
   <nav class="nav">
@@ -6032,6 +6032,8 @@ function iniciarRealtime(){
           const row = payload.new || payload.old || {};
           const modulo = row.modulo, data = row.data;
           if(!modulo) return;
+          // Señal "publicar vista oficial": otro equipo pidió que TODOS jalen la nube ahora.
+          if(modulo==='sync_broadcast'){ try{ _aplicarBroadcastSync(data); }catch(e){} return; }
           // Ignora el eco de nuestra propia escritura reciente
           if(_rtSelfWrite[modulo] && (Date.now()-_rtSelfWrite[modulo] < 5000)) return;
           _rtAplicarModulo(modulo, data);
@@ -19621,9 +19623,11 @@ async function abrirDiagSync(){
     <div style="font-size:11px;color:var(--text3);margin-bottom:14px">Versión <b>${document.getElementById('app-version')?.textContent||'—'}</b> · Nube: <b style="color:${(typeof SB_ONLINE!=='undefined'&&SB_ONLINE)?'#22c55e':'#ef4444'}">${(typeof SB_ONLINE!=='undefined'&&SB_ONLINE)?'conectada':'SIN CONEXIÓN'}</b> · Tiempo real: <b>${rtBadge?rtBadge.textContent:'—'}</b> · Pendientes por subir: <b style="color:${pendientes.length?'#f59e0b':'#22c55e'}">${pendientes.length?pendientes.join(', '):'ninguno'}</b> · Hora del equipo: <b>${new Date().toLocaleString('es-PE')}</b></div>
     <div id="diag-sync-tabla" style="font-size:12px;color:var(--text3)">Cargando comparación con la nube…</div>
     <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
-      <button class="btn btn-gold" onclick="forzarSincronizacion()">🔄 Forzar sincronización completa</button>
+      <button class="btn btn-gold" onclick="publicarVistaOficial()" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);border:none;color:#fff">📢 Publicar mi vista a todos los equipos</button>
+      <button class="btn btn-outline" onclick="forzarSincronizacion()">🔄 Jalar la nube a este equipo</button>
       <button class="btn btn-outline" onclick="document.getElementById('diag-sync-modal').remove()">Cerrar</button>
     </div>
+    <div style="font-size:10px;color:var(--text3);margin-top:8px"><b>📢 Publicar mi vista</b>: úsalo desde el equipo con la información correcta — sube tus datos y hace que TODOS los demás equipos (con la app abierta) se sincronicen contigo. &nbsp;<b>🔄 Jalar la nube</b>: trae a ESTE equipo lo último de la nube.</div>
   </div>`;
   document.body.appendChild(ov);
   // Comparación local vs nube por módulo
@@ -19697,6 +19701,50 @@ async function abrirDiagSync(){
     const t=document.getElementById('diag-sync-tabla');
     if(t) t.textContent='Error del diagnóstico: '+(e&&e.message||e);
   }
+}
+// ═══════════ "PUBLICAR MI VISTA A TODOS" — un equipo fija sus datos como los oficiales ═══════════
+// Sube TODOS los módulos de ESTE equipo a la nube y avisa a los demás que jalen la nube ahora.
+// Los que faltan datos (los que muestran menos) los reciben; el resultado: todos ven lo mismo.
+const _SYNC_MODULOS=[
+  ['personal', ()=>state.personal],
+  ['tareas', ()=>state.tareas],
+  ['almacen', ()=>(typeof _almClonLight==='function'?_almClonLight(state.almacen):state.almacen)],
+  ['reportes_guardia', ()=>state.reportesGuardia],
+  ['compresorista', ()=>state.compresorista],
+  ['comb_pet', ()=>{try{return combCargar('pet');}catch(e){return null;}}],
+  ['comb_gas', ()=>{try{return combCargar('gas');}catch(e){return null;}}],
+  ['planilla_supervision', ()=>{try{return planillaSupLoad();}catch(e){return null;}}],
+  ['remanente_salidas', ()=>state.remanenteSalidas],
+  ['mant_kits', ()=>state.mantenimiento],
+  ['mant_repuestos', ()=>state.mantRepuestos],
+  ['servicios_terceros', ()=>{try{return JSON.parse(localStorage.getItem('atmin_servicios_terceros')||'[]');}catch(e){return null;}}],
+  ['metas', ()=>state.metas],
+  ['distribucion', ()=>state.distribucion],
+  ['val_labor', ()=>state.valorizacionesLabor],
+];
+async function publicarVistaOficial(){
+  if(!confirm('¿Publicar la vista de ESTE equipo como la oficial?\n\nTus datos actuales se enviarán a la nube y TODOS los demás equipos (que estén con la app abierta) se sincronizarán con lo que ves aquí. Úsalo desde el equipo que tiene la información correcta.')) return;
+  showNotif('📢 Publicando tu vista a todos los equipos…');
+  for(const [m,get] of _SYNC_MODULOS){ try{ const d=get(); if(d!=null) await sbSyncModulo(m,d); }catch(e){} }
+  try{ ['params_precios','adelantos','meses_cerrados','fin_config','personal_jefe'].forEach(m=>{ if(typeof configSync==='function') configSync(m); }); }catch(e){}
+  try{ if(typeof tombLoad==='function') await sbSyncModulo('tombstones', tombLoad()); }catch(e){}
+  // Avisar a los demás que jalen la nube ahora (broadcast)
+  try{
+    const v=Date.now();
+    localStorage.setItem('atmin_sync_bcast', String(v));
+    if(typeof sb!=='undefined'&&sb) await sb.from('app_modulos').upsert({ modulo:'sync_broadcast', data:{ v, por:(typeof usuarioActivo!=='undefined'&&usuarioActivo?usuarioActivo.nombre:''), ts:v }, updated_at:new Date().toISOString() },{ onConflict:'modulo' });
+  }catch(e){}
+  showNotif('✓ Vista publicada. Los demás equipos se están sincronizando.');
+  try{ document.getElementById('diag-sync-modal')?.remove(); }catch(e){}
+}
+// Recibe el broadcast: si es nuevo, este equipo recarga para jalar la nube fresca y quedar igual.
+function _aplicarBroadcastSync(data){
+  const v=Number(data&&data.v)||0;
+  const visto=Number(localStorage.getItem('atmin_sync_bcast')||0);
+  if(v<=visto) return;                       // ya aplicado o propio
+  localStorage.setItem('atmin_sync_bcast', String(v));
+  try{ showNotif('🔄 Sincronizando con el equipo oficial…'); }catch(e){}
+  setTimeout(()=>{ try{ location.reload(); }catch(e){} }, 2000);  // recarga → arranque jala la nube
 }
 async function forzarSincronizacion(){
   showNotif('🔄 Sincronizando todo…');
