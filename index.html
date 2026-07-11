@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.10-8</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-1</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -6086,9 +6086,23 @@ function almacenLoad(){
   }catch(e){}
 }
 // ── AUTOCOMPLETE INGRESO ──
+// Resuelve el producto elegido SIN ambigüedad: varios productos pueden compartir nombre
+// (p.ej. 7 "FILTRO DE PETROLEO" con códigos distintos), así que la opción del datalist es
+// "NOMBRE (CÓDIGO)" y aquí se extrae el código exacto. El código resuelto queda en
+// dataset.codigo del input y viaja con el ingreso para que el stock se separe por código.
+function _prodResolverIngreso(valRaw){
+  const val=String(valRaw||'').trim().toLowerCase();
+  const prods=state.almacen.productos||[];
+  // 1) "nombre (codigo)" — formato del datalist
+  const m=/\(([^()]+)\)\s*$/.exec(val);
+  if(m){ const cod=m[1].trim(); const p=prods.find(x=>String(x.codigo||'').toLowerCase()===cod); if(p) return p; }
+  // 2) código exacto  3) nombre exacto (primer match, para productos con nombre único)
+  return prods.find(x=>String(x.codigo||'').toLowerCase()===val)||prods.find(x=>String(x.nombre||'').toLowerCase()===val)||null;
+}
 function autoFillProductoIngreso(){
-  const val=document.getElementById('in-producto').value.trim().toLowerCase();
-  const p=(state.almacen.productos||[]).find(x=>x.codigo.toLowerCase()===val||x.nombre.toLowerCase()===val);
+  const inp=document.getElementById('in-producto');
+  const p=_prodResolverIngreso(inp.value);
+  if(inp) inp.dataset.codigo=p?String(p.codigo||''):'';
   if(p){
     // Vincular con el maestro de productos: autocompletar descripción, unidad y precio
     document.getElementById('in-descripcion').value=p.descripcion||p.nombre||'';
@@ -6097,13 +6111,13 @@ function autoFillProductoIngreso(){
     if(pr && !pr.value && p.precio) pr.value=p.precio;
     if(typeof calcTotalIngreso==='function') calcTotalIngreso();
   }
-  // rebuild datalist
+  // rebuild datalist — el value incluye el código para distinguir productos con el mismo nombre
   const dl=document.getElementById('prod-datalist');
-  if(dl){dl.innerHTML=(state.almacen.productos||[]).map(x=>`<option value="${escAttr(x.nombre)}" label="${escAttr(x.codigo+' · '+x.nombre)}">`).join('');}
+  if(dl){dl.innerHTML=(state.almacen.productos||[]).map(x=>`<option value="${escAttr(x.nombre+(x.codigo?' ('+x.codigo+')':''))}" label="${escAttr(x.codigo+' · '+x.nombre)}">`).join('');}
 }
 function poblarDatalistProductos(){
   const dl=document.getElementById('prod-datalist');
-  if(dl)dl.innerHTML=(state.almacen.productos||[]).map(x=>`<option value="${escAttr(x.nombre)}">${x.codigo} · ${x.nombre}</option>`).join('');
+  if(dl)dl.innerHTML=(state.almacen.productos||[]).map(x=>`<option value="${escAttr(x.nombre+(x.codigo?' ('+x.codigo+')':''))}">${x.codigo} · ${x.nombre}</option>`).join('');
 }
 // ── MAESTRO DE PRODUCTOS ──
 function nextCodigoProducto(){
@@ -7165,7 +7179,13 @@ function almMesConDatos(){
   if(!meses.length)return almMesActual();
   return meses.sort().reverse()[0];
 }
-function prodKey(almacen,codigo,desc){return (almacen||'')+'|'+String(desc||'').trim().toUpperCase();}
+// Clave de agrupación del stock: si el movimiento tiene CÓDIGO, agrupa por código (productos
+// distintos con el mismo nombre —p.ej. 7 "FILTRO DE PETROLEO"— se ven POR SEPARADO); los
+// movimientos antiguos sin código se agrupan por descripción como siempre.
+function prodKey(almacen,codigo,desc){
+  const c=String(codigo||'').trim().toUpperCase();
+  return (almacen||'')+'|'+(c?('C:'+c):String(desc||'').trim().toUpperCase());
+}
 // Escapa comillas/ángulos para usar de forma segura dentro de un atributo HTML (value="...").
 // Sin esto, descripciones con comillas (p.ej. medidas en pulgadas: 1/2") rompen el atributo
 // y el <option> pierde su value real, impidiendo seleccionar el producto correcto.
@@ -7349,10 +7369,14 @@ function agregarItemIngreso(){
   if(!desc){showNotif('⚠ Ingresa la descripción del producto','error');return;}
   if(cant<=0){showNotif('⚠ Ingresa una cantidad válida','error');return;}
   const precio=parseFloat(g('in-precio').value)||0;
-  ingresoCart.push({vale:g('in-vale').value.trim(),producto:g('in-producto').value.trim(),descripcion:desc,unidad:g('in-unidad').value,cantidad:cant,precio:precio,total:cant*precio});
+  // Resolver el producto del maestro para capturar su CÓDIGO (clave para separar el stock)
+  const pM=(typeof _prodResolverIngreso==='function')?_prodResolverIngreso(g('in-producto').value):null;
+  const codigo=g('in-producto').dataset.codigo||(pM?String(pM.codigo||''):'');
+  const nombreLimpio=pM?pM.nombre:g('in-producto').value.trim().replace(/\s*\([^()]*\)\s*$/,'');
+  ingresoCart.push({vale:g('in-vale').value.trim(),producto:nombreLimpio,codigo,descripcion:desc,unidad:g('in-unidad').value,cantidad:cant,precio:precio,total:cant*precio});
   renderIngresoCart();
   // Limpiar campos de ítem para el siguiente (mantiene vale por si es el mismo)
-  g('in-producto').value='';g('in-descripcion').value='';g('in-cantidad').value='';g('in-precio').value='';
+  g('in-producto').value='';g('in-producto').dataset.codigo='';g('in-descripcion').value='';g('in-cantidad').value='';g('in-precio').value='';
   g('in-total').textContent='S/ 0.00';g('in-producto').focus();
 }
 function quitarItemIngreso(idx){ingresoCart.splice(idx,1);renderIngresoCart();}
@@ -7377,7 +7401,7 @@ function guardarIngreso(){
   const almacen=g('in-almacen').value;
   const base=Date.now();const grupo='GI'+base;
   ingresoCart.forEach((i,idx)=>{
-    state.almacen.ingresos.push({id:'I'+(base+idx),grupo,fecha,vale:i.vale,detalle,almacen,codigo:'',
+    state.almacen.ingresos.push({id:'I'+(base+idx),grupo,fecha,vale:i.vale,detalle,almacen,codigo:i.codigo||'',
       producto:i.producto,descripcion:i.descripcion,unidad:i.unidad,cantidad:i.cantidad,precio:i.precio,total:i.total});
   });
   almacenSave();
@@ -7681,7 +7705,7 @@ function guardarEdicionSalida(){
   // Revalidar stock: disponible = stock actual del producto + la cantidad original de ESTA salida
   // (que se está reemplazando). Evita dejar el stock en negativo al editar.
   const cantOriginal=Number(s.cantidad)||0;
-  const keyEdit=(typeof prodKey==='function')?prodKey(nuevoAlmacen,g('es-producto').value.trim(),desc):null;
+  const keyEdit=(typeof prodKey==='function')?prodKey(nuevoAlmacen,s.codigo,desc):null;
   if(keyEdit && typeof calcStock==='function'){
     const rStk=calcStock().find(x=>x.key===keyEdit);
     const dispEfectivo=(rStk?(rStk.stock||0):0) + (String(s.almacen)===String(nuevoAlmacen)&&String(s.descripcion).trim().toUpperCase()===desc.toUpperCase()?cantOriginal:0);
