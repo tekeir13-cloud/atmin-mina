@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-19/span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-20/span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-19/span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-20/span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-19/span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-20/span></div>
     </div>
   </div>
   <nav class="nav">
@@ -2557,6 +2557,8 @@ select option{background:var(--coal3);}
         <option value="General">Insumos</option>
         <option value="Mantenimiento">Mantenimiento</option>
       </select>
+      <div style="flex:1"></div>
+      <button class="btn btn-outline" style="padding:7px 14px;font-size:12px;border-color:#22c55e;color:#22c55e" onclick="exportarStockExcel()">📊 Exportar Excel</button>
     </div>
     <div id="stock-vigente-wrap"></div>
   </div>
@@ -7411,6 +7413,34 @@ function verDesgloseValor(){
     <div style="margin-top:14px"><button class="btn btn-outline" onclick="document.getElementById('desglose-valor-modal').remove()">Cerrar</button></div>
   </div>`;
   document.body.appendChild(ov);
+}
+// Exporta a Excel el stock actual: solo productos del maestro, con código y existencia real.
+function exportarStockExcel(){
+  if(typeof XLSX==='undefined'){ showNotif('Librería Excel no cargada','error'); return; }
+  const almFil=document.getElementById('stock-alm-fil')?.value||'';
+  let stock=(typeof filtrarPorMaestro==='function'?filtrarPorMaestro(calcStock()):calcStock());
+  if(almFil) stock=stock.filter(r=>r.almacen===almFil);
+  stock=stock.slice().sort((a,b)=>(a.producto||a.descripcion||'').localeCompare(b.producto||b.descripcion||''));
+  const almLbl=a=>a==='General'?'Insumos':a;
+  const filas=stock.map(r=>({
+    'Código': r.codigo||'',
+    'Producto': r.producto||r.descripcion||'',
+    'Almacén': almLbl(r.almacen),
+    'U.M.': r.unidad||'',
+    'Existencia': Number(r.stock)||0,
+    'Precio Unit.': Number(r.precio)||0,
+    'Valor': Math.round((Number(r.stock)||0)*(Number(r.precio)||0)*100)/100
+  }));
+  const totalUnid=filas.reduce((a,r)=>a+r.Existencia,0);
+  const totalVal=filas.reduce((a,r)=>a+r.Valor,0);
+  filas.push({'Código':'','Producto':'TOTAL','Almacén':'','U.M.':'','Existencia':totalUnid,'Precio Unit.':'','Valor':Math.round(totalVal*100)/100});
+  const ws=XLSX.utils.json_to_sheet(filas,{header:['Código','Producto','Almacén','U.M.','Existencia','Precio Unit.','Valor']});
+  ws['!cols']=[{wch:16},{wch:44},{wch:14},{wch:8},{wch:12},{wch:12},{wch:14}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Stock');
+  const f='stock_almacen_'+((typeof hoy==='function')?hoy():new Date().toISOString().slice(0,10))+'.xlsx';
+  XLSX.writeFile(wb,f);
+  showNotif('✓ Excel exportado: '+filas.length+' líneas ('+stock.length+' productos)');
 }
 function renderStockVigente(){
   const wrap=document.getElementById('stock-vigente-wrap');if(!wrap)return;
