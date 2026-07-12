@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-21/span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-22/span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-21/span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-22/span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-21/span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-22/span></div>
     </div>
   </div>
   <nav class="nav">
@@ -2573,6 +2573,7 @@ select option{background:var(--coal3);}
       <div style="flex:1"></div>
       <button id="btn-hist-vertodo" class="btn btn-outline" style="padding:6px 14px;font-size:11px" onclick="histToggleVerTodo()" title="Muestra solo lo reciente o todo el historial (solo cambia la vista, no borra nada)">👁 Ver compacto</button>
       <button id="btn-recuperar-hist" class="btn btn-outline" style="display:none;padding:6px 14px;font-size:11px;border-color:#22c55e;color:#22c55e" onclick="recuperarMovimientos()" title="Recupera los ingresos y salidas del respaldo (repone el detalle y el NV2820)">♻ Recuperar movimientos</button>
+      <button class="btn btn-outline" style="padding:6px 14px;font-size:11px;border-color:#f87171;color:#f87171" onclick="restablecerAlmacenBase()" title="Vuelve al inventario base (~S/ 103,554), limpiando movimientos. Con respaldo.">🧯 Restablecer al inventario base</button>
     </div>
     <div class="section-title" style="color:#60a5fa">📥 Ingresos <span id="hist-ing-count" style="font-size:12px;color:var(--text3);font-weight:400"></span></div>
     <div class="table-wrap" style="margin-bottom:24px">
@@ -7763,6 +7764,39 @@ function _tombAddMuchos(ids){
   const t=(typeof tombLoad==='function')?tombLoad():{}; const now=Date.now(); let ch=false;
   (ids||[]).forEach(id=>{ if(id!=null&&id!==''){ t[String(id)]=now; ch=true; } });
   if(ch){ try{ tombPrune(); }catch(e){} try{ tombPersist(); }catch(e){} try{ if(typeof sbSyncModulo==='function') sbSyncModulo('tombstones', tombLoad()); }catch(e){} }
+}
+// Restablece el almacén al INVENTARIO BASE (los 380 productos de la semilla, ~S/ 103,554).
+// Deja el stock correcto de partida y limpia los movimientos polucionados. Con respaldo previo.
+// Se impone en todos los equipos (lápida a lo actual + a la semilla vieja; re-siembra con ids
+// frescos para que la fusión no lo pise ni lo duplique).
+function restablecerAlmacenBase(){
+  if(!confirm('¿Restablecer el almacén al INVENTARIO BASE?\n\n• El stock vuelve al inventario inicial oficial (~S/ 103,554).\n• Se limpian los ingresos y salidas registrados (quedan en respaldo).\n• Los explosivos NV3190 NO se tocan.\n\nÚsalo para dejar el valor correcto tras los datos de prueba. Se aplica en todos los equipos.')) return;
+  // Respaldo del estado actual por si acaso
+  try{
+    const backup={ ts:Date.now(), ingresos:JSON.parse(JSON.stringify(state.almacen.ingresos||[])), salidas:JSON.parse(JSON.stringify(state.almacen.salidas||[])), inventarioInicial:JSON.parse(JSON.stringify(state.almacen.inventarioInicial||[])) };
+    localStorage.setItem(HISTBK_KEY, JSON.stringify(backup));
+    if(typeof sbSyncModulo==='function') sbSyncModulo('almacen_histbackup', backup);
+  }catch(e){}
+  // Lápida a TODO lo actual + al rango de ids de la semilla vieja (II0001..II0400), para que en
+  // todos los equipos desaparezca y no reaparezca por fusión.
+  const ids=[
+    ...(state.almacen.ingresos||[]).map(x=>x.id),
+    ...(state.almacen.salidas||[]).map(x=>x.id),
+    ...(state.almacen.inventarioInicial||[]).map(x=>x.id)
+  ].filter(Boolean);
+  for(let i=1;i<=400;i++) ids.push('II'+String(i).padStart(4,'0'));
+  _tombAddMuchos(ids);
+  // Re-sembrar el inventario base con ids FRESCOS (esquivan las lápidas)
+  try{ almacenSeedInventarioInicial(); }catch(e){}
+  const base=Date.now();
+  state.almacen.inventarioInicial=(state.almacen.inventarioInicial||[]).map((x,i)=>({...x, id:'SEED'+base+'-'+i}));
+  state.almacen.ingresos=[];
+  state.almacen.salidas=[];
+  delete state.almacen.histDepuradoTs;
+  try{ almacenSave(); }catch(e){}
+  try{ renderAlmacen(); renderStockVigente(); renderHistorialAlmacen(); if(typeof renderSubalmacen2820==='function') renderSubalmacen2820(); }catch(e){}
+  const val=(typeof _valorDeAlmacen==='function')?_valorDeAlmacen(state.almacen):0;
+  showNotif('✓ Almacén restablecido al inventario base. Valor en stock: '+fmtS2(val));
 }
 // "Depurar" ahora es SOLO VISUAL: alterna entre ver lo reciente (compacto) o todo el historial.
 // NO toca ningún dato — los ingresos, salidas y el stock quedan exactamente igual.
