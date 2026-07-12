@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-17/span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-18/span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-17/span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-18/span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-17/span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-18/span></div>
     </div>
   </div>
   <nav class="nav">
@@ -7381,6 +7381,37 @@ function poblarFiltroAlmacenes(selId){
   sel.innerHTML='<option value="">Todos los almacenes</option>'+alms.map(a=>`<option value="${escAttr(a)}">${escAttr(almLabel(a))}</option>`).join('');
   if(cur && alms.includes(cur)) sel.value=cur;
 }
+// Desglose del VALOR en stock: muestra los productos que más aportan (stock × precio), para
+// detectar de un vistazo qué está inflando el total (precio o cantidad rara, duplicados, etc.).
+function verDesgloseValor(){
+  document.getElementById('desglose-valor-modal')?.remove();
+  const stock=(typeof filtrarPorMaestro==='function'?filtrarPorMaestro(calcStock()):calcStock())
+    .filter(r=>Number(r.stock)>0)
+    .map(r=>({...r, valor:Number(r.stock)*Number(r.precio||0)}))
+    .sort((a,b)=>b.valor-a.valor);
+  const total=stock.reduce((a,r)=>a+r.valor,0);
+  const top=stock.slice(0,40);
+  const ov=document.createElement('div');
+  ov.id='desglose-valor-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9998;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.onclick=e=>{ if(e.target===ov) ov.remove(); };
+  ov.innerHTML=`<div style="background:var(--coal2);border:1px solid var(--border);border-radius:14px;width:min(680px,96vw);max-height:88vh;overflow:auto;padding:22px" onclick="event.stopPropagation()">
+    <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:2px">🔎 Desglose del valor en stock</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:14px">Total: <b style="color:var(--gold-light)">${fmtS2(total)}</b> en ${stock.length} productos. Ordenado por cuánto aporta cada uno (stock × precio). Si ves un precio o una cantidad rara, ahí está el problema.</div>
+    <div class="table-wrap"><table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="color:var(--text3);font-size:10px;text-transform:uppercase"><th style="text-align:left;padding:5px 8px">Producto</th><th style="padding:5px 8px">Código</th><th style="padding:5px 8px;text-align:right">Stock</th><th style="padding:5px 8px;text-align:right">P.U.</th><th style="padding:5px 8px;text-align:right">Valor</th></tr></thead>
+      <tbody>${top.map(r=>`<tr>
+        <td style="padding:5px 8px;color:var(--text)">${r.producto||r.descripcion||'—'}</td>
+        <td style="padding:5px 8px;color:var(--text3);font-family:monospace">${r.codigo||'—'}</td>
+        <td style="padding:5px 8px;text-align:right;font-family:monospace">${fmt3(r.stock)}</td>
+        <td style="padding:5px 8px;text-align:right;font-family:monospace">${fmtS2(r.precio)}</td>
+        <td style="padding:5px 8px;text-align:right;font-family:monospace;font-weight:700;color:${r.valor>50000?'#f87171':'var(--gold-light)'}">${fmtS2(r.valor)}</td>
+      </tr>`).join('')}</tbody></table></div>
+    ${stock.length>40?`<div style="font-size:10px;color:var(--text3);margin-top:8px">Mostrando los 40 de mayor valor de ${stock.length}.</div>`:''}
+    <div style="margin-top:14px"><button class="btn btn-outline" onclick="document.getElementById('desglose-valor-modal').remove()">Cerrar</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+}
 function renderStockVigente(){
   const wrap=document.getElementById('stock-vigente-wrap');if(!wrap)return;
   poblarFiltroAlmacenes('stock-alm-fil');
@@ -7412,8 +7443,8 @@ function renderStockVigente(){
       <div class="kpi-label" style="font-size:10px">Productos agotados / sin mov.</div>
       <div class="kpi-value" style="font-size:22px;color:#f87171">${sinStock.length}</div>
     </div>
-    <div class="kpi-card" style="padding:12px 14px">
-      <div class="kpi-label" style="font-size:10px">Valor total en stock</div>
+    <div class="kpi-card" style="padding:12px 14px;cursor:pointer" onclick="verDesgloseValor()" title="Ver qué productos aportan al valor">
+      <div class="kpi-label" style="font-size:10px">Valor total en stock 🔎</div>
       <div class="kpi-value" style="font-size:18px;color:var(--gold-light)">${fmtS2(valorTotal)}</div>
     </div>
     <div class="kpi-card" style="padding:12px 14px">
