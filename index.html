@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-22/span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-23/span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-22/span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-23/span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-22/span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-23/span></div>
     </div>
   </div>
   <nav class="nav">
@@ -2572,7 +2572,7 @@ select option{background:var(--coal3);}
       <button class="btn btn-outline" style="padding:6px 14px;font-size:11px" onclick="document.getElementById('hist-mes-sel').value='';renderHistorialAlmacen()">Ver todo el historial</button>
       <div style="flex:1"></div>
       <button id="btn-hist-vertodo" class="btn btn-outline" style="padding:6px 14px;font-size:11px" onclick="histToggleVerTodo()" title="Muestra solo lo reciente o todo el historial (solo cambia la vista, no borra nada)">👁 Ver compacto</button>
-      <button id="btn-recuperar-hist" class="btn btn-outline" style="display:none;padding:6px 14px;font-size:11px;border-color:#22c55e;color:#22c55e" onclick="recuperarMovimientos()" title="Recupera los ingresos y salidas del respaldo (repone el detalle y el NV2820)">♻ Recuperar movimientos</button>
+      <button id="btn-recuperar-hist" class="btn btn-outline" style="padding:6px 14px;font-size:11px;border-color:#22c55e;color:#22c55e" onclick="recuperarMovimientos()" title="Repone las salidas del respaldo → devuelve el NV2820 del compresorista y el gasto de almacén, sin re-inflar el stock">♻ Recuperar salidas (NV2820 y gasto)</button>
       <button class="btn btn-outline" style="padding:6px 14px;font-size:11px;border-color:#f87171;color:#f87171" onclick="restablecerAlmacenBase()" title="Vuelve al inventario base (~S/ 103,554), limpiando movimientos. Con respaldo.">🧯 Restablecer al inventario base</button>
     </div>
     <div class="section-title" style="color:#60a5fa">📥 Ingresos <span id="hist-ing-count" style="font-size:12px;color:var(--text3);font-weight:400"></span></div>
@@ -7816,19 +7816,22 @@ async function recuperarMovimientos(){
   if((!bk||(!(bk.ingresos||[]).length&&!(bk.salidas||[]).length)) && typeof sb!=='undefined' && sb){
     try{ const { data }=await sb.from('app_modulos').select('data').eq('modulo','almacen_histbackup').single(); if(data&&data.data) bk=data.data; }catch(e){}
   }
-  if(!bk||(!(bk.ingresos||[]).length&&!(bk.salidas||[]).length)){ showNotif('No se encontró respaldo de movimientos para recuperar','error'); return; }
-  if(!confirm(`¿Recuperar los movimientos del respaldo?\n\n• Ingresos: ${(bk.ingresos||[]).length}\n• Salidas: ${(bk.salidas||[]).length}\n\nSe reponen los ingresos y salidas (y con ellos el NV2820). El stock se recalcula desde esos movimientos.`)) return;
-  // Quitar la apertura que creó la depuración (con lápida) para no duplicar stock
-  _tombAddMuchos((state.almacen.inventarioInicial||[]).filter(x=>String(x.id||'').indexOf('INIC')===0).map(x=>x.id));
+  const nSal=(bk.salidas||[]).length;
+  if(!nSal){ showNotif('El respaldo no tiene salidas para recuperar','error'); return; }
+  // RECUPERAR SOLO LAS SALIDAS: son las que alimentan el NV2820 y el gasto de almacén, y NO
+  // inflan el stock (las que inflaban eran los ingresos, que se dejan fuera). Se conserva el
+  // inventario base actual. Resultado: stock ≈ base − consumo, gasto y NV2820 de vuelta.
+  if(!confirm(`¿Recuperar las SALIDAS del respaldo?\n\n• Salidas a reponer: ${nSal}\n\nDevuelve el gasto de almacén y el stock del compresorista (NV2820). Mantiene el inventario base actual (no re-infla el stock).`)) return;
   const base=Date.now(); let c=0;
-  const fresco=(arr,pref)=>(arr||[]).map(x=>({...x, id:pref+base+'-'+(c++)}));
-  state.almacen.ingresos=fresco(bk.ingresos,'IREC');
-  state.almacen.salidas=fresco(bk.salidas,'SREC');
-  state.almacen.inventarioInicial=fresco((bk.inventarioInicial||[]).filter(x=>String(x.id||'').indexOf('INIC')!==0),'IIREC');
+  const salsFrescas=(bk.salidas||[]).map(x=>({...x, id:'SREC'+base+'-'+(c++)}));
+  // Unir con las salidas actuales (por si ya hay algunas), evitando duplicar por contenido
+  const yaHay=new Set((state.almacen.salidas||[]).map(s=>(s.fecha||'')+'|'+(s.codigo||s.producto||'')+'|'+(s.cantidad||'')+'|'+(s.destino||'')));
+  const nuevas=salsFrescas.filter(s=>!yaHay.has((s.fecha||'')+'|'+(s.codigo||s.producto||'')+'|'+(s.cantidad||'')+'|'+(s.destino||'')));
+  state.almacen.salidas=[...(state.almacen.salidas||[]), ...nuevas];
   delete state.almacen.histDepuradoTs;
   try{ almacenSave(); }catch(e){}
-  try{ renderAlmacen(); renderStockVigente(); renderHistorialAlmacen(); if(typeof renderSubalmacen2820==='function') renderSubalmacen2820(); }catch(e){}
-  showNotif('✓ Movimientos recuperados: '+(bk.ingresos||[]).length+' ingresos, '+(bk.salidas||[]).length+' salidas');
+  try{ renderAlmacen(); renderStockVigente(); renderHistorialAlmacen(); if(typeof renderSubalmacen2820==='function') renderSubalmacen2820(); if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
+  showNotif('✓ Salidas recuperadas: '+nuevas.length+' (NV2820 y gasto de almacén repuestos)');
 }
 function renderHistorialAlmacen(){
   // Mostrar "Recuperar movimientos" si hay respaldo de la depuración vieja (local o nube)
