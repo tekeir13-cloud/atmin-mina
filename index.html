@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-26/span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-27/span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-26/span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-27/span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-26/span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-27/span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5125,19 +5125,37 @@ function renderSubalmacen2820(){
 // Siembra el stock inicial del NV2820 con materiales típicos del maestro (brocas, barrenos,
 // cimbras, pernos, split sets…). Es stock de CONTROL: no descuenta nada del almacén general.
 function cargarStockNV2820(){
-  if(!confirm('¿Cargar materiales típicos como stock inicial del NV2820?\n\n(brocas, barrenos, cimbras, pernos, split sets…). Es stock de control — NO toca el almacén general. Podrás editar cada cantidad.')) return;
+  if(!confirm('¿Cargar materiales típicos como stock inicial del NV2820?\n\nIncluye todo lo que salió a NV2820 + materiales típicos (brocas, barrenos, cimbras, pernos, split sets, rafia, planchas acanaladas, malla, mangueras…). Es stock de control — NO toca el almacén general. Podrás editar cada cantidad.')) return;
   const prods=(state.almacen&&state.almacen.productos)||[];
   const buscar=kw=>prods.find(p=>String(p.nombre||'').toUpperCase().includes(kw));
-  const plan=[['BROCA DESCARTABLE DE BOTONES 32',20],['BROCA DESCARTABLE DE BOTONES 36',20],['BARRA CONICA 4',10],['BARRA CONICA 6',10],['BARRA CONICA 8',6],['CIMBRA',4],['PERNO HELICOIDAL 19 MM X 7',30],['SPLIT SET',30],['ATACADOR',10],['GUIADOR',10],['ALCAYATA DE FE CORRUGADO T-G',20]];
   const ap=(state.almacen.nv2820Apertura||[]).slice();
   const yaHay=new Set(ap.map(a=>String(a.codigo||a.nombre).toUpperCase()));
-  let n=0;
-  plan.forEach((row,i)=>{
-    const p=buscar(row[0]); if(!p) return;
-    const key=String(p.codigo||p.nombre).toUpperCase();
-    if(yaHay.has(key)) return;
-    ap.push({id:'NV28-'+Date.now()+'-'+i, codigo:p.codigo||'', nombre:p.nombre, unidad:p.unidad||'PZA', cantidad:row[1]}); n++;
+  let n=0, base=Date.now(), idx=0;
+  const push=(codigo,nombre,unidad,cant)=>{
+    const key=String(codigo||nombre).toUpperCase();
+    if(!key||yaHay.has(key)) return;
+    yaHay.add(key);
+    ap.push({id:'NV28-'+base+'-'+(idx++), codigo:codigo||'', nombre:nombre, unidad:unidad||'PZA', cantidad:Number(cant)||0}); n++;
+  };
+  // 1) TODO lo que ha salido del almacén hacia NV2820 (destino '2820') — la cantidad total enviada
+  const salDest={};
+  ((state.almacen&&state.almacen.salidas)||[]).filter(s=>String(s.destino)==='2820').forEach(s=>{
+    const k=String(s.codigo||s.producto||'').toUpperCase(); if(!k) return;
+    if(!salDest[k]) salDest[k]={codigo:s.codigo||'', nombre:s.producto||s.descripcion||s.codigo, unidad:s.unidad||'PZA', cant:0};
+    salDest[k].cant+=Number(s.cantidad)||0;
   });
+  Object.values(salDest).forEach(x=>push(x.codigo,x.nombre,x.unidad,x.cant));
+  // 2) Materiales típicos del frente (por nombre en el maestro) con cantidades por defecto
+  const plan=[
+    ['BROCA DESCARTABLE DE BOTONES 32',20],['BROCA DESCARTABLE DE BOTONES 36',20],
+    ['BARRA CONICA 4',10],['BARRA CONICA 6',10],['BARRA CONICA 8',6],
+    ['CIMBRA',4],['PERNO HELICOIDAL 19 MM X 7',30],['SPLIT SET',30],
+    ['ATACADOR',10],['GUIADOR',10],['ALCAYATA DE FE CORRUGADO T-G',20],['ALCAYATA DE FE CORRUGADO T-L',20],
+    ['RAFIA',10],['PLANCHA ACANALADA',15],['MALLA ELECTROSOLDADA',10],
+    ['MANGUERA DE JEBE Y LONA 1/2',2],['MANGUERA DE JEBE Y LONA 1"',2],
+    ['ALAMBRE NEGRO',5],['SACO METALERO',50]
+  ];
+  plan.forEach(row=>{ const p=buscar(row[0]); if(p) push(p.codigo,p.nombre,p.unidad,row[1]); });
   state.almacen.nv2820Apertura=ap;
   try{ almacenSave(); }catch(e){}
   renderSubalmacen2820();
