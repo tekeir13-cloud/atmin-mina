@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-12/span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-13/span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-12/span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-13/span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-12/span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-13/span></div>
     </div>
   </div>
   <nav class="nav">
@@ -2568,6 +2568,9 @@ select option{background:var(--coal3);}
       <input type="month" id="hist-mes-sel" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px" onchange="renderHistorialAlmacen()">
       <span style="font-size:11px;color:var(--text3)">Deja vacío para ver todos los meses</span>
       <button class="btn btn-outline" style="padding:6px 14px;font-size:11px" onclick="document.getElementById('hist-mes-sel').value='';renderHistorialAlmacen()">Ver todo el historial</button>
+      <div style="flex:1"></div>
+      <button class="btn btn-outline" style="padding:6px 14px;font-size:11px;border-color:#f59e0b;color:#f59e0b" onclick="depurarHistorial()" title="Limpia la lista de movimientos conservando el stock actual (con respaldo)">🧹 Depurar historial</button>
+      <button id="btn-restaurar-hist" class="btn btn-outline" style="display:none;padding:6px 14px;font-size:11px;border-color:#22c55e;color:#22c55e" onclick="restaurarHistorial()" title="Devuelve los ingresos y salidas al estado previo a la depuración">↩ Restaurar</button>
     </div>
     <div class="section-title" style="color:#60a5fa">📥 Ingresos <span id="hist-ing-count" style="font-size:12px;color:var(--text3);font-weight:400"></span></div>
     <div class="table-wrap" style="margin-bottom:24px">
@@ -5977,6 +5980,7 @@ function _rtAplicarModulo(modulo, data){
     case 'remanente_salidas':  if(Array.isArray(data)){ state.remanenteSalidas=M(data, state.remanenteSalidas||[]); setLS('atmin_remanente_salidas', state.remanenteSalidas); } break;
     case 'servicios_terceros': if(Array.isArray(data)){ let loc=[]; try{loc=JSON.parse(localStorage.getItem('atmin_servicios_terceros')||'[]');}catch(e){} setLS('atmin_servicios_terceros', M(data, loc)); } break;
     case 'planilla_supervision': if(data&&typeof data==='object'){ setLS('atmin_planilla_supervision', data); } break;
+    case 'almacen_histbackup': if(data&&typeof data==='object'){ setLS('atmin_almacen_histbackup', data); } break;
     case 'params_precios': case 'adelantos': case 'meses_cerrados': case 'fin_config': case 'personal_jefe':
       if(typeof _cfgAplicar==='function'&&data&&typeof data==='object'){ _cfgAplicar(modulo,data); try{ localStorage.setItem('atmin_cfg_ts_'+modulo,String(Number(data._ts)||0)); }catch(e){} } break;
     case 'comb_pet':           if(Array.isArray(data)){ setLS('atmin_comb_petroleo', data); } break;
@@ -7646,7 +7650,56 @@ function histToggleGrupo(gid){
   const ar=document.getElementById(gid+'-arrow');if(ar)ar.textContent=open?'▸':'▾';
 }
 function almBadge(alm){return `<span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${alm==='Mantenimiento'?'rgba(201,168,76,0.15);color:#d4b75e':'rgba(96,165,250,0.15);color:#60a5fa'}">${alm}</span>`;}
+// ── DEPURAR HISTORIAL: limpia la lista de movimientos CONSERVANDO el stock actual ──
+// El stock que dejaron los ingresos/salidas se convierte en un saldo de apertura de hoy, y las
+// listas de movimientos se vacían. Antes de tocar nada se guarda un respaldo (local + nube) que
+// permite restaurar todo exactamente como estaba. NO toca explosivos NV3190.
+const HISTBK_KEY='atmin_almacen_histbackup';
+function _histBackupExiste(){
+  try{ const d=JSON.parse(localStorage.getItem(HISTBK_KEY)||'null'); return d&&(d.ingresos||d.salidas); }catch(e){ return null; }
+}
+function depurarHistorial(){
+  const nIng=(state.almacen.ingresos||[]).length, nSal=(state.almacen.salidas||[]).length;
+  if(!nIng && !nSal){ showNotif('El historial ya está vacío','warn'); return; }
+  if(!confirm(`¿Depurar el historial de almacén?\n\n• Se limpiarán ${nIng} ingreso(s) y ${nSal} salida(s).\n• El STOCK ACTUAL de cada producto se conserva (pasa a saldo de apertura de hoy).\n• Se guarda un respaldo: podrás RESTAURAR todo como estaba.\n\nEsto se aplica en todos los equipos.`)) return;
+  // 1) Respaldo completo del estado actual (para restaurar)
+  const backup={ ts:Date.now(), por:(typeof usuarioActivo!=='undefined'&&usuarioActivo?usuarioActivo.nombre:''),
+    ingresos:JSON.parse(JSON.stringify(state.almacen.ingresos||[])),
+    salidas:JSON.parse(JSON.stringify(state.almacen.salidas||[])),
+    inventarioInicial:JSON.parse(JSON.stringify(state.almacen.inventarioInicial||[])) };
+  try{ localStorage.setItem(HISTBK_KEY, JSON.stringify(backup)); }catch(e){}
+  try{ if(typeof sbSyncModulo==='function') sbSyncModulo('almacen_histbackup', backup); }catch(e){}
+  // 2) Stock actual → nuevo saldo de apertura (solo lo que tiene stock > 0)
+  const hoyF=(typeof hoy==='function')?hoy():'';
+  const nuevaApertura=(typeof calcStock==='function'?calcStock():[]).filter(r=>Number(r.stock)>0).map((r,i)=>({
+    id:'INIC'+Date.now()+'-'+i, fecha:hoyF, almacen:r.almacen, codigo:r.codigo||'',
+    producto:r.producto||'', descripcion:r.descripcion||r.producto||'', unidad:r.unidad||'UND',
+    cantidad:Number(r.stock)||0, precio:Number(r.precio)||0
+  }));
+  // 3) Vaciar movimientos y fijar la apertura
+  state.almacen.inventarioInicial=nuevaApertura;
+  state.almacen.ingresos=[];
+  state.almacen.salidas=[];
+  state.almacen.histDepuradoTs=Date.now();
+  try{ almacenSave(); }catch(e){}
+  try{ renderAlmacen(); renderHistorialAlmacen(); renderStockVigente(); }catch(e){}
+  showNotif(`✓ Historial depurado. Stock conservado en ${nuevaApertura.length} productos. Puedes Restaurar si lo necesitas.`);
+}
+function restaurarHistorial(){
+  let bk=null; try{ bk=JSON.parse(localStorage.getItem(HISTBK_KEY)||'null'); }catch(e){}
+  if(!bk||(!bk.ingresos&&!bk.salidas)){ showNotif('No hay respaldo para restaurar','error'); return; }
+  if(!confirm('¿Restaurar los ingresos y salidas al estado previo a la depuración?\n\nSe reemplazará el historial actual con el respaldo guardado, en todos los equipos.')) return;
+  state.almacen.ingresos=JSON.parse(JSON.stringify(bk.ingresos||[]));
+  state.almacen.salidas=JSON.parse(JSON.stringify(bk.salidas||[]));
+  state.almacen.inventarioInicial=JSON.parse(JSON.stringify(bk.inventarioInicial||[]));
+  delete state.almacen.histDepuradoTs;
+  try{ almacenSave(); }catch(e){}
+  try{ renderAlmacen(); renderHistorialAlmacen(); renderStockVigente(); }catch(e){}
+  showNotif('✓ Ingresos y salidas restaurados como estaban');
+}
 function renderHistorialAlmacen(){
+  // Mostrar el botón Restaurar solo si hay un respaldo de depuración disponible
+  try{ const rb=document.getElementById('btn-restaurar-hist'); if(rb) rb.style.display=_histBackupExiste()?'inline-block':'none'; }catch(e){}
   const sel=document.getElementById('hist-mes-sel');
   const mes=(sel&&sel.value)||'';
   let ings=state.almacen.ingresos.slice();
