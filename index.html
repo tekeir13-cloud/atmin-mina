@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-18/span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-19/span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-18/span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-19/span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-18/span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-19/span></div>
     </div>
   </div>
   <nav class="nav">
@@ -19749,6 +19749,7 @@ async function abrirDiagSync(){
     <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
       <button class="btn btn-gold" onclick="publicarVistaOficial()" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);border:none;color:#fff">📢 Publicar mi vista a todos los equipos</button>
       <button class="btn btn-outline" onclick="forzarSincronizacion()">🔄 Jalar la nube a este equipo</button>
+      <button class="btn btn-outline" style="border-color:#f59e0b;color:#f59e0b" onclick="abrirRestaurarAlmacen()">🕗 Restaurar almacén a un estado anterior</button>
       <button class="btn btn-outline" onclick="document.getElementById('diag-sync-modal').remove()">Cerrar</button>
     </div>
     <div style="font-size:10px;color:var(--text3);margin-top:8px"><b>📢 Publicar mi vista</b>: úsalo desde el equipo con la información correcta — sube tus datos y hace que TODOS los demás equipos (con la app abierta) se sincronicen contigo. &nbsp;<b>🔄 Jalar la nube</b>: trae a ESTE equipo lo último de la nube.</div>
@@ -19881,6 +19882,74 @@ async function forzarSincronizacion(){
   try{ if(typeof renderStockVigente==='function') renderStockVigente(); }catch(e){}
   showNotif('✓ Sincronización completa terminada');
   try{ abrirDiagSync(); }catch(e){}   // refrescar el panel con los números nuevos
+}
+
+// ═══════════ RESTAURAR ALMACÉN A UN ESTADO ANTERIOR (respaldos de la nube) ═══════════
+// Calcula el valor en stock de un almacén cualquiera (para identificar el respaldo correcto).
+function _valorDeAlmacen(alm){
+  if(!alm) return 0;
+  const map={};
+  const add=(arr,sign)=>{ (arr||[]).forEach(it=>{ const k=(it.almacen||'')+'|'+String(it.codigo||it.descripcion||it.producto||'').toLowerCase(); if(!map[k])map[k]={q:0,p:0}; map[k].q+=sign*(Number(it.cantidad)||0); if(it.precio)map[k].p=Number(it.precio); }); };
+  add(alm.inventarioInicial,1); add(alm.ingresos,1); add(alm.salidas,-1);
+  return Object.values(map).reduce((a,r)=>a+(r.q>0?r.q*r.p:0),0);
+}
+async function abrirRestaurarAlmacen(){
+  document.getElementById('restaurar-alm-modal')?.remove();
+  const ov=document.createElement('div');
+  ov.id='restaurar-alm-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.onclick=e=>{ if(e.target===ov) ov.remove(); };
+  ov.innerHTML=`<div style="background:var(--coal2);border:1px solid var(--border);border-radius:14px;width:min(640px,96vw);max-height:88vh;overflow:auto;padding:22px" onclick="event.stopPropagation()">
+    <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:2px">🕗 Restaurar almacén a un estado anterior</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:14px">Estos son los respaldos guardados en la nube. Elige aquel cuyo <b>valor en stock</b> sea el correcto. Al restaurar, el almacén de TODOS los equipos vuelve a ese estado (los movimientos actuales se archivan con lápida).</div>
+    <div id="restaurar-alm-lista" style="font-size:12px;color:var(--text3)">Buscando respaldos…</div>
+    <div style="margin-top:14px"><button class="btn btn-outline" onclick="document.getElementById('restaurar-alm-modal').remove()">Cerrar</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  try{
+    if(typeof sb==='undefined'||!sb){ document.getElementById('restaurar-alm-lista').textContent='Sin conexión a la nube.'; return; }
+    const { data }=await sb.from('app_modulos').select('modulo,data,updated_at').like('modulo','backup_%');
+    const backs=(data||[]).map(r=>{
+      const snap=(r.modulo==='backup_ultimo')?(r.data&&r.data.snap):r.data;
+      const alm=snap&&snap.almacen; return alm?{ modulo:r.modulo, upd:r.updated_at, ts:(snap._ts||r.updated_at), valor:_valorDeAlmacen(alm), nMov:((alm.ingresos||[]).length+(alm.salidas||[]).length), snap }:null;
+    }).filter(Boolean).sort((a,b)=>String(b.ts).localeCompare(String(a.ts)));
+    const actual=_valorDeAlmacen(state.almacen);
+    window._restBacks=backs;
+    const lst=document.getElementById('restaurar-alm-lista');
+    if(!backs.length){ lst.innerHTML='<div style="color:#f59e0b">No hay respaldos en la nube. Puedes crear uno con el botón 💾 Respaldo, o restablecer al inventario base.</div>'; return; }
+    lst.innerHTML=`<div style="margin-bottom:10px;padding:8px 12px;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);border-radius:8px">Valor en stock AHORA: <b style="color:#f87171">${fmtS2(actual)}</b></div>`+
+      backs.map((b,i)=>`<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;flex-wrap:wrap">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;color:var(--text)">${b.modulo.replace('backup_','Respaldo ')}</div>
+          <div style="font-size:10px;color:var(--text3)">${String(b.ts).slice(0,16).replace('T',' ')} · ${b.nMov} movimientos</div>
+        </div>
+        <div style="font-weight:800;color:var(--gold-light);font-family:monospace">${fmtS2(b.valor)}</div>
+        <button class="btn btn-gold" style="padding:5px 12px;font-size:11px" onclick="restaurarAlmacenDesde(${i})">Restaurar este</button>
+      </div>`).join('');
+  }catch(e){ const l=document.getElementById('restaurar-alm-lista'); if(l) l.textContent='Error al leer respaldos: '+(e&&e.message||e); }
+}
+function restaurarAlmacenDesde(i){
+  const b=(window._restBacks||[])[i];
+  if(!b||!b.snap||!b.snap.almacen){ showNotif('Respaldo no válido','error'); return; }
+  if(!confirm(`¿Restaurar el almacén al estado del ${String(b.ts).slice(0,16).replace('T',' ')}?\n\nValor en stock de ese respaldo: ${fmtS2(b.valor)}\n\nLos movimientos actuales se archivan (lápida) y el almacén vuelve a ese estado en todos los equipos.`)) return;
+  const alm=b.snap.almacen;
+  // Lápida a TODO lo actual, para que no se vuelva a unir con la nube
+  _tombAddMuchos([
+    ...(state.almacen.ingresos||[]).map(x=>x.id),
+    ...(state.almacen.salidas||[]).map(x=>x.id),
+    ...(state.almacen.inventarioInicial||[]).map(x=>x.id)
+  ].filter(Boolean));
+  // Re-crear los movimientos del respaldo con ids FRESCOS (esquivan lápidas actuales y anteriores)
+  const base=Date.now(); let c=0;
+  const fresco=(arr,pref)=>(arr||[]).map(x=>({...x, id:pref+base+'-'+(c++)}));
+  state.almacen.ingresos=fresco(alm.ingresos,'I');
+  state.almacen.salidas=fresco(alm.salidas,'S');
+  state.almacen.inventarioInicial=fresco(alm.inventarioInicial,'II');
+  if(alm.explosivos) state.almacen.explosivos=JSON.parse(JSON.stringify(alm.explosivos));
+  try{ almacenSave(); }catch(e){}
+  try{ renderAlmacen(); renderStockVigente(); renderHistorialAlmacen(); }catch(e){}
+  try{ document.getElementById('restaurar-alm-modal')?.remove(); }catch(e){}
+  showNotif('✓ Almacén restaurado. Valor en stock: '+fmtS2(_valorDeAlmacen(state.almacen)));
 }
 // La versión bajo el logo abre el diagnóstico
 try{
