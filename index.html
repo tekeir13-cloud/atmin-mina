@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-10/span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-11/span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-10/span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-11/span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-10/span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-11/span></div>
     </div>
   </div>
   <nav class="nav">
@@ -6012,7 +6012,44 @@ function _rtRerenderActivo(){
   }catch(e){}
 }
 function _rtRerenderDebounced(){ clearTimeout(_rtRerenderT); _rtRerenderT=setTimeout(_rtRerenderActivo, 400); }
-function _rtIndicador(){ const n=Date.now(); if(n-_rtLastNotif>4000){ _rtLastNotif=n; if(typeof showNotif==='function') showNotif('🔄 Datos actualizados en tiempo real'); } }
+function _rtIndicador(){ const n=Date.now(); if(n-_rtLastNotif>4000){ _rtLastNotif=n; if(typeof showNotif==='function') showNotif('🔄 Datos actualizados'); } }
+
+// ═══════════ SONDEO DE SINCRONIZACIÓN (no depende del tiempo real de Supabase) ═══════════
+// El tiempo real de Supabase requiere que la tabla esté en la "publicación realtime"; si no lo
+// está, la suscripción conecta ("En vivo") pero NUNCA llegan eventos y los equipos no se ven
+// entre sí. Este sondeo lo resuelve de forma independiente: cada 20 s consulta la nube (UNA
+// query, la tabla tiene ~20 filas) y aplica los módulos que cambiaron, usando la MISMA lógica
+// de fusión del tiempo real. Con esto los dispositivos convergen solos, pase lo que pase.
+let _pollUpd={};          // modulo -> updated_at ya visto
+let _pollPrimera=true;
+async function _syncPoll(){
+  try{
+    if(!SB_ONLINE || !sb || document.hidden) return;
+    const { data, error } = await sb.from('app_modulos').select('modulo,data,updated_at');
+    if(error || !Array.isArray(data)) return;
+    let cambios=0;
+    for(const row of data){
+      const m=row.modulo, upd=row.updated_at||'';
+      if(!m) continue;
+      const primeraVezModulo=!(m in _pollUpd);
+      // Primera pasada tras cargar: solo registrar la línea base, no re-aplicar (ya se cargó al abrir)
+      if(_pollPrimera || primeraVezModulo){ _pollUpd[m]=upd; continue; }
+      if(upd && upd!==_pollUpd[m]){
+        _pollUpd[m]=upd;
+        // Ignorar el eco de nuestra propia escritura reciente
+        if(_rtSelfWrite[m] && (Date.now()-_rtSelfWrite[m] < 6000)) continue;
+        if(m==='sync_broadcast'){ try{ _aplicarBroadcastSync(row.data); }catch(e){} continue; }
+        try{ _rtAplicarModulo(m, row.data); cambios++; }catch(e){}
+      }
+    }
+    _pollPrimera=false;
+    if(cambios){ try{ _rtRerenderDebounced(); }catch(e){} try{ _rtIndicador(); }catch(e){} }
+  }catch(e){}
+}
+// Arranca el sondeo ~15 s después de cargar (para que la línea base sea posterior a la carga
+// inicial) y luego cada 20 s. También al volver el foco a la ventana, para ver lo último ya.
+setTimeout(()=>{ _syncPoll(); setInterval(_syncPoll, 20000); }, 15000);
+try{ document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ setTimeout(_syncPoll, 500); } }); }catch(e){}
 
 // Indicador PERMANENTE del estado del tiempo real (esquina inferior izquierda, siempre visible)
 // Versión visible del build → sirve para confirmar que se cargó la versión nueva (no la de caché).
