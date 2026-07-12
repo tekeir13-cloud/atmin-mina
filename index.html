@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-20/span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-21/span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-20/span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-21/span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-20/span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-21/span></div>
     </div>
   </div>
   <nav class="nav">
@@ -2571,8 +2571,8 @@ select option{background:var(--coal3);}
       <span style="font-size:11px;color:var(--text3)">Deja vacío para ver todos los meses</span>
       <button class="btn btn-outline" style="padding:6px 14px;font-size:11px" onclick="document.getElementById('hist-mes-sel').value='';renderHistorialAlmacen()">Ver todo el historial</button>
       <div style="flex:1"></div>
-      <button class="btn btn-outline" style="padding:6px 14px;font-size:11px;border-color:#f59e0b;color:#f59e0b" onclick="depurarHistorial()" title="Limpia la lista de movimientos conservando el stock actual (con respaldo)">🧹 Depurar historial</button>
-      <button id="btn-restaurar-hist" class="btn btn-outline" style="display:none;padding:6px 14px;font-size:11px;border-color:#22c55e;color:#22c55e" onclick="restaurarHistorial()" title="Devuelve los ingresos y salidas al estado previo a la depuración">↩ Restaurar</button>
+      <button id="btn-hist-vertodo" class="btn btn-outline" style="padding:6px 14px;font-size:11px" onclick="histToggleVerTodo()" title="Muestra solo lo reciente o todo el historial (solo cambia la vista, no borra nada)">👁 Ver compacto</button>
+      <button id="btn-recuperar-hist" class="btn btn-outline" style="display:none;padding:6px 14px;font-size:11px;border-color:#22c55e;color:#22c55e" onclick="recuperarMovimientos()" title="Recupera los ingresos y salidas del respaldo (repone el detalle y el NV2820)">♻ Recuperar movimientos</button>
     </div>
     <div class="section-title" style="color:#60a5fa">📥 Ingresos <span id="hist-ing-count" style="font-size:12px;color:var(--text3);font-weight:400"></span></div>
     <div class="table-wrap" style="margin-bottom:24px">
@@ -7764,91 +7764,75 @@ function _tombAddMuchos(ids){
   (ids||[]).forEach(id=>{ if(id!=null&&id!==''){ t[String(id)]=now; ch=true; } });
   if(ch){ try{ tombPrune(); }catch(e){} try{ tombPersist(); }catch(e){} try{ if(typeof sbSyncModulo==='function') sbSyncModulo('tombstones', tombLoad()); }catch(e){} }
 }
-function depurarHistorial(){
-  const nIng=(state.almacen.ingresos||[]).length, nSal=(state.almacen.salidas||[]).length;
-  if(!nIng && !nSal){ showNotif('El historial ya está vacío','warn'); return; }
-  if(!confirm(`¿Depurar el historial de almacén?\n\n• Se limpiarán ${nIng} ingreso(s) y ${nSal} salida(s).\n• El STOCK ACTUAL de cada producto se conserva (pasa a saldo de apertura de hoy).\n• Se guarda un respaldo: podrás RESTAURAR todo como estaba.\n\nEsto se aplica en todos los equipos.`)) return;
-  // 1) Respaldo completo del estado actual (para restaurar)
-  const backup={ ts:Date.now(), por:(typeof usuarioActivo!=='undefined'&&usuarioActivo?usuarioActivo.nombre:''),
-    ingresos:JSON.parse(JSON.stringify(state.almacen.ingresos||[])),
-    salidas:JSON.parse(JSON.stringify(state.almacen.salidas||[])),
-    inventarioInicial:JSON.parse(JSON.stringify(state.almacen.inventarioInicial||[])) };
-  try{ localStorage.setItem(HISTBK_KEY, JSON.stringify(backup)); }catch(e){}
-  try{ if(typeof sbSyncModulo==='function') sbSyncModulo('almacen_histbackup', backup); }catch(e){}
-  // 2) Stock actual → nuevo saldo de apertura (solo lo que tiene stock > 0), con ids FRESCOS
-  const hoyF=(typeof hoy==='function')?hoy():'';
-  const base=Date.now();
-  const nuevaApertura=(typeof calcStock==='function'?calcStock():[]).filter(r=>Number(r.stock)>0).map((r,i)=>({
-    id:'INIC'+base+'-'+i, fecha:hoyF, almacen:r.almacen, codigo:r.codigo||'',
-    producto:r.producto||'', descripcion:r.descripcion||r.producto||'', unidad:r.unidad||'UND',
-    cantidad:Number(r.stock)||0, precio:Number(r.precio)||0
-  }));
-  // 3) LÁPIDAS a todos los movimientos y a la apertura anterior (para que la fusión los excluya)
-  const idsBorrar=[
-    ...(state.almacen.ingresos||[]).map(x=>x.id),
-    ...(state.almacen.salidas||[]).map(x=>x.id),
-    ...(state.almacen.inventarioInicial||[]).map(x=>x.id)
-  ].filter(Boolean);
-  _tombAddMuchos(idsBorrar);
-  // 4) Vaciar movimientos y fijar la apertura nueva
-  state.almacen.inventarioInicial=nuevaApertura;
-  state.almacen.ingresos=[];
-  state.almacen.salidas=[];
-  state.almacen.histDepuradoTs=Date.now();
-  try{ almacenSave(); }catch(e){}
-  try{ renderAlmacen(); renderHistorialAlmacen(); renderStockVigente(); }catch(e){}
-  showNotif(`✓ Historial depurado. Stock conservado en ${nuevaApertura.length} productos. Puedes Restaurar si lo necesitas.`);
+// "Depurar" ahora es SOLO VISUAL: alterna entre ver lo reciente (compacto) o todo el historial.
+// NO toca ningún dato — los ingresos, salidas y el stock quedan exactamente igual.
+let _histVerTodo=false;
+function histToggleVerTodo(){
+  _histVerTodo=!_histVerTodo;
+  const b=document.getElementById('btn-hist-vertodo');
+  if(b) b.textContent=_histVerTodo?'👁 Ver compacto':'👁 Ver todo';
+  renderHistorialAlmacen();
 }
-function restaurarHistorial(){
-  let bk=null; try{ bk=JSON.parse(localStorage.getItem(HISTBK_KEY)||'null'); }catch(e){}
-  if(!bk||(!bk.ingresos&&!bk.salidas)){ showNotif('No hay respaldo para restaurar','error'); return; }
-  if(!confirm('¿Restaurar los ingresos y salidas al estado previo a la depuración?\n\nSe reemplazará el historial actual con el respaldo guardado, en todos los equipos.')) return;
-  // Lápida a la apertura creada por la depuración (para que desaparezca en todos los equipos)
-  _tombAddMuchos((state.almacen.inventarioInicial||[]).map(x=>x.id).filter(Boolean));
-  // Re-crear los movimientos del respaldo con ids FRESCOS: así NO chocan con las lápidas viejas
-  // y sobreviven a la fusión en todos los equipos (los datos se conservan; solo cambia el id).
+// RECUPERAR movimientos: repone los ingresos y salidas desde el respaldo (local o de la nube) que
+// dejó la depuración destructiva anterior. Los recrea con ids frescos → reponen el detalle y el
+// stock por destino (NV2820). Úsalo si la depuración vieja borró el detalle de movimientos.
+async function recuperarMovimientos(){
+  let bk=null;
+  try{ bk=JSON.parse(localStorage.getItem(HISTBK_KEY)||'null'); }catch(e){}
+  if((!bk||(!(bk.ingresos||[]).length&&!(bk.salidas||[]).length)) && typeof sb!=='undefined' && sb){
+    try{ const { data }=await sb.from('app_modulos').select('data').eq('modulo','almacen_histbackup').single(); if(data&&data.data) bk=data.data; }catch(e){}
+  }
+  if(!bk||(!(bk.ingresos||[]).length&&!(bk.salidas||[]).length)){ showNotif('No se encontró respaldo de movimientos para recuperar','error'); return; }
+  if(!confirm(`¿Recuperar los movimientos del respaldo?\n\n• Ingresos: ${(bk.ingresos||[]).length}\n• Salidas: ${(bk.salidas||[]).length}\n\nSe reponen los ingresos y salidas (y con ellos el NV2820). El stock se recalcula desde esos movimientos.`)) return;
+  // Quitar la apertura que creó la depuración (con lápida) para no duplicar stock
+  _tombAddMuchos((state.almacen.inventarioInicial||[]).filter(x=>String(x.id||'').indexOf('INIC')===0).map(x=>x.id));
   const base=Date.now(); let c=0;
   const fresco=(arr,pref)=>(arr||[]).map(x=>({...x, id:pref+base+'-'+(c++)}));
-  state.almacen.ingresos=fresco(bk.ingresos,'I');
-  state.almacen.salidas=fresco(bk.salidas,'S');
-  state.almacen.inventarioInicial=fresco(bk.inventarioInicial,'INIC');
+  state.almacen.ingresos=fresco(bk.ingresos,'IREC');
+  state.almacen.salidas=fresco(bk.salidas,'SREC');
+  state.almacen.inventarioInicial=fresco((bk.inventarioInicial||[]).filter(x=>String(x.id||'').indexOf('INIC')!==0),'IIREC');
   delete state.almacen.histDepuradoTs;
   try{ almacenSave(); }catch(e){}
-  try{ renderAlmacen(); renderHistorialAlmacen(); renderStockVigente(); }catch(e){}
-  showNotif('✓ Ingresos y salidas restaurados como estaban');
+  try{ renderAlmacen(); renderStockVigente(); renderHistorialAlmacen(); if(typeof renderSubalmacen2820==='function') renderSubalmacen2820(); }catch(e){}
+  showNotif('✓ Movimientos recuperados: '+(bk.ingresos||[]).length+' ingresos, '+(bk.salidas||[]).length+' salidas');
 }
 function renderHistorialAlmacen(){
-  // Mostrar el botón Restaurar solo si hay un respaldo de depuración disponible
-  try{ const rb=document.getElementById('btn-restaurar-hist'); if(rb) rb.style.display=_histBackupExiste()?'inline-block':'none'; }catch(e){}
+  // Mostrar "Recuperar movimientos" si hay respaldo de la depuración vieja (local o nube)
+  try{ const rb=document.getElementById('btn-recuperar-hist'); if(rb) rb.style.display=(_histBackupExiste()||(state.almacen&&state.almacen.histDepuradoTs))?'inline-block':'none'; }catch(e){}
   const sel=document.getElementById('hist-mes-sel');
   const mes=(sel&&sel.value)||'';
   let ings=state.almacen.ingresos.slice();
   let sals=state.almacen.salidas.slice();
   if(mes){ings=ings.filter(i=>filtroMes(i.fecha,mes));sals=sals.filter(s=>filtroMes(s.fecha,mes));}
+  const _LIM=25;  // vista compacta: solo los 25 más recientes de cada uno (no borra nada)
   // Solo DOS grupos: Ingresos y Salidas (tablas planas, más recientes arriba)
   const totIn=ings.reduce((a,i)=>a+(Number(i.total)||0),0);
   const totSal=sals.reduce((a,s)=>a+(Number(s.importe)||0),0);
+  const ingsV=_histVerTodo?ings.slice().reverse():ings.slice().reverse().slice(0,_LIM);
+  const salsV=_histVerTodo?sals.slice().reverse():sals.slice().reverse().slice(0,_LIM);
+  const notaIn=(!_histVerTodo&&ings.length>_LIM)?`<div style="font-size:10px;color:var(--text3);padding:6px 8px">Mostrando los ${_LIM} más recientes de ${ings.length}. Usa "👁 Ver todo" para ver el resto. (No se borra nada.)</div>`:'';
+  const notaSal=(!_histVerTodo&&sals.length>_LIM)?`<div style="font-size:10px;color:var(--text3);padding:6px 8px">Mostrando los ${_LIM} más recientes de ${sals.length}. Usa "👁 Ver todo" para ver el resto. (No se borra nada.)</div>`:'';
   const cIng=document.getElementById('hist-ing-count'); if(cIng) cIng.textContent=`· ${ings.length} ítem${ings.length!==1?'s':''} · ${fmtS2(totIn)}`;
   const cSal=document.getElementById('hist-sal-count'); if(cSal) cSal.textContent=`· ${sals.length} ítem${sals.length!==1?'s':''} · ${fmtS2(totSal)}`;
   // ── Tabla de INGRESOS ──
   const it=document.getElementById('alm-ingresos-tbody');
-  if(it) it.innerHTML=ings.length?ings.slice().reverse().map(i=>`<tr>
+  if(it) it.innerHTML=ings.length?ingsV.map(i=>`<tr>
     <td>${fmtF(i.fecha)}</td><td>${i.vale||'—'}</td><td>${i.detalle||'—'}</td>
     <td><span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${i.almacen==='Mantenimiento'?'rgba(201,168,76,0.15);color:#d4b75e':'rgba(96,165,250,0.15);color:#60a5fa'}">${i.almacen}</span></td>
     <td><strong>${i.producto||''}</strong><br><span style="font-size:10px;color:var(--text3)">${i.descripcion||''}</span></td>
     <td>${i.unidad}</td><td>${fmt3(i.cantidad)}</td><td>${fmtS2(i.precio)}</td><td style="color:#60a5fa;font-weight:700">${fmtS2(i.total)}</td>
     <td style="white-space:nowrap"><button onclick="abrirEditarIngreso('${i.id}')" style="padding:4px 9px;font-size:11px;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.4);border-radius:6px;cursor:pointer;font-weight:600">✏</button>
-      <button onclick="eliminarIngreso('${i.id}')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px">🗑</button></td></tr>`).join('')
+      <button onclick="eliminarIngreso('${i.id}')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px">🗑</button></td></tr>`).join('')+(notaIn?`<tr><td colspan="10" style="padding:0">${notaIn}</td></tr>`:'')
     :`<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:18px">Sin ingresos registrados</td></tr>`;
   const st=document.getElementById('alm-salidas-tbody');
-  if(st) st.innerHTML=sals.length?sals.slice().reverse().map(s=>`<tr>
+  if(st) st.innerHTML=sals.length?salsV.map(s=>`<tr>
     <td>${fmtF(s.fecha)}</td><td><strong>${nivelLabel(s.destino)}</strong>${(String(s.destino)==='operario'&&s.operario)?`<br><span style="font-size:10px;color:#34d399">👤 ${s.operario}</span>`:''}</td>
     <td><span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${s.almacen==='Mantenimiento'?'rgba(201,168,76,0.15);color:#d4b75e':'rgba(96,165,250,0.15);color:#60a5fa'}">${s.almacen}</span></td>
     <td>${s.solicitante||'—'}</td><td>${s.maquina||'—'}</td>
     <td><strong>${s.producto||''}</strong><br><span style="font-size:10px;color:var(--text3)">${s.descripcion||''}</span></td>
     <td>${s.unidad}</td><td>${fmtS2(s.precio)}</td><td>${fmt3(s.cantidad)}</td><td style="color:#f87171;font-weight:700">${fmtS2(s.importe)}</td>
     <td style="white-space:nowrap"><button onclick="abrirEditarSalida('${s.id}')" style="padding:4px 9px;font-size:11px;background:rgba(248,113,113,0.15);color:#f87171;border:1px solid rgba(248,113,113,0.4);border-radius:6px;cursor:pointer;font-weight:600">✏</button>
-      <button onclick="eliminarSalida('${s.id}')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px">🗑</button></td></tr>`).join('')
+      <button onclick="eliminarSalida('${s.id}')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px">🗑</button></td></tr>`).join('')+(notaSal?`<tr><td colspan="11" style="padding:0">${notaSal}</td></tr>`:'')
     :`<tr><td colspan="11" style="text-align:center;color:var(--text3);padding:18px">Sin salidas registradas</td></tr>`;
 }
 
