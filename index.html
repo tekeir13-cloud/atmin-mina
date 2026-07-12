@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-23/span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-24/span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-23/span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-24/span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-23/span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-24/span></div>
     </div>
   </div>
   <nav class="nav">
@@ -7811,11 +7811,25 @@ function histToggleVerTodo(){
 // dejó la depuración destructiva anterior. Los recrea con ids frescos → reponen el detalle y el
 // stock por destino (NV2820). Úsalo si la depuración vieja borró el detalle de movimientos.
 async function recuperarMovimientos(){
-  let bk=null;
-  try{ bk=JSON.parse(localStorage.getItem(HISTBK_KEY)||'null'); }catch(e){}
-  if((!bk||(!(bk.ingresos||[]).length&&!(bk.salidas||[]).length)) && typeof sb!=='undefined' && sb){
-    try{ const { data }=await sb.from('app_modulos').select('data').eq('modulo','almacen_histbackup').single(); if(data&&data.data) bk=data.data; }catch(e){}
+  showNotif('🔎 Buscando salidas en los respaldos…');
+  // Reúne TODAS las fuentes posibles de salidas: histbackup (local+nube) y todos los backup_*
+  // (snapshots completos del botón Respaldo). Elige la que tenga MÁS salidas.
+  const candidatos=[];
+  try{ const l=JSON.parse(localStorage.getItem(HISTBK_KEY)||'null'); if(l&&(l.salidas||[]).length) candidatos.push({origen:'respaldo depuración (local)', salidas:l.salidas}); }catch(e){}
+  if(typeof sb!=='undefined' && sb){
+    try{
+      const { data }=await sb.from('app_modulos').select('modulo,data').or('modulo.eq.almacen_histbackup,modulo.like.backup_%');
+      (data||[]).forEach(row=>{
+        const d=row.data; if(!d) return;
+        const alm=(row.modulo==='almacen_histbackup')?d:((d.snap&&d.snap.almacen)||d.almacen);
+        const sal=(row.modulo==='almacen_histbackup')?(d.salidas):(alm&&alm.salidas);
+        if(sal&&sal.length) candidatos.push({origen:row.modulo, salidas:sal});
+      });
+    }catch(e){}
   }
+  if(!candidatos.length){ showNotif('No se encontraron salidas en ningún respaldo. Habría que reingresarlas.','error'); return; }
+  candidatos.sort((a,b)=>b.salidas.length-a.salidas.length);
+  const bk={ salidas: candidatos[0].salidas };
   const nSal=(bk.salidas||[]).length;
   if(!nSal){ showNotif('El respaldo no tiene salidas para recuperar','error'); return; }
   // RECUPERAR SOLO LAS SALIDAS: son las que alimentan el NV2820 y el gasto de almacén, y NO
@@ -7835,7 +7849,7 @@ async function recuperarMovimientos(){
 }
 function renderHistorialAlmacen(){
   // Mostrar "Recuperar movimientos" si hay respaldo de la depuración vieja (local o nube)
-  try{ const rb=document.getElementById('btn-recuperar-hist'); if(rb) rb.style.display=(_histBackupExiste()||(state.almacen&&state.almacen.histDepuradoTs))?'inline-block':'none'; }catch(e){}
+  try{ const rb=document.getElementById('btn-recuperar-hist'); if(rb) rb.style.display='inline-block'; }catch(e){}
   const sel=document.getElementById('hist-mes-sel');
   const mes=(sel&&sel.value)||'';
   let ings=state.almacen.ingresos.slice();
