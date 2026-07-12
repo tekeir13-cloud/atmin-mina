@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-15/span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-16/span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-15/span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-16/span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-15/span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-16/span></div>
     </div>
   </div>
   <nav class="nav">
@@ -7333,13 +7333,21 @@ function calcStock(){
 function filtrarPorMaestro(stock){
   const maestro=(state.almacen&&state.almacen.productos)||[];
   if(!maestro.length) return stock;   // maestro vacío: no ocultar nada (bootstrap)
-  const cods=new Set(), noms=new Set();
-  maestro.forEach(p=>{ if(p.codigo)cods.add(String(p.codigo).trim().toLowerCase()); if(p.nombre)noms.add(String(p.nombre).trim().toLowerCase()); });
+  // Códigos del maestro + nombres de los productos que el maestro tiene SIN código.
+  const cods=new Set(), nomsSinCod=new Set();
+  maestro.forEach(p=>{
+    const c=String(p.codigo||'').trim().toLowerCase();
+    if(c) cods.add(c);
+    else { const n=String(p.nombre||'').trim().toLowerCase(); if(n) nomsSinCod.add(n); }
+  });
+  // Solo sobrevive lo que ESTÁ en el maestro: por código, o (si el maestro lo lleva sin código)
+  // por nombre. Un movimiento con código ajeno al maestro, o sin código que no se pudo unificar,
+  // se saca. (calcStock ya resolvió el código de los movimientos sin código cuando era posible.)
   return stock.filter(r=>{
     const c=String(r.codigo||'').trim().toLowerCase();
     if(c) return cods.has(c);
     const n=String(r.producto||r.descripcion||'').trim().toLowerCase();
-    return n&&noms.has(n);
+    return n&&nomsSinCod.has(n);
   });
 }
 function fmt3(n){return (Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:0,maximumFractionDigits:3});}
