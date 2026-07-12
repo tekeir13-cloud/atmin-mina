@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-14/span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-15/span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-14/span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-15/span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-14/span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-15/span></div>
     </div>
   </div>
   <nav class="nav">
@@ -7299,11 +7299,25 @@ function escAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"
 function nivelLabel(d){return d==='mantenimiento'?'Almacén Mantenimiento':d==='operario'?'Entrega a Operario':d?('NV'+d):'—';}
 
 // Stock = inventario inicial + ingresos - salidas (acumulado histórico, no por mes)
+// Resuelve el CÓDIGO de un movimiento desde el maestro cuando viene sin código: si hay UN solo
+// producto del maestro con ese mismo nombre, usa su código. Así los movimientos antiguos sin
+// código se unifican con el producto codificado (mismo filtro = una sola fila), en vez de salir
+// duplicado. Si el nombre coincide con varios códigos, se deja sin resolver (para no adivinar).
+function _codigoDesdeMaestro(codigo,producto,descripcion){
+  const c=String(codigo||'').trim();
+  if(c) return c;
+  const maestro=(state.almacen&&state.almacen.productos)||[];
+  const n1=String(producto||'').trim().toLowerCase(), n2=String(descripcion||'').trim().toLowerCase();
+  if(!n1&&!n2) return '';
+  const m=maestro.filter(p=>{ const pn=String(p.nombre||'').trim().toLowerCase(); return pn&&(pn===n1||pn===n2); });
+  return (m.length===1&&m[0].codigo)?String(m[0].codigo):'';
+}
 function calcStock(){
   const map={};
   function ensure(almacen,codigo,producto,desc,unidad,precio){
-    const k=prodKey(almacen,codigo,desc);
-    if(!map[k]) map[k]={key:k,almacen:almacen||'General',codigo:String(codigo||''),producto:producto||'',descripcion:desc||'',unidad:unidad||'UND',precio:Number(precio)||0,ingreso:0,salida:0,stock:0};
+    const cod=_codigoDesdeMaestro(codigo,producto,desc);   // unifica sin-código con su producto codificado
+    const k=prodKey(almacen,cod,desc);
+    if(!map[k]) map[k]={key:k,almacen:almacen||'General',codigo:String(cod||''),producto:producto||'',descripcion:desc||'',unidad:unidad||'UND',precio:Number(precio)||0,ingreso:0,salida:0,stock:0};
     return map[k];
   }
   (state.almacen.inventarioInicial||[]).forEach(it=>{const r=ensure(it.almacen,it.codigo,it.producto,it.descripcion,it.unidad,it.precio);r.ingreso+=Number(it.cantidad)||0;if(it.precio)r.precio=Number(it.precio);});
