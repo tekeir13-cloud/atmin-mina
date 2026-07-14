@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-27/span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-28/span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-27/span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-28/span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-27/span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-28/span></div>
     </div>
   </div>
   <nav class="nav">
@@ -17066,6 +17066,9 @@ async function enviarMensajeIA(textoDirecto){
     window._iaPendienteSolicitud=false;
   }
 
+  // ── "Voy a revisar la base de datos" — pausa realista antes de responder ──
+  await _iaRevisarBaseDatos();
+
   // ── Flujo especial: pregunta fuera del ámbito de la operación ──
   if(respuesta==='__OFFTOPIC__'){
     const msgRefusal=`Lo siento, Señor Amador. No estoy autorizada a responder ese tipo de consultas — mi acceso está limitado a los datos de la operación minera de Poderosa. Sin embargo, podría solicitar autorización a mi creador para ampliar ese acceso. ¿Desea que realice la solicitud?`;
@@ -17085,6 +17088,20 @@ async function enviarMensajeIA(textoDirecto){
   if(status) status.innerHTML = '<div style="width:7px;height:7px;border-radius:50%;background:var(--positive);box-shadow:0 0 6px var(--positive)"></div> Listo';
 }
 
+// Muestra "Espere un momento… voy a revisar la base de datos" con puntos animados y voz, y
+// espera unos segundos antes de dar la respuesta (efecto de estar consultando la base).
+async function _iaRevisarBaseDatos(){
+  const frase='Espere un momento, Señor Amador. Voy a revisar la base de datos';
+  const el=_iaAgregarMsg('🛰️ '+frase+'<span id="nia-db-dots">.</span>', true, false, true);
+  try{ _iaHablar(frase); }catch(e){}
+  let n=1;
+  const iv=setInterval(()=>{ n=(n%3)+1; const d=document.getElementById('nia-db-dots'); if(d) d.textContent='.'.repeat(n); }, 400);
+  const status=document.getElementById('ia-status');
+  if(status) status.innerHTML='<div style="width:7px;height:7px;border-radius:50%;background:var(--warn);box-shadow:0 0 6px var(--warn)"></div> Consultando base de datos...';
+  await new Promise(r=>setTimeout(r, 2600));
+  clearInterval(iv);
+  if(el) el.remove();
+}
 // ── Voz: español latinoamericano neutro (sin acento de España) ──
 function _iaHablar(texto){
   if(!window.speechSynthesis) return;
