@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-30/span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-31</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-30/span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.11-31</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-30/span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.11-31</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -6218,7 +6218,11 @@ function _almMergeSnaps(a,b){
   if(a.exploLock||b.exploLock) out.exploLock=true;
   out.remApertura=a.remApertura||b.remApertura||out.remApertura;
   out.remAperturaTs=Number(a.remAperturaTs||b.remAperturaTs||0)||out.remAperturaTs;
-  out.exploStockBase=a.exploStockBase||b.exploStockBase||out.exploStockBase;
+  // La base de stock gana por versión (exploStockBaseV): si un equipo la ajustó al editar/eliminar
+  // un movimiento viejo, ese ajuste se impone y no lo pisa una base más antigua de otro equipo.
+  out.exploStockBase=(Number(a.exploStockBaseV||0)>=Number(b.exploStockBaseV||0)
+    ? (a.exploStockBase||b.exploStockBase)
+    : (b.exploStockBase||a.exploStockBase)) || out.exploStockBase;
   return out;
 }
 // Al cargar desde la nube (que viene sin fotos), re-adjunta las fotos guardadas localmente,
@@ -8532,7 +8536,13 @@ function renderExploHistorial(){
           <div style="font-size:12px;color:var(--text3);margin-top:3px">${esIng?'Polvorín Santa María → NV3190':'NV3190 → Almacén NV2820'}</div>
           <div style="font-size:12px;margin-top:4px">Vale: <strong>${r.vale||'—'}</strong> · Cantidad: <strong style="color:${color}">${cantLabel}</strong></div>
         </div>
-        ${(r.fotoUrl||r.fotoBase64)?`<img src="${r.fotoUrl||r.fotoBase64}" style="max-height:64px;max-width:100px;border-radius:6px;border:1px solid var(--border);cursor:pointer" onclick="verFotoExplo('${r.id}')" title="Ver foto del vale">`:''}
+        <div style="display:flex;gap:8px;align-items:center">
+          ${(r.fotoUrl||r.fotoBase64)?`<img src="${r.fotoUrl||r.fotoBase64}" style="max-height:64px;max-width:100px;border-radius:6px;border:1px solid var(--border);cursor:pointer" onclick="verFotoExplo('${r.id}')" title="Ver foto del vale">`:''}
+          ${r.id?`<div style="display:flex;flex-direction:column;gap:5px">
+            <button onclick="editarMovimientoExplosivo('${r.id}','${r.tipo}')" style="padding:4px 9px;font-size:11px;background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:4px;cursor:pointer">✎ Editar</button>
+            <button onclick="eliminarMovimientoExplosivo('${r.id}','${r.tipo}')" style="padding:4px 9px;font-size:11px;background:rgba(239,68,68,0.12);color:#f87171;border:1px solid rgba(239,68,68,0.35);border-radius:4px;cursor:pointer">🗑 Eliminar</button>
+          </div>`:''}
+        </div>
       </div>
     </div>`;
   }).join('');
@@ -8694,6 +8704,81 @@ async function guardarExploSalida(){
   cerrarModal('modal-explo-salida');renderExploTab();
   try{ if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
   showNotif(`✓ Salida registrada: ${total} ${exploGetCat(prodId)?.unidad||'und'} de ${exploGetCat(prodId)?.nombre}`);
+}
+
+// ── Editar / eliminar movimientos de explosivos NV3190 con ajuste correcto del stock ──
+// Los movimientos ANTERIORES al corte (EXPLO_STOCK_BASE_CUT) ya están reflejados dentro del
+// saldo base: para que el borrado/edición se note en el stock hay que ajustar la base misma
+// (y subir exploStockBaseV para que ese ajuste gane en la fusión con otros equipos).
+function _exploBuscarMov(id,tipo){
+  const exp=state.almacen.explosivos||{ingresos:[],salidas:[]};
+  const arr=tipo==='ingreso'?(exp.ingresos||[]):(exp.salidas||[]);
+  const idx=arr.findIndex(x=>x&&x.id===id);
+  return {arr, idx, mov: idx>=0?arr[idx]:null};
+}
+function _exploAjustarBase(producto,delta){
+  // delta = cuánto debe cambiar el stock visible por un movimiento viejo (pre-corte)
+  if(!state.almacen.exploStockBase) return;
+  const b=state.almacen.exploStockBase;
+  b[producto]=(Number(b[producto])||0)+delta;
+  state.almacen.exploStockBaseV=Date.now();   // gana en la fusión, y evita re-sembrado
+}
+function _exploEsPreCorte(mov){ return (Number(mov._ts)||0)<=EXPLO_STOCK_BASE_CUT && !!state.almacen.exploStockBase; }
+function eliminarMovimientoExplosivo(id,tipo){
+  const {arr, idx, mov}=_exploBuscarMov(id,tipo);
+  if(!mov){showNotif('⚠ Movimiento no encontrado','error');return;}
+  const c=exploGetCat(mov.producto); const und=c?.unidad||'und'; const tot=Number(mov.totalUnidades)||0;
+  const stock=exploStockActual(); const disp=Number(stock[mov.producto])||0;
+  if(tipo==='ingreso' && disp-tot<0){
+    showNotif(`⚠ No se puede eliminar: el stock de ${c?.nombre||mov.producto} quedaría en ${disp-tot} (negativo). Ya se despachó parte de ese ingreso.`,'error');
+    return;
+  }
+  const msg=tipo==='ingreso'
+    ?`¿Eliminar este INGRESO?\n\n${c?.nombre||mov.producto} · ${tot} ${und} · Vale ${mov.vale||'—'}\n\nEl stock BAJARÁ de ${disp} a ${disp-tot} ${und}.`
+    :`¿Eliminar esta SALIDA?\n\n${c?.nombre||mov.producto} · ${tot} ${und} · Vale ${mov.vale||'—'}\n\nEl stock SUBIRÁ de ${disp} a ${disp+tot} ${und} (vuelve al polvorín NV3190).`;
+  if(!confirm(msg)) return;
+  const preCorte=_exploEsPreCorte(mov);
+  arr.splice(idx,1);
+  try{ _tombAddMuchos([id]); }catch(e){}                 // lápida: no revive al sincronizar
+  if(preCorte) _exploAjustarBase(mov.producto, tipo==='ingreso'?-tot:+tot);  // el viejo vivía en la base
+  almacenSave();
+  renderExploTab();
+  try{ if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
+  const nuevo=exploStockActual()[mov.producto]||0;
+  showNotif(`✓ ${tipo==='ingreso'?'Ingreso':'Salida'} eliminado — stock de ${c?.nombre||mov.producto}: ${nuevo} ${und}`);
+}
+function editarMovimientoExplosivo(id,tipo){
+  const {mov}=_exploBuscarMov(id,tipo);
+  if(!mov){showNotif('⚠ Movimiento no encontrado','error');return;}
+  const c=exploGetCat(mov.producto); const und=c?.unidad||'und'; const esMecha=c&&c.id==='NEITHER';
+  const viejo=Number(mov.totalUnidades)||0;
+  const etiqCajas=esMecha?'Rollos':'Cajas', etiqUnd=esMecha?'Metros sueltos':'Unidades sueltas';
+  const sc=prompt(`Editar ${tipo==='ingreso'?'INGRESO':'SALIDA'} — ${c?.nombre||mov.producto}\nVale ${mov.vale||'—'} · actual: ${viejo} ${und}\n\n${etiqCajas}:`, String(mov.cajas||0));
+  if(sc===null) return;
+  const su=prompt(`${etiqUnd}:`, String(mov.unidades||0));
+  if(su===null) return;
+  const cajas=parseInt(sc)||0, unidades=parseInt(su)||0;
+  if(cajas<0||unidades<0){showNotif('⚠ Cantidades inválidas','error');return;}
+  const nuevoTot=esMecha?cajas*(c.mPorRollo||150)+unidades:cajas*(c?.upCaja||1)+unidades;
+  if(nuevoTot<=0){showNotif('⚠ La cantidad debe ser mayor a cero. Para quitar el movimiento use Eliminar.','error');return;}
+  const sv=prompt('N° Vale / Guía:', mov.vale||'');
+  if(sv===null) return;
+  const stock=exploStockActual(); const disp=Number(stock[mov.producto])||0;
+  const delta=nuevoTot-viejo;   // cuánto cambia la cantidad del movimiento
+  // El stock resultante no puede quedar negativo:
+  //  · salida más grande consume más → stock - delta
+  //  · ingreso más chico deja menos → stock + delta
+  const stockFinal=tipo==='salida'?disp-delta:disp+delta;
+  if(stockFinal<0){showNotif(`⚠ No alcanza: el stock de ${c?.nombre||mov.producto} quedaría en ${stockFinal} ${und}.`,'error');return;}
+  if(!confirm(`¿Guardar cambios?\n\n${c?.nombre||mov.producto}: ${viejo} → ${nuevoTot} ${und}\nStock resultante: ${stockFinal} ${und}`)) return;
+  const preCorte=_exploEsPreCorte(mov);
+  mov.cajas=cajas; mov.unidades=unidades; mov.totalUnidades=nuevoTot;
+  mov.vale=sv.trim()||mov.vale;
+  if(preCorte) _exploAjustarBase(mov.producto, tipo==='salida'?-delta:+delta);  // ajustar lo baked en la base
+  almacenSave();
+  renderExploTab();
+  try{ if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
+  showNotif(`✓ Movimiento actualizado — stock de ${c?.nombre||mov.producto}: ${exploStockActual()[mov.producto]||0} ${und}`);
 }
 
 async function exportarExplosivosExcel(){
@@ -16882,7 +16967,7 @@ function _iaRespuestaLocal(texto){
     return `${SR}en el reporte de hoy se registraron ${(m.metrosHoyB||0)+(m.metrosHoyCR||0)} metros (Brenda ${m.metrosHoyB||0} m · Cortada Noroeste ${m.metrosHoyCR||0} m) con ${m.disparosHoy||0} disparo${m.disparosHoy!==1?'s':''}.`;
   if(has('disparo','voladura','guardia'))
     return `${SR}en el día de hoy se han registrado ${m.disparosHoy||0} disparo${m.disparosHoy!==1?'s':''} en los frentes. ${m.rgHoy>0?'Hay '+m.rgHoy+' reporte'+(m.rgHoy!==1?'s':'')+' de guardia del día.':'Aún no hay reporte de guardia registrado hoy.'}`;
-  if(has('proyecci','pronostic','cuanto vamos a llegar','como vamos a terminar','alcanzar la meta'))
+  if(has('proyecci','proyecta','pronostic','pronóstic','predicci','estimad','cuanto vamos a llegar','como vamos a terminar','alcanzar la meta','como termina','llegamos a la meta'))
     return `${SR}al ritmo actual de ${m.prom.toFixed(1)} m/día y con ${m.diasRestMes} días restantes en el mes, la proyección es alcanzar ${m.proyMes} m de los ${m.meta} m de meta (${m.cum}% completado).`;
   if(has('metro','avance','perfora','rampa','cortada'))
     return `${SR}el avance acumulado es de ${m.metros.toFixed(1)} m (Rampa ${m.f1.toFixed(1)} m · Cortada Noroeste ${m.f2.toFixed(1)} m), con ${m.cum}% de cumplimiento. Promedio diario: ${m.prom.toFixed(1)} m/día.`;
@@ -16994,7 +17079,7 @@ Pregúnteme con naturalidad, como si conversara con un gerente de operaciones.`;
   }
 
   // ── Detección off-topic ──
-  const mineroKw=['metro','avance','mina','minero','mineral','miner','explosion','explosiv','polvorin','polvorín','scoop','dumper','compresor','excavadora','cargador','grupo electr','cisterna','petroleo','petróleo','gasolina','combustibl','tareo','trabajador','personal','planilla','sueldo','jornal','almacen','almacén','stock','logistic','logística','costo','gasto','egreso','ingreso','factura','valoriza','utilidad','ganancia','margen','rentab','produccion','producción','perforac','disparo','voladura','frente','rampa','cortada','guardia','reporte','seguridad','accidente','incidente','mantenimiento','reparac','compra','pedido','solicitud','empresa','operacion','operación','mukicloud','poderosa','nia','resumen','cumplimiento','meta','programa','proyecci','recomend','alerta','kit','repuesto','cimbra','top','ranking','mejores'];
+  const mineroKw=['metro','avance','mina','minero','mineral','miner','explosion','explosiv','polvorin','polvorín','scoop','dumper','compresor','excavadora','cargador','grupo electr','cisterna','petroleo','petróleo','gasolina','combustibl','tareo','trabajador','personal','planilla','sueldo','jornal','almacen','almacén','stock','logistic','logística','costo','gasto','egreso','ingreso','factura','valoriza','utilidad','ganancia','margen','rentab','produccion','producción','perforac','disparo','voladura','frente','rampa','cortada','guardia','reporte','seguridad','accidente','incidente','mantenimiento','reparac','compra','pedido','solicitud','empresa','operacion','operación','mukicloud','poderosa','nia','resumen','cumplimiento','meta','programa','proyecci','proyecta','pronostic','pronóstic','predicci','estimad','recomend','alerta','kit','repuesto','cimbra','top','ranking','mejores'];
   const esMinero=mineroKw.some(k=>q.includes(k))||has('hola','buenos','buenas','saludos','quien eres','quién eres','como te llamas','cómo te llamas','que puedes','qué puedes','que sabes','qué sabes','ayuda');
   if(!esMinero && q.length>3) return '__OFFTOPIC__';
 
