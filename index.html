@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-3</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-4</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-3</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-4</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.16-3</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.16-4</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -3324,6 +3324,7 @@ select option{background:var(--coal3);}
       </select>
       <span id="vt-badge" style="font-size:11px;color:var(--text3)"></span>
       <button id="vt-wa-btn" onclick="copiarReporteWhatsApp()" style="display:none;padding:8px 16px;background:rgba(37,211,102,0.15);border:1px solid rgba(37,211,102,0.4);color:#25d366;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">📲 Enviar por WhatsApp</button>
+      <button id="vt-del-btn" onclick="eliminarReporteComp()" style="display:none;padding:8px 16px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#f87171;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">🗑 Eliminar reporte</button>
     </div>
     <!-- Panel sin datos -->
     <div id="vt-empty" style="text-align:center;padding:32px;color:var(--text3);font-size:13px">
@@ -18537,9 +18538,35 @@ const COMP_STORAGE_KEY = 'atmin_compresorista';
 function _compMergeByTs(a, b){
   const kof=r=>(r.fecha||'')+'|'+(r.turno||'');
   const by={};
-  const put=r=>{ if(!r||!r.fecha) return; const k=kof(r); const ex=by[k]; if(!ex || (Number(r._ts)||0) >= (Number(ex._ts)||0)) by[k]=r; };
+  const put=r=>{ if(!r||!r.fecha) return; const k=kof(r);
+    if(typeof tombHas==='function' && tombHas('comp:'+k)) return;   // reporte eliminado: no resucita
+    const ex=by[k]; if(!ex || (Number(r._ts)||0) >= (Number(ex._ts)||0)) by[k]=r; };
   (a||[]).forEach(put); (b||[]).forEach(put);
   return Object.values(by).sort((x,y)=>(x.fecha||'').localeCompare(y.fecha||''));
+}
+// Elimina un reporte de compresorista. SOLO el Jefe de Finanzas puede hacerlo.
+// Deja lápida por firma 'comp:fecha|turno' para que el borrado se imponga al sincronizar.
+function eliminarReporteComp(){
+  if(typeof usuarioActivo==='undefined' || !usuarioActivo || usuarioActivo.rol!=='jefe_finanzas'){
+    showNotif('Solo el Jefe de Finanzas puede eliminar reportes','error'); return;
+  }
+  const btn=document.getElementById('vt-del-btn');
+  const fecha=(btn&&btn.dataset.fecha)||'';
+  const turno=(btn&&btn.dataset.turno)||'';
+  if(!fecha||!turno){ showNotif('Selecciona un reporte para eliminar','error'); return; }
+  if(!confirm('¿Eliminar el reporte del '+fecha+' — turno '+turno+'?\nEsta acción no se puede deshacer.')) return;
+  try{ if(typeof tombAdd==='function') tombAdd('comp:'+fecha+'|'+turno); }catch(e){}
+  state.compresorista=(state.compresorista||[]).filter(r=>!(r.fecha===fecha && r.turno===turno));
+  compGuardarLocal();
+  // Refrescar todas las vistas que dependen de los reportes
+  try{ renderTablaCompresorista(); }catch(e){}
+  try{ if(typeof visorPoblarDias==='function') visorPoblarDias(); }catch(e){}
+  try{ visorRenderDia(); }catch(e){}
+  try{ if(typeof renderCompHistorial==='function') renderCompHistorial(); }catch(e){}
+  try{ if(document.getElementById('log-stockremanente') && typeof renderStockRemanente==='function') renderStockRemanente(); }catch(e){}
+  try{ if(document.getElementById('log-combustible') && typeof renderCombustible==='function') renderCombustible(); }catch(e){}
+  try{ if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
+  showNotif('🗑 Reporte del '+fecha+' ('+turno+') eliminado','warn');
 }
 function compGuardarLocal() {
   try { localStorage.setItem(COMP_STORAGE_KEY, JSON.stringify(state.compresorista)); } catch(e){}
@@ -19581,16 +19608,25 @@ function visorRenderDia() {
   const fecha = sel ? sel.value : '';
   const empty = document.getElementById('vt-empty');
   const panel = document.getElementById('vt-panel');
-  if(!fecha){ if(empty)empty.style.display='block'; if(panel)panel.style.display='none'; return; }
+  const _ocultarAcciones=()=>{ ['vt-wa-btn','vt-del-btn'].forEach(id=>{ const b=document.getElementById(id); if(b) b.style.display='none'; }); };
+  if(!fecha){ if(empty)empty.style.display='block'; if(panel)panel.style.display='none'; _ocultarAcciones(); return; }
 
   const r = state.compresorista.find(x=>x.fecha===fecha && x.turno===_vtTurno);
   if(!r){
     if(empty){ empty.style.display='block'; empty.textContent='Sin reporte de turno '+_vtTurno+' para este día'; }
-    if(panel) panel.style.display='none'; return;
+    if(panel) panel.style.display='none'; _ocultarAcciones(); return;
   }
   if(empty) empty.style.display='none';
   const waBtnEl = document.getElementById('vt-wa-btn');
   if(waBtnEl) waBtnEl.style.display='inline-block';
+  // Botón de eliminar reporte: SOLO visible para el Jefe de Finanzas
+  const delBtnEl = document.getElementById('vt-del-btn');
+  if(delBtnEl){
+    const esFinanzas = typeof usuarioActivo!=='undefined' && usuarioActivo && usuarioActivo.rol==='jefe_finanzas';
+    delBtnEl.style.display = esFinanzas ? 'inline-block' : 'none';
+    delBtnEl.dataset.fecha = r.fecha||'';
+    delBtnEl.dataset.turno = r.turno||'';
+  }
   if(panel) panel.style.display='block';
 
   // Info compresorista
