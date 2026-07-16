@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-4</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-5</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-4</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-5</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.16-4</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.16-5</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -3612,8 +3612,8 @@ select option{background:var(--coal3);}
     <!-- Agregar ítem -->
     <div class="section-title" style="margin:14px 0 8px;font-size:12px">Agregar producto</div>
     <div class="form-grid">
-      <div class="form-group"><label>Almacén origen</label><select id="sa-almacen" onchange="poblarProductosSalida()"><option value="General">Insumos</option><option value="Mantenimiento">Mantenimiento</option></select></div>
-      <div class="form-group" style="grid-column:1/-1"><label>Producto en stock <span style="color:var(--text3);font-size:10px">(solo con stock disponible)</span></label><select id="sa-producto" onchange="autollenarSalida()"><option value="">— Seleccionar —</option></select></div>
+      <div class="form-group"><label>Almacén origen</label><select id="sa-almacen" onchange="poblarProductosSalida()"><option value="">Todos los almacenes</option><option value="General">Insumos</option><option value="Mantenimiento">Mantenimiento</option></select></div>
+      <div class="form-group" style="grid-column:1/-1"><label>Producto en stock <span style="color:var(--text3);font-size:10px">(todos los materiales con stock disponible)</span></label><select id="sa-producto" onchange="autollenarSalida()"><option value="">— Seleccionar —</option></select></div>
       <div class="form-group"><label>U.M.</label><input type="text" id="sa-unidad" readonly style="opacity:0.8"></div>
       <div class="form-group"><label>Stock disponible</label><div id="sa-stock-disp" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:9px 11px;font-size:13px;color:var(--text3)">—</div></div>
       <div class="form-group"><label>P.U. sin IGV (S/)</label><input type="number" id="sa-precio" min="0" step="any" oninput="calcImporteSalida()"></div>
@@ -5273,7 +5273,7 @@ function cargarStockNV2820(){
     const key=String(codigo||nombre).toUpperCase();
     if(!key||yaHay.has(key)) return;
     yaHay.add(key);
-    ap.push({id:'NV28-'+base+'-'+(idx++), codigo:codigo||'', nombre:nombre, unidad:unidad||'PZA', cantidad:Number(cant)||0}); n++;
+    ap.push({id:'NV28-'+base+'-'+(idx++), codigo:codigo||'', nombre:nombre, unidad:unidad||'PZA', cantidad:Number(cant)||0, _ts:Date.now()}); n++;
   };
   // 1) TODO lo que ha salido del almacén hacia NV2820 (destino '2820') — la cantidad total enviada
   const salDest={};
@@ -5307,16 +5307,17 @@ function agregarItemNV2820(){
   if(!p){ showNotif('No se encontró ese producto en el maestro','error'); return; }
   const cant=parseFloat(prompt('Cantidad en NV2820 para '+p.nombre+':','0'))||0;
   state.almacen.nv2820Apertura=(state.almacen.nv2820Apertura||[]);
-  state.almacen.nv2820Apertura.push({id:'NV28-'+Date.now(), codigo:p.codigo||'', nombre:p.nombre, unidad:p.unidad||'PZA', cantidad:cant});
+  state.almacen.nv2820Apertura.push({id:'NV28-'+Date.now(), codigo:p.codigo||'', nombre:p.nombre, unidad:p.unidad||'PZA', cantidad:cant, _ts:Date.now()});
   try{ almacenSave(); }catch(e){}
   renderSubalmacen2820();
   showNotif('✓ '+p.nombre+' agregado al NV2820');
 }
 function editarAperturaNV2820(id,val){
   const a=(state.almacen.nv2820Apertura||[]).find(x=>x.id===id);
-  if(a){ a.cantidad=parseFloat(val)||0; try{ almacenSave(); }catch(e){} renderSubalmacen2820(); }
+  if(a){ a.cantidad=parseFloat(val)||0; a._ts=Date.now(); try{ almacenSave(); }catch(e){} renderSubalmacen2820(); }
 }
 function quitarAperturaNV2820(id){
+  try{ if(typeof tombAdd==='function') tombAdd(id); }catch(e){}   // lápida: el borrado se impone al sincronizar
   state.almacen.nv2820Apertura=(state.almacen.nv2820Apertura||[]).filter(x=>x.id!==id);
   try{ almacenSave(); }catch(e){} renderSubalmacen2820();
 }
@@ -5330,6 +5331,7 @@ function confirmarMaterialNV2820(salidaId){
   const resp=(prompt('Tu nombre (Compresorista) que confirma la recepción:',def)||'').trim();
   if(!resp){showNotif('Cancelado — se requiere nombre','error');return;}
   s.confirmadoNV2820=true;s.confirmadoPor=resp;s.confirmadoFecha=hoy();
+  s._ts=Date.now();   // la confirmación es la versión MÁS reciente → gana al sincronizar y no se re-pide
   if(typeof almacenSave==='function') almacenSave();
   if(typeof renderMatPendientesComp==='function') renderMatPendientesComp();
   if(typeof _compRefrescarConsumoSelectors==='function') _compRefrescarConsumoSelectors(); // ← ya disponible para consumo
@@ -6205,7 +6207,7 @@ function _rtAplicarModulo(modulo, data){
   const setLS=(k,v)=>{ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} };
   const M=(typeof mergeSnapById==='function')?mergeSnapById:((a,b)=>b||a||[]);
   switch(modulo){
-    case 'almacen':            if(data&&typeof data==='object'){ const prevAlm=state.almacen||{}; let a=Object.assign({}, prevAlm, data); if(typeof mergeSnapById==='function'){ a.ingresos=mergeSnapById(data.ingresos||[], prevAlm.ingresos||[]); a.salidas=mergeSnapById(data.salidas||[], prevAlm.salidas||[]); a.inventarioInicial=mergeSnapById(data.inventarioInicial||[], prevAlm.inventarioInicial||[]); const exN=data.explosivos||prevAlm.explosivos||{ingresos:[],salidas:[]}, exP=prevAlm.explosivos||{ingresos:[],salidas:[]}; a.explosivos={...exN, ingresos:mergeSnapById(exN.ingresos||[], exP.ingresos||[]), salidas:mergeSnapById(exN.salidas||[], exP.salidas||[])}; } if(Number(prevAlm.productosTs||0)>Number(data.productosTs||0)){ a.productos=prevAlm.productos; a.productosTs=prevAlm.productosTs; } if(typeof _prodsVivos==='function') a.productos=_prodsVivos(a.productos); try{ if(typeof _almRestaurarFotos==='function') a=_almRestaurarFotos(a); }catch(e){} state.almacen=a; setLS('atmin_almacen', state.almacen); if(typeof _sbPend!=='undefined' && ('almacen' in _sbPend)){ try{ _sbPend['almacen']=(typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}; _sbPendSave(); }catch(e){} } } break;
+    case 'almacen':            if(data&&typeof data==='object'){ const prevAlm=state.almacen||{}; let a=Object.assign({}, prevAlm, data); if(typeof mergeSnapById==='function'){ a.ingresos=mergeSnapById(data.ingresos||[], prevAlm.ingresos||[]); a.salidas=(typeof mergeById_ts==='function')?mergeById_ts(data.salidas||[], prevAlm.salidas||[]):mergeSnapById(data.salidas||[], prevAlm.salidas||[]); a.nv2820Apertura=(typeof mergeById_ts==='function')?mergeById_ts(data.nv2820Apertura||[], prevAlm.nv2820Apertura||[]):(data.nv2820Apertura||prevAlm.nv2820Apertura||[]); a.inventarioInicial=mergeSnapById(data.inventarioInicial||[], prevAlm.inventarioInicial||[]); const exN=data.explosivos||prevAlm.explosivos||{ingresos:[],salidas:[]}, exP=prevAlm.explosivos||{ingresos:[],salidas:[]}; a.explosivos={...exN, ingresos:mergeSnapById(exN.ingresos||[], exP.ingresos||[]), salidas:mergeSnapById(exN.salidas||[], exP.salidas||[])}; } if(Number(prevAlm.productosTs||0)>Number(data.productosTs||0)){ a.productos=prevAlm.productos; a.productosTs=prevAlm.productosTs; } if(typeof _prodsVivos==='function') a.productos=_prodsVivos(a.productos); try{ if(typeof _almRestaurarFotos==='function') a=_almRestaurarFotos(a); }catch(e){} state.almacen=a; setLS('atmin_almacen', state.almacen); if(typeof _sbPend!=='undefined' && ('almacen' in _sbPend)){ try{ _sbPend['almacen']=(typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}; _sbPendSave(); }catch(e){} } } break;
     case 'personal':           if(Array.isArray(data)){ state.personal=(typeof mergeById_ts==='function')?mergeById_ts(state.personal||[], data):data; try{ if(typeof normalizarCargos==='function') normalizarCargos(); }catch(e){} setLS('atmin_personal_snap', state.personal); if(typeof _sbPend!=='undefined' && ('personal' in _sbPend)){ _sbPend['personal']=state.personal; try{ _sbPendSave(); }catch(e){} } } break;
     case 'tareas':             if(Array.isArray(data)){ state.tareas=data; setLS('atmin_tareas_snap', data); } break;
     case 'reportes_guardia':   if(Array.isArray(data)){ state.reportesGuardia=(typeof mergeById_ts==='function')?mergeById_ts(state.reportesGuardia||[], data, (typeof _rgMetros==='function'?_rgMetros:null)):M(data, state.reportesGuardia||[]); setLS('atmin_reportes_guardia', state.reportesGuardia); try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){} } break;
@@ -6355,14 +6357,20 @@ function _almClonLight(alm){
 function _almMergeSnaps(a,b){
   a=a||{}; b=b||{};
   const M=(x,y)=>(typeof mergeSnapById==='function')?mergeSnapById(x||[], y||[]):(((x&&x.length)?x:y)||[]);
+  // Salidas: fusión por id conservando la versión con _ts MÁS reciente. Así la confirmación
+  // del Compresorista (que marca _ts nuevo) NO la pisa una copia vieja "sin confirmar" de Logística.
+  const Mts=(x,y)=>(typeof mergeById_ts==='function')?mergeById_ts(x||[], y||[]):M(x,y);
   const exA=a.explosivos||{ingresos:[],salidas:[]}, exB=b.explosivos||{ingresos:[],salidas:[]};
   let productos=a.productos||[], productosTs=Number(a.productosTs||0);
   if(Number(b.productosTs||0) > productosTs){ productos=b.productos||productos; productosTs=Number(b.productosTs||0); }
   else if(!productos.length && (b.productos||[]).length){ productos=b.productos; }
   if(typeof _prodsVivos==='function') productos=_prodsVivos(productos);   // borrados no reviven
   const out={ ...a, ...b,
-    ingresos:M(a.ingresos,b.ingresos), salidas:M(a.salidas,b.salidas),
+    ingresos:M(a.ingresos,b.ingresos), salidas:Mts(a.salidas,b.salidas),
     inventarioInicial:M(a.inventarioInicial,b.inventarioInicial),
+    // Stock inicial del NV2820: fusión por id con _ts reciente (antes se reemplazaba y un equipo
+    // con copia vieja/vacía borraba lo que otro había cargado, p.ej. los 100 sacos de cemento).
+    nv2820Apertura:Mts(a.nv2820Apertura,b.nv2820Apertura),
     explosivos:{ ...exA, ...exB, ingresos:M(exA.ingresos,exB.ingresos), salidas:M(exA.salidas,exB.salidas) },
     productos, productosTs };
   ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','exploStockBaseV','catalogVersion','almExcelV','stockCorteTs']
@@ -7891,7 +7899,7 @@ function guardarIngreso(){
 let salidaCart=[];
 function abrirSalidaModal(){
   const g=id=>document.getElementById(id);
-  g('sa-fecha').value=hoy();g('sa-almacen').value='General';
+  g('sa-fecha').value=hoy();g('sa-almacen').value='';   // "Todos los almacenes" por defecto → ve todo el stock
   g('sa-solicitante').value='';
   g('sa-unidad').value='';g('sa-precio').value='';
   g('sa-maquina').value='';g('sa-cantidad').value='';g('sa-destino').value='2820';
@@ -7920,12 +7928,15 @@ function toggleOperarioSalida(){
 }
 function poblarProductosSalida(){
   const alm=document.getElementById('sa-almacen').value;
-  const stock=filtrarPorMaestro(calcStock()).filter(r=>r.almacen===alm&&r.stock>0).sort((a,b)=>(a.producto||a.descripcion).localeCompare(b.producto||b.descripcion));
+  // alm vacío = "Todos los almacenes": aparecen TODOS los materiales con stock. Cada ítem de la
+  // salida conserva su propio almacén, por lo que mezclar ambos no altera la contabilidad.
+  const stock=filtrarPorMaestro(calcStock()).filter(r=>r.stock>0&&(!alm||r.almacen===alm)).sort((a,b)=>(a.producto||a.descripcion).localeCompare(b.producto||b.descripcion));
   const sel=document.getElementById('sa-producto');
-  sel.innerHTML='<option value="">— Seleccionar —</option>'+stock.map(r=>`<option value="${escAttr(r.key)}">${r.producto?r.producto+' — ':''}${r.descripcion}${r.codigo?' ('+r.codigo+')':''} (stock: ${fmt3(r.stock)} ${r.unidad})</option>`).join('');
+  const almTag=r=>(!alm)?` · ${r.almacen==='Mantenimiento'?'Mant.':'Insumos'}`:'';
+  sel.innerHTML='<option value="">— Seleccionar —</option>'+stock.map(r=>`<option value="${escAttr(r.key)}">${r.producto?r.producto+' — ':''}${r.descripcion}${r.codigo?' ('+r.codigo+')':''} (stock: ${fmt3(r.stock)} ${r.unidad})${almTag(r)}</option>`).join('');
   document.getElementById('sa-unidad').value='';
   document.getElementById('sa-precio').value='';document.getElementById('sa-stock-disp').textContent='—';
-  if(!stock.length) sel.innerHTML='<option value="">Sin productos con stock en este almacén</option>';
+  if(!stock.length) sel.innerHTML='<option value="">Sin productos con stock disponible</option>';
 }
 // Stock disponible considerando lo que ya está en el carrito
 function stockDisponibleSalida(key){
@@ -8252,6 +8263,7 @@ function guardarEdicionSalida(){
     // Dejó de ser NV2820: limpiar los marcadores de confirmación huérfanos
     delete s.confirmadoNV2820; delete s.confirmadoPor; delete s.confirmadoFecha;
   }
+  s._ts=Date.now();   // esta edición es la versión más reciente → gana al sincronizar
   almacenSave();cerrarModal('modal-edit-salida');renderHistorialAlmacen();renderAlmacen();showNotif('✓ Salida actualizada');
 }
 
