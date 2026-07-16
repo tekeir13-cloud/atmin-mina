@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-5</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-6</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-5</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-6</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.16-5</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.16-6</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -6448,14 +6448,20 @@ function almacenLoad(){
 // (p.ej. 7 "FILTRO DE PETROLEO" con códigos distintos), así que la opción del datalist es
 // "NOMBRE (CÓDIGO)" y aquí se extrae el código exacto. El código resuelto queda en
 // dataset.codigo del input y viaja con el ingreso para que el stock se separe por código.
+// Normaliza un nombre para comparar sin diferencias de mayúsculas, acentos ni espacios.
+function _normNom(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim(); }
 function _prodResolverIngreso(valRaw){
   const val=String(valRaw||'').trim().toLowerCase();
   const prods=state.almacen.productos||[];
   // 1) "nombre (codigo)" — formato del datalist
   const m=/\(([^()]+)\)\s*$/.exec(val);
   if(m){ const cod=m[1].trim(); const p=prods.find(x=>String(x.codigo||'').toLowerCase()===cod); if(p) return p; }
-  // 2) código exacto  3) nombre exacto (primer match, para productos con nombre único)
-  return prods.find(x=>String(x.codigo||'').toLowerCase()===val)||prods.find(x=>String(x.nombre||'').toLowerCase()===val)||null;
+  // 2) código exacto  3) nombre exacto  4) nombre normalizado (sin acentos/mayúsculas/espacios extra)
+  const nv=_normNom(valRaw);
+  return prods.find(x=>String(x.codigo||'').toLowerCase()===val)
+    || prods.find(x=>String(x.nombre||'').toLowerCase()===val)
+    || prods.find(x=>_normNom(x.nombre)===nv)
+    || null;
 }
 function autoFillProductoIngreso(){
   const inp=document.getElementById('in-producto');
@@ -6526,6 +6532,10 @@ function guardarProductoCatalogo(){
   if(!state.almacen.productos)state.almacen.productos=[];
   const duplicado=state.almacen.productos.find(x=>x.codigo===codigo&&x.id!==editId);
   if(duplicado){showNotif('⚠ Ya existe un producto con ese código','error');return;}
+  // Evitar duplicados por NOMBRE (p.ej. "Caja de agua" vs "CAJA DE AGUA"): confunden el stock.
+  const _nn=(typeof _normNom==='function')?_normNom(nombre):String(nombre||'').toLowerCase().trim();
+  const dupNombre=state.almacen.productos.find(x=>x.id!==editId && ((typeof _normNom==='function')?_normNom(x.nombre):String(x.nombre||'').toLowerCase().trim())===_nn);
+  if(dupNombre){showNotif('⚠ Ya existe un producto con ese nombre: '+dupNombre.nombre+' ('+dupNombre.codigo+'). Usa ese o edítalo.','error');return;}
   if(editId){
     const p=state.almacen.productos.find(x=>x.id===editId);
     if(p){p.codigo=codigo;p.nombre=nombre;p.unidad=unidad;p.precio=precio;}
@@ -7857,6 +7867,12 @@ function agregarItemIngreso(){
   // Resolver el producto del maestro para capturar su CÓDIGO (clave para separar el stock)
   const pM=(typeof _prodResolverIngreso==='function')?_prodResolverIngreso(g('in-producto').value):null;
   const codigo=g('in-producto').dataset.codigo||(pM?String(pM.codigo||''):'');
+  // El maestro MANDA: si lo escrito no corresponde a un producto del maestro, se bloquea. Así el
+  // ingreso siempre lleva un código válido y su stock aparece (antes quedaba oculto y "sin stock").
+  if(!pM && !codigo){
+    showNotif('⚠ Elige el producto de la lista (debe existir en el maestro). Si es nuevo, créalo primero en la pestaña Productos.','error');
+    return;
+  }
   const nombreLimpio=pM?pM.nombre:g('in-producto').value.trim().replace(/\s*\([^()]*\)\s*$/,'');
   ingresoCart.push({vale:g('in-vale').value.trim(),producto:nombreLimpio,codigo,descripcion:desc,unidad:g('in-unidad').value,cantidad:cant,precio:precio,total:cant*precio});
   renderIngresoCart();
