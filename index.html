@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-7</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-8</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-7</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-8</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.16-7</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.16-8</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -7651,14 +7651,14 @@ function filtrarPorMaestro(stock){
     if(c) cods.add(c);
     else { const n=String(p.nombre||'').trim().toLowerCase(); if(n) nomsSinCod.add(n); }
   });
-  // Solo sobrevive lo que ESTÁ en el maestro: por código, o (si el maestro lo lleva sin código)
-  // por nombre. Un movimiento con código ajeno al maestro, o sin código que no se pudo unificar,
-  // se saca. (calcStock ya resolvió el código de los movimientos sin código cuando era posible.)
+  // Con código: solo sobrevive si el código está en el maestro (así un producto eliminado
+  // desaparece del stock). SIN código: calcStock ya lo unió automáticamente al maestro cuando el
+  // nombre calza (ignorando mayúsculas/acentos/espacios); si aun así no calzó, SE MUESTRA IGUAL —
+  // es material registrado por el usuario y ocultarlo hacía "desaparecer" su stock en silencio.
   return stock.filter(r=>{
     const c=String(r.codigo||'').trim().toLowerCase();
     if(c) return cods.has(c);
-    const n=String(r.producto||r.descripcion||'').trim().toLowerCase();
-    return n&&nomsSinCod.has(n);
+    return true;
   });
 }
 function fmt3(n){return (Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:0,maximumFractionDigits:3});}
@@ -7737,62 +7737,6 @@ function exportarStockExcel(){
   XLSX.writeFile(wb,f);
   showNotif('✓ Excel exportado: '+filas.length+' líneas ('+stock.length+' productos)');
 }
-// Movimientos HUÉRFANOS: registrados sin código y cuyo nombre no calza con el maestro. Antes se
-// ocultaban en silencio ("registré y no aparece"); ahora se muestran con botón para vincular.
-let _huerfanosCache=[];
-function stockHuerfanos(){
-  const all=calcStock();
-  const vivos=new Set(filtrarPorMaestro(all).map(r=>r.key));
-  return all.filter(r=>!vivos.has(r.key));
-}
-function vincularHuerfano(idx){
-  const row=_huerfanosCache[idx];
-  if(!row){showNotif('Ítem no encontrado','error');return;}
-  const val=prompt('¿A qué producto del MAESTRO pertenece "'+(row.producto||row.descripcion)+'"?\nEscribe su nombre o código exacto:','');
-  if(!val) return;
-  const NN=(typeof _normNom==='function')?_normNom:(s=>String(s||'').trim().toLowerCase());
-  const prods=(state.almacen&&state.almacen.productos)||[];
-  const p=(typeof _prodResolverIngreso==='function'?_prodResolverIngreso(val):null)
-        || prods.find(x=>NN(x.nombre).includes(NN(val)));
-  if(!p){showNotif('No se encontró ese producto en el maestro','error');return;}
-  const match=it=>{
-    if(String(it.codigo||'').trim()) return false;
-    if((it.almacen||'General')!==row.almacen) return false;
-    return NN(it.descripcion)===NN(row.descripcion) || NN(it.producto)===NN(row.producto||row.descripcion);
-  };
-  let n=0; const base=Date.now();
-  // Ingresos: la fusión por unión conservaría la copia vieja sin código → se reemplaza el registro
-  // por uno NUEVO (id nuevo, con código) y se deja lápida al viejo: el cambio se impone en todos.
-  (state.almacen.ingresos||[]).slice().forEach(it=>{
-    if(!match(it)) return;
-    try{ if(typeof tombAdd==='function') tombAdd(it.id); }catch(e){}
-    state.almacen.ingresos=state.almacen.ingresos.filter(x=>x!==it);
-    state.almacen.ingresos.push({...it, id:'I'+(base+n), _ts:base+n, codigo:String(p.codigo||''), producto:p.nombre});
-    n++;
-  });
-  // Salidas: se fusionan por _ts reciente → basta editar en sitio y marcar _ts nuevo.
-  (state.almacen.salidas||[]).forEach(it=>{ if(match(it)){ it.codigo=String(p.codigo||''); it.producto=p.nombre; it._ts=Date.now(); n++; } });
-  try{ almacenSave(); }catch(e){}
-  renderStockVigente();
-  try{ renderHistorialAlmacen(); }catch(e){}
-  showNotif('🔗 '+n+' movimiento(s) vinculados a '+p.nombre+' ('+p.codigo+') — ya aparecen en stock');
-}
-function _huerfanosHTML(){
-  _huerfanosCache=stockHuerfanos();
-  if(!_huerfanosCache.length) return '';
-  return `<div style="background:rgba(251,191,36,0.07);border:1px solid rgba(251,191,36,0.4);border-radius:12px;padding:14px 16px;margin-bottom:16px">
-    <div style="font-size:13px;font-weight:800;color:#fbbf24;margin-bottom:4px">⚠️ Movimientos sin vincular al maestro (${_huerfanosCache.length})</div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Se registraron con un nombre que no calza con ningún producto del maestro, por eso NO aparecen en el stock ni en Salidas. Vincúlalos y se suman de inmediato.</div>
-    ${_huerfanosCache.map((r,i)=>`
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:6px;flex-wrap:wrap">
-        <div>
-          <div style="font-size:12.5px;font-weight:700;color:var(--text)">${escAttr(r.producto||r.descripcion||'—')}</div>
-          <div style="font-size:10.5px;color:var(--text3)">${escAttr(r.descripcion||'')} · ${almLabel(r.almacen)} · saldo: <strong style="color:var(--text2)">${fmt3(r.stock)} ${r.unidad||''}</strong></div>
-        </div>
-        <button class="btn btn-outline" style="font-size:11px;padding:5px 12px;border-color:#fbbf24;color:#fbbf24" onclick="vincularHuerfano(${i})">🔗 Vincular al maestro</button>
-      </div>`).join('')}
-  </div>`;
-}
 function renderStockVigente(){
   const wrap=document.getElementById('stock-vigente-wrap');if(!wrap)return;
   poblarFiltroAlmacenes('stock-alm-fil');
@@ -7800,14 +7744,13 @@ function renderStockVigente(){
   const almFil=document.getElementById('stock-alm-fil')?.value||'';
   const soloCon=document.getElementById('stock-solo-con')?.checked||false;
 
-  const huerfanosHtml=_huerfanosHTML();
   let stock=filtrarPorMaestro(calcStock());
   if(almFil) stock=stock.filter(r=>r.almacen===almFil);
   if(q) stock=stock.filter(r=>(r.producto||r.descripcion||'').toLowerCase().includes(q)||(r.descripcion||'').toLowerCase().includes(q)||String(r.codigo||'').toLowerCase().includes(q));
   if(soloCon) stock=stock.filter(r=>r.stock>0);
   stock.sort((a,b)=>b.stock-a.stock);
 
-  if(!stock.length){wrap.innerHTML=huerfanosHtml+'<div style="text-align:center;color:var(--text3);padding:24px">Sin productos con movimientos aún.</div>';return;}
+  if(!stock.length){wrap.innerHTML='<div style="text-align:center;color:var(--text3);padding:24px">Sin productos con movimientos aún.</div>';return;}
 
   const maxStock=Math.max(...stock.map(r=>Math.abs(r.stock)),1);
 
@@ -7859,7 +7802,7 @@ function renderStockVigente(){
   const truncNota = stock.length>TOPE_BARRAS
     ? `<div style="font-size:10px;color:var(--text3);text-align:center;margin-top:10px">Mostrando ${TOPE_BARRAS} de ${stock.length} ítems (usa el buscador o el filtro de almacén para acotar).</div>`
     : '';
-  wrap.innerHTML=huerfanosHtml+kpiHtml+`<div class="card" style="padding:16px 18px;max-height:70vh;overflow-y:auto">${bars}${truncNota}</div>`;
+  wrap.innerHTML=kpiHtml+`<div class="card" style="padding:16px 18px;max-height:70vh;overflow-y:auto">${bars}${truncNota}</div>`;
 }
 
 // ── TAB 1: ALMACÉN (solo dispara stock) ──
