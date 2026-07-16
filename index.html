@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-10</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-11</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-10</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-11</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.16-10</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.16-11</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -6373,7 +6373,7 @@ function _almMergeSnaps(a,b){
     nv2820Apertura:Mts(a.nv2820Apertura,b.nv2820Apertura),
     explosivos:{ ...exA, ...exB, ingresos:M(exA.ingresos,exB.ingresos), salidas:M(exA.salidas,exB.salidas) },
     productos, productosTs };
-  ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','exploStockBaseV','catalogVersion','almExcelV','stockCorteTs']
+  ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','exploStockBaseV','catalogVersion','almExcelV','stockCorteTs','aguaFixV']
     .forEach(k=>{ const mx=Math.max(Number(a[k]||0), Number(b[k]||0)); if(mx) out[k]=mx; });
   if(a.exploLock||b.exploLock) out.exploLock=true;
   out.remApertura=a.remApertura||b.remApertura||out.remApertura;
@@ -7703,38 +7703,34 @@ function almacenUnificarMaestroDuplicados(){
     return cambios>0;
   }catch(e){ return false; }
 }
-// RE-VINCULACIÓN AUTOMÁTICA de movimientos con CÓDIGO MUERTO: si un producto fue eliminado del
-// maestro (p.ej. el duplicado "Caja de agua ART-00001") pero sus ingresos/salidas quedaron con
-// ese código, aquí se re-vinculan por NOMBRE al producto oficial del maestro. Regla del sistema:
-// si no existe en el maestro no tiene stock — y lo que sí es del mismo material queda unificado.
-function almacenReligarCodigosMuertos(){
+// LIMPIEZA ÚNICA (v1, corre una sola vez en todos los equipos): elimina el agua fantasma.
+// El producto duplicado "Caja de agua (ART-00001)" acumuló ingresos de prueba (3,030 y 1,000)
+// que NO son reales — el usuario solo tiene 10 unidades bajo CAJA DE AGUA (ALM-062).
+// Se eliminan CON LÁPIDA todos los movimientos del código ART-00001 y cualquier ingreso/salida
+// de "caja de agua" con cantidad >= 1000 (por si algún equipo ya los re-etiquetó al oficial).
+// Las 10 reales (cantidad < 1000 bajo ALM-062) y el inventario inicial del Excel NO se tocan.
+function almacenPurgaAguaV1(){
   try{
-    const prods=(state.almacen&&state.almacen.productos)||[];
-    if(!prods.length) return false;
+    if((Number(state.almacen&&state.almacen.aguaFixV)||0)>=1) return false;
+    if(!state.almacen) return false;
     const NN=(typeof _normNom==='function')?_normNom:(s=>String(s||'').trim().toLowerCase());
-    const cods=new Set(prods.map(p=>String(p.codigo||'').trim().toLowerCase()).filter(Boolean));
-    // Índice nombre normalizado → producto (solo nombres ÚNICOS, para no adivinar)
-    const porNombre={};
-    prods.forEach(p=>{ const k=NN(p.nombre); if(!k) return; porNombre[k]=(k in porNombre)?null:p; });
-    const destino=it=>{
-      const c=String(it.codigo||'').trim().toLowerCase();
-      if(!c||cods.has(c)) return null;               // sin código o código vivo: no tocar
-      return porNombre[NN(it.producto)]||porNombre[NN(it.descripcion)]||null;
+    const esFantasma=it=>{
+      if(!it) return false;
+      if(String(it.codigo||'').toUpperCase()==='ART-00001') return true;
+      return NN(it.producto)==='caja de agua' && (Number(it.cantidad)||0)>=1000;
     };
-    let cambios=0; const base=Date.now();
-    // Ingresos: registro nuevo + lápida (la fusión por unión no puede resucitar la copia vieja)
-    (state.almacen.ingresos||[]).slice().forEach(it=>{
-      const p=destino(it); if(!p) return;
-      try{ if(typeof tombAdd==='function') tombAdd(it.id); }catch(e){}
-      state.almacen.ingresos=state.almacen.ingresos.filter(x=>x!==it);
-      state.almacen.ingresos.push({...it, id:'I'+(base+cambios), _ts:base+cambios, codigo:String(p.codigo||''), producto:p.nombre});
-      cambios++;
+    let n=0;
+    ['ingresos','salidas'].forEach(k=>{
+      (state.almacen[k]||[]).slice().forEach(it=>{
+        if(!esFantasma(it)) return;
+        try{ if(typeof tombAdd==='function') tombAdd(it.id); }catch(e){}
+        state.almacen[k]=state.almacen[k].filter(x=>x!==it);
+        n++;
+      });
     });
-    // Salidas: editar en sitio con _ts nuevo (gana la versión reciente)
-    (state.almacen.salidas||[]).forEach(it=>{ const p=destino(it); if(p){ it.codigo=String(p.codigo||''); it.producto=p.nombre; it._ts=Date.now(); cambios++; } });
-    (state.almacen.inventarioInicial||[]).forEach(it=>{ const p=destino(it); if(p){ it.codigo=String(p.codigo||''); it.producto=p.nombre; cambios++; } });
-    if(cambios){ try{ almacenSave(); }catch(e){} }
-    return cambios>0;
+    state.almacen.aguaFixV=1;   // marca versionada: se propaga por sync y no vuelve a correr
+    try{ almacenSave(); }catch(e){}
+    return n>0;
   }catch(e){ return false; }
 }
 function fmt3(n){return (Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:0,maximumFractionDigits:3});}
@@ -15842,8 +15838,8 @@ async function initSistema(){
   await cargarDesdeSB();
   // Unificar productos duplicados del maestro (mismo nombre, código autogenerado): automático.
   try{ if(typeof almacenUnificarMaestroDuplicados==='function') almacenUnificarMaestroDuplicados(); }catch(e){}
-  // Re-vincular movimientos con código de producto eliminado al oficial del maestro (por nombre).
-  try{ if(typeof almacenReligarCodigosMuertos==='function') almacenReligarCodigosMuertos(); }catch(e){}
+  // Limpieza única del agua fantasma (ART-00001): deja solo las unidades reales.
+  try{ if(typeof almacenPurgaAguaV1==='function') almacenPurgaAguaV1(); }catch(e){}
   // Se habilitaron 5 frentes fijos (Brenda, CRNE, GLSE-2, ESCM 4430, ESCM 4410) — ya NO se
   // filtran del estado en memoria. Solo se reconstruye la perforación derivada de los reportes
   // de guardia para que quede en sincronía con los 5 frentes tras cargar la nube.
