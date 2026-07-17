@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-13</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-14</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-13</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-14</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.16-13</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.16-14</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -3434,7 +3434,7 @@ select option{background:var(--coal3);}
       <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">💥 Explosivos por Frente</div>
       <div class="table-wrap" style="margin-bottom:20px">
         <table style="width:100%">
-          <thead><tr style="font-size:10px;color:var(--text3)"><th style="text-align:left;padding:6px 8px">Código</th><th style="padding:6px 8px;text-align:center;color:#f87171">⛏️ Rampa Brenda</th><th style="padding:6px 8px;text-align:center;color:#60a5fa">🔵 Cortada Noreste</th></tr></thead>
+          <thead><tr id="comp-expf-head" style="font-size:10px;color:var(--text3)"><th style="text-align:left;padding:6px 8px">Código</th></tr></thead>
           <tbody id="comp-expf-body"></tbody>
         </table>
       </div>
@@ -3495,7 +3495,7 @@ select option{background:var(--coal3);}
       <button class="mod-tab" onclick="switchCompTab('historial',this)">📅 Historial</button>
     </div>
     <div id="comp-tab-explosivos" class="comp-tab-content">
-      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Código</th><th class="r">I</th><th class="r">E</th><th class="r">C</th><th class="r">F</th><th class="r" style="color:#f87171">Rampa Brenda</th><th class="r" style="color:#60a5fa">Cortada Noreste</th></tr></thead><tbody id="tbody-explosivos"><tr><td colspan="9" style="text-align:center;color:var(--text3);padding:20px">Sin reportes aún</td></tr></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr id="thead-explosivos"><th>Fecha</th><th>Turno</th><th>Código</th><th class="r">I</th><th class="r">E</th><th class="r">C</th><th class="r">F</th></tr></thead><tbody id="tbody-explosivos"><tr><td colspan="13" style="text-align:center;color:var(--text3);padding:20px">Sin reportes aún</td></tr></tbody></table></div>
     </div>
     <div id="comp-tab-materiales" class="comp-tab-content" style="display:none">
       <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Frente</th><th>Material</th><th class="r">Cantidad</th><th>Unidad</th></tr></thead><tbody id="tbody-materiales"><tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sin reportes aún</td></tr></tbody></table></div>
@@ -5820,8 +5820,8 @@ function renderDashAvanceMeta(){
   // tienen desglose rampa/galería por ahora)
   const preciosExpD=(typeof compGetPreciosExp==='function')?compGetPreciosExp():(typeof COMP_PRECIOS_EXP_DEFAULT!=='undefined'?COMP_PRECIOS_EXP_DEFAULT:{});
   const compMesD=(state.compresorista||[]).filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mesAct):((r.fecha||'').slice(0,7)===mesAct));
-  const gastoExpD={1:0,2:0};
-  compMesD.forEach(r=>(r.expFrente||[]).forEach(x=>{const pr=preciosExpD[x.codigo]||0; gastoExpD[1]+=(Number(x.rampa)||0)*pr; gastoExpD[2]+=(Number(x.galeria)||0)*pr;}));
+  const gastoExpD={}; FRENTES.forEach(f=>gastoExpD[f.id]=0);
+  compMesD.forEach(r=>(r.expFrente||[]).forEach(x=>{const pr=preciosExpD[x.codigo]||0; FRENTES.forEach(f=>{gastoExpD[f.id]+=compExpVal(x,f.key)*pr;});}));
   const fSexp=n=>'S/ '+Math.round(Number(n)||0).toLocaleString('es-PE');
 
   // Por frente — los 5 frentes configurados
@@ -12774,9 +12774,8 @@ function renderTableroOp(){
   // rampa/galería en el reporte del Compresorista; los frentes nuevos aún no tienen esa fuente.
   const preciosExpT=(typeof compGetPreciosExp==='function')?compGetPreciosExp():(typeof COMP_PRECIOS_EXP_DEFAULT!=='undefined'?COMP_PRECIOS_EXP_DEFAULT:{});
   const compMesT=(state.compresorista||[]).filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mesAct):((r.fecha||'').slice(0,7)===mesAct));
-  let gastoExpF1=0,gastoExpF2=0;
-  compMesT.forEach(r=>(r.expFrente||[]).forEach(x=>{const pr=preciosExpT[x.codigo]||0; gastoExpF1+=(Number(x.rampa)||0)*pr; gastoExpF2+=(Number(x.galeria)||0)*pr;}));
-  const gastoExpPorFrente={1:gastoExpF1,2:gastoExpF2};
+  const gastoExpPorFrente={}; FRENTES.forEach(f=>gastoExpPorFrente[f.id]=0);
+  compMesT.forEach(r=>(r.expFrente||[]).forEach(x=>{const pr=preciosExpT[x.codigo]||0; FRENTES.forEach(f=>{gastoExpPorFrente[f.id]+=compExpVal(x,f.key)*pr;});}));
   const fST=n=>'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:0,maximumFractionDigits:0});
 
   // ── Datos por frente (los 5 configurados en FRENTES) ──
@@ -12823,7 +12822,7 @@ function renderTableroOp(){
     <div class="kpi-card"><div class="kpi-label">Cumplimiento Mes</div><div class="kpi-value ${pcTot>=100?'green':(pcTot>=60?'warn':'red')}">${pcTot}%</div><div class="kpi-sub">del programa (conjunto)</div></div>
     <div class="kpi-card"><div class="kpi-label">Taladros Hoy</div><div class="kpi-value warn">${tperfHoy} / ${tcargHoy}</div><div class="kpi-sub">perf. / carg.</div></div>
     <div class="kpi-card"><div class="kpi-label">Personal en Frentes</div><div class="kpi-value blue">${persTot}</div><div class="kpi-sub">Brenda ${datos[0].pers} · CRNE ${datos[1].pers}</div></div>
-    <div class="kpi-card"><div class="kpi-label">Gasto Explosivo Mes</div><div class="kpi-value gold">${fST(gastoExpTot)}</div><div class="kpi-sub">🟥 Brenda ${fST(gastoExpF1)} · 🟦 CRNE ${fST(gastoExpF2)}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Gasto Explosivo Mes</div><div class="kpi-value gold">${fST(gastoExpTot)}</div><div class="kpi-sub">🟥 Brenda ${fST(gastoExpPorFrente[1]||0)} · 🟦 CRNE ${fST(gastoExpPorFrente[2]||0)}</div></div>
     <div class="kpi-card"><div class="kpi-label">Masas / Explosivos Hoy</div><div class="kpi-value blue">${masasHoy}</div><div class="kpi-sub">unidades consumidas</div></div>
     <div class="kpi-card"><div class="kpi-label">Cimbras Hoy</div><div class="kpi-value warn">${cimbHoyT}</div><div class="kpi-sub">de los 5 frentes</div></div>
     <div class="kpi-card"><div class="kpi-label">Cimbras Mes</div><div class="kpi-value blue">${cimbMesT}</div><div class="kpi-sub">acumulado · 5 frentes</div></div>
@@ -15074,13 +15073,13 @@ function rptOperaciones(per,dt,usr,cos,ing){
   const cimbTot=cimb1+cimb2+cimbEx;
   // Gasto de explosivo por frente (fuente: reportes del Compresorista)
   const preciosExpO=(typeof compGetPreciosExp==='function')?compGetPreciosExp():(typeof COMP_PRECIOS_EXP_DEFAULT!=='undefined'?COMP_PRECIOS_EXP_DEFAULT:{});
-  let gExpF1=0,gExpF2=0;
-  (state.compresorista||[]).forEach(r=>(r.expFrente||[]).forEach(x=>{const pr=preciosExpO[x.codigo]||0; gExpF1+=(Number(x.rampa)||0)*pr; gExpF2+=(Number(x.galeria)||0)*pr;}));
+  let gExpF1=0,gExpF2=0,gExpTot=0;
+  (state.compresorista||[]).forEach(r=>(r.expFrente||[]).forEach(x=>{const pr=preciosExpO[x.codigo]||0; gExpF1+=(Number(x.rampa)||0)*pr; gExpF2+=(Number(x.galeria)||0)*pr; gExpTot+=compExpTotal(x)*pr;}));
   const fSexpO=n=>'S/ '+Math.round(Number(n)||0).toLocaleString('es-PE');
 
   const portada = rPortada(per,'operaciones',
     `Metros avanzados: ${tm}m totales (${cum}% de meta). Rampa: ${f1m}m (${c1}%) · Cortada: ${f2m}m (${c2}%).`,
-    `Promedio: ${prom} m/día en ${dias} días efectivos. Cimbras: ${cimbTot} (Rampa ${cimb1} · Cortada ${cimb2}). Gasto explosivo: ${fSexpO(gExpF1+gExpF2)} (Rampa ${fSexpO(gExpF1)} · Cortada ${fSexpO(gExpF2)}). Costo/metro: S/${cxM}/m.`,
+    `Promedio: ${prom} m/día en ${dias} días efectivos. Cimbras: ${cimbTot} (Rampa ${cimb1} · Cortada ${cimb2}). Gasto explosivo: ${fSexpO(gExpTot)} (Rampa ${fSexpO(gExpF1)} · Cortada ${fSexpO(gExpF2)}${gExpTot>gExpF1+gExpF2?' · Otros frentes '+fSexpO(gExpTot-gExpF1-gExpF2):''}). Costo/metro: S/${cxM}/m.`,
     dt,usr);
 
   // Registros diarios
@@ -17234,13 +17233,13 @@ function _iaRespuestaLocal(texto){
   if(has('explosiv') && has('gasto','gast','costo','consumo','cuanto','cuánto','hoy','mes')){
     const _hoyF=hoy(), _mesYM=(typeof finMesActual==='function')?finMesActual():_hoyF.slice(0,7);
     const _precios=(typeof compGetPreciosExp==='function')?compGetPreciosExp():(typeof COMP_PRECIOS_EXP_DEFAULT!=='undefined'?COMP_PRECIOS_EXP_DEFAULT:{});
-    const _gastoDe=r=>(r.expFrente||[]).reduce((s,x)=>s+(((Number(x&&x.rampa)||0)+(Number(x&&x.galeria)||0))*(_precios[x.codigo]||0)),0);
+    const _gastoDe=r=>(r.expFrente||[]).reduce((s,x)=>s+(compExpTotal(x)*(_precios[x.codigo]||0)),0);
     const _comps=state.compresorista||[];
     const expHoy=_comps.filter(r=>r.fecha===_hoyF).reduce((s,r)=>s+_gastoDe(r),0);
     const _compMes=_comps.filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,_mesYM):((r.fecha||'').slice(0,7)===_mesYM));
-    let expF1=0, expF2=0;
-    _compMes.forEach(r=>(r.expFrente||[]).forEach(x=>{const pr=_precios[x.codigo]||0; expF1+=(Number(x.rampa)||0)*pr; expF2+=(Number(x.galeria)||0)*pr;}));
-    return `${SR}el gasto de explosivos de hoy es ${fS(expHoy)} y el acumulado del mes es ${fS(expF1+expF2)} (Brenda ${fS(expF1)} · Cortada Noroeste ${fS(expF2)}, periodo minero 26→25) — mismas cifras del Dashboard, según lo reportado por el Compresorista a precios vigentes.`;
+    let expF1=0, expF2=0, expTot=0;
+    _compMes.forEach(r=>(r.expFrente||[]).forEach(x=>{const pr=_precios[x.codigo]||0; expF1+=(Number(x.rampa)||0)*pr; expF2+=(Number(x.galeria)||0)*pr; expTot+=compExpTotal(x)*pr;}));
+    return `${SR}el gasto de explosivos de hoy es ${fS(expHoy)} y el acumulado del mes es ${fS(expTot)} (Brenda ${fS(expF1)} · Cortada Noroeste ${fS(expF2)}${expTot>expF1+expF2?' · Otros frentes '+fS(expTot-expF1-expF2):''}, periodo minero 26→25) — mismas cifras del Dashboard, según lo reportado por el Compresorista a precios vigentes.`;
   }
 
   // ── Reporte del Jefe de Guardia (hoy) — resumen con datos reales del parte ──
@@ -18796,7 +18795,7 @@ function compCostoReporte(r){
   const pGas = snp.gas||compGetPrecioGas();
 
   const ef = r.expFrente||[];
-  const efTotal = ef.reduce((s,e)=>s+((e.rampa||0)+(e.galeria||0))*(pExp[e.codigo]||0),0);
+  const efTotal = ef.reduce((s,e)=>s+compExpTotal(e)*(pExp[e.codigo]||0),0);
   const cExpCardex = r.explosivos.reduce((s,e)=>s+(e.C||0)*(pExp[e.codigo]||0),0);
   const cExp = efTotal > 0 ? efTotal : cExpCardex;
   const cPet = r.petroleo.reduce((s,p)=>s+p.gln,0)*pPet;
@@ -18832,12 +18831,16 @@ function abrirModalCompresorista() {
     </tr>`).join('');
   // consumo: una sección por cada frente de FRENTES (los mismos del Reporte de Jefe de Guardia)
   compRenderConsFrentes();
-  // explosivos por frente
+  // explosivos por frente: una columna por CADA frente de FRENTES (igual que Jefe de Guardia).
+  // Los inputs de brenda/crne conservan sus ids legacy (-R/-G); los demás usan -<key>.
+  const _expfInputId=(c,f)=>'cexpf-'+c+(f.key==='brenda'?'-R':f.key==='crne'?'-G':'-'+f.key);
+  const _frs=(typeof FRENTES!=='undefined'?FRENTES:[]);
+  const _head=document.getElementById('comp-expf-head');
+  if(_head) _head.innerHTML='<th style="text-align:left;padding:6px 8px">Código</th>'+_frs.map(f=>`<th style="padding:6px 8px;text-align:center;color:${f.color||'var(--text2)'};white-space:nowrap">${f.emoji||''} ${compFrenteLabel(f.key)}</th>`).join('');
   document.getElementById('comp-expf-body').innerHTML = COMP_EXPLOSIVOS.map(c => `
     <tr style="border-top:1px solid var(--border2)">
       <td style="padding:6px 8px;font-size:12px;color:var(--text)">${COMP_EXPLO_LABEL[c]||c}<br><span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${c}</span></td>
-      <td style="padding:4px 6px"><input type="number" min="0" step="any" id="cexpf-${c}-R" placeholder="0" style="width:100%;background:var(--coal4);border:1px solid rgba(248,113,113,0.3);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>
-      <td style="padding:4px 6px"><input type="number" min="0" step="any" id="cexpf-${c}-G" placeholder="0" style="width:100%;background:var(--coal4);border:1px solid rgba(96,165,250,0.3);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>
+      ${_frs.map(f=>`<td style="padding:4px 6px"><input type="number" min="0" step="any" id="${_expfInputId(c,f)}" placeholder="0" style="width:100%;min-width:64px;background:var(--coal4);border:1px solid ${f.color||'var(--border)'}55;color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>`).join('')}
     </tr>`).join('');
   // (aceros por frente: sección eliminada — los aceros salen por Logística → NV2820 → consumo)
   const _aceBody=document.getElementById('comp-acerosf-body'); if(_aceBody) _aceBody.innerHTML='';
@@ -18914,6 +18917,12 @@ function compFrenteLabel(key){
   const f=(typeof FRENTES!=='undefined'?FRENTES:[]).find(x=>x.key===key);
   return f?f.nombre:key;
 }
+// Campo del ítem de expFrente para cada frente: brenda/crne conservan sus campos legacy
+// (rampa/galeria) para no romper reportes antiguos; los demás usan su propia key.
+function compExpCampo(key){ return key==='brenda'?'rampa':key==='crne'?'galeria':key; }
+function compExpVal(x,key){ return Number(x&&x[compExpCampo(key)])||0; }
+// Total de un ítem de expFrente sumando TODOS los frentes
+function compExpTotal(x){ return (typeof FRENTES!=='undefined'?FRENTES:[]).reduce((s,f)=>s+compExpVal(x,f.key),0); }
 // id del contenedor de filas de consumo por frente (brenda/crne mantienen sus ids legacy)
 function compConsRowsId(key){
   if(key==='brenda') return 'comp-cons-rampa-rows';
@@ -19006,11 +19015,15 @@ function guardarReporteComp() {
     C:parseFloat(document.getElementById('cexp-'+c+'-C')?.value)||0,
     F:parseFloat(document.getElementById('cexp-'+c+'-F')?.value)||0
   }));
-  // explosivos por frente
-  const expFrente = COMP_EXPLOSIVOS.map(c => ({
-    codigo:c, rampa:parseFloat(document.getElementById('cexpf-'+c+'-R')?.value)||0,
-    galeria:parseFloat(document.getElementById('cexpf-'+c+'-G')?.value)||0
-  }));
+  // explosivos por frente: un campo por cada frente de FRENTES (brenda/crne = rampa/galeria legacy)
+  const expFrente = COMP_EXPLOSIVOS.map(c => {
+    const item={codigo:c};
+    (typeof FRENTES!=='undefined'?FRENTES:[]).forEach(f=>{
+      const iid='cexpf-'+c+(f.key==='brenda'?'-R':f.key==='crne'?'-G':'-'+f.key);
+      item[compExpCampo(f.key)]=parseFloat(document.getElementById(iid)?.value)||0;
+    });
+    return item;
+  });
 
   // aceros por frente
   // Aceros por frente: sección eliminada del formulario. Se guarda vacío (los reportes
@@ -19197,31 +19210,30 @@ function renderCompHistorial(){
   if(!repMes.length){ cont.innerHTML='<div class="card"><div class="empty-state">Sin reportes en este mes.</div></div>'; return; }
 
   // ── Gasto de explosivo por frente: diario y acumulado ──
-  const costoRep=(r,campo)=>(r.expFrente||[]).reduce((s,x)=>s+(Number(x[campo])||0)*(precios[x.codigo]||0),0);
-  const porDia={}; // fecha -> {rampa, galeria}
-  let gastoF1=0,gastoF2=0;
+  // Gasto por frente: TODOS los frentes de FRENTES (brenda/crne = campos legacy rampa/galeria)
+  const _frsH=(typeof FRENTES!=='undefined'?FRENTES:[]);
+  const costoRepF=(r,key)=>(r.expFrente||[]).reduce((s,x)=>s+compExpVal(x,key)*(precios[x.codigo]||0),0);
+  const porDia={}; // fecha -> {key: S/}
+  const gastoF={}; _frsH.forEach(f=>gastoF[f.key]=0);
   repMes.forEach(r=>{
-    const cr=costoRep(r,'rampa'), cg=costoRep(r,'galeria');
-    gastoF1+=cr; gastoF2+=cg;
-    const k=r.fecha; if(!porDia[k])porDia[k]={rampa:0,galeria:0};
-    porDia[k].rampa+=cr; porDia[k].galeria+=cg;
+    const k=r.fecha; if(!porDia[k]){porDia[k]={};_frsH.forEach(f=>porDia[k][f.key]=0);}
+    _frsH.forEach(f=>{ const c=costoRepF(r,f.key); gastoF[f.key]+=c; porDia[k][f.key]+=c; });
   });
+  const gastoTotal=_frsH.reduce((s,f)=>s+gastoF[f.key],0);
   const dias=Object.keys(porDia).sort();
-  const maxDia=Math.max(1,...dias.map(d=>Math.max(porDia[d].rampa,porDia[d].galeria)));
+  const maxDia=Math.max(1,...dias.map(d=>Math.max(..._frsH.map(f=>porDia[d][f.key]))));
   const fS=n=>'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2});
 
   const kpiFrentes=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px">
-    <div class="kpi-card"><div class="kpi-label">💥 Gasto Explosivo Mes</div><div class="kpi-value gold">${fS(gastoF1+gastoF2)}</div><div class="kpi-sub">acumulado ${finNombreMes?finNombreMes(mes):mes}</div></div>
-    <div class="kpi-card"><div class="kpi-label">🟥 Rampa Brenda (F1)</div><div class="kpi-value" style="color:#f87171">${fS(gastoF1)}</div><div class="kpi-sub">explosivo del mes</div></div>
-    <div class="kpi-card"><div class="kpi-label">🟦 Cortada Noreste (F2)</div><div class="kpi-value blue">${fS(gastoF2)}</div><div class="kpi-sub">explosivo del mes</div></div>
+    <div class="kpi-card"><div class="kpi-label">💥 Gasto Explosivo Mes</div><div class="kpi-value gold">${fS(gastoTotal)}</div><div class="kpi-sub">acumulado ${finNombreMes?finNombreMes(mes):mes}</div></div>
+    ${_frsH.filter(f=>gastoF[f.key]>0||f.key==='brenda'||f.key==='crne').map(f=>`<div class="kpi-card"><div class="kpi-label">${f.emoji||''} ${compFrenteLabel(f.key)}</div><div class="kpi-value" style="color:${f.color||'var(--text)'}">${fS(gastoF[f.key])}</div><div class="kpi-sub">explosivo del mes</div></div>`).join('')}
   </div>`;
 
   const graficaDiaria=`<div class="card" style="margin-bottom:16px">
     <div class="section-title" style="margin-top:0;font-size:13px">📈 Gasto de explosivo por día (por frente)</div>
     ${dias.map(d=>`<div style="margin-bottom:10px">
       <div style="font-size:11px;color:var(--text3);margin-bottom:4px">${(typeof fmtF==='function')?fmtF(d):d}</div>
-      ${_histBar('🟥 Rampa',porDia[d].rampa,maxDia,'#f87171',fS(porDia[d].rampa))}
-      ${_histBar('🟦 Cortada',porDia[d].galeria,maxDia,'#60a5fa',fS(porDia[d].galeria))}
+      ${_frsH.filter(f=>porDia[d][f.key]>0).map(f=>_histBar(`${f.emoji||''} ${compFrenteLabel(f.key)}`,porDia[d][f.key],maxDia,f.color||'#888',fS(porDia[d][f.key]))).join('')||'<div style="font-size:11px;color:var(--text3)">Sin gasto este día</div>'}
     </div>`).join('')}
   </div>`;
 
@@ -19265,17 +19277,21 @@ function renderCompHistorial(){
 function renderTablaCompresorista() {
   const data = state.compresorista;
   if(!data.length) return;
-  // explosivos
+  // explosivos: una columna por CADA frente de FRENTES
+  const _frsT=(typeof FRENTES!=='undefined'?FRENTES:[]);
+  const _theadExp=document.getElementById('thead-explosivos');
+  if(_theadExp) _theadExp.innerHTML='<th>Fecha</th><th>Turno</th><th>Código</th><th class="r">I</th><th class="r">E</th><th class="r">C</th><th class="r">F</th>'
+    +_frsT.map(f=>`<th class="r" style="color:${f.color||'var(--text2)'};white-space:nowrap">${compFrenteLabel(f.key)}</th>`).join('');
   let expRows = '';
   data.forEach(r => {
     const ef = r.expFrente || [];
     r.explosivos.forEach(e => {
-      const f = ef.find(x=>x.codigo===e.codigo)||{rampa:0,galeria:0};
-      const rVal = f.rampa||0, gVal = f.galeria||0;
-      expRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td style="font-family:'DM Mono',monospace">${e.codigo}</td><td class="r">${e.I}</td><td class="r">${e.E}</td><td class="r">${e.C}</td><td class="r">${e.F}</td><td class="r" style="color:#f87171">${rVal||'—'}</td><td class="r" style="color:#60a5fa">${gVal||'—'}</td></tr>`;
+      const f = ef.find(x=>x.codigo===e.codigo)||{};
+      const celdas=_frsT.map(fr=>{const v=compExpVal(f,fr.key);return `<td class="r" style="color:${fr.color||'var(--text2)'}">${v||'—'}</td>`;}).join('');
+      expRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td style="font-family:'DM Mono',monospace">${e.codigo}</td><td class="r">${e.I}</td><td class="r">${e.E}</td><td class="r">${e.C}</td><td class="r">${e.F}</td>${celdas}</tr>`;
     });
   });
-  document.getElementById('tbody-explosivos').innerHTML = expRows || '<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:20px">Sin datos</td></tr>';
+  document.getElementById('tbody-explosivos').innerHTML = expRows || '<tr><td colspan="13" style="text-align:center;color:var(--text3);padding:20px">Sin datos</td></tr>';
   // materiales
   let matRows = '';
   data.forEach(r => {
@@ -19369,19 +19385,15 @@ function _enviarReporteWA(r) {
 
   // Explosivos por frente — agrupado por frente para mejor lectura
   const ef = r.expFrente || [];
-  const efAct = ef.filter(x=>x.rampa||x.galeria);
+  const efAct = ef.filter(x=>compExpTotal(x)>0);
   if(efAct.length){
     txt += `*EXPLOSIVOS POR FRENTE*\n`;
-    const efR = efAct.filter(e=>e.rampa>0);
-    const efC = efAct.filter(e=>e.galeria>0);
-    if(efR.length){
-      txt += `_Rampa Brenda:_\n`;
-      efR.forEach(e=>{ txt += `   • ${e.codigo}: ${e.rampa}\n`; });
-    }
-    if(efC.length){
-      txt += `_Cortada Noreste:_\n`;
-      efC.forEach(e=>{ txt += `   • ${e.codigo}: ${e.galeria}\n`; });
-    }
+    (typeof FRENTES!=='undefined'?FRENTES:[]).forEach(fr=>{
+      const items=efAct.filter(e=>compExpVal(e,fr.key)>0);
+      if(!items.length) return;
+      txt += `_${compFrenteLabel(fr.key)}:_\n`;
+      items.forEach(e=>{ txt += `   • ${e.codigo}: ${compExpVal(e,fr.key)}\n`; });
+    });
     txt += '\n';
   }
 
@@ -19532,23 +19544,23 @@ function exportarCompresoristExcel() {
 
   // ── EXPLOSIVOS ──
   const expFilas=[];
-  const expTotalesR={}, expTotalesG={};
-  COMP_EXPLOSIVOS.forEach(c=>{expTotalesR[c]=0;expTotalesG[c]=0;});
+  const _frsX=(typeof FRENTES!=='undefined'?FRENTES:[]);
+  const expTotalesF={};   // codigo -> {key: total}
+  COMP_EXPLOSIVOS.forEach(c=>{expTotalesF[c]={};_frsX.forEach(f=>expTotalesF[c][f.key]=0);});
   data.forEach(r=>{
     const ef=r.expFrente||[];
     r.explosivos.forEach(e=>{
       if(e.I||e.E||e.C||e.F){
-        const f=ef.find(x=>x.codigo===e.codigo)||{rampa:0,galeria:0};
-        expFilas.push([r.fecha,r.turno,r.nombre,e.codigo,e.I,e.E,e.C,e.F,f.rampa||0,f.galeria||0]);
-        expTotalesR[e.codigo]=(expTotalesR[e.codigo]||0)+(f.rampa||0);
-        expTotalesG[e.codigo]=(expTotalesG[e.codigo]||0)+(f.galeria||0);
+        const f=ef.find(x=>x.codigo===e.codigo)||{};
+        expFilas.push([r.fecha,r.turno,r.nombre,e.codigo,e.I,e.E,e.C,e.F,..._frsX.map(fr=>compExpVal(f,fr.key))]);
+        _frsX.forEach(fr=>{expTotalesF[e.codigo][fr.key]+=compExpVal(f,fr.key);});
       }
     });
   });
-  COMP_EXPLOSIVOS.forEach(c=>expFilas.push(['TOTAL','','',c,expTotales[c].I,expTotales[c].E,expTotales[c].C,'',expTotalesR[c]||0,expTotalesG[c]||0]));
+  COMP_EXPLOSIVOS.forEach(c=>expFilas.push(['TOTAL','','',c,expTotales[c].I,expTotales[c].E,expTotales[c].C,'',..._frsX.map(fr=>expTotalesF[c][fr.key]||0)]));
   XLSX.utils.book_append_sheet(wb, _xlHoja('EXPLOSIVOS — '+mesNombre+' '+ay, C_ROJO,
-    ['Fecha','Turno','Compresorista','Código','I','E','C','F','Rampa Brenda','Cortada Noreste'], expFilas,
-    [{wch:12},{wch:8},{wch:20},{wch:10},{wch:8},{wch:8},{wch:8},{wch:8},{wch:10},{wch:10}]), 'Explosivos');
+    ['Fecha','Turno','Compresorista','Código','I','E','C','F',..._frsX.map(fr=>compFrenteLabel(fr.key))], expFilas,
+    [{wch:12},{wch:8},{wch:20},{wch:10},{wch:8},{wch:8},{wch:8},{wch:8},..._frsX.map(()=>({wch:12}))]), 'Explosivos');
 
   // ── MATERIALES ──
   const matFilas=[];
@@ -19681,6 +19693,8 @@ function pintarFrenteChart(cfg){
         {label:'Rampa Brenda', data:datos.map(f=>+f.cR.toFixed(2)), backgroundColor:COL_R, borderRadius:5, borderSkipped:false, stack:'s', maxBarThickness:26},
         {label:'Cortada Noreste', data:datos.map(f=>+f.cC.toFixed(2)), backgroundColor:COL_C, borderRadius:5, borderSkipped:false, stack:'s', maxBarThickness:26},
       ];
+      // Tercera serie: otros frentes (GLSE-2, ESCM, SN 5100 NW…), solo si hay datos
+      if(datos.some(f=>(f.cO||0)>0)) datasets.push({label:'Otros frentes', data:datos.map(f=>+(f.cO||0).toFixed(2)), backgroundColor:'rgba(234,179,8,0.88)', borderRadius:5, borderSkipped:false, stack:'s', maxBarThickness:26});
     }
     // Mide el texto más largo para calcular el padding derecho
     const tmpC = document.createElement('canvas').getContext('2d');
@@ -19839,7 +19853,10 @@ function visorRenderDia() {
     const x = ef.find(e=>e.codigo===c) || {};
     const precio = COMP_PRECIOS_EXP[c]||0;
     const cR=(x.rampa||0)*precio, cC=(x.galeria||0)*precio;
-    return {codigo:c, precio, qR:x.rampa||0, qC:x.galeria||0, cR, cC, total:cR+cC};
+    // Otros frentes (GLSE-2, ESCM, SN 5100 NW…): serie agregada para el gráfico
+    const qO=(typeof FRENTES!=='undefined'?FRENTES:[]).filter(f=>f.key!=='brenda'&&f.key!=='crne').reduce((s,f)=>s+compExpVal(x,f.key),0);
+    const cO=qO*precio;
+    return {codigo:c, precio, qR:x.rampa||0, qC:x.galeria||0, qO, cR, cC, cO, total:cR+cC+cO};
   }).filter(f=>f.total>0).sort((a,b)=>b.total-a.total);
   // Respaldo: sin datos por frente, usar consumo del cardex como columna única
   let expFallback=false;
@@ -19852,7 +19869,8 @@ function visorRenderDia() {
   }
   const totalRampa = expFilas.reduce((s,f)=>s+f.cR,0);
   const totalCortada = expFilas.reduce((s,f)=>s+f.cC,0);
-  const totalExp = totalRampa + totalCortada;
+  const totalOtros = expFilas.reduce((s,f)=>s+(f.cO||0),0);
+  const totalExp = totalRampa + totalCortada + totalOtros;
   if(expFilas.length && ctxExp){
     pintarFrenteChart({key:'exp', wrapEl:wExp, modoEl:document.getElementById('vt-exp-modo'), filas:expFilas});
     // Detalle: tabla ranqueada por costo + tarjetas resumen
@@ -19864,6 +19882,7 @@ function visorRenderDia() {
         <td style="padding:5px 6px;font-family:'DM Mono',monospace;font-size:11px;color:var(--text)">${f.codigo}</td>
         <td style="padding:5px 6px;text-align:right;font-size:11px;color:#f87171">${f.cR>0?'S/ '+f.cR.toFixed(2):'—'}</td>
         <td style="padding:5px 6px;text-align:right;font-size:11px;color:#60a5fa">${f.cC>0?'S/ '+f.cC.toFixed(2):'—'}</td>
+        ${totalOtros>0?`<td style="padding:5px 6px;text-align:right;font-size:11px;color:#eab308">${(f.cO||0)>0?'S/ '+f.cO.toFixed(2):'—'}</td>`:''}
         <td style="padding:5px 6px;text-align:right;font-size:11px;font-weight:700;color:var(--text)">S/ ${f.total.toFixed(2)}</td>
         <td style="padding:5px 6px;text-align:right;font-size:10px;color:var(--text3)">${pct.toFixed(0)}%</td>
       </tr>`;
@@ -19875,13 +19894,14 @@ function visorRenderDia() {
             <th style="padding:4px 6px;text-align:left">Explosivo</th>
             <th style="padding:4px 6px;text-align:right;color:#f87171">${expFallback?'Consumo':'Rampa'}</th>
             <th style="padding:4px 6px;text-align:right;color:#60a5fa">Cortada</th>
+            ${totalOtros>0?'<th style="padding:4px 6px;text-align:right;color:#eab308">Otros frentes</th>':''}
             <th style="padding:4px 6px;text-align:right">Total</th>
             <th style="padding:4px 6px;text-align:right">%</th>
           </tr></thead>
           <tbody>${filasHTML}</tbody>
         </table>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:10px">
         <div style="background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.3);border-radius:8px;padding:9px;text-align:center">
           <div style="font-size:14px;font-weight:700;color:#f87171">S/ ${totalRampa.toFixed(2)}</div>
           <div style="font-size:9px;color:#f87171;opacity:0.85">${pctR}% del total</div>
@@ -19892,6 +19912,11 @@ function visorRenderDia() {
           <div style="font-size:9px;color:#60a5fa;opacity:0.85">${pctC}% del total</div>
           <div style="font-size:8px;color:var(--text3);text-transform:uppercase;margin-top:2px">Cortada Noreste</div>
         </div>
+        ${totalOtros>0?`<div style="background:rgba(234,179,8,0.12);border:1px solid rgba(234,179,8,0.3);border-radius:8px;padding:9px;text-align:center">
+          <div style="font-size:14px;font-weight:700;color:#eab308">S/ ${totalOtros.toFixed(2)}</div>
+          <div style="font-size:9px;color:#eab308;opacity:0.85">${(totalExp>0?(totalOtros/totalExp*100):0).toFixed(1)}% del total</div>
+          <div style="font-size:8px;color:var(--text3);text-transform:uppercase;margin-top:2px">Otros frentes</div>
+        </div>`:''}
       </div>
       <div style="text-align:center;margin-top:8px;font-size:11px;color:var(--text3)">Total explosivos: <b style="color:var(--text)">S/ ${totalExp.toFixed(2)}</b></div>`;
   } else {
