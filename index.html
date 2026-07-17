@@ -2184,7 +2184,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-12</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-13</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2229,7 +2229,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-12</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#8b5cf6">v2026.07.16-13</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2394,7 +2394,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.16-12</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.07.16-13</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -3371,6 +3371,8 @@ select option{background:var(--coal3);}
           <div id="vt-cons-gal" style="background:var(--coal3);border-radius:8px;padding:12px;font-size:12px;color:var(--text2);min-height:60px"></div>
         </div>
       </div>
+      <!-- Consumo de los demás frentes (GLSE-2, ESCM, SN 5100 NW…) -->
+      <div id="vt-cons-frentes" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px"></div>
       <!-- Observaciones -->
       <div id="vt-obs-wrap" style="margin-top:14px;display:none">
         <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">📝 Observaciones</div>
@@ -3424,13 +3426,10 @@ select option{background:var(--coal3);}
       <!-- S2: CONSUMO -->
       <div class="section-title" style="margin-bottom:12px">⛏️ Consumo</div>
 
-      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Para Rampa Brenda</div>
-      <div id="comp-cons-rampa-rows" style="margin-bottom:8px"></div>
-      <button onclick="compAddCons('rampa')" style="font-size:11px;background:var(--coal4);border:1px dashed var(--border);color:var(--accent-light);padding:6px 14px;border-radius:4px;cursor:pointer;width:100%;margin-bottom:16px">+ Agregar ítem Rampa Brenda</button>
-
-      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Para Cortada Noreste</div>
-      <div id="comp-cons-gal-rows" style="margin-bottom:8px"></div>
-      <button onclick="compAddCons('galeria')" style="font-size:11px;background:var(--coal4);border:1px dashed var(--border);color:var(--accent-light);padding:6px 14px;border-radius:4px;cursor:pointer;width:100%;margin-bottom:16px">+ Agregar ítem Cortada Noreste</button>
+      <!-- Consumo por frente: se genera desde FRENTES (config central) — los mismos frentes del
+           Reporte de Jefe de Guardia. Rampa Brenda y Cortada Noreste conservan sus claves legacy
+           (consumoRampa/consumoGaleria); los demás guardan en consumoFrentes[key]. -->
+      <div id="comp-cons-frentes-wrap"></div>
 
       <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">💥 Explosivos por Frente</div>
       <div class="table-wrap" style="margin-bottom:20px">
@@ -4894,9 +4893,10 @@ function nv2820Stock(){
     const r=ensure(a.codigo||a.nombre, a.nombre||a.codigo, a.unidad);
     if(r)r.ingreso+=Number(a.cantidad)||0;
   });
-  // EGRESO: Compresorista → Rampa/Cortada
+  // EGRESO: Compresorista → cualquier frente (Rampa, Cortada, GLSE-2, ESCM, SN 5100 NW…)
   (state.compresorista||[]).forEach(rep=>{
-    [...(rep.consumoRampa||[]),...(rep.consumoGaleria||[])].forEach(c=>{
+    const extras=Object.values(rep.consumoFrentes||{}).reduce((a,arr)=>a.concat(arr||[]),[]);
+    [...(rep.consumoRampa||[]),...(rep.consumoGaleria||[]),...extras].forEach(c=>{
       const r=ensure(c.codigo||c.desc, c.desc||c.codigo, c.unidad);
       if(r)r.egreso+=Number(c.cant)||0;
     });
@@ -18830,10 +18830,8 @@ function abrirModalCompresorista() {
       <td style="padding:6px 8px;font-size:12px;color:var(--text)">${COMP_EXPLO_LABEL[c]||c}<br><span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${c}</span></td>
       ${['I','E','C','F'].map(f => `<td style="padding:4px 6px"><input type="number" min="0" step="any" id="cexp-${c}-${f}" placeholder="0" oninput="compCalcF('${c}')" style="width:100%;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>`).join('')}
     </tr>`).join('');
-  // consumo
-  document.getElementById('comp-cons-rampa-rows').innerHTML = '';
-  document.getElementById('comp-cons-gal-rows').innerHTML = '';
-  compAddCons('rampa'); compAddCons('galeria');
+  // consumo: una sección por cada frente de FRENTES (los mismos del Reporte de Jefe de Guardia)
+  compRenderConsFrentes();
   // explosivos por frente
   document.getElementById('comp-expf-body').innerHTML = COMP_EXPLOSIVOS.map(c => `
     <tr style="border-top:1px solid var(--border2)">
@@ -18908,7 +18906,35 @@ function _compRefrescarConsumoSelectors(){
     if(cur) sel.value=cur;
   });
 }
-function compAddCons(frente) {
+// Nombre visible de cada punto de consumo del compresorista. Los dos históricos conservan su
+// nombre de siempre; los demás usan el nombre del frente tal como en el Reporte de Jefe de Guardia.
+function compFrenteLabel(key){
+  if(key==='brenda') return 'Rampa Brenda';
+  if(key==='crne') return 'Cortada Noreste';
+  const f=(typeof FRENTES!=='undefined'?FRENTES:[]).find(x=>x.key===key);
+  return f?f.nombre:key;
+}
+// id del contenedor de filas de consumo por frente (brenda/crne mantienen sus ids legacy)
+function compConsRowsId(key){
+  if(key==='brenda') return 'comp-cons-rampa-rows';
+  if(key==='crne') return 'comp-cons-gal-rows';
+  return 'comp-consf-'+key+'-rows';
+}
+// Construye las secciones de consumo del modal: UNA por cada frente de FRENTES (config central).
+// Agregar un frente en FRENTES lo activa automáticamente aquí, sin tocar nada más.
+function compRenderConsFrentes(){
+  const wrap=document.getElementById('comp-cons-frentes-wrap'); if(!wrap) return;
+  wrap.innerHTML=(typeof FRENTES!=='undefined'?FRENTES:[]).map(f=>{
+    const rid=compConsRowsId(f.key), lbl=compFrenteLabel(f.key);
+    return `<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">${f.emoji||''} Para ${lbl}</div>
+      <div id="${rid}" style="margin-bottom:8px"></div>
+      <button onclick="compAddConsTo('${rid}')" style="font-size:11px;background:var(--coal4);border:1px dashed var(--border);color:var(--accent-light);padding:6px 14px;border-radius:4px;cursor:pointer;width:100%;margin-bottom:16px">+ Agregar ítem ${lbl}</button>`;
+  }).join('');
+  // Una fila lista en cada frente para empezar a registrar
+  (typeof FRENTES!=='undefined'?FRENTES:[]).forEach(f=>compAddConsTo(compConsRowsId(f.key)));
+}
+function compAddConsTo(rowsId){
+  const wrap=document.getElementById(rowsId); if(!wrap) return;
   const row = document.createElement('div');
   row.style.cssText = 'display:grid;grid-template-columns:1fr 80px 70px 30px;gap:6px;margin-bottom:6px';
   // Productos disponibles en el subalmacén NV2820 (con stock)
@@ -18920,8 +18946,10 @@ function compAddCons(frente) {
     <input type="number" class="comp-cons-cant" min="0" placeholder="Cant." style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 8px;font-size:12px;text-align:center">
     <input type="text" class="comp-cons-unidad" placeholder="Unidad" style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 8px;font-size:12px">
     <button onclick="this.parentElement.remove()" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);color:var(--negative);border-radius:4px;cursor:pointer;font-size:14px">×</button>`;
-  document.getElementById('comp-cons-'+(frente==='rampa'?'rampa':'gal')+'-rows').appendChild(row);
+  wrap.appendChild(row);
 }
+// Compatibilidad con llamadas antiguas
+function compAddCons(frente){ compAddConsTo(frente==='rampa'?'comp-cons-rampa-rows':'comp-cons-gal-rows'); }
 function compConsSelChange(sel){
   const row=sel.parentElement;
   const opt=sel.options[sel.selectedIndex];
@@ -19006,6 +19034,14 @@ function guardarReporteComp() {
   };
   const consumoRampa = leerConsumo('comp-cons-rampa-rows');
   const consumoGaleria = leerConsumo('comp-cons-gal-rows');
+  // Consumo de los demás frentes (GLSE-2, ESCM 4430/4410, SN 5100 NW…): {key: [items]}
+  const consumoFrentes = {};
+  (typeof FRENTES!=='undefined'?FRENTES:[]).forEach(f=>{
+    if(f.key==='brenda'||f.key==='crne') return;   // legacy: ya leídos arriba
+    const el=document.getElementById(compConsRowsId(f.key)); if(!el) return;
+    const arr=leerConsumo(compConsRowsId(f.key));
+    if(arr.length) consumoFrentes[f.key]=arr;
+  });
 
   // petróleo
   const petroleo = COMP_PETROLEO.map(m => ({equipo:m, gln:parseFloat(document.getElementById('cpet-'+m.replace(/ /g,'_'))?.value)||0}));
@@ -19021,7 +19057,7 @@ function guardarReporteComp() {
 
   const obs = document.getElementById('comp-obs').value.trim();
 
-  const reporte = {fecha, turno:_compTurnoSeleccionado, nombre, dni, materialesAlmacen, explosivos, expFrente, aceros, consumoRampa, consumoGaleria, petroleo, gasolina, horometros, obs,
+  const reporte = {fecha, turno:_compTurnoSeleccionado, nombre, dni, materialesAlmacen, explosivos, expFrente, aceros, consumoRampa, consumoGaleria, consumoFrentes, petroleo, gasolina, horometros, obs,
     _ts:Date.now(),   // marca de tiempo: al sincronizar entre equipos gana la edición MÁS RECIENTE
     _precios:{pet:compGetPrecioPet(), gas:compGetPrecioGas(), explosivos:compGetPreciosExp(), aceros:compGetPreciosAce()}
   };
@@ -19246,6 +19282,7 @@ function renderTablaCompresorista() {
     r.materialesAlmacen.forEach(m => { matRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>Almacén</td><td>${m.desc}</td><td class="r">${m.cant}</td><td>${m.unidad}</td></tr>`; });
     r.consumoRampa.forEach(m => { matRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>Rampa Brenda</td><td>${m.desc}</td><td class="r">${m.cant}</td><td>${m.unidad}</td></tr>`; });
     r.consumoGaleria.forEach(m => { matRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>Cortada Noreste</td><td>${m.desc}</td><td class="r">${m.cant}</td><td>${m.unidad}</td></tr>`; });
+    Object.entries(r.consumoFrentes||{}).forEach(([k,arr]) => (arr||[]).forEach(m => { matRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${compFrenteLabel(k)}</td><td>${m.desc}</td><td class="r">${m.cant}</td><td>${m.unidad}</td></tr>`; }));
   });
   document.getElementById('tbody-materiales').innerHTML = matRows || '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sin datos</td></tr>';
   // petróleo/gasolina
@@ -19349,10 +19386,12 @@ function _enviarReporteWA(r) {
   }
 
   // Consumo materiales
-  if(r.consumoRampa.length||r.consumoGaleria.length){
+  const _cfEntries=Object.entries(r.consumoFrentes||{}).filter(([k,a])=>(a||[]).length);
+  if(r.consumoRampa.length||r.consumoGaleria.length||_cfEntries.length){
     txt += `*CONSUMO MATERIALES*\n`;
     if(r.consumoRampa.length){ txt += `_Rampa Brenda:_\n`; r.consumoRampa.forEach(m=>{ txt += `   • ${m.desc}: ${m.cant} ${m.unidad}\n`; }); }
     if(r.consumoGaleria.length){ txt += `_Cortada Noreste:_\n`; r.consumoGaleria.forEach(m=>{ txt += `   • ${m.desc}: ${m.cant} ${m.unidad}\n`; }); }
+    _cfEntries.forEach(([k,arr])=>{ txt += `_${compFrenteLabel(k)}:_\n`; (arr||[]).forEach(m=>{ txt += `   • ${m.desc}: ${m.cant} ${m.unidad}\n`; }); });
     txt += '\n';
   }
 
@@ -19517,6 +19556,7 @@ function exportarCompresoristExcel() {
     r.materialesAlmacen.forEach(m=>matFilas.push([r.fecha,r.turno,'Almacén',m.desc,m.cant,m.unidad]));
     r.consumoRampa.forEach(m=>matFilas.push([r.fecha,r.turno,'Rampa Brenda',m.desc,m.cant,m.unidad]));
     r.consumoGaleria.forEach(m=>matFilas.push([r.fecha,r.turno,'Cortada Noreste',m.desc,m.cant,m.unidad]));
+    Object.entries(r.consumoFrentes||{}).forEach(([k,arr])=>(arr||[]).forEach(m=>matFilas.push([r.fecha,r.turno,compFrenteLabel(k),m.desc,m.cant,m.unidad])));
   });
   XLSX.utils.book_append_sheet(wb, _xlHoja('MATERIALES — '+mesNombre+' '+ay, C_AZUL,
     ['Fecha','Turno','Frente','Material','Cantidad','Unidad'], matFilas,
@@ -20014,6 +20054,16 @@ function visorRenderDia() {
   const cGal = document.getElementById('vt-cons-gal');
   if(cRampa) cRampa.innerHTML = r.consumoRampa.length ? r.consumoRampa.map(m=>`<div style="padding:4px 0;border-bottom:1px solid var(--border2)"><span style="color:var(--text)">${m.desc}</span> <span style="float:right;color:var(--accent-light)">${m.cant} ${m.unidad}</span></div>`).join('') : '<span style="color:var(--text3)">Sin consumo Rampa Brenda</span>';
   if(cGal) cGal.innerHTML = r.consumoGaleria.length ? r.consumoGaleria.map(m=>`<div style="padding:4px 0;border-bottom:1px solid var(--border2)"><span style="color:var(--text)">${m.desc}</span> <span style="float:right;color:var(--accent-light)">${m.cant} ${m.unidad}</span></div>`).join('') : '<span style="color:var(--text3)">Sin consumo Cortada Noreste</span>';
+  // Consumo de los demás frentes (solo se pintan los que tienen datos en este reporte)
+  const cFr=document.getElementById('vt-cons-frentes');
+  if(cFr){
+    const ent=Object.entries(r.consumoFrentes||{}).filter(([k,a])=>(a||[]).length);
+    cFr.style.display=ent.length?'grid':'none';
+    cFr.innerHTML=ent.map(([k,arr])=>`<div>
+      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">⛏️ Consumo ${compFrenteLabel(k)}</div>
+      <div style="background:var(--coal3);border-radius:8px;padding:12px;font-size:12px;color:var(--text2);min-height:60px">${arr.map(m=>`<div style="padding:4px 0;border-bottom:1px solid var(--border2)"><span style="color:var(--text)">${m.desc}</span> <span style="float:right;color:var(--accent-light)">${m.cant} ${m.unidad}</span></div>`).join('')}</div>
+    </div>`).join('');
+  }
 
   // Observaciones
   const obsWrap = document.getElementById('vt-obs-wrap');

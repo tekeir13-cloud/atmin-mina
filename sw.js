@@ -4,7 +4,7 @@
 //    si no hay señal, se sirve la última copia buena desde caché → la app abre en interior mina.
 //  · Supabase y demás peticiones de datos: solo red (la app ya maneja sus fallos y su cola offline).
 // Al desplegar una versión nueva basta con cambiar CACHE_V: el SW viejo se limpia solo.
-const CACHE_V = 'mukicloud-v2026.07.16-12';
+const CACHE_V = 'mukicloud-v2026.07.16-13';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
