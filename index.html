@@ -13815,7 +13815,18 @@ const COMB_CAP_GAS = 120;    // capacidad cisterna gasolina (gln)
 const COMB_ALERTA_PET = 250; // alerta petróleo
 const COMB_ALERTA_GAS = 20;  // alerta gasolina
 
-function combCargar(tipo){ const k=tipo==='gas'?COMB_KEY_GAS:COMB_KEY_PET; try{return JSON.parse(localStorage.getItem(k)||'[]');}catch(e){return[];} }
+function combCargar(tipo){
+  const k=tipo==='gas'?COMB_KEY_GAS:COMB_KEY_PET;
+  try{
+    let arr = JSON.parse(localStorage.getItem(k)||'[]');
+    // Si petróleo está vacío, inicializar con 1650 galones
+    if(tipo==='pet' && (!arr || !arr.length)){
+      arr = [{fecha:new Date().toISOString().split('T')[0],hora:'00:00',placa:'INIT',chofer:'Sistema',cantidad:1650,precio:0,obs:'Stock inicial'}];
+      localStorage.setItem(k,JSON.stringify(arr));
+    }
+    return arr;
+  }catch(e){return[];}
+}
 function combGuardar(tipo,arr){ const k=tipo==='gas'?COMB_KEY_GAS:COMB_KEY_PET; try{localStorage.setItem(k,JSON.stringify(arr));}catch(e){} sbSyncModulo('comb_'+(tipo==='gas'?'gas':'pet'), arr); }
 
 function combStockTipo(tipo){
