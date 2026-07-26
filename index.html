@@ -6486,11 +6486,7 @@ function autoFillProductoIngreso(){
     // Vincular con el maestro de productos: autocompletar descripción, unidad y precio
     document.getElementById('in-descripcion').value=p.descripcion||p.nombre||'';
     document.getElementById('in-unidad').value=p.unidad||'UND';
-    // EL MAESTRO MANDA también con el almacén: el stock se agrupa por (almacén|código), así que
-    // ingresar un producto de Mantenimiento con el desplegable en Insumos abría una fila NUEVA
-    // en vez de sumar a la existente ("el stock no se actualiza"). Se ajusta al del maestro.
-    const alm=document.getElementById('in-almacen');
-    if(alm && p.almacen && alm.value!==p.almacen) alm.value=p.almacen;
+    // El ALMACÉN no se toca: lo decide quien registra (es el destino físico del material).
     const pr=document.getElementById('in-precio');
     if(pr && !pr.value && p.precio) pr.value=p.precio;
     if(typeof calcTotalIngreso==='function') calcTotalIngreso();
@@ -7970,9 +7966,9 @@ function agregarItemIngreso(){
     return;
   }
   const nombreLimpio=pM?pM.nombre:g('in-producto').value.trim().replace(/\s*\([^()]*\)\s*$/,'');
-  // Almacén POR ÍTEM y tomado del maestro: una misma hoja puede mezclar Insumos y Mantenimiento
-  // sin que ninguno caiga en el almacén equivocado (que partiría el stock en dos filas).
-  const almItem=(pM&&pM.almacen)||g('in-almacen').value;
+  // Almacén POR ÍTEM = el que está elegido al agregar la línea. Así una misma hoja puede repartir
+  // material entre Insumos y Mantenimiento, y cada línea conserva el destino que se le marcó.
+  const almItem=g('in-almacen').value;
   ingresoCart.push({vale:g('in-vale').value.trim(),almacen:almItem,producto:nombreLimpio,codigo,descripcion:desc,unidad:g('in-unidad').value,cantidad:cant,precio:precio,total:cant*precio});
   renderIngresoCart();
   // Limpiar campos de ítem para el siguiente (mantiene vale por si es el mismo)
