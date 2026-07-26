@@ -3576,9 +3576,9 @@ select option{background:var(--coal3);}
     <!-- Hoja de registro -->
     <div class="table-wrap" style="margin-bottom:10px;max-height:260px;overflow-y:auto">
       <table>
-        <thead><tr><th>Vale</th><th>Producto</th><th>Descripción</th><th>U.M.</th><th>Cant.</th><th>Precio</th><th>Total</th><th></th></tr></thead>
-        <tbody id="in-cart-tbody"><tr><td colspan="8" style="text-align:center;color:var(--text3);padding:20px;font-size:13px">Agrega productos arriba para armar la hoja de ingreso</td></tr></tbody>
-        <tfoot><tr><td colspan="6" style="text-align:right;font-weight:700">Total hoja</td><td id="in-cart-total" style="color:var(--gold-light);font-weight:700">S/ 0.00</td><td></td></tr></tfoot>
+        <thead><tr><th>Vale</th><th>Almacén</th><th>Producto</th><th>Descripción</th><th>U.M.</th><th>Cant.</th><th>Precio</th><th>Total</th><th></th></tr></thead>
+        <tbody id="in-cart-tbody"><tr><td colspan="9" style="text-align:center;color:var(--text3);padding:20px;font-size:13px">Agrega productos arriba para armar la hoja de ingreso</td></tr></tbody>
+        <tfoot><tr><td colspan="7" style="text-align:right;font-weight:700">Total hoja</td><td id="in-cart-total" style="color:var(--gold-light);font-weight:700">S/ 0.00</td><td></td></tr></tfoot>
       </table>
     </div>
     <div class="btn-row" style="margin-top:6px">
@@ -6486,6 +6486,11 @@ function autoFillProductoIngreso(){
     // Vincular con el maestro de productos: autocompletar descripción, unidad y precio
     document.getElementById('in-descripcion').value=p.descripcion||p.nombre||'';
     document.getElementById('in-unidad').value=p.unidad||'UND';
+    // EL MAESTRO MANDA también con el almacén: el stock se agrupa por (almacén|código), así que
+    // ingresar un producto de Mantenimiento con el desplegable en Insumos abría una fila NUEVA
+    // en vez de sumar a la existente ("el stock no se actualiza"). Se ajusta al del maestro.
+    const alm=document.getElementById('in-almacen');
+    if(alm && p.almacen && alm.value!==p.almacen) alm.value=p.almacen;
     const pr=document.getElementById('in-precio');
     if(pr && !pr.value && p.precio) pr.value=p.precio;
     if(typeof calcTotalIngreso==='function') calcTotalIngreso();
@@ -7965,7 +7970,10 @@ function agregarItemIngreso(){
     return;
   }
   const nombreLimpio=pM?pM.nombre:g('in-producto').value.trim().replace(/\s*\([^()]*\)\s*$/,'');
-  ingresoCart.push({vale:g('in-vale').value.trim(),producto:nombreLimpio,codigo,descripcion:desc,unidad:g('in-unidad').value,cantidad:cant,precio:precio,total:cant*precio});
+  // Almacén POR ÍTEM y tomado del maestro: una misma hoja puede mezclar Insumos y Mantenimiento
+  // sin que ninguno caiga en el almacén equivocado (que partiría el stock en dos filas).
+  const almItem=(pM&&pM.almacen)||g('in-almacen').value;
+  ingresoCart.push({vale:g('in-vale').value.trim(),almacen:almItem,producto:nombreLimpio,codigo,descripcion:desc,unidad:g('in-unidad').value,cantidad:cant,precio:precio,total:cant*precio});
   renderIngresoCart();
   // Limpiar campos de ítem para el siguiente (mantiene vale por si es el mismo)
   g('in-producto').value='';g('in-producto').dataset.codigo='';g('in-descripcion').value='';g('in-cantidad').value='';g('in-precio').value='';
@@ -7976,12 +7984,13 @@ function renderIngresoCart(){
   const tb=document.getElementById('in-cart-tbody');
   if(tb) tb.innerHTML=ingresoCart.length?ingresoCart.map((i,idx)=>`<tr>
     <td style="font-size:12px">${i.vale||'—'}</td>
+    <td><span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${i.almacen==='Mantenimiento'?'rgba(201,168,76,0.15);color:#d4b75e':'rgba(96,165,250,0.15);color:#60a5fa'}">${i.almacen==='Mantenimiento'?'Mant.':'Insumos'}</span></td>
     <td style="font-size:12px;font-weight:600">${i.producto||''}</td>
     <td style="font-size:11px;color:var(--text3);max-width:200px;white-space:normal">${i.descripcion||''}</td>
     <td style="font-size:12px">${i.unidad}</td><td style="font-size:12px">${fmt3(i.cantidad)}</td><td style="font-size:12px">${fmtS2(i.precio)}</td>
     <td style="color:var(--gold-light);font-weight:700;font-size:12px">${fmtS2(i.total)}</td>
     <td><button onclick="quitarItemIngreso(${idx})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px">🗑</button></td></tr>`).join('')
-    :`<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:20px;font-size:13px">Agrega productos arriba para armar la hoja de ingreso</td></tr>`;
+    :`<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:20px;font-size:13px">Agrega productos arriba para armar la hoja de ingreso</td></tr>`;
   const tot=ingresoCart.reduce((a,i)=>a+i.total,0);
   const t=document.getElementById('in-cart-total');if(t)t.textContent=fmtS2(tot);
 }
@@ -7993,7 +8002,7 @@ function guardarIngreso(){
   const almacen=g('in-almacen').value;
   const base=Date.now();const grupo='GI'+base;
   ingresoCart.forEach((i,idx)=>{
-    state.almacen.ingresos.push({id:'I'+(base+idx),_ts:base+idx,grupo,fecha,vale:i.vale,detalle,almacen,codigo:i.codigo||'',
+    state.almacen.ingresos.push({id:'I'+(base+idx),_ts:base+idx,grupo,fecha,vale:i.vale,detalle,almacen:i.almacen||almacen,codigo:i.codigo||'',
       producto:i.producto,descripcion:i.descripcion,unidad:i.unidad,cantidad:i.cantidad,precio:i.precio,total:i.total});
   });
   almacenSave();
