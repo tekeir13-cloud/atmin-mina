@@ -3704,6 +3704,7 @@ select option{background:var(--coal3);}
     <div class="form-grid">
       <div class="form-group"><label>Código <span style="color:var(--text3);font-size:10px">(automático)</span></label><input type="text" id="prod-codigo" style="font-family:'DM Mono',monospace" placeholder="Se genera solo" title="Se genera automáticamente"></div>
       <div class="form-group"><label>Unidad</label><input type="text" id="prod-unidad" placeholder="PZA / KG / M / BOL"></div>
+      <div class="form-group"><label>Almacén</label><select id="prod-almacen"><option value="General">Insumos (Almacén General)</option><option value="Mantenimiento">Mantenimiento</option></select></div>
       <div class="form-group" style="grid-column:1/-1"><label>Nombre del Producto</label><input type="text" id="prod-nombre" placeholder="Ej: CEMENTO GRIS ANTISALITRE PORTL. TIPO MS"></div>
       <div class="form-group" style="grid-column:1/-1"><label>Precio Unitario (S/)</label><input id="prod-precio" type="number" step="0.01" min="0" placeholder="0.00" style="width:140px"></div>
     </div>
@@ -6511,6 +6512,9 @@ function generarCodigoProducto(){
   const prods=(state.almacen&&state.almacen.productos)||[];
   let max=0;
   prods.forEach(p=>{ const m=/^ART-(\d+)$/.exec(String(p.codigo||'')); if(m){ const n=parseInt(m[1],10); if(n>max) max=n; } });
+  // ART-00001 está QUEMADO: fue el código de la "Caja de agua" fantasma y la limpieza heredada
+  // lo persigue. Nunca se vuelve a repartir para que un producto nuevo no herede ese castigo.
+  if(max<1) max=1;
   return 'ART-'+String(max+1).padStart(5,'0');
 }
 function abrirModalProducto(id){
@@ -6525,6 +6529,7 @@ function abrirModalProducto(id){
     g('prod-nombre').value=p.nombre;
     g('prod-unidad').value=p.unidad||'PZA';
     g('prod-precio').value=p.precio||'';
+    if(g('prod-almacen')) g('prod-almacen').value=p.almacen||'General';
   }else{
     g('modal-prod-titulo').textContent='Nuevo Producto';
     g('prod-edit-id').value='';
@@ -6533,6 +6538,7 @@ function abrirModalProducto(id){
     g('prod-nombre').value='';
     g('prod-unidad').value='PZA';
     g('prod-precio').value='';
+    if(g('prod-almacen')) g('prod-almacen').value='General';
   }
   abrirModal('modal-producto');
 }
@@ -6552,11 +6558,14 @@ function guardarProductoCatalogo(){
   const _nn=(typeof _normNom==='function')?_normNom(nombre):String(nombre||'').toLowerCase().trim();
   const dupNombre=state.almacen.productos.find(x=>x.id!==editId && ((typeof _normNom==='function')?_normNom(x.nombre):String(x.nombre||'').toLowerCase().trim())===_nn);
   if(dupNombre){showNotif('⚠ Ya existe un producto con ese nombre: '+dupNombre.nombre+' ('+dupNombre.codigo+'). Usa ese o edítalo.','error');return;}
+  // Almacén al que pertenece el producto. Sin esto los productos creados a mano quedaban sin
+  // clasificar y no aparecían en ningún almacén hasta tener movimientos.
+  const almacen=(g('prod-almacen')&&g('prod-almacen').value)||'General';
   if(editId){
     const p=state.almacen.productos.find(x=>x.id===editId);
-    if(p){p.codigo=codigo;p.nombre=nombre;p.unidad=unidad;p.precio=precio;}
+    if(p){p.codigo=codigo;p.nombre=nombre;p.unidad=unidad;p.precio=precio;p.almacen=almacen;}
   }else{
-    state.almacen.productos.push({id:'P'+Date.now(),codigo,nombre,unidad,precio});
+    state.almacen.productos.push({id:'P'+Date.now(),codigo,nombre,unidad,precio,almacen});
   }
   state.almacen.productosTs=Date.now();   // marca de edición: el maestro más reciente gana en la sincronización
   almacenSave();cerrarModal('modal-producto');renderProductos();
@@ -7626,6 +7635,13 @@ function calcStock(){
     if(!map[k]) map[k]={key:k,almacen:almacen||'General',codigo:String(cod||''),producto:producto||'',descripcion:desc||'',unidad:unidad||'UND',precio:Number(precio)||0,ingreso:0,salida:0,stock:0};
     return map[k];
   }
+  // Todo producto del MAESTRO existe en su almacén desde que se crea, aunque aún no tenga
+  // movimientos: aparece con stock 0 en vez de no aparecer. Antes, un producto recién creado era
+  // invisible en el almacén hasta registrarle el primer ingreso.
+  ((state.almacen&&state.almacen.productos)||[]).forEach(p=>{
+    if(!p) return;
+    ensure(p.almacen||'General', p.codigo, p.nombre, p.descripcion||p.nombre, p.unidad, p.precio);
+  });
   // Deduplicar saldos de apertura de "Depurar historial" (ids que empiezan con INIC): si se depuró
   // varias veces, quedaron varias aperturas del MISMO producto y se apilaban (stock/valor inflado).
   // Aquí se cuenta SOLO la más reciente por producto. No borra nada: solo corrige el cálculo.
@@ -7731,10 +7747,15 @@ function almacenPurgaAguaV1(){
     if((Number(state.almacen&&state.almacen.aguaFixV)||0)>=1) return false;
     if(!state.almacen) return false;
     const NN=(typeof _normNom==='function')?_normNom:(s=>String(s||'').trim().toLowerCase());
+    // SIEMPRE exige que sea la caja de agua. Antes bastaba el código ART-00001 y, como el
+    // generador vuelve a repartir ese mismo código al siguiente producto nuevo del maestro,
+    // esta limpieza borraba con lápida los movimientos de un producto recién creado (que
+    // desaparecían en todos los equipos y no se podían recuperar).
     const esFantasma=it=>{
       if(!it) return false;
+      if(NN(it.producto)!=='caja de agua' && NN(it.descripcion)!=='caja de agua') return false;
       if(String(it.codigo||'').toUpperCase()==='ART-00001') return true;
-      return NN(it.producto)==='caja de agua' && (Number(it.cantidad)||0)>=1000;
+      return (Number(it.cantidad)||0)>=1000;
     };
     let n=0;
     ['ingresos','salidas'].forEach(k=>{
