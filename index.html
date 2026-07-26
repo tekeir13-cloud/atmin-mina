@@ -4517,6 +4517,9 @@ async function cargarAlmacenCombustibleSB(){
         if(local.length) await sbSyncModulo('comb_'+tipo, local);
       }
     }
+    // Apertura de petróleo del periodo (1650 gln). Se aplica DESPUÉS de traer la nube, por id
+    // determinista: nunca duplica ni pisa los ingresos/consumos reales de otros equipos.
+    try{ if(typeof aplicarAperturaPetroleo==='function') aplicarAperturaPetroleo(); }catch(e){}
     // ── VALORIZACIONES (compra de labor) — vinculadas al dashboard ──
     const valNube = await sbLoadModulo('val_labor');
     if(Array.isArray(valNube) && valNube.length){
@@ -13815,17 +13818,29 @@ const COMB_CAP_GAS = 120;    // capacidad cisterna gasolina (gln)
 const COMB_ALERTA_PET = 250; // alerta petróleo
 const COMB_ALERTA_GAS = 20;  // alerta gasolina
 
-function combCargar(tipo){
-  const k=tipo==='gas'?COMB_KEY_GAS:COMB_KEY_PET;
+function combCargar(tipo){ const k=tipo==='gas'?COMB_KEY_GAS:COMB_KEY_PET; try{return JSON.parse(localStorage.getItem(k)||'[]');}catch(e){return[];} }
+// Apertura de petróleo del periodo (1650 gln). Idempotente: usa el MISMO id determinista que el
+// cierre de periodo, así dos equipos no pueden duplicarla. No borra ingresos ni consumos reales.
+const APERTURA_PET_GLN = 1650;
+function aplicarAperturaPetroleo(){
   try{
-    let arr = JSON.parse(localStorage.getItem(k)||'[]');
-    // Si petróleo está vacío, inicializar con 1650 galones
-    if(tipo==='pet' && (!arr || !arr.length)){
-      arr = [{fecha:new Date().toISOString().split('T')[0],hora:'00:00',placa:'INIT',chofer:'Sistema',cantidad:1650,precio:0,obs:'Stock inicial'}];
-      localStorage.setItem(k,JSON.stringify(arr));
+    if(typeof periodoActual!=='function') return false;
+    const periodo=periodoActual();
+    const id='CBPET'+periodo.replace('-','');
+    const arr=combCargar('pet');
+    const i=arr.findIndex(r=>r&&r.id===id);
+    if(i>=0){
+      if(Number(arr[i].cantidad)===APERTURA_PET_GLN) return false;   // ya está: no re-subir
+      arr[i].cantidad=APERTURA_PET_GLN;
+    }else{
+      const r=(typeof periodoRango==='function')?periodoRango(periodo):null;
+      arr.unshift({ id, fecha:(r&&r.ini)||new Date().toISOString().slice(0,10),
+        placa:'APERTURA', chofer:'Sistema', cantidad:APERTURA_PET_GLN, precio:0,
+        apertura:true, obs:'Saldo de apertura del periodo' });
     }
-    return arr;
-  }catch(e){return[];}
+    combGuardar('pet', arr);
+    return true;
+  }catch(e){ return false; }
 }
 function combGuardar(tipo,arr){ const k=tipo==='gas'?COMB_KEY_GAS:COMB_KEY_PET; try{localStorage.setItem(k,JSON.stringify(arr));}catch(e){} sbSyncModulo('comb_'+(tipo==='gas'?'gas':'pet'), arr); }
 
