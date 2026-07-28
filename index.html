@@ -16101,6 +16101,18 @@ function actualizarBadgeMes(){
   try{
     const el=document.getElementById('topbar-mes');
     if(!el) return;
+    // Con el ciclo 26→25 activo el badge muestra el PERIODO OPERATIVO, no el mes de calendario.
+    // Antes el 28 de julio decía "Julio 2026" mientras el resto del sistema ya trabajaba el
+    // periodo 2026-08 (26 jul → 25 ago), y esa contradicción hacía leer los datos del ciclo
+    // vigente como si fueran del anterior.
+    if(typeof cicloActivo==='function' && cicloActivo()){
+      const per=periodoActual();
+      const r=(typeof periodoRango==='function')?periodoRango(per):null;
+      el.textContent=((typeof periodoLabel==='function')?periodoLabel(per):per)
+        + (r?(' · '+r.ini.slice(8)+'/'+r.ini.slice(5,7)+'→'+r.fin.slice(8)+'/'+r.fin.slice(5,7)):'');
+      el.title=r?('Ciclo operativo '+r.ini+' al '+r.fin):'Ciclo operativo '+per;
+      return;
+    }
     const m=state.mesActivo&&state.mesActivo.mes, a=state.mesActivo&&state.mesActivo.año;
     if(m&&a&&typeof MESES_ES!=='undefined'&&MESES_ES[m]){
       el.textContent=MESES_ES[m]+' '+a;
