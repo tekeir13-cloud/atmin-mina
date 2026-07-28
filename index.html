@@ -21396,16 +21396,111 @@ function abrirHistorialPeriodos(){
         Tareos: <b>${t.tareos||0}</b> · Reportes: <b>${t.reportes||0}</b> · Mantenimientos: <b>${t.mantenimientos||0}</b> · Avance: <b>${t.metrosAvance||0} m</b>
       </div>
       <div style="font-size:10px;color:var(--text3);margin-top:6px">Cerrado: ${(h.cerradoEl||'').slice(0,16).replace('T',' ')} · Respaldo en nube: <code>${h.backupKey||''}</code></div>
+      <div style="margin-top:8px"><button class="btn btn-outline" style="font-size:11px;padding:5px 12px;border-color:#22d3a5;color:#22d3a5" onclick="restaurarPeriodo('${h.periodo}')">♻ Restaurar datos de este ciclo</button></div>
     </div>`;
   }).join(''):'<div style="text-align:center;color:var(--text3);padding:24px">Aún no hay periodos cerrados.</div>';
   const html=`<div id="modal-historial-periodos" class="modal-overlay" style="display:flex" onclick="if(event.target===this)cerrarModal('modal-historial-periodos')">
     <div class="modal-box" style="max-width:600px" onclick="event.stopPropagation()">
       <div class="modal-header"><h3>📁 Historial de Periodos</h3>
         <button onclick="cerrarModal('modal-historial-periodos')" class="modal-close">×</button></div>
-      <div style="padding:18px;max-height:70vh;overflow-y:auto">${filas}</div>
+      <div style="padding:18px;max-height:70vh;overflow-y:auto">
+        <div style="background:rgba(34,211,165,0.1);border:1px solid rgba(34,211,165,0.35);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:11px;color:#22d3a5">
+          ♻ Los cierres anteriores a esta versión borraban los datos del ciclo. Si un ciclo cerrado aparece en cero, restáuralo desde su respaldo con el botón de su tarjeta.
+        </div>
+        ${filas}
+      </div>
     </div></div>`;
   const prev=document.getElementById('modal-historial-periodos'); if(prev) prev.remove();
   document.body.insertAdjacentHTML('beforeend',html);
+}
+
+// ══════════════════════════════════════════════════════════════
+// RESTAURAR LOS DATOS DE UN CICLO CERRADO DESDE SU RESPALDO
+// ══════════════════════════════════════════════════════════════
+// Los cierres anteriores a esta versión borraban de state los reportes de guardia, los del
+// Compresorista, mantenimientos, remanente y los movimientos de almacén del ciclo. El respaldo
+// SÍ se guardó en la nube (app_modulos, modulo='backup_<periodo>') antes de purgar, así que el
+// ciclo se puede reconstruir.
+// REGLA CLAVE: del respaldo se toma SOLO lo que cae dentro de la ventana del ciclo restaurado y
+// se FUSIONA por id con lo que hay hoy. Nunca reemplaza el estado completo, así que el ciclo
+// vigente no se toca. Antes de escribir nada se guarda un respaldo del estado actual.
+function _restMergeId(actual, delRespaldo){
+  const out=(actual||[]).slice();
+  const vistos=new Set(out.map(x=>String((x&&(x.id||x._id))||JSON.stringify(x))));
+  let nuevos=0;
+  (delRespaldo||[]).forEach(x=>{
+    if(!x) return;
+    const k=String((x.id||x._id)||JSON.stringify(x));
+    if(vistos.has(k)) return;
+    vistos.add(k); out.push(x); nuevos++;
+  });
+  return {lista:out, nuevos};
+}
+async function restaurarPeriodo(periodo){
+  if(!periodo){ showNotif('Periodo no válido','error'); return; }
+  const r=periodoRango(periodo);
+  showNotif('Buscando el respaldo de '+periodo+' en la nube…','warn');
+  let snap=null;
+  try{
+    if(typeof sb==='undefined'||!sb||!SB_ONLINE) throw new Error('sin nube');
+    const { data }=await sb.from('app_modulos').select('data').eq('modulo','backup_'+periodo).single();
+    snap=data&&data.data;
+    if(!snap){
+      const alt=await sb.from('app_modulos').select('data').eq('modulo','backup_ultimo').single();
+      const u=alt&&alt.data&&alt.data.data;
+      if(u&&u.periodo===periodo&&u.snap) snap=u.snap;
+    }
+  }catch(e){ showNotif('No se pudo leer el respaldo (¿sin conexión?)','error'); return; }
+  if(!snap){ showNotif('No hay respaldo guardado para el ciclo '+periodo,'error'); return; }
+
+  const en=x=>x&&enRango(x.fecha,r);
+  const dRG=(snap.reportesGuardia||[]).filter(en);
+  const dCO=(snap.compresorista||[]).filter(en);
+  const dMA=(snap.mantenimiento||[]).filter(en);
+  const dRE=(snap.remanenteSalidas||[]).filter(en);
+  const dTA=(snap.tareas||[]).filter(en);
+  const alm=snap.almacen||{};
+  const dAI=(alm.ingresos||[]).filter(en), dAS=(alm.salidas||[]).filter(en);
+  const total=dRG.length+dCO.length+dMA.length+dRE.length+dTA.length+dAI.length+dAS.length;
+  if(!total){ showNotif('El respaldo de '+periodo+' no tiene registros dentro de '+r.ini+' → '+r.fin,'warn'); return; }
+
+  if(!confirm('Restaurar el ciclo '+periodo+' ('+r.ini+' al '+r.fin+')\n\n'+
+    'Del respaldo se recuperarán:\n'+
+    '· '+dRG.length+' reportes de guardia\n'+
+    '· '+dCO.length+' reportes del Compresorista\n'+
+    '· '+dMA.length+' mantenimientos\n'+
+    '· '+dRE.length+' salidas de remanente\n'+
+    '· '+dTA.length+' tareos\n'+
+    '· '+dAI.length+' ingresos y '+dAS.length+' salidas de almacén\n\n'+
+    'Solo se agrega lo que falta, por id. El ciclo vigente NO se toca.\n'+
+    'Antes de escribir se guarda un respaldo del estado actual.')) return;
+
+  try{ await respaldoCompleto(true); }catch(e){}
+
+  const res={};
+  let m;
+  m=_restMergeId(state.reportesGuardia,dRG); state.reportesGuardia=m.lista; res.reportes=m.nuevos;
+  m=_restMergeId(state.compresorista,dCO);   state.compresorista=m.lista;   res.compresorista=m.nuevos;
+  m=_restMergeId(state.mantenimiento,dMA);   state.mantenimiento=m.lista;   res.mantenimiento=m.nuevos;
+  m=_restMergeId(state.remanenteSalidas,dRE);state.remanenteSalidas=m.lista;res.remanente=m.nuevos;
+  m=_restMergeId(state.tareas,dTA);          state.tareas=m.lista;          res.tareos=m.nuevos;
+  if(!state.almacen) state.almacen={ingresos:[],salidas:[]};
+  m=_restMergeId(state.almacen.ingresos,dAI);state.almacen.ingresos=m.lista;res.ingresosAlm=m.nuevos;
+  m=_restMergeId(state.almacen.salidas,dAS); state.almacen.salidas=m.lista; res.salidasAlm=m.nuevos;
+
+  try{ if(typeof reportesGuardiaSave==='function') reportesGuardiaSave(); }catch(e){}
+  try{ if(typeof compGuardarLocal==='function') compGuardarLocal(); }catch(e){}
+  try{ sbSyncModulo('mant_kits', state.mantenimiento||[]); }catch(e){}
+  try{ if(typeof remSalSave==='function') remSalSave(); }catch(e){}
+  try{ if(typeof tareasSave==='function') tareasSave(); }catch(e){}
+  try{ if(typeof almacenSave==='function') almacenSave(); }catch(e){}
+  try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){}
+
+  const rec=Object.values(res).reduce((a,b)=>a+b,0);
+  showNotif('♻ Ciclo '+periodo+' restaurado: '+rec+' registros recuperados',rec?'ok':'warn');
+  try{ cerrarModal('modal-historial-periodos'); }catch(e){}
+  try{ if(typeof refrescarVistaActual==='function') refrescarVistaActual(); }catch(e){}
+  return res;
 }
 
 // ── Pantalla completa ──
