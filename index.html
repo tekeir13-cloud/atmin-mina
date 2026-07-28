@@ -11278,6 +11278,10 @@ function renderTareoMensual(){
   const nombreMes=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][mm-1]||mes;
   const trabajadores=(state.personal||[]).filter(p=>p.estado!=='baja'&&p.estado!=='inactivo');
   const meses=[...new Set([...(state.tareas||[]).map(t=>(t.fecha||'').slice(0,7)).filter(Boolean), hoy().slice(0,7)])].sort().reverse();
+  // Estado de archivado del mes elegido: el tareo se archiva cuando el mes calendario se cumple
+  const _arch=(typeof mesTareoArchivado==='function')&&mesTareoArchivado(mes);
+  const _puede=(typeof puedeEditarTareoMes!=='function')||puedeEditarTareoMes(mes);
+  const _mesLabel=m=>{ const [a,b]=String(m).split('-'); const N=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Set','Oct','Nov','Dic']; return (N[parseInt(b,10)-1]||b)+' '+a; };
   let head='<th style="position:sticky;left:0;background:#1a2744;z-index:2;text-align:left;padding:6px 10px;width:170px;min-width:170px">Trabajador</th>';
   for(let d=1;d<=nDias;d++) head+=`<th style="padding:4px 0;width:24px;min-width:24px;text-align:center;font-size:10px">${d}</th>`;
   head+='<th style="padding:4px 6px;width:38px;min-width:38px">Trab</th><th style="padding:4px 6px;width:44px;min-width:44px">Tareas</th><th style="padding:4px 6px;width:38px;min-width:38px">Gan</th><th style="padding:4px 6px;width:38px;min-width:38px">Tom</th><th style="padding:4px 6px;width:50px;min-width:50px">Compr</th><th style="padding:4px 8px;width:82px;min-width:82px;text-align:right">Pago S/</th>';
@@ -11303,19 +11307,24 @@ function renderTareoMensual(){
   }).join('');
   cont.innerHTML=`
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">
-      <div class="section-title" style="margin:0">🗓 Tareo Mensual — ${nombreMes} ${y}</div>
-      <select id="tareomes-sel" onchange="renderTareoMensual()" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:13px;font-weight:600">
-        ${meses.map(m=>`<option value="${m}"${m===mes?' selected':''}>${m}</option>`).join('')}
+      <div class="section-title" style="margin:0">🗓 Tareo Mensual — ${nombreMes} ${y}${_arch?' <span style="font-size:11px;color:#f59e0b;font-weight:700">🔒 ARCHIVADO</span>':''}</div>
+      <select id="tareomes-sel" onchange="document.getElementById('rrhh-tareomes').dataset.editing='false';renderTareoMensual()" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:13px;font-weight:600">
+        ${meses.map(m=>`<option value="${m}"${m===mes?' selected':''}>${_mesLabel(m)}${mesTareoArchivado(m)?' 🔒':''}</option>`).join('')}
       </select>
       <div style="display:flex;gap:8px;margin-left:auto">
         ${isEditing?`
           <button class="btn btn-outline" onclick="document.getElementById('rrhh-tareomes').dataset.editing='false';renderTareoMensual()">Cancelar</button>
           <button class="btn btn-gold" onclick="tareoMensualGuardar('${mes}')">💾 Guardar</button>
+        `:(_puede?`
+          <button class="btn btn-gold" onclick="document.getElementById('rrhh-tareomes').dataset.editing='true';renderTareoMensual()">✏️ Editar${_arch?' (mes archivado)':''}</button>
         `:`
-          <button class="btn btn-gold" onclick="document.getElementById('rrhh-tareomes').dataset.editing='true';renderTareoMensual()">✏️ Editar</button>
-        `}
+          <span style="font-size:11px;color:#f59e0b;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.35);border-radius:8px;padding:7px 12px">🔒 Solo lectura — mes archivado</span>
+        `)}
       </div>
     </div>
+    ${_arch?`<div style="font-size:11px;color:#f59e0b;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:8px;padding:9px 12px;margin-bottom:10px">
+      🔒 ${nombreMes} ${y} ya se cumplió y quedó archivado${_puede?'. Como Gerencia/Finanzas puedes corregirlo, pero recuerda que su costo ya se cargó al ciclo.':'. Solo Gerencia o Finanzas pueden corregirlo.'}
+    </div>`:''}
     <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6">${isEditing?'<b style="color:var(--gold)">✏️ Modo edición activado</b> — Haz <b>clic en una celda</b> para elegir: <b style="color:#16a34a">1</b>, <b style="color:#84cc16">1.25</b>, <b style="color:#d97706">1.5</b>, <b style="color:#f59e0b">1.75</b>, <b style="color:#dc2626">2</b>, <b style="color:#e11d48">2.25</b>, <b style="color:#ec4899">2.5</b>, <b style="color:#c026d3">2.75</b>, <b style="color:#8b5cf6">3</b> (tareas del día), <b style="color:#2563eb">DL</b> (día libre) o <b style="color:#9ca3af">F</b> (falta, no paga). Para copiar como en Excel: <b>mantén presionado y arrastra</b> sobre la fila (desde una celda vacía, el arrastre <b>borra</b> las casillas por donde pasa).<br>':'Lectura — haz clic en Editar para modificar.<br>'}<b>Trab</b>=días trabajados · <b>Tareas</b>=unidades de pago · <b>Gan</b>=libres ganados (trab÷2) · <b>Tom</b>=libres tomados (DL) · <b>Compr</b>=comprados (ganados−tomados). &nbsp;<b>Pago = (tareas + tomados + comprados) × jornal.</b></div>
     <div class="table-wrap" style="max-height:72vh;overflow:auto;border:1px solid var(--border);border-radius:10px">
       <table style="border-collapse:collapse;font-size:11px;min-width:100%;table-layout:fixed;width:max-content">
