@@ -5631,7 +5631,9 @@ function ejecCambiarMes(delta){
   const [y,m]=base.split('-').map(Number);
   const d=new Date(y, m-1+delta, 1);
   _ejecMes = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-  renderDashEjecutivo();
+  // Repinta TODO el dashboard: antes solo el panel ejecutivo cambiaba de ciclo y el resto
+  // (acumulado del mes, avance vs meta, top de trabajadores) se quedaba en el ciclo vigente.
+  if(typeof renderDashboard==='function') renderDashboard(); else renderDashEjecutivo();
 }
 function renderDashEjecutivo(){
   const cont=document.getElementById('d-ejecutivo');
@@ -5754,7 +5756,7 @@ function renderDashEjecutivo(){
       <button onclick="ejecCambiarMes(-1)" title="Mes anterior" style="background:var(--coal3);border:1px solid var(--border);color:var(--text2);border-radius:8px;width:30px;height:30px;cursor:pointer;font-size:15px;line-height:1;flex-shrink:0">‹</button>
       <div style="font-size:20px;font-weight:900;color:var(--text);letter-spacing:-.5px;min-width:130px;text-align:center">${nombreMes}</div>
       <button onclick="ejecCambiarMes(1)" title="Mes siguiente" style="background:var(--coal3);border:1px solid var(--border);color:var(--text2);border-radius:8px;width:30px;height:30px;cursor:pointer;font-size:15px;line-height:1;flex-shrink:0">›</button>
-      ${_ejecMes&&_ejecMes!==((typeof finMesActual==='function')?finMesActual():'')?`<button onclick="_ejecMes=null;renderDashEjecutivo()" style="background:none;border:none;color:var(--accent-light);font-size:11px;cursor:pointer;text-decoration:underline">Mes actual</button>`:''}
+      ${_ejecMes&&_ejecMes!==((typeof finMesActual==='function')?finMesActual():'')?`<button onclick="_ejecMes=null;(typeof renderDashboard==='function'?renderDashboard():renderDashEjecutivo())" style="background:none;border:none;color:var(--accent-light);font-size:11px;cursor:pointer;text-decoration:underline">Mes actual</button>`:''}
     </div>
   </div>
 
@@ -5877,7 +5879,8 @@ function _renderTop5Demo(cont){
 function renderDashTopTrabajadores(){
   const cont=document.getElementById('d-top-trabajadores'); if(!cont)return;
   if(DASH_TOP5_DEMO){ _renderTop5Demo(cont); return; }
-  const mesYM=(typeof finMesActual==='function')?finMesActual():hoy().slice(0,7);
+  // Sigue el ciclo elegido en el panel ejecutivo (no siempre el vigente)
+  const mesYM=(typeof ejecMesActual==='function')?ejecMesActual():((typeof finMesActual==='function')?finMesActual():hoy().slice(0,7));
   // Tareos = mes calendario (ver enMesTareo), no la ventana 26→25 del resto del sistema.
   const enMes=t=>(typeof enMesTareo==='function')?enMesTareo(t.fecha,mesYM):((t.fecha||'').slice(0,7)===String(mesYM).slice(0,7));
   const conteo={};
@@ -5917,8 +5920,15 @@ function renderDashResumenHoy(){
   const cont=document.getElementById('d-resumen-hoy'); if(!cont)return;
   const S=n=>'S/ '+Math.round(n||0).toLocaleString('es-PE');
   const ts=hoy();
-  const mesYM=(typeof finMesActual==='function')?finMesActual():ts.slice(0,7);
+  // SIGUE EL CICLO ELEGIDO en el panel, no el vigente. Antes usaba finMesActual(): al entrar a
+  // julio los metros salían de julio (esos sí venían del panel) pero los gastos seguían siendo
+  // los de agosto, y el bloque decía "Acumulado del Mes · Ago 2026" dentro de la vista de julio.
+  const mesYM=(typeof ejecMesActual==='function')?ejecMesActual()
+             :((typeof finMesActual==='function')?finMesActual():ts.slice(0,7));
   const nombreMes=(typeof finNombreMes==='function')?finNombreMes(mesYM):mesYM;
+  // "Hoy" solo tiene sentido dentro del ciclo vigente: si se está mirando otro ciclo, ese bloque
+  // se oculta en vez de mezclar la actividad de hoy con el acumulado de un mes distinto.
+  const esCicloVigente=(typeof finMesActual!=='function')||mesYM===finMesActual();
   const activos=state.personal.filter(p=>p.estado==='activo').length;
   const totReg=state.personal.length;
   const ocP=state.ordenes.filter(o=>o.estado==='pendiente').length;
@@ -5956,6 +5966,7 @@ function renderDashResumenHoy(){
     </div>`;
 
   cont.innerHTML=`
+  ${esCicloVigente?`
   <div style="margin:4px 0 16px">
     <div style="font-size:13px;font-weight:800;color:var(--text);margin:0 2px 11px">📅 Actividad de Hoy</div>
     <div style="display:flex;flex-wrap:wrap;gap:12px">
@@ -5968,9 +5979,9 @@ function renderDashResumenHoy(){
       ${card('🔧','Mantenimiento hoy',S(fMant(ts)),'kits despachados','#e67e22')}
       ${card('📄','OC pendientes',ocP,ocP>0?'por aprobar':'todo al día',ocP>0?'#ef4444':'#10b981')}
     </div>
-  </div>
+  </div>`:''}
   <div style="margin:4px 0 18px">
-    <div style="font-size:13px;font-weight:800;color:var(--text);margin:0 2px 11px">📆 Acumulado del Mes · ${nombreMes}</div>
+    <div style="font-size:13px;font-weight:800;color:var(--text);margin:0 2px 11px">📆 Acumulado del Ciclo · ${nombreMes}${esCicloVigente?'':' <span style="font-size:10px;color:#f59e0b;font-weight:600">· ciclo cerrado / no vigente</span>'}</div>
     <div style="display:flex;flex-wrap:wrap;gap:12px">
       ${card('⛏','Metros del mes',fMetros(mesYM)+' m','avance acumulado','#5b6ef5')}
       ${card('💵','Costo operativo del mes',S(fOperativo(mesYM)),'planilla+almacén+petróleo+mant+expl.','#ef4444')}
@@ -5988,7 +5999,8 @@ function renderDashAvanceMeta(){
   const r1=n=>Math.round((Number(n)||0)*10)/10;   // redondeo a 1 decimal (evita 3.4000000004)
   const M=state.metas||{};
   const dias=M.dias||M.diasMes||26;
-  const mesAct=(typeof finMesActual==='function')?finMesActual():hoy().slice(0,7);
+  // Sigue el ciclo elegido en el panel ejecutivo (no siempre el vigente)
+  const mesAct=(typeof ejecMesActual==='function')?ejecMesActual():((typeof finMesActual==='function')?finMesActual():hoy().slice(0,7));
   const diasPeriodo=diasDelPeriodo(mesAct);   // horizonte del pronóstico (30/31/28 días 26→25)
   const rgMes=(state.reportesGuardia||[]).filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mesAct):((r.fecha||'').slice(0,7)===mesAct));
   // Gasto de explosivo del mes por frente (fuente: reportes del Compresorista; solo Brenda/CRNE
