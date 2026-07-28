@@ -5741,7 +5741,8 @@ function renderDashTopTrabajadores(){
   const cont=document.getElementById('d-top-trabajadores'); if(!cont)return;
   if(DASH_TOP5_DEMO){ _renderTop5Demo(cont); return; }
   const mesYM=(typeof finMesActual==='function')?finMesActual():hoy().slice(0,7);
-  const enMes=t=>(typeof enVentana==='function')?enVentana(t.fecha,mesYM):((t.fecha||'').slice(0,7)===mesYM);
+  // Tareos = mes calendario (ver enMesTareo), no la ventana 26→25 del resto del sistema.
+  const enMes=t=>(typeof enMesTareo==='function')?enMesTareo(t.fecha,mesYM):((t.fecha||'').slice(0,7)===String(mesYM).slice(0,7));
   const conteo={};
   (state.tareas||[]).filter(enMes).forEach(t=>{ const id=t.trabajadorId; if(id==null)return; conteo[id]=(conteo[id]||0)+1; });
   const rank=Object.entries(conteo).map(([id,n])=>{
@@ -5790,7 +5791,7 @@ function renderDashResumenHoy(){
   const fMetros = pre => (typeof finAvanceMes==='function') ? finAvanceMes(pre) : 0;
   // Costo operativo → planilla (tareo)
   const fPlanilla = pre => (typeof finCostoPlanilla==='function') ? finCostoPlanilla(pre)
-      : state.tareas.filter(t=>filtroMes(t.fecha,pre)).reduce((s,t)=>{const p=state.personal.find(x=>x.id===t.trabajadorId);return s+((t.jornal??p?.jornal??0)*(t.mult||1));},0);
+      : state.tareas.filter(t=>enMesTareo(t.fecha,pre)).reduce((s,t)=>{const p=state.personal.find(x=>x.id===t.trabajadorId);return s+((t.jornal??p?.jornal??0)*(t.mult||1));},0);
   // Logística → salidas de almacén general
   const fLogistica = pre => (typeof finCostoLogistica==='function') ? finCostoLogistica(pre) : 0;
   // Petróleo CONSUMIDO → galones que el Compresorista reporta consumidos por equipo (coincide con
@@ -10354,7 +10355,7 @@ function actualizarKpisTareo(fecha){
   const mes=f.slice(0,7);
   const activos=state.personal.filter(p=>p.estado!=='baja');
   const hoyT=state.tareas.filter(t=>t.fecha===f);
-  const mesT=state.tareas.filter(t=>filtroMes(t.fecha,mes));
+  const mesT=state.tareas.filter(t=>enMesTareo(t.fecha,mes));
   const costHoy=hoyT.reduce((s,t)=>{const p=state.personal.find(x=>x.id==t.trabajadorId);return s+((t.jornal??p?.jornal??0)*(t.mult||1));},0);
   const costMes=mesT.reduce((s,t)=>{const p=state.personal.find(x=>x.id==t.trabajadorId);return s+((t.jornal??p?.jornal??0)*(t.mult||1));},0);
   const g=id=>document.getElementById(id);
@@ -11283,7 +11284,7 @@ function planillaSupMes(mesYM){ const o=planillaSupLoad(); return Array.isArray(
 function planillaSupTotal(mesYM){ return planillaSupMes(mesYM).reduce((s,r)=>s+(Number(r.monto)||0),0); }
 // Total operarios del mes (tareos, excluye sueldos reservados) — para la planilla integrada
 function planillaOperariosTotal(mesYM){
-  return (state.tareas||[]).filter(t=>filtroMes(t.fecha,mesYM)).reduce((s,t)=>{
+  return (state.tareas||[]).filter(t=>enMesTareo(t.fecha,mesYM)).reduce((s,t)=>{
     const p=(state.personal||[]).find(pp=>String(pp.id)===String(t.trabajadorId));
     if(p && esSueldoReservado(p.rol)) return s;
     const j=(t.jornal!=null?t.jornal:(p?p.jornal:0))||0;
@@ -11418,7 +11419,7 @@ async function exportarPlanillaIntegradaExcel(){
   if(typeof ExcelJS==='undefined'){ showNotif('No se pudo cargar el generador de Excel','error'); return; }
   const wb=new ExcelJS.Workbook(); wb.creator='ATMIN';
   // Detalle operarios (por trabajador, excluye reservados)
-  const tMes=(state.tareas||[]).filter(t=>filtroMes(t.fecha,mes));
+  const tMes=(state.tareas||[]).filter(t=>enMesTareo(t.fecha,mes));
   const opMap={};
   tMes.forEach(t=>{
     const p=(state.personal||[]).find(pp=>String(pp.id)===String(t.trabajadorId));
@@ -17849,6 +17850,17 @@ function filtroMes(fecha, mes){
 }
 // Predicado que acepta prefijo de día (YYYY-MM-DD → ese día exacto) o de mes/periodo (YYYY-MM → ventana)
 function _finEnPre(fecha, pre){ if(!pre) return true; if(String(pre).length>7) return (fecha||'').startsWith(pre); return enVentana(fecha, pre); }
+// ── EXCEPCIÓN DEL TAREO: MES CALENDARIO, NO EL CICLO 26→25 ──
+// La mano de obra se costea por mes de calendario aunque el resto del sistema trabaje con el
+// periodo operativo 26→25. Un tareo del 28 de julio es gasto de JULIO (1–31 jul), aunque el
+// periodo 2026-08 ya haya arrancado el 26 de julio; los del mes siguiente entran a agosto.
+// Acepta día (YYYY-MM-DD → ese día exacto) o mes (YYYY-MM → mes calendario completo).
+function enMesTareo(fecha, pre){
+  const f=String(fecha||'').slice(0,10); if(!f) return false;
+  const p=String(pre||''); if(!p) return true;
+  if(p.length>7) return f.startsWith(p);
+  return f.slice(0,7)===p.slice(0,7);
+}
 function finMesActual(){ return (typeof periodoActual==='function')?periodoActual():hoy().slice(0,7); }
 function finFiltrarMes(arr,mesYM){ if(!mesYM) return arr||[]; if(String(mesYM).length>7) return (arr||[]).filter(r=>(r.fecha||'').startsWith(mesYM)); return (arr||[]).filter(r=>enVentana(r.fecha,mesYM)); }
 function finCostoKits(mesYM){ return finFiltrarMes(state.mantenimiento||[],mesYM).filter(k=>k.aprobLog&&k.aprobLog.ok).reduce((s,k)=>s+(k.costo||0),0); }
@@ -17864,7 +17876,8 @@ function finCostoCombustible(mesYM){
 // Planillas: tareo del mes (jornal × multiplicador)
 function finCostoPlanilla(mesYM){
   // Operarios: tareos diarios, EXCLUYE sueldos reservados (supervisión va aparte → sin doble gasto)
-  const operarios=(state.tareas||[]).filter(t=>_finEnPre(t.fecha,mesYM)).reduce((s,t)=>{
+  // MES CALENDARIO (no el ciclo 26→25): ver enMesTareo.
+  const operarios=(state.tareas||[]).filter(t=>enMesTareo(t.fecha,mesYM)).reduce((s,t)=>{
     const p=(state.personal||[]).find(pp=>String(pp.id)===String(t.trabajadorId));
     if(p && typeof esSueldoReservado==='function' && esSueldoReservado(p.rol)) return s;
     const j=(t.jornal!=null?t.jornal:(p?p.jornal:0))||0;
@@ -20361,7 +20374,11 @@ async function cerrarPeriodo(periodo){
 
   // 4) Reinicio de consumo del periodo (los datos quedan en el respaldo/archivo)
   try{
-    state.tareas=(state.tareas||[]).filter(x=>!enRango(x.fecha,r)); if(typeof tareasSave==='function') tareasSave();
+    // TAREOS: NO se borran al cerrar el periodo. Se costean por MES CALENDARIO (enMesTareo), así
+    // que la ventana 26→25 parte por la mitad dos meses de planilla: borrarlos aquí eliminaría
+    // tareos de un mes que todavía no cierra (p. ej. los del 26–31 de julio al cerrar el periodo
+    // de agosto) y descuadraría el costo de mano de obra de ese mes. El filtro por mes ya los
+    // deja fuera del periodo nuevo, no hace falta destruirlos.
     state.compresorista=(state.compresorista||[]).filter(x=>!enRango(x.fecha,r)); if(typeof compGuardarLocal==='function') compGuardarLocal();
     state.mantenimiento=(state.mantenimiento||[]).filter(x=>!enRango(x.fecha,r));
     try{ sbSyncModulo('mant_kits', state.mantenimiento||[]); }catch(e){}
