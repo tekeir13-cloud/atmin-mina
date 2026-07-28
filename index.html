@@ -3534,6 +3534,7 @@ select option{background:var(--coal3);}
 <div class="page" id="page-compras">
   <div class="mod-tabs">
     <button class="mod-tab active" onclick="modTab('cmp','facturas',this)">🧾 Facturas</button>
+    <button class="mod-tab" onclick="modTab('cmp','informe',this)">📑 Informe</button>
     <button class="mod-tab" onclick="modTab('cmp','presupuestos',this)">💵 Presupuestos</button>
     <button class="mod-tab" onclick="modTab('cmp','balance',this)">📊 Balance</button>
   </div>
@@ -3551,6 +3552,18 @@ select option{background:var(--coal3);}
     </div>
     <div id="cmp-fact-kpis"></div>
     <div id="cmp-fact-wrap"></div>
+  </div>
+
+  <!-- ════ TAB: INFORME ════ -->
+  <div class="mod-pane" style="display:none" id="cmp-informe">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+      <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--text)">📑 Informe de Compras del Ciclo</div>
+      <div style="flex:1"></div>
+      <label style="font-size:11px;color:var(--text3)">Ciclo:</label>
+      <select id="cmp-periodo-inf" onchange="renderComprasInforme()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px"></select>
+      <button class="btn btn-outline" style="border-color:#22c55e;color:#22c55e" onclick="cmpExportarExcel()">📊 Excel</button>
+    </div>
+    <div id="cmp-inf-wrap"></div>
   </div>
 
   <!-- ════ TAB 2: PRESUPUESTOS ════ -->
@@ -4400,7 +4413,7 @@ const MODULE_PANES = {
   'op': ['tablero','avance','solicitudes','vsproyectado','valorizaciones'],
   'mant': ['registro','costosmant'],
   'fin': ['dashboard','informe','costocentro'],
-  'cmp': ['facturas','presupuestos','balance']
+  'cmp': ['facturas','informe','presupuestos','balance']
 };
 
 function modTab(mod, pane, btn){
@@ -4999,6 +5012,7 @@ function renderModPane(mod,pane){
   else if(k==='log-solicitudmantlog')renderSolicitudMantLog();
   else if(k==='log-combustible')renderCombustible();
   else if(k==='cmp-facturas')renderComprasFacturas();
+  else if(k==='cmp-informe')renderComprasInforme();
   else if(k==='cmp-presupuestos')renderComprasPresupuestos();
   else if(k==='cmp-balance')renderComprasBalance();
   else if(k==='rrhh-planilla')renderPlanilla();
@@ -20854,6 +20868,118 @@ function renderComprasPresupuestos(){
       </td></tr>`).join('')}</tbody></table></div>`;
 }
 
+// ── INFORME: consolida lo digitalizado de las facturas y acumula montos ──
+// Agrupa por PROVEEDOR (a partir de la cabecera de cada factura) y por PRODUCTO (a partir del
+// detalle línea por línea que el lector transcribe del PDF o la foto).
+function cmpConsolidado(per){
+  const fs=cmpFacturasDe(per);
+  const prov={}, prod={};
+  let conIgv=0, sinIgv=0, igv=0, conDetalle=0, sumaDetalle=0;
+  fs.forEach(f=>{
+    conIgv+=Number(f.conIgv)||0; sinIgv+=Number(f.sinIgv)||0; igv+=Number(f.igv)||0;
+    const kp=(f.ruc||'').trim()||((f.proveedor||'—').trim().toUpperCase());
+    if(!prov[kp]) prov[kp]={ruc:f.ruc||'',nombre:f.proveedor||'—',n:0,sinIgv:0,igv:0,conIgv:0};
+    const p=prov[kp];
+    p.n++; p.sinIgv+=Number(f.sinIgv)||0; p.igv+=Number(f.igv)||0; p.conIgv+=Number(f.conIgv)||0;
+    if(!p.nombre||p.nombre==='—') p.nombre=f.proveedor||p.nombre;
+    const its=Array.isArray(f.items)?f.items:[];
+    if(its.length) conDetalle++;
+    its.forEach(i=>{
+      const d=String(i.descripcion||'').trim(); if(!d) return;
+      const k=d.toUpperCase();
+      if(!prod[k]) prod[k]={descripcion:d,unidad:i.unidad||'',cantidad:0,importe:0,n:0,proveedores:new Set()};
+      const r=prod[k];
+      r.cantidad+=Number(i.cantidad)||0; r.importe+=Number(i.importe)||0; r.n++;
+      if(!r.unidad&&i.unidad) r.unidad=i.unidad;
+      if(f.proveedor) r.proveedores.add(f.proveedor);
+      sumaDetalle+=Number(i.importe)||0;
+    });
+  });
+  return {
+    facturas:fs, conIgv, sinIgv, igv, conDetalle, sumaDetalle,
+    proveedores:Object.values(prov).sort((a,b)=>b.conIgv-a.conIgv),
+    productos:Object.values(prod).map(p=>({...p,proveedores:[...p.proveedores]})).sort((a,b)=>b.importe-a.importe)
+  };
+}
+function renderComprasInforme(){
+  comprasLoad();
+  const per=cmpPoblarSelect('cmp-periodo-inf'); if(!per) return;
+  const c=cmpConsolidado(per);
+  const v=(typeof ventanaMes==='function')?ventanaMes(per):null;
+  const w=document.getElementById('cmp-inf-wrap'); if(!w) return;
+  if(!c.facturas.length){
+    w.innerHTML=`<div style="font-size:11px;color:var(--text3);margin-bottom:10px">Ciclo <b style="color:var(--text2)">${v?v.ini+' → '+v.fin:per}</b></div>
+      <div style="text-align:center;color:var(--text3);padding:28px">Sin facturas en este ciclo. Sube una factura (foto o PDF) y el informe se arma solo.</div>`;
+    return;
+  }
+  const pctC=n=>c.conIgv>0?Math.round(n/c.conIgv*100):0;
+  const pctD=n=>c.sumaDetalle>0?Math.round(n/c.sumaDetalle*100):0;
+  const barra=(p,col)=>`<div style="background:var(--coal4);border-radius:3px;height:5px;margin-top:3px;overflow:hidden"><div style="height:100%;width:${Math.min(100,p)}%;background:${col};border-radius:3px"></div></div>`;
+
+  w.innerHTML=`
+    <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Ciclo <b style="color:var(--text2)">${v?v.ini+' → '+v.fin:per}</b> · consolidado de ${c.facturas.length} factura${c.facturas.length!==1?'s':''}${c.conDetalle?` · ${c.conDetalle} con detalle digitalizado`:''}</div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:18px">
+      <div class="kpi-card" style="padding:12px 14px"><div class="kpi-label" style="font-size:10px">Total con IGV</div><div class="kpi-value" style="font-size:20px;color:var(--gold-light)">${cmpMoney(c.conIgv)}</div></div>
+      <div class="kpi-card" style="padding:12px 14px"><div class="kpi-label" style="font-size:10px">Base imponible</div><div class="kpi-value" style="font-size:20px;color:#60a5fa">${cmpMoney(c.sinIgv)}</div></div>
+      <div class="kpi-card" style="padding:12px 14px"><div class="kpi-label" style="font-size:10px">IGV acumulado</div><div class="kpi-value" style="font-size:20px;color:#a855f7">${cmpMoney(c.igv)}</div></div>
+      <div class="kpi-card" style="padding:12px 14px"><div class="kpi-label" style="font-size:10px">Proveedores</div><div class="kpi-value" style="font-size:20px;color:#22d3a5">${c.proveedores.length}</div></div>
+    </div>
+
+    <div class="card" style="padding:16px;margin-bottom:16px">
+      <div class="section-title" style="margin-top:0;font-size:13px">🏢 Acumulado por proveedor</div>
+      <div class="table-wrap" style="overflow-x:auto;margin:0"><table style="width:100%">
+        <thead><tr style="font-size:10px;color:var(--text3)">
+          <th style="padding:7px 8px">RUC</th><th style="padding:7px 8px">Proveedor</th>
+          <th style="padding:7px 8px;text-align:center">Facturas</th>
+          <th style="padding:7px 8px;text-align:right">Sin IGV</th><th style="padding:7px 8px;text-align:right">IGV</th>
+          <th style="padding:7px 8px;text-align:right">Con IGV</th><th style="padding:7px 8px;width:110px">% del total</th>
+        </tr></thead><tbody>
+        ${c.proveedores.map(p=>`<tr style="border-top:1px solid var(--border2)">
+          <td style="padding:7px 8px;font-size:11px;font-family:'DM Mono',monospace">${p.ruc||'—'}</td>
+          <td style="padding:7px 8px;font-size:12px;font-weight:600">${p.nombre}</td>
+          <td style="padding:7px 8px;font-size:12px;text-align:center">${p.n}</td>
+          <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace">${cmpMoney(p.sinIgv)}</td>
+          <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;color:#a855f7">${cmpMoney(p.igv)}</td>
+          <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;color:var(--gold-light);font-weight:700">${cmpMoney(p.conIgv)}</td>
+          <td style="padding:7px 8px;font-size:11px;color:var(--text3)">${pctC(p.conIgv)}%${barra(pctC(p.conIgv),'#fbbf24')}</td>
+        </tr>`).join('')}
+        <tr style="border-top:2px solid var(--border)">
+          <td colspan="3" style="padding:8px;font-size:12px;font-weight:700">TOTAL</td>
+          <td style="padding:8px;font-size:12px;text-align:right;font-weight:700;font-family:'DM Mono',monospace">${cmpMoney(c.sinIgv)}</td>
+          <td style="padding:8px;font-size:12px;text-align:right;font-weight:700;font-family:'DM Mono',monospace">${cmpMoney(c.igv)}</td>
+          <td style="padding:8px;font-size:12px;text-align:right;font-weight:700;font-family:'DM Mono',monospace;color:var(--gold-light)">${cmpMoney(c.conIgv)}</td>
+          <td></td></tr>
+      </tbody></table></div>
+    </div>
+
+    <div class="card" style="padding:16px">
+      <div class="section-title" style="margin-top:0;font-size:13px">📦 Acumulado por producto <span style="font-size:10px;color:var(--text3);font-weight:400">— del detalle digitalizado de cada factura</span></div>
+      ${c.productos.length?`
+      <div class="table-wrap" style="overflow-x:auto;margin:0"><table style="width:100%">
+        <thead><tr style="font-size:10px;color:var(--text3)">
+          <th style="padding:7px 8px">Producto</th><th style="padding:7px 8px;text-align:center">Veces</th>
+          <th style="padding:7px 8px;text-align:right">Cantidad</th><th style="padding:7px 8px;text-align:center">U.M.</th>
+          <th style="padding:7px 8px;text-align:right">Importe</th><th style="padding:7px 8px;width:110px">% del detalle</th>
+        </tr></thead><tbody>
+        ${c.productos.map(p=>`<tr style="border-top:1px solid var(--border2)">
+          <td style="padding:7px 8px;font-size:12px;white-space:normal">${p.descripcion}${p.proveedores.length?`<br><span style="font-size:10px;color:var(--text3)">${p.proveedores.join(' · ')}</span>`:''}</td>
+          <td style="padding:7px 8px;font-size:12px;text-align:center">${p.n}</td>
+          <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace">${(Math.round(p.cantidad*1000)/1000).toLocaleString('es-PE')}</td>
+          <td style="padding:7px 8px;font-size:11px;text-align:center;color:var(--text3)">${p.unidad||'—'}</td>
+          <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;color:var(--gold-light);font-weight:700">${cmpMoney(p.importe)}</td>
+          <td style="padding:7px 8px;font-size:11px;color:var(--text3)">${pctD(p.importe)}%${barra(pctD(p.importe),'#60a5fa')}</td>
+        </tr>`).join('')}
+        <tr style="border-top:2px solid var(--border)">
+          <td colspan="4" style="padding:8px;font-size:12px;font-weight:700">SUMA DEL DETALLE</td>
+          <td style="padding:8px;font-size:12px;text-align:right;font-weight:700;font-family:'DM Mono',monospace;color:var(--gold-light)">${cmpMoney(c.sumaDetalle)}</td>
+          <td></td></tr>
+      </tbody></table></div>
+      <div style="font-size:10px;color:var(--text3);margin-top:8px">La suma del detalle es sin IGV y solo cubre las facturas con detalle leído; por eso puede no cuadrar con el total del ciclo.</div>
+      `:'<div style="text-align:center;color:var(--text3);padding:22px;font-size:12px">Ninguna factura de este ciclo tiene detalle digitalizado todavía.<br>Sube la factura como <b>PDF</b> o foto y el lector transcribe sus líneas.</div>'}
+    </div>`;
+}
+
 // ── VISTA: BALANCE + GRÁFICA ÚNICA DEL CICLO ──
 let _cmpChart=null;
 function renderComprasBalance(){
@@ -20954,6 +21080,24 @@ async function cmpExportarExcel(){
     sd.columns=[{width:12},{width:18},{width:28},{width:44},{width:11},{width:8},{width:14},{width:14}];
     [7,8].forEach(c=>sd.getColumn(c).numFmt='#,##0.00');
   }
+
+  // Consolidados del informe: por proveedor y por producto
+  const cons=cmpConsolidado(per);
+  const si=wb.addWorksheet('Informe');
+  si.addRow(['INFORME DE COMPRAS — CICLO '+per+' ('+v.ini+' al '+v.fin+')']); si.getRow(1).font={bold:true,size:13};
+  si.addRow([]);
+  si.addRow(['ACUMULADO POR PROVEEDOR']); si.getRow(3).font={bold:true};
+  si.addRow(['RUC','Proveedor','Facturas','Sin IGV','IGV','Con IGV']); si.getRow(4).font={bold:true};
+  cons.proveedores.forEach(p=>si.addRow([p.ruc||'',p.nombre||'',p.n,p.sinIgv,p.igv,p.conIgv]));
+  const fp=si.addRow(['','TOTAL','',cons.sinIgv,cons.igv,cons.conIgv]); fp.font={bold:true};
+  si.addRow([]);
+  const rProd=si.rowCount+1;
+  si.addRow(['ACUMULADO POR PRODUCTO (del detalle digitalizado)']); si.getRow(rProd).font={bold:true};
+  si.addRow(['Producto','Veces','Cantidad','U.M.','Importe']); si.getRow(rProd+1).font={bold:true};
+  cons.productos.forEach(p=>si.addRow([p.descripcion,p.n,p.cantidad,p.unidad||'',p.importe]));
+  const fpr=si.addRow(['SUMA DEL DETALLE','','','',cons.sumaDetalle]); fpr.font={bold:true};
+  si.columns=[{width:44},{width:12},{width:14},{width:10},{width:16},{width:16}];
+  [4,5,6].forEach(c=>si.getColumn(c).numFmt='#,##0.00');
 
   const s2=wb.addWorksheet('Presupuestos');
   s2.addRow(['PRESUPUESTOS ENTREGADOS — CICLO '+per]); s2.getRow(1).font={bold:true,size:13};
