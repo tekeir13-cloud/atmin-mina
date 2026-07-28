@@ -7700,6 +7700,26 @@ function calcStock(){
   const _cuenta=it=>!_corte || _tsMov(it)>_corte;
   (state.almacen.ingresos||[]).forEach(it=>{ if(!_cuenta(it)) return; const r=ensure(it.almacen,it.codigo,it.producto,it.descripcion,it.unidad,it.precio);r.ingreso+=Number(it.cantidad)||0;if(it.precio)r.precio=Number(it.precio);if(it.producto&&!r.producto)r.producto=it.producto;});
   (state.almacen.salidas||[]).forEach(it=>{ if(!_cuenta(it)) return; const r=ensure(it.almacen,it.codigo,it.producto,it.descripcion,it.unidad,it.precio);r.salida+=Number(it.cantidad)||0;});
+  // EL PRECIO UNITARIO LO MANDA EL MAESTRO.
+  // Cada inventario inicial e ingreso venía pisando r.precio con el precio de ESE movimiento, así
+  // que el P.U. del stock era el del último papel registrado y no el del catálogo: un precio viejo
+  // o mal digitado dejaba el valor del almacén descuadrado (p. ej. ANILLOS (2) RNORP-116A salía a
+  // S/ 2,208 cuando el maestro dice S/ 3.80). Aquí se impone el precio del maestro al final, ya
+  // hechas las sumas. Si el maestro no tiene precio cargado (0 o vacío) se conserva el del
+  // movimiento como respaldo, para no dejar en cero el valor de un producto sin precio en catálogo.
+  const _pmCod={}, _pmNom={};
+  ((state.almacen&&state.almacen.productos)||[]).forEach(p=>{
+    if(!p) return;
+    const pr=Number(p.precio)||0; if(pr<=0) return;
+    const c=String(p.codigo||'').trim().toUpperCase(); if(c) _pmCod[c]=pr;
+    const n=String(p.nombre||'').trim().toUpperCase(); if(n && _pmNom[n]===undefined) _pmNom[n]=pr;
+  });
+  Object.values(map).forEach(r=>{
+    const c=String(r.codigo||'').trim().toUpperCase();
+    let pm = c ? _pmCod[c] : undefined;
+    if(pm===undefined) pm=_pmNom[String(r.producto||r.descripcion||'').trim().toUpperCase()];
+    if(pm!==undefined) r.precio=pm;
+  });
   Object.values(map).forEach(r=>r.stock=r.ingreso-r.salida);
   return Object.values(map);
 }
