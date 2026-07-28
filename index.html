@@ -3542,8 +3542,8 @@ select option{background:var(--coal3);}
   <div class="mod-pane active" style="display:block" id="cmp-facturas">
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
       <button class="btn btn-gold" onclick="cmpAbrirFactura()">+ Registrar Factura</button>
-      <button class="btn btn-outline" style="border-color:#22d3a5;color:#22d3a5" onclick="document.getElementById('cmp-foto-input').click()">📷 Subir Factura (foto)</button>
-      <input type="file" id="cmp-foto-input" accept="image/*" capture="environment" style="display:none" onchange="cmpLeerFoto(this)">
+      <button class="btn btn-outline" style="border-color:#22d3a5;color:#22d3a5" onclick="document.getElementById('cmp-foto-input').click()">📷 Subir Factura (foto o PDF)</button>
+      <input type="file" id="cmp-foto-input" accept="image/*,application/pdf,.pdf" style="display:none" onchange="cmpLeerFoto(this)">
       <div style="flex:1"></div>
       <label style="font-size:11px;color:var(--text3)">Ciclo:</label>
       <select id="cmp-periodo" onchange="renderComprasFacturas()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px"></select>
@@ -3598,6 +3598,7 @@ select option{background:var(--coal3);}
       <div class="form-group" style="margin:0"><label>Total con IGV (S/)</label><input type="number" step="0.01" min="0" id="cmpf-conigv" placeholder="0.00" oninput="cmpCalcMontos('con')"></div>
     </div>
     <div style="font-size:10px;color:var(--text3);margin-bottom:10px">Escribe cualquiera de los tres montos y los otros se completan solos (IGV 18%). Puedes corregir cualquiera.</div>
+    <div id="cmpf-items"></div>
     <div id="cmpf-foto-prev"></div>
     <div class="btn-row" style="margin-top:6px">
       <button class="btn btn-gold" onclick="cmpGuardarFactura()">✓ Guardar Factura</button>
@@ -20497,12 +20498,46 @@ function cmpAbrirFactura(datos){
   g('cmpf-igv').value=(d.igv!=null&&d.igv!=='')?d.igv:'';
   g('cmpf-conigv').value=(d.conIgv!=null&&d.conIgv!=='')?d.conIgv:'';
   _cmpFotoPend=d.foto||null;
+  _cmpItemsPend=Array.isArray(d.items)?d.items:[];
+  cmpRenderItems();
   const pv=g('cmpf-foto-prev');
-  pv.innerHTML=_cmpFotoPend?`<div style="margin-bottom:10px"><img src="${_cmpFotoPend}" style="max-width:100%;max-height:170px;border-radius:8px;border:1px solid var(--border)"></div>`:'';
+  pv.innerHTML=_cmpFotoPend?cmpAdjuntoHTML(_cmpFotoPend):'';
   const av=g('cmpf-aviso-ia'); if(!datos||!datos._aviso){ av.style.display='none'; }
   abrirModal('modal-cmp-factura');
 }
-let _cmpFotoPend=null;
+let _cmpFotoPend=null, _cmpItemsPend=[];
+function cmpEsPdf(dataUrl){ return String(dataUrl||'').startsWith('data:application/pdf'); }
+function cmpAdjuntoHTML(dataUrl){
+  if(cmpEsPdf(dataUrl)) return `<div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:10px 12px"><span style="font-size:20px">📄</span><span style="font-size:12px;color:var(--text2)">PDF de la factura adjunto</span><a href="${dataUrl}" target="_blank" style="margin-left:auto;font-size:11px;color:#60a5fa">Abrir</a></div>`;
+  return `<div style="margin-bottom:10px"><img src="${dataUrl}" style="max-width:100%;max-height:170px;border-radius:8px;border:1px solid var(--border)"></div>`;
+}
+// Detalle línea por línea leído del documento. Se muestra para revisarlo antes de guardar.
+function cmpRenderItems(){
+  const w=document.getElementById('cmpf-items'); if(!w) return;
+  const its=_cmpItemsPend||[];
+  if(!its.length){ w.innerHTML=''; return; }
+  const sum=its.reduce((s,i)=>s+(Number(i.importe)||0),0);
+  w.innerHTML=`<div style="margin-bottom:10px">
+    <div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">
+      📋 Detalle leído — ${its.length} línea${its.length!==1?'s':''}
+      <button onclick="_cmpItemsPend=[];cmpRenderItems()" style="margin-left:auto;background:none;border:none;color:#f87171;cursor:pointer;font-size:11px">Quitar detalle</button>
+    </div>
+    <div class="table-wrap" style="max-height:190px;overflow:auto;margin:0">
+      <table style="width:100%"><thead><tr style="font-size:9px;color:var(--text3)">
+        <th style="padding:5px 7px">Descripción</th><th style="padding:5px 7px;text-align:center">Cant.</th>
+        <th style="padding:5px 7px;text-align:center">U.M.</th><th style="padding:5px 7px;text-align:right">P.U.</th>
+        <th style="padding:5px 7px;text-align:right">Importe</th></tr></thead><tbody>
+      ${its.map(i=>`<tr style="border-top:1px solid var(--border2)">
+        <td style="padding:5px 7px;font-size:11px;white-space:normal">${i.descripcion||'—'}</td>
+        <td style="padding:5px 7px;font-size:11px;text-align:center">${i.cantidad||''}</td>
+        <td style="padding:5px 7px;font-size:11px;text-align:center">${i.unidad||''}</td>
+        <td style="padding:5px 7px;font-size:11px;text-align:right;font-family:'DM Mono',monospace">${i.precioUnit?cmpMoney(i.precioUnit):''}</td>
+        <td style="padding:5px 7px;font-size:11px;text-align:right;font-family:'DM Mono',monospace">${i.importe?cmpMoney(i.importe):''}</td></tr>`).join('')}
+      </tbody></table>
+    </div>
+    <div style="font-size:10px;color:var(--text3);margin-top:4px">Suma del detalle: <b style="color:var(--text2)">${cmpMoney(sum)}</b></div>
+  </div>`;
+}
 function cmpGuardarFactura(){
   const g=id=>document.getElementById(id);
   const num=n=>{ const v=parseFloat(g(n).value); return isNaN(v)?0:v; };
@@ -20517,11 +20552,12 @@ function cmpGuardarFactura(){
   const id=g('cmpf-id').value||('FC'+Date.now()+Math.random().toString(36).slice(2,7));
   const reg={ id, _ts:Date.now(), fecha, numero:g('cmpf-numero').value.trim(),
     ruc:g('cmpf-ruc').value.trim(), proveedor, producto:g('cmpf-producto').value.trim(),
-    sinIgv:num('cmpf-sinigv'), igv:num('cmpf-igv'), conIgv, foto:_cmpFotoPend||null };
+    sinIgv:num('cmpf-sinigv'), igv:num('cmpf-igv'), conIgv, foto:_cmpFotoPend||null,
+    items:Array.isArray(_cmpItemsPend)?_cmpItemsPend:[] };
   const i=state.compras.facturas.findIndex(f=>f.id===id);
   if(i>=0) state.compras.facturas[i]={...state.compras.facturas[i],...reg}; else state.compras.facturas.push(reg);
   comprasSave();
-  _cmpFotoPend=null;
+  _cmpFotoPend=null; _cmpItemsPend=[];
   cerrarModal('modal-cmp-factura');
   renderComprasFacturas();
   showNotif('✓ Factura registrada: '+proveedor+' · '+cmpMoney(conIgv));
@@ -20562,25 +20598,50 @@ function cmpComprimirImagen(file,maxLado){
     fr.readAsDataURL(file);
   });
 }
+// Lee el archivo tal cual (para PDF, que no se comprime ni se redibuja)
+function cmpLeerArchivoBase64(file){
+  return new Promise((res,rej)=>{
+    const fr=new FileReader();
+    fr.onerror=()=>rej(new Error('No se pudo leer el archivo'));
+    fr.onload=()=>res(fr.result);
+    fr.readAsDataURL(file);
+  });
+}
+const CMP_PDF_MAX_MB=3.5;   // el cuerpo de la petición va en base64: sobre esto el servidor lo rechaza
 async function cmpLeerFoto(input){
   const file=input&&input.files&&input.files[0];
   input.value='';
   if(!file) return;
+  const esPdf=(file.type==='application/pdf')||/\.pdf$/i.test(file.name||'');
   let dataUrl=null;
-  try{ dataUrl=await cmpComprimirImagen(file,1400); }
-  catch(e){ showNotif('⚠ No se pudo procesar la imagen','error'); return; }
-  showNotif('🔍 Leyendo la factura…','warn');
+  if(esPdf){
+    if(file.size>CMP_PDF_MAX_MB*1024*1024){
+      showNotif('⚠ El PDF pesa '+(file.size/1048576).toFixed(1)+' MB. El máximo es '+CMP_PDF_MAX_MB+' MB — súbelo como foto o reduce el archivo.','error');
+      return;
+    }
+    try{ dataUrl=await cmpLeerArchivoBase64(file); }
+    catch(e){ showNotif('⚠ No se pudo leer el PDF','error'); return; }
+  }else{
+    try{ dataUrl=await cmpComprimirImagen(file,1400); }
+    catch(e){ showNotif('⚠ No se pudo procesar la imagen','error'); return; }
+  }
+  showNotif(esPdf?'🔍 Leyendo el PDF de la factura…':'🔍 Leyendo la factura…','warn');
   let datos=null, motivo='';
   try{
     const b64=dataUrl.split(',')[1];
+    // El PDF va como bloque 'document' (la API lo lee con su capa de texto, más exacto que una
+    // foto en las facturas electrónicas). La imagen va como bloque 'image'.
+    const adjunto=esPdf
+      ? {type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}}
+      : {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}};
     const resp=await fetch('/api/chat',{
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         max_tokens:1000,
         system:'Eres un lector de facturas peruanas. Devuelves SOLO un objeto JSON válido, sin texto alrededor y sin bloques de código.',
         messages:[{role:'user',content:[
-          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
-          {type:'text',text:'Lee esta factura y devuelve SOLO este JSON:\n{"fecha":"YYYY-MM-DD","numero":"serie-correlativo","ruc":"RUC del PROVEEDOR (quien emite)","proveedor":"razón social del proveedor","producto":"resumen corto de lo comprado","sinIgv":number,"igv":number,"conIgv":number}\nReglas: montos como número sin símbolo ni separador de miles. Si un dato no aparece usa "" para textos y 0 para números. El RUC peruano tiene 11 dígitos. No inventes datos.'}
+          adjunto,
+          {type:'text',text:'Lee esta factura y devuelve SOLO este JSON:\n{"fecha":"YYYY-MM-DD","numero":"serie-correlativo","ruc":"RUC del PROVEEDOR (quien emite)","proveedor":"razón social del proveedor","producto":"resumen corto de lo comprado","sinIgv":number,"igv":number,"conIgv":number,"items":[{"descripcion":"texto","cantidad":number,"unidad":"UND/KG/GLN/...","precioUnit":number,"importe":number}]}\nReglas: en "items" transcribe TODAS las líneas del detalle de la factura, una por producto, en el mismo orden y con el texto tal como aparece. Montos como número sin símbolo ni separador de miles. Si un dato no aparece usa "" para textos y 0 para números. El RUC peruano tiene 11 dígitos. No inventes datos ni agregues líneas que no estén en el documento.'}
         ]}]
       })
     });
@@ -20603,11 +20664,18 @@ async function cmpLeerFoto(input){
     if(sin<=0 && con>0) sin=Math.round(con/(1+CMP_IGV)*100)/100;
     if(igv<=0 && con>0 && sin>0) igv=Math.round((con-sin)*100)/100;
     const f=String(datos.fecha||'').slice(0,10);
+    // Detalle línea por línea, tal como viene en la factura
+    const items=Array.isArray(datos.items)?datos.items.map(it=>({
+      descripcion:String((it&&it.descripcion)||'').trim(),
+      cantidad:n(it&&it.cantidad), unidad:String((it&&it.unidad)||'').trim(),
+      precioUnit:n(it&&it.precioUnit), importe:n(it&&it.importe)
+    })).filter(it=>it.descripcion||it.importe||it.cantidad):[];
     Object.assign(base,{
       fecha:/^\d{4}-\d{2}-\d{2}$/.test(f)?f:hoy(),
       numero:String(datos.numero||''), ruc:String(datos.ruc||'').replace(/\D/g,''),
-      proveedor:String(datos.proveedor||''), producto:String(datos.producto||''),
-      sinIgv:sin||'', igv:igv||'', conIgv:con||''
+      proveedor:String(datos.proveedor||''),
+      producto:String(datos.producto||'')||items.map(i=>i.descripcion).filter(Boolean).slice(0,3).join(' · '),
+      sinIgv:sin||'', igv:igv||'', conIgv:con||'', items
     });
   }
   base._aviso=true;
@@ -20693,11 +20761,11 @@ function renderComprasFacturas(){
       <td style="padding:7px 8px;font-size:11px;font-family:'DM Mono',monospace">${f.numero||'—'}</td>
       <td style="padding:7px 8px;font-size:11px;font-family:'DM Mono',monospace">${f.ruc||'—'}</td>
       <td style="padding:7px 8px;font-size:12px;font-weight:600">${f.proveedor||'—'}</td>
-      <td style="padding:7px 8px;font-size:11px;color:var(--text3);max-width:220px;white-space:normal">${f.producto||'—'}</td>
+      <td style="padding:7px 8px;font-size:11px;color:var(--text3);max-width:220px;white-space:normal">${f.producto||'—'}${(f.items&&f.items.length)?`<br><span style="font-size:10px;color:#22d3a5;cursor:pointer" onclick="cmpVerDetalle('${f.id}')">📋 ${f.items.length} línea${f.items.length!==1?'s':''} de detalle</span>`:''}</td>
       <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace">${cmpMoney(f.sinIgv)}</td>
       <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;color:#a855f7">${cmpMoney(f.igv)}</td>
       <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;color:var(--gold-light);font-weight:700">${cmpMoney(f.conIgv)}</td>
-      <td style="padding:7px 8px;text-align:center">${f.foto?`<img src="${f.foto}" onclick="cmpVerFoto('${f.id}')" style="width:34px;height:34px;object-fit:cover;border-radius:5px;cursor:pointer;border:1px solid var(--border)">`:'<span style="color:var(--text3);font-size:11px">—</span>'}</td>
+      <td style="padding:7px 8px;text-align:center">${f.foto?(cmpEsPdf(f.foto)?`<span onclick="cmpVerFoto('${f.id}')" title="Ver PDF" style="cursor:pointer;font-size:19px">📄</span>`:`<img src="${f.foto}" onclick="cmpVerFoto('${f.id}')" style="width:34px;height:34px;object-fit:cover;border-radius:5px;cursor:pointer;border:1px solid var(--border)">`):'<span style="color:var(--text3);font-size:11px">—</span>'}</td>
       <td style="padding:7px 8px;white-space:nowrap">
         <button onclick="cmpEditarFactura('${f.id}')" style="background:none;border:none;color:#60a5fa;cursor:pointer;font-size:13px" title="Editar">✏</button>
         <button onclick="cmpEliminarFactura('${f.id}')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:13px" title="Eliminar">🗑</button>
@@ -20706,10 +20774,46 @@ function renderComprasFacturas(){
 }
 function cmpVerFoto(id){
   const f=comprasNorm().facturas.find(x=>x.id===id); if(!f||!f.foto) return;
+  if(cmpEsPdf(f.foto)){
+    // El PDF se abre en su propia pestaña con el visor del navegador
+    try{
+      const bin=atob(f.foto.split(',')[1]); const arr=new Uint8Array(bin.length);
+      for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+      const url=URL.createObjectURL(new Blob([arr],{type:'application/pdf'}));
+      window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000);
+    }catch(e){ showNotif('No se pudo abrir el PDF','error'); }
+    return;
+  }
   const ov=document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;cursor:zoom-out';
   ov.onclick=()=>ov.remove();
   ov.innerHTML=`<img src="${f.foto}" style="max-width:96%;max-height:96%;border-radius:10px">`;
+  document.body.appendChild(ov);
+}
+// Detalle línea por línea de una factura ya guardada
+function cmpVerDetalle(id){
+  const f=comprasNorm().facturas.find(x=>x.id===id); if(!f||!(f.items&&f.items.length)) return;
+  const sum=f.items.reduce((s,i)=>s+(Number(i.importe)||0),0);
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.onclick=e=>{ if(e.target===ov) ov.remove(); };
+  ov.innerHTML=`<div class="card" style="max-width:min(760px,96vw);max-height:86vh;overflow:auto;padding:18px">
+    <div class="section-title" style="margin-top:0">📋 ${f.proveedor||'—'} · ${f.numero||'sin N°'} · ${f.fecha||''}</div>
+    <div class="table-wrap" style="margin:0"><table style="width:100%"><thead><tr style="font-size:10px;color:var(--text3)">
+      <th style="padding:6px 8px">Descripción</th><th style="padding:6px 8px;text-align:center">Cant.</th>
+      <th style="padding:6px 8px;text-align:center">U.M.</th><th style="padding:6px 8px;text-align:right">P.U.</th>
+      <th style="padding:6px 8px;text-align:right">Importe</th></tr></thead><tbody>
+      ${f.items.map(i=>`<tr style="border-top:1px solid var(--border2)">
+        <td style="padding:6px 8px;font-size:12px;white-space:normal">${i.descripcion||'—'}</td>
+        <td style="padding:6px 8px;font-size:12px;text-align:center">${i.cantidad||''}</td>
+        <td style="padding:6px 8px;font-size:12px;text-align:center">${i.unidad||''}</td>
+        <td style="padding:6px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace">${i.precioUnit?cmpMoney(i.precioUnit):''}</td>
+        <td style="padding:6px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace">${i.importe?cmpMoney(i.importe):''}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div style="display:flex;justify-content:space-between;margin-top:10px;font-size:12px">
+      <span style="color:var(--text3)">Suma del detalle</span><b style="color:var(--gold-light)">${cmpMoney(sum)}</b></div>
+    <div class="btn-row" style="margin-top:12px"><button class="btn btn-outline" onclick="this.closest('div[style*=fixed]').remove()">Cerrar</button></div>
+  </div>`;
   document.body.appendChild(ov);
 }
 
@@ -20822,6 +20926,22 @@ async function cmpExportarExcel(){
   fila.font={bold:true};
   s1.columns=[{width:12},{width:18},{width:14},{width:30},{width:34},{width:14},{width:12},{width:14}];
   [6,7,8].forEach(c=>s1.getColumn(c).numFmt='#,##0.00');
+
+  // Detalle línea por línea de las facturas que lo tengan
+  const conItems=fs.filter(f=>Array.isArray(f.items)&&f.items.length);
+  if(conItems.length){
+    const sd=wb.addWorksheet('Detalle');
+    sd.addRow(['DETALLE DE FACTURAS — CICLO '+per]); sd.getRow(1).font={bold:true,size:13};
+    sd.addRow([]);
+    sd.addRow(['Fecha','N° Factura','Proveedor','Descripción','Cantidad','U.M.','P. Unitario','Importe']);
+    sd.getRow(3).font={bold:true};
+    conItems.slice().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha))).forEach(f=>{
+      f.items.forEach(i=>sd.addRow([f.fecha||'',f.numero||'',f.proveedor||'',i.descripcion||'',
+        Number(i.cantidad)||0,i.unidad||'',Number(i.precioUnit)||0,Number(i.importe)||0]));
+    });
+    sd.columns=[{width:12},{width:18},{width:28},{width:44},{width:11},{width:8},{width:14},{width:14}];
+    [7,8].forEach(c=>sd.getColumn(c).numFmt='#,##0.00');
+  }
 
   const s2=wb.addWorksheet('Presupuestos');
   s2.addRow(['PRESUPUESTOS ENTREGADOS — CICLO '+per]); s2.getRow(1).font={bold:true,size:13};
