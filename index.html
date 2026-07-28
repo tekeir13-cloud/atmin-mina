@@ -3421,7 +3421,7 @@ select option{background:var(--coal3);}
       <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Explosivos</div>
       <div class="table-wrap" style="margin-bottom:20px">
         <table style="width:100%">
-          <thead><tr style="font-size:10px;color:var(--text3)"><th style="text-align:left;padding:6px 8px">Código</th><th style="padding:6px 8px;text-align:center">I (Ingreso)</th><th style="padding:6px 8px;text-align:center">E (Egreso)</th><th style="padding:6px 8px;text-align:center">C (Consumo)</th><th style="padding:6px 8px;text-align:center">F (Final)</th></tr></thead>
+          <thead><tr style="font-size:10px;color:var(--text3)"><th style="text-align:left;padding:6px 8px">Código</th><th style="padding:6px 8px;text-align:center">I (Ingreso)</th><th style="padding:6px 8px;text-align:center">E (Egreso)</th><th style="padding:6px 8px;text-align:center">C (Consumo) <span style="color:#22d3a5;font-size:9px">⟲ auto</span></th><th style="padding:6px 8px;text-align:center">F (Final)</th></tr></thead>
           <tbody id="comp-exp-body"></tbody>
         </table>
       </div>
@@ -3435,8 +3435,11 @@ select option{background:var(--coal3);}
       <div id="comp-cons-frentes-wrap"></div>
 
       <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">💥 Explosivos por Frente</div>
-      <div class="table-wrap" style="margin-bottom:20px">
-        <table style="width:100%">
+      <div style="font-size:10px;color:var(--text3);margin-bottom:6px">Se suma solo hacia la columna <b style="color:var(--text2)">C (Consumo)</b> del cuadro de Explosivos de arriba. Desliza la tabla para ver todos los frentes →</div>
+      <!-- overflow-x propio: con 9 frentes la tabla es más ancha que el modal y las últimas
+           columnas quedaban cortadas sin forma de llegar a ellas (.table-wrap es overflow:hidden). -->
+      <div class="table-wrap" style="margin-bottom:20px;overflow-x:auto;-webkit-overflow-scrolling:touch">
+        <table style="width:100%;min-width:max-content">
           <thead><tr id="comp-expf-head" style="font-size:10px;color:var(--text3)"><th style="text-align:left;padding:6px 8px">Código</th></tr></thead>
           <tbody id="comp-expf-body"></tbody>
         </table>
@@ -19001,7 +19004,7 @@ function abrirModalCompresorista() {
   document.getElementById('comp-expf-body').innerHTML = COMP_EXPLOSIVOS.map(c => `
     <tr style="border-top:1px solid var(--border2)">
       <td style="padding:6px 8px;font-size:12px;color:var(--text)">${COMP_EXPLO_LABEL[c]||c}<br><span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${c}</span></td>
-      ${_frs.map(f=>`<td style="padding:4px 6px"><input type="number" min="0" step="any" id="${_expfInputId(c,f)}" placeholder="0" style="width:100%;min-width:64px;background:var(--coal4);border:1px solid ${f.color||'var(--border)'}55;color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>`).join('')}
+      ${_frs.map(f=>`<td style="padding:4px 6px"><input type="number" min="0" step="any" id="${_expfInputId(c,f)}" placeholder="0" oninput="compExpFSuma('${c}')" style="width:100%;min-width:64px;background:var(--coal4);border:1px solid ${f.color||'var(--border)'}55;color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>`).join('')}
     </tr>`).join('');
   // (aceros por frente: sección eliminada — los aceros salen por Logística → NV2820 → consumo)
   const _aceBody=document.getElementById('comp-acerosf-body'); if(_aceBody) _aceBody.innerHTML='';
@@ -19127,6 +19130,29 @@ function compConsSelChange(sel){
   if(u&&opt)u.value=opt.getAttribute('data-unidad')||'';
 }
 
+// AUTORRELLENO: lo que se carga por frente en "Explosivos por Frente" se va sumando solo a la
+// columna C (Consumo) del cuadro de Explosivos de arriba, y ese consumo recalcula F. Así el
+// Compresorista llena una sola vez: el detalle por frente, y el consolidado se arma solo.
+// Solo toca C: I y E se siguen digitando a mano.
+function compExpFSuma(codigo){
+  const frs=(typeof FRENTES!=='undefined'?FRENTES:[]);
+  let total=0;
+  frs.forEach(f=>{
+    const iid='cexpf-'+codigo+(f.key==='brenda'?'-R':f.key==='crne'?'-G':'-'+f.key);
+    total+=parseFloat(document.getElementById(iid)?.value)||0;
+  });
+  const cEl=document.getElementById('cexp-'+codigo+'-C');
+  if(cEl){
+    // Redondeo a 3 decimales para que 0.1+0.2 no muestre 0.30000000000000004
+    cEl.value = total ? Math.round(total*1000)/1000 : '';
+    cEl.dataset.auto='1';
+  }
+  compCalcF(codigo);
+}
+// Recalcula el consumo de TODOS los explosivos (al abrir el modal o al cargar un reporte).
+function compExpFSumaTodos(){
+  try{ (typeof COMP_EXPLOSIVOS!=='undefined'?COMP_EXPLOSIVOS:[]).forEach(c=>compExpFSuma(c)); }catch(e){}
+}
 function compCalcF(codigo) {
   const i = parseFloat(document.getElementById('cexp-'+codigo+'-I')?.value)||0;
   const e = parseFloat(document.getElementById('cexp-'+codigo+'-E')?.value)||0;
