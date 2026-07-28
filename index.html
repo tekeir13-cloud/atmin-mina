@@ -10370,6 +10370,7 @@ async function guardarTareo(){
   const turno    = document.getElementById('tareo-turno')?.value || 'DIA';
   const mesFecha = fecha.slice(0,7);
   if((state.mesesCerrados||[]).includes(mesFecha)){showNotif('Este mes está cerrado. Contacte al administrador.','error');return;}
+  if(!tareoEditable(fecha)) return;
   const rows = document.querySelectorAll('#tareo-grid .tareo-row');
   let guardados=0, omitidos=0;
   for(const row of rows){
@@ -10496,6 +10497,7 @@ function registrarAsistencia(){
 function guardarTareoHoy(btn){
   const overlay=btn.closest('[data-tareo-overlay]');
   const fecha=document.getElementById('tar-fecha')?.value||hoy();
+  if(!tareoEditable(fecha)) return;
   const activos=state.personal.filter(p=>p.estado!=='baja'&&p.estado!=='inactivo');
   let count=0;
   activos.forEach(p=>{
@@ -10613,6 +10615,7 @@ async function editarMultTareo(uid, multStr){
   const t=state.tareas.find(x=>String(x.id||x._uid)===String(uid));
   if(!t) return;
   if((state.mesesCerrados||[]).includes(t.fecha.slice(0,7))){showNotif('Este mes está cerrado','error');return;}
+  if(!tareoEditable(t.fecha)) return;
   t.mult=mult;
   try{if(t.id) await sb.from('tareas').update({mult}).eq('id',t.id);}catch(e){}
   // Actualizar solo los botones de esa fila sin re-renderizar todo
@@ -10643,6 +10646,7 @@ async function eliminarTareoArch(fecha,turno){
   const match=t=>t.fecha===fecha&&(t.turno||'DIA')===turno;
   const items=(state.tareas||[]).filter(match);
   if(!items.length)return;
+  if(!tareoEditable(fecha)) return;
   if(!confirm(`¿Eliminar el tareo completo del ${fmtF(fecha)} (turno ${turno})?\n\nSe borrarán ${items.length} registro(s). Esta acción no se puede deshacer.`))return;
   for(const t of items){ if(t.id){ try{ await sb.from('tareas').delete().eq('id',t.id); }catch(e){} } }
   state.tareas=(state.tareas||[]).filter(t=>!match(t));
@@ -10916,6 +10920,29 @@ const TAREO_CICLO=['','1','1.25','1.5','1.75','2','2.25','2.5','2.75','3','DL'];
 // Multiplicadores de tarea disponibles en la HOJA DE TAREO (diaria y hojas archivadas).
 // Lista única para que los tres sitios donde se eligen no se desincronicen.
 const TAREO_MULTS=['1','1.25','1.5','1.75','2','2.25','2.5','2.75','3'];
+
+// ── ARCHIVADO DEL TAREO MENSUAL ──
+// El tareo de un mes se ARCHIVA recién cuando el mes calendario se cumple: julio (31 días)
+// queda archivado el 1 de agosto. Mientras el mes corre se edita con normalidad; una vez
+// archivado solo Gerencia y Finanzas pueden corregirlo, para que nadie altere un mes ya
+// costeado y cargado al ciclo.
+function mesTareoArchivado(mesYM){
+  const m=String(mesYM||'').slice(0,7);
+  if(m.length!==7) return false;
+  return m < hoy().slice(0,7);
+}
+function puedeEditarTareoMes(mesYM){
+  if(!mesTareoArchivado(mesYM)) return true;
+  const rol=(typeof usuarioActivo!=='undefined'&&usuarioActivo&&usuarioActivo.rol)||'';
+  return rol==='gerente_general'||rol==='jefe_finanzas';
+}
+// Guarda de escritura: devuelve true si se puede tocar el tareo de esa fecha; si no, avisa.
+function tareoEditable(fecha){
+  const m=String(fecha||'').slice(0,7);
+  if(puedeEditarTareoMes(m)) return true;
+  try{ showNotif('🔒 El tareo de '+m+' ya está archivado (mes cumplido). Solo Gerencia o Finanzas pueden corregirlo.','error'); }catch(e){}
+  return false;
+}
 function tareoMesSel(){ const s=document.getElementById('tareomes-sel'); return (s&&s.value)||hoy().slice(0,7); }
 function _tareoCell(tid,fecha){
   const t=(state.tareas||[]).find(t=>String(t.trabajadorId)===String(tid)&&t.fecha===fecha);
@@ -10939,6 +10966,7 @@ function _tareoActualizaResumen(tid,mes){
 function tareoGridSet(tid,fecha,val){
   const cont=document.getElementById('rrhh-tareomes');
   if(!cont || cont.dataset.editing!=='true') return;
+  if(!tareoEditable(fecha)) return;
   state.tareas=(state.tareas||[]).filter(t=>!(String(t.trabajadorId)===String(tid)&&t.fecha===fecha));
   const p=(state.personal||[]).find(x=>String(x.id)===String(tid));
   if(val!==''){
@@ -10957,6 +10985,7 @@ function tareoGridSet(tid,fecha,val){
 function tareoGridShowModal(tid,fecha){
   const cont=document.getElementById('rrhh-tareomes');
   if(!cont || cont.dataset.editing!=='true') return;
+  if(!tareoEditable(fecha)) return;
   const cur=_tareoCell(tid,fecha);
   const p=(state.personal||[]).find(x=>String(x.id)===String(tid));
   document.getElementById('tareo-cell-modal')?.remove();
