@@ -12695,10 +12695,17 @@ function renderResidente(){
 function renderVsProyectado(){
   const dias=parseInt(document.getElementById('meta-dias')?.value)||state.metas.dias||26;
   const cont=document.getElementById('vs-contenido');if(!cont)return;
+  // LAS METAS CIERRAN CON EL CICLO 26→25: el avance acumulado que se compara contra la meta es
+  // SOLO el del periodo vigente. La noche del 25 cierra y el 26 arranca de 0 — lo avanzado en el
+  // ciclo anterior no se arrastra. Antes esta vista sumaba TODO el historial de perforación, así
+  // que el % de cumplimiento nunca bajaba a 0 y cargaba los metros de meses anteriores.
+  const mesAct=(typeof finMesActual==='function')?finMesActual():hoy().slice(0,7);
+  const vent=(typeof ventanaMes==='function')?ventanaMes(mesAct):null;
+  const enCiclo=x=>(typeof filtroMes==='function')?filtroMes(x.fecha,mesAct):true;
   const cards=FRENTES.map(f=>{
     const metaEl=document.getElementById('meta-mensual-'+(f.id===1||f.id===2?('f'+f.id):f.id));
     const p=parseInt(metaEl?.value)||metaMensualFrente(f.id,dias)||0;
-    const r=Math.round(state.perforacion.filter(x=>String(x.frente)===String(f.id)).reduce((s,x)=>s+(x.metros||0),0)*10)/10;
+    const r=Math.round(state.perforacion.filter(x=>String(x.frente)===String(f.id)&&enCiclo(x)).reduce((s,x)=>s+(x.metros||0),0)*10)/10;
     const pc=p>0?Math.round((r/p)*100):0;
     return `<div class="card"><div class="section-title" style="font-size:12px">${f.emoji} ${f.nombre}</div>
         <div class="vs-row"><div class="vs-label">Real</div><div class="vs-real">${r.toFixed(1)} m</div><div class="vs-proy">meta mes: ${p} m</div><span class="vs-pct ${pc>=100?'over':'under'}">${pc}%</span></div>
@@ -12706,7 +12713,8 @@ function renderVsProyectado(){
         <div style="margin-top:8px;font-size:11px;color:var(--text3)">Diferencia: <span style="color:var(--text2)">${r>=p?'+':''}${(r-p).toFixed(1)} m</span>${p>0?` · ritmo objetivo ${(p/dias).toFixed(1)} m/día`:''}</div>
       </div>`;
   }).join('');
-  cont.innerHTML=`<div class="two-col">${cards}</div>`;
+  const cab=vent?`<div style="font-size:11px;color:var(--text3);margin-bottom:10px">Ciclo vigente <b style="color:var(--text2)">${vent.ini} → ${vent.fin}</b> · el avance acumulado vuelve a 0 cada 26</div>`:'';
+  cont.innerHTML=cab+`<div class="two-col">${cards}</div>`;
 }
 function guardarMetas(){
   const dias=parseInt(document.getElementById('meta-dias').value)||26;
