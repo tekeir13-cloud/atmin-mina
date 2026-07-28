@@ -8208,6 +8208,7 @@ function guardarIngreso(){
   const g=id=>document.getElementById(id);
   if(!ingresoCart.length){showNotif('⚠ Agrega al menos un ítem a la hoja','error');return;}
   const fecha=g('in-fecha').value||hoy();
+  if(bloqueadoPorCierre(fecha,'ingresos de almacén')) return;
   const detalle=g('in-detalle').value||'Almacen Poderosa';
   const almacen=g('in-almacen').value;
   const base=Date.now();const grupo='GI'+base;
@@ -8317,6 +8318,7 @@ function guardarSalida(){
   const g=id=>document.getElementById(id);
   if(!salidaCart.length){showNotif('⚠ Agrega al menos un ítem a la lista','error');return;}
   const fecha=g('sa-fecha').value||hoy();
+  if(bloqueadoPorCierre(fecha,'salidas de almacén')) return;
   const destino=g('sa-destino').value;
   if(!destino){showNotif('⚠ Seleccione el destino / nivel de la salida','error');return;}
   const maquina=g('sa-maquina').value.trim();
@@ -12788,6 +12790,7 @@ function guardarReporteGuardia(){
   const g=i=>document.getElementById(i);
   const fecha=g('rg-fecha').value;
   if(!fecha){showNotif('⚠ Indique la fecha','error');return;}
+  if(bloqueadoPorCierre(fecha,'reportes de guardia')) return;
   const jefe=g('rg-jefe').value.trim();
   if(!jefe){showNotif('⚠ Indique el Jefe de Guardia','error');return;}
   const turno=g('rg-turno').value;
@@ -19335,6 +19338,7 @@ function guardarReporteComp() {
   if(!dni){showNotif('Ingresa el DNI','error');return;}
   if(!_compTurnoSeleccionado){showNotif('Selecciona el turno','error');return;}
   if(!fecha){showNotif('Selecciona la fecha','error');return;}
+  if(bloqueadoPorCierre(fecha,'reportes del Compresorista')) return;
 
   // materiales almacén — registro manual/informal del compresorista (no afecta stock del subalmacén;
   // el stock real de NV2820 se alimenta de las salidas de Logística confirmadas, ver comp-mat-pendientes)
@@ -21218,6 +21222,28 @@ function histPeriodosLoad(){ try{ return JSON.parse(localStorage.getItem(HIST_PE
 function histPeriodosSave(arr){ try{ localStorage.setItem(HIST_PERIODOS_KEY,JSON.stringify(arr||[])); }catch(e){} try{ sbSyncModulo('historial_periodos', arr||[]); }catch(e){} }
 
 function enRango(fecha,r){ const f=(fecha||'').slice(0,10); return !!f && f>=r.ini && f<=r.fin; }
+// Periodo 26→25 al que pertenece una fecha (con el ciclo activo; si no, el mes de calendario).
+function periodoDeFecha(fecha){
+  const d=String(fecha||'').slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(d)) return '';
+  try{ if(typeof cicloActivo==='function' && !cicloActivo()) return d.slice(0,7); }catch(e){}
+  let y=+d.slice(0,4), m=+d.slice(5,7); const dd=+d.slice(8,10);
+  if(dd>=26){ m++; if(m>12){ m=1; y++; } }
+  return y+'-'+String(m).padStart(2,'0');
+}
+// Un periodo CERRADO ya rindió cuentas: se puede consultar, pero no admite montos nuevos.
+// Ojo: se compara por PERIODO, no por mes de calendario — el 28 de julio pertenece al ciclo
+// de agosto, así que cerrar julio no debe bloquear lo que se registra ese día.
+function periodoEstaCerrado(fecha){
+  const p=periodoDeFecha(fecha); if(!p) return false;
+  return ((state.mesesCerrados)||[]).includes(p);
+}
+function bloqueadoPorCierre(fecha,queCosa){
+  if(!periodoEstaCerrado(fecha)) return false;
+  const p=periodoDeFecha(fecha);
+  try{ showNotif('🔒 El ciclo '+p+' está cerrado. No se pueden agregar '+(queCosa||'registros')+' con fecha '+String(fecha).slice(0,10)+'.','error'); }catch(e){}
+  return true;
+}
 
 // Totales del periodo (consumos), para guardar en el índice del historial
 function periodoTotales(r){
@@ -21266,8 +21292,11 @@ async function cerrarPeriodo(periodo){
       unidad:p.unidad, precio:p.precio, cantidad:p.stock
     }));
     state.almacen.inventarioInicial=nuevoII;
-    state.almacen.ingresos=[];
-    state.almacen.salidas=[];
+    // Los movimientos NO se borran: se mueve el CORTE de stock. El inventario inicial nuevo ya
+    // incluye el efecto de todo lo anterior, así que calcStock ignora los movimientos previos al
+    // corte y no los doble-cuenta — pero siguen en el historial y en el gasto del periodo cerrado.
+    // Antes se vaciaban ingresos/salidas y el periodo quedaba en blanco al consultarlo después.
+    state.almacen.stockCorteTs=Date.now();
     if(typeof almacenSave==='function') almacenSave();
   }catch(e){ console.warn('arrastre almacen',e); }
   // 3b) Combustible → apertura con el stock restante; se borran consumos previos
@@ -21290,21 +21319,17 @@ async function cerrarPeriodo(periodo){
     if(typeof almacenSave==='function') almacenSave();
   }catch(e){ console.warn('arrastre explosivos',e); }
 
-  // 4) Reinicio de consumo del periodo (los datos quedan en el respaldo/archivo)
+  // 4) EL CIERRE YA NO DESTRUYE DATOS.
+  // Antes se borraban de state los tareos, reportes de guardia, reportes del Compresorista,
+  // mantenimientos y salidas de remanente del periodo cerrado. El resultado era que al entrar
+  // después al dashboard de ese ciclo aparecía TODO EN CERO: el periodo quedaba en blanco y ya
+  // no se podía revisar qué pasó ese mes.
+  // No hace falta borrar nada: cada vista filtra por la ventana del periodo (ventanaMes/filtroMes),
+  // así que el ciclo nuevo arranca en cero por el filtro, no por destrucción. Lo que sí se cierra
+  // es la ESCRITURA: el periodo queda marcado en state.mesesCerrados y no admite montos nuevos.
   try{
-    // TAREOS: NO se borran al cerrar el periodo. Se costean por MES CALENDARIO (enMesTareo), así
-    // que la ventana 26→25 parte por la mitad dos meses de planilla: borrarlos aquí eliminaría
-    // tareos de un mes que todavía no cierra (p. ej. los del 26–31 de julio al cerrar el periodo
-    // de agosto) y descuadraría el costo de mano de obra de ese mes. El filtro por mes ya los
-    // deja fuera del periodo nuevo, no hace falta destruirlos.
-    state.compresorista=(state.compresorista||[]).filter(x=>!enRango(x.fecha,r)); if(typeof compGuardarLocal==='function') compGuardarLocal();
-    state.mantenimiento=(state.mantenimiento||[]).filter(x=>!enRango(x.fecha,r));
-    try{ sbSyncModulo('mant_kits', state.mantenimiento||[]); }catch(e){}
-    state.reportesGuardia=(state.reportesGuardia||[]).filter(x=>!enRango(x.fecha,r)); if(typeof reportesGuardiaSave==='function') reportesGuardiaSave();
-    state.remanenteSalidas=(state.remanenteSalidas||[]).filter(x=>!enRango(x.fecha,r));
-    if(typeof remSalSave==='function'){ try{ remSalSave(); }catch(e){} }
     if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes();
-  }catch(e){ console.warn('reinicio consumo',e); }
+  }catch(e){ console.warn('cierre periodo',e); }
 
   // 5) Índice del historial + marca de mes cerrado
   hist.unshift({ periodo, label, rango:r, cerradoEl:new Date().toISOString(),
