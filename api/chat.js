@@ -7,8 +7,19 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const { messages, system } = req.body;
-    
+    // max_tokens y model son OPCIONALES: sin ellos el comportamiento es el de siempre.
+    // El lector de facturas los usa porque devuelve un JSON más largo que una respuesta de chat.
+    const { messages, system, max_tokens, model } = req.body;
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(200).json({
+        error: 'sin_api_key',
+        content: [{ type: 'text', text: 'Falta configurar ANTHROPIC_API_KEY en el entorno.' }],
+      });
+    }
+
+    const mt = Math.min(Math.max(parseInt(max_tokens, 10) || 400, 1), 4000);
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -17,8 +28,8 @@ module.exports = async function handler(req, res) {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 400,
+        model: model || 'claude-haiku-4-5-20251001',
+        max_tokens: mt,
         system: system || 'Eres el asistente de Deepmine.',
         messages: messages && messages.length ? messages : [{ role: 'user', content: 'Hola' }],
       }),

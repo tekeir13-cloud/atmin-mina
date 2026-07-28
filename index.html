@@ -2411,6 +2411,7 @@ select option{background:var(--coal3);}
     <button class="nav-item" onclick="navigate('ia')"><span class="icon">🤖</span> Asistente IA</button>
     <button class="nav-item" onclick="navigate('reporte')"><span class="icon">📋</span> Reporte Mensual</button>
     <button class="nav-item" onclick="navigate('compresorista')"><span class="icon">🔧</span> Compresorista</button>
+    <button class="nav-item" onclick="navigate('compras')"><span class="icon">🧾</span> Compras</button>
   </nav>
 </aside>
 <main class="main">
@@ -3526,6 +3527,104 @@ select option{background:var(--coal3);}
   </div>
 </div>
 
+<!-- ══════════════════ MÓDULO COMPRAS ══════════════════
+     Módulo de CONTROL, independiente del costeo operativo: nada de lo que se registra aquí
+     entra en calcCostos / finCostoTotal / dashboard de egresos. Sirve para saber cuánto se
+     compró y cuánto queda del presupuesto entregado. Usa el mismo ciclo 26→25 del sistema. -->
+<div class="page" id="page-compras">
+  <div class="mod-tabs">
+    <button class="mod-tab active" onclick="modTab('cmp','facturas',this)">🧾 Facturas</button>
+    <button class="mod-tab" onclick="modTab('cmp','presupuestos',this)">💵 Presupuestos</button>
+    <button class="mod-tab" onclick="modTab('cmp','balance',this)">📊 Balance</button>
+  </div>
+
+  <!-- ════ TAB 1: FACTURAS ════ -->
+  <div class="mod-pane active" style="display:block" id="cmp-facturas">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+      <button class="btn btn-gold" onclick="cmpAbrirFactura()">+ Registrar Factura</button>
+      <button class="btn btn-outline" style="border-color:#22d3a5;color:#22d3a5" onclick="document.getElementById('cmp-foto-input').click()">📷 Subir Factura (foto)</button>
+      <input type="file" id="cmp-foto-input" accept="image/*" capture="environment" style="display:none" onchange="cmpLeerFoto(this)">
+      <div style="flex:1"></div>
+      <label style="font-size:11px;color:var(--text3)">Ciclo:</label>
+      <select id="cmp-periodo" onchange="renderComprasFacturas()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px"></select>
+      <button class="btn btn-outline" style="border-color:#22c55e;color:#22c55e" onclick="cmpExportarExcel()">📊 Excel</button>
+    </div>
+    <div id="cmp-fact-kpis"></div>
+    <div id="cmp-fact-wrap"></div>
+  </div>
+
+  <!-- ════ TAB 2: PRESUPUESTOS ════ -->
+  <div class="mod-pane" style="display:none" id="cmp-presupuestos">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+      <button class="btn btn-gold" onclick="cmpAbrirPresupuesto()">+ Registrar Presupuesto Entregado</button>
+      <div style="flex:1"></div>
+      <label style="font-size:11px;color:var(--text3)">Ciclo:</label>
+      <select id="cmp-periodo-pre" onchange="renderComprasPresupuestos()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px"></select>
+    </div>
+    <div id="cmp-pre-wrap"></div>
+  </div>
+
+  <!-- ════ TAB 3: BALANCE ════ -->
+  <div class="mod-pane" style="display:none" id="cmp-balance">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+      <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--text)">📊 Balance del Ciclo</div>
+      <div style="flex:1"></div>
+      <label style="font-size:11px;color:var(--text3)">Ciclo:</label>
+      <select id="cmp-periodo-bal" onchange="renderComprasBalance()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px"></select>
+    </div>
+    <div id="cmp-bal-wrap"></div>
+  </div>
+</div>
+
+<!-- ════ MODAL: FACTURA ════ -->
+<div class="modal-overlay" id="modal-cmp-factura" onclick="if(event.target===this)cerrarModal('modal-cmp-factura')">
+  <div class="modal" style="width:min(680px,95vw)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+      <div class="modal-title" style="margin-bottom:0;color:#fbbf24">🧾 <span id="cmp-fact-titulo">Registrar Factura</span></div>
+      <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-cmp-factura')">✕</button>
+    </div>
+    <input type="hidden" id="cmpf-id">
+    <div id="cmpf-aviso-ia" style="display:none;font-size:11px;border-radius:8px;padding:9px 12px;margin-bottom:12px"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group" style="margin:0"><label>Fecha de la factura</label><input type="date" id="cmpf-fecha"></div>
+      <div class="form-group" style="margin:0"><label>N° de factura</label><input type="text" id="cmpf-numero" placeholder="F001-00001234"></div>
+      <div class="form-group" style="margin:0"><label>RUC del proveedor</label><input type="text" id="cmpf-ruc" placeholder="20123456789" inputmode="numeric"></div>
+      <div class="form-group" style="margin:0"><label>Proveedor</label><input type="text" id="cmpf-proveedor" placeholder="Razón social"></div>
+    </div>
+    <div class="form-group"><label>Producto / detalle</label><textarea id="cmpf-producto" rows="2" placeholder="Qué se compró" style="width:100%;resize:vertical"></textarea></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div class="form-group" style="margin:0"><label>Monto sin IGV (S/)</label><input type="number" step="0.01" min="0" id="cmpf-sinigv" placeholder="0.00" oninput="cmpCalcMontos('sin')"></div>
+      <div class="form-group" style="margin:0"><label>IGV (S/)</label><input type="number" step="0.01" min="0" id="cmpf-igv" placeholder="0.00" oninput="cmpCalcMontos('igv')"></div>
+      <div class="form-group" style="margin:0"><label>Total con IGV (S/)</label><input type="number" step="0.01" min="0" id="cmpf-conigv" placeholder="0.00" oninput="cmpCalcMontos('con')"></div>
+    </div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:10px">Escribe cualquiera de los tres montos y los otros se completan solos (IGV 18%). Puedes corregir cualquiera.</div>
+    <div id="cmpf-foto-prev"></div>
+    <div class="btn-row" style="margin-top:6px">
+      <button class="btn btn-gold" onclick="cmpGuardarFactura()">✓ Guardar Factura</button>
+      <button class="btn btn-outline" onclick="cerrarModal('modal-cmp-factura')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ MODAL: PRESUPUESTO ════ -->
+<div class="modal-overlay" id="modal-cmp-presupuesto" onclick="if(event.target===this)cerrarModal('modal-cmp-presupuesto')">
+  <div class="modal" style="width:min(480px,95vw)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+      <div class="modal-title" style="margin-bottom:0;color:#22d3a5">💵 Presupuesto Entregado</div>
+      <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-cmp-presupuesto')">✕</button>
+    </div>
+    <input type="hidden" id="cmpp-id">
+    <div class="form-group"><label>Fecha de entrega</label><input type="date" id="cmpp-fecha"></div>
+    <div class="form-group"><label>Monto entregado (S/)</label><input type="number" step="0.01" min="0" id="cmpp-monto" placeholder="0.00"></div>
+    <div class="form-group"><label>Entregado a</label><input type="text" id="cmpp-responsable" placeholder="Nombre de quien recibe"></div>
+    <div class="form-group"><label>Concepto / observación</label><textarea id="cmpp-obs" rows="2" placeholder="Opcional" style="width:100%;resize:vertical"></textarea></div>
+    <div class="btn-row" style="margin-top:6px">
+      <button class="btn btn-gold" onclick="cmpGuardarPresupuesto()">✓ Guardar</button>
+      <button class="btn btn-outline" onclick="cerrarModal('modal-cmp-presupuesto')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 </div><!-- end content -->
 </main>
 
@@ -4216,6 +4315,8 @@ const state={
   perforacion:[],reportesGuardia:[],mantenimiento:[],mantRepuestos:[],horometros:[],tareas:[],
   ordenes:[],valorizaciones:[],valorizacionesLabor:[],
   compresorista:[],
+  // Módulo Compras: control independiente del costeo operativo (no entra a calcCostos ni al dashboard)
+  compras:{facturas:[],presupuestos:[]},
   metas:{f1:20,f2:20,dias:26,mensualF1:520,mensualF2:520,metasFrentes:{}},frenteActivo:1,
   distribucion:{},reuniones:[],
   mesActivo:{ id:null, mes:null, año:null },
@@ -4242,12 +4343,12 @@ const EQUIPOS_FACTURABLES=[
   {label:'Cargador Frontal',fig:'cargador',  col:'#ef4444',tags:['cargador frontal','cargador'],mt:['cargador'],op:5000,opL:'S/5,000/mes'},
   {label:'Grupo Electrógeno',fig:'grupo',    col:'#fbbf24',tags:['grupo electrógeno','grupo electrogeno'],mt:['grupo'],op:2500,opL:'S/2,500/mes'},
 ];
-const PT={'dashboard':'Dashboard KPI','logistica':'Módulo Logística','rrhh':'Recursos Humanos','operaciones':'Módulo Operaciones','mantenimiento':'Módulo Mantenimiento','finanzas':'Módulo Finanzas','reporte':'Reporte Mensual','compresorista':'Reporte Compresorista'};
+const PT={'dashboard':'Dashboard KPI','logistica':'Módulo Logística','rrhh':'Recursos Humanos','operaciones':'Módulo Operaciones','mantenimiento':'Módulo Mantenimiento','finanzas':'Módulo Finanzas','reporte':'Reporte Mensual','compresorista':'Reporte Compresorista','compras':'Módulo Compras'};
 
 function mostrarAccesoDenegado(page){
   const nombres={dashboard:'Dashboard',logistica:'Logística',rrhh:'Recursos Humanos',
     operaciones:'Operaciones',mantenimiento:'Mantenimiento',finanzas:'Finanzas',
-    seguridad:'Seguridad',ia:'Asistente IA',reporte:'Reportes',compresorista:'Compresorista'};
+    seguridad:'Seguridad',ia:'Asistente IA',reporte:'Reportes',compresorista:'Compresorista',compras:'Compras'};
   // Cambiar al page y mostrar overlay de acceso denegado
   window._currentPage = page;
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -4297,7 +4398,8 @@ const MODULE_PANES = {
   'rrhh': ['planilla','tareomes','tareas','personal','costorrhh','servicios','planillaint'],
   'op': ['tablero','avance','solicitudes','vsproyectado','valorizaciones'],
   'mant': ['registro','costosmant'],
-  'fin': ['dashboard','informe','costocentro']
+  'fin': ['dashboard','informe','costocentro'],
+  'cmp': ['facturas','presupuestos','balance']
 };
 
 function modTab(mod, pane, btn){
@@ -4557,6 +4659,19 @@ async function cargarAlmacenCombustibleSB(){
     // Apertura de petróleo del periodo (1650 gln). Se aplica DESPUÉS de traer la nube, por id
     // determinista: nunca duplica ni pisa los ingresos/consumos reales de otros equipos.
     try{ if(typeof aplicarAperturaPetroleo==='function') aplicarAperturaPetroleo(); }catch(e){}
+    // ── COMPRAS (módulo de control, independiente del costeo) ──
+    try{
+      const compNube=await sbLoadModulo('compras');
+      if(compNube && typeof compNube==='object'){
+        state.compras=compNube;
+        try{ localStorage.setItem(COMPRAS_KEY,JSON.stringify(compNube)); }catch(e){}
+      }else{
+        comprasLoad();
+        const c=comprasNorm();
+        if(c.facturas.length||c.presupuestos.length) await sbSyncModulo('compras', c);
+      }
+      comprasNorm();
+    }catch(e){}
     // ── VALORIZACIONES (compra de labor) — vinculadas al dashboard ──
     const valNube = await sbLoadModulo('val_labor');
     if(Array.isArray(valNube) && valNube.length){
@@ -4867,6 +4982,7 @@ function renderPage(page){
   else if(page==='ia')renderIA();
   else if(page==='reporte')renderReportePage();
   else if(page==='compresorista'){if(typeof renderTablaCompresorista==='function'){renderTablaCompresorista();if(typeof visorPoblarMeses==='function')visorPoblarMeses();visorPoblarDias();visorRenderDia();}}
+  else if(page==='compras'){activarPrimerTab('cmp','facturas');renderModPane('cmp','facturas');}
 }
 
 function renderModPane(mod,pane){
@@ -4881,6 +4997,9 @@ function renderModPane(mod,pane){
   else if(k==='log-subalmacen2820')renderSubalmacen2820();
   else if(k==='log-solicitudmantlog')renderSolicitudMantLog();
   else if(k==='log-combustible')renderCombustible();
+  else if(k==='cmp-facturas')renderComprasFacturas();
+  else if(k==='cmp-presupuestos')renderComprasPresupuestos();
+  else if(k==='cmp-balance')renderComprasBalance();
   else if(k==='rrhh-planilla')renderPlanilla();
   else if(k==='rrhh-tareomes')renderTareoMensual();
   else if(k==='rrhh-tareas')renderTareas();
@@ -6267,6 +6386,8 @@ function _rtAplicarModulo(modulo, data){
     case 'params_precios': case 'adelantos': case 'meses_cerrados': case 'fin_config': case 'personal_jefe':
       if(typeof _cfgAplicar==='function'&&data&&typeof data==='object'){ _cfgAplicar(modulo,data); try{ localStorage.setItem('atmin_cfg_ts_'+modulo,String(Number(data._ts)||0)); }catch(e){} } break;
     case 'comb_pet':           if(Array.isArray(data)){ setLS('atmin_comb_petroleo', data); } break;
+    case 'compras':            if(data&&typeof data==='object'){ state.compras=data; setLS(COMPRAS_KEY, data);
+                                 try{ if(window._currentPage==='compras'){ renderComprasFacturas(); } }catch(e){} } break;
     case 'comb_gas':           if(Array.isArray(data)){ setLS('atmin_comb_gasolina', data); } break;
     case 'fin_ing_maq':        if(data&&typeof data==='object'){ try{ if(typeof _fimMigrarNombres==='function') _fimMigrarNombres(data); }catch(e){} setLS('atmin_fin_ing_maq', data); } break;
     case 'historial_periodos': if(Array.isArray(data)){ state.historialPeriodos=data; setLS('atmin_historial_periodos', data); } break;
@@ -15797,13 +15918,13 @@ function renderGraficosReporte(modulo, ac, cos, ing, util){
 //  SISTEMA DE AUTENTICACIÓN — DEEPMINE
 // ════════════════════════════════════════════════════
 
-const TODOS_MODULOS = ['dashboard','logistica','rrhh','operaciones','mantenimiento','finanzas','seguridad','ia','reporte','compresorista'];
+const TODOS_MODULOS = ['dashboard','logistica','rrhh','operaciones','mantenimiento','finanzas','seguridad','ia','reporte','compresorista','compras'];
 
 const ROLES_MODULOS = {
   gerente_general:      TODOS_MODULOS,
   jefe_finanzas:        TODOS_MODULOS,
   jefe_operaciones:     ['operaciones','mantenimiento','compresorista','seguridad'],
-  logistico:            ['dashboard','logistica','seguridad'],
+  logistico:            ['dashboard','logistica','seguridad','compras'],
   administrador:        ['rrhh','seguridad'],
   jefe_guardia:         ['operaciones','seguridad'],
   ingeniero_residente:  ['operaciones','seguridad'],
@@ -20296,6 +20417,441 @@ const _origRenderTabla = typeof renderTablaCompresorista === 'function' ? render
 // Periodo de valorización = del 26 de un mes al 25 del siguiente (noche).
 // Etiquetado por el MES DEL CIERRE (ej: 26-jun→25-jul = "Julio").
 // Se ACTIVA en agosto; en julio es solo prueba (los cortes 26→25 no se usan aún).
+// ══════════════════════════════════════════════════════════════
+// MÓDULO COMPRAS — control de facturas y presupuesto
+// ══════════════════════════════════════════════════════════════
+// AISLADO A PROPÓSITO: nada de lo que se registra aquí entra en calcCostos, finCostoTotal,
+// los egresos del Dashboard ni el gasto de Finanzas. Es un módulo de CONTROL: responde
+// "cuánto se compró y cuánto queda del presupuesto entregado", nada más.
+// Usa el mismo ciclo 26→25 del resto del sistema (ventanaMes/filtroMes).
+const COMPRAS_KEY='atmin_compras';
+function comprasNorm(){
+  if(!state.compras || typeof state.compras!=='object') state.compras={facturas:[],presupuestos:[]};
+  if(!Array.isArray(state.compras.facturas)) state.compras.facturas=[];
+  if(!Array.isArray(state.compras.presupuestos)) state.compras.presupuestos=[];
+  return state.compras;
+}
+function comprasLoad(){
+  try{ const d=JSON.parse(localStorage.getItem(COMPRAS_KEY)||'null'); if(d&&typeof d==='object') state.compras=d; }catch(e){}
+  comprasNorm();
+}
+function comprasSave(){
+  comprasNorm();
+  try{ localStorage.setItem(COMPRAS_KEY,JSON.stringify(state.compras)); }catch(e){}
+  try{ sbSyncModulo('compras', state.compras); }catch(e){}
+}
+function cmpMoney(n){ return 'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+// Periodos con datos + el vigente, para los selectores de ciclo
+function cmpPeriodos(){
+  const c=comprasNorm();
+  const set=new Set();
+  const add=f=>{ const d=String(f||'').slice(0,10); if(!d) return;
+    // a qué periodo 26→25 pertenece la fecha: si el día es >= 26 pertenece al mes siguiente
+    const y=+d.slice(0,4), m=+d.slice(5,7), dd=+d.slice(8,10);
+    let py=y, pm=m; if(dd>=26){ pm++; if(pm>12){pm=1;py++;} }
+    set.add(py+'-'+String(pm).padStart(2,'0'));
+  };
+  c.facturas.forEach(x=>add(x.fecha)); c.presupuestos.forEach(x=>add(x.fecha));
+  try{ set.add(periodoActual()); }catch(e){ set.add(hoy().slice(0,7)); }
+  return [...set].filter(Boolean).sort().reverse();
+}
+function cmpPoblarSelect(id){
+  const sel=document.getElementById(id); if(!sel) return null;
+  const per=cmpPeriodos();
+  const prev=sel.value;
+  sel.innerHTML=per.map(p=>`<option value="${p}">${(typeof periodoLabel==='function')?periodoLabel(p):p}</option>`).join('');
+  // Por defecto el ciclo VIGENTE, no el más nuevo con datos: si alguien registra una factura
+  // con fecha adelantada, el módulo no debe saltar a un ciclo futuro al abrirlo.
+  let porDefecto=per[0];
+  try{ const act=periodoActual(); if(per.includes(act)) porDefecto=act; }catch(e){}
+  sel.value=(prev&&per.includes(prev))?prev:porDefecto;
+  return sel.value;
+}
+function cmpEnPeriodo(fecha,per){ return (typeof filtroMes==='function')?filtroMes(fecha,per):String(fecha||'').startsWith(per); }
+function cmpFacturasDe(per){ return comprasNorm().facturas.filter(f=>cmpEnPeriodo(f.fecha,per)).sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha))); }
+function cmpPresupuestosDe(per){ return comprasNorm().presupuestos.filter(p=>cmpEnPeriodo(p.fecha,per)).sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha))); }
+
+// ── IGV: escribes uno de los tres montos y los otros se completan (IGV 18%) ──
+const CMP_IGV=0.18;
+function cmpCalcMontos(origen){
+  const g=id=>document.getElementById(id);
+  const sin=parseFloat(g('cmpf-sinigv').value), igv=parseFloat(g('cmpf-igv').value), con=parseFloat(g('cmpf-conigv').value);
+  const r2=n=>Math.round(n*100)/100;
+  if(origen==='sin' && !isNaN(sin)){ g('cmpf-igv').value=r2(sin*CMP_IGV); g('cmpf-conigv').value=r2(sin*(1+CMP_IGV)); }
+  else if(origen==='con' && !isNaN(con)){ const s=con/(1+CMP_IGV); g('cmpf-sinigv').value=r2(s); g('cmpf-igv').value=r2(con-s); }
+  else if(origen==='igv' && !isNaN(igv)){ const s=igv/CMP_IGV; g('cmpf-sinigv').value=r2(s); g('cmpf-conigv').value=r2(s+igv); }
+}
+
+// ── MODAL FACTURA ──
+function cmpAbrirFactura(datos){
+  const g=id=>document.getElementById(id);
+  const d=datos||{};
+  g('cmpf-id').value=d.id||'';
+  g('cmp-fact-titulo').textContent=d.id?'Editar Factura':'Registrar Factura';
+  g('cmpf-fecha').value=d.fecha||hoy();
+  g('cmpf-numero').value=d.numero||'';
+  g('cmpf-ruc').value=d.ruc||'';
+  g('cmpf-proveedor').value=d.proveedor||'';
+  g('cmpf-producto').value=d.producto||'';
+  g('cmpf-sinigv').value=(d.sinIgv!=null&&d.sinIgv!=='')?d.sinIgv:'';
+  g('cmpf-igv').value=(d.igv!=null&&d.igv!=='')?d.igv:'';
+  g('cmpf-conigv').value=(d.conIgv!=null&&d.conIgv!=='')?d.conIgv:'';
+  _cmpFotoPend=d.foto||null;
+  const pv=g('cmpf-foto-prev');
+  pv.innerHTML=_cmpFotoPend?`<div style="margin-bottom:10px"><img src="${_cmpFotoPend}" style="max-width:100%;max-height:170px;border-radius:8px;border:1px solid var(--border)"></div>`:'';
+  const av=g('cmpf-aviso-ia'); if(!datos||!datos._aviso){ av.style.display='none'; }
+  abrirModal('modal-cmp-factura');
+}
+let _cmpFotoPend=null;
+function cmpGuardarFactura(){
+  const g=id=>document.getElementById(id);
+  const num=n=>{ const v=parseFloat(g(n).value); return isNaN(v)?0:v; };
+  const fecha=g('cmpf-fecha').value||hoy();
+  const proveedor=g('cmpf-proveedor').value.trim();
+  const conIgv=num('cmpf-conigv');
+  if(!proveedor){ showNotif('⚠ Indica el proveedor','error'); return; }
+  if(conIgv<=0){ showNotif('⚠ El total con IGV debe ser mayor a 0','error'); return; }
+  comprasNorm();
+  // Sufijo aleatorio: solo con Date.now() dos registros creados en el mismo milisegundo
+  // compartían id y el segundo pisaba al primero.
+  const id=g('cmpf-id').value||('FC'+Date.now()+Math.random().toString(36).slice(2,7));
+  const reg={ id, _ts:Date.now(), fecha, numero:g('cmpf-numero').value.trim(),
+    ruc:g('cmpf-ruc').value.trim(), proveedor, producto:g('cmpf-producto').value.trim(),
+    sinIgv:num('cmpf-sinigv'), igv:num('cmpf-igv'), conIgv, foto:_cmpFotoPend||null };
+  const i=state.compras.facturas.findIndex(f=>f.id===id);
+  if(i>=0) state.compras.facturas[i]={...state.compras.facturas[i],...reg}; else state.compras.facturas.push(reg);
+  comprasSave();
+  _cmpFotoPend=null;
+  cerrarModal('modal-cmp-factura');
+  renderComprasFacturas();
+  showNotif('✓ Factura registrada: '+proveedor+' · '+cmpMoney(conIgv));
+}
+function cmpEditarFactura(id){
+  const f=comprasNorm().facturas.find(x=>x.id===id); if(!f) return;
+  cmpAbrirFactura(f);
+}
+function cmpEliminarFactura(id){
+  const f=comprasNorm().facturas.find(x=>x.id===id); if(!f) return;
+  if(!confirm('¿Eliminar la factura de '+(f.proveedor||'—')+' por '+cmpMoney(f.conIgv)+'?')) return;
+  state.compras.facturas=state.compras.facturas.filter(x=>x.id!==id);
+  comprasSave(); renderComprasFacturas();
+  showNotif('🗑 Factura eliminada','warn');
+}
+
+// ── LECTOR DE FACTURAS (foto → datos) ──
+// Manda la foto a /api/chat (Claude con visión) y pide un JSON con los campos. Si no hay API
+// configurada o falla, abre el formulario con la foto adjunta para llenarlo a mano: nunca se
+// pierde el registro por un fallo del lector.
+function cmpComprimirImagen(file,maxLado){
+  return new Promise((res,rej)=>{
+    const fr=new FileReader();
+    fr.onerror=()=>rej(new Error('No se pudo leer el archivo'));
+    fr.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>rej(new Error('Archivo de imagen inválido'));
+      img.onload=()=>{
+        const m=maxLado||1400;
+        let w=img.width,h=img.height;
+        if(w>m||h>m){ if(w>=h){ h=Math.round(h*m/w); w=m; } else { w=Math.round(w*m/h); h=m; } }
+        const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+        cv.getContext('2d').drawImage(img,0,0,w,h);
+        res(cv.toDataURL('image/jpeg',0.8));
+      };
+      img.src=fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+async function cmpLeerFoto(input){
+  const file=input&&input.files&&input.files[0];
+  input.value='';
+  if(!file) return;
+  let dataUrl=null;
+  try{ dataUrl=await cmpComprimirImagen(file,1400); }
+  catch(e){ showNotif('⚠ No se pudo procesar la imagen','error'); return; }
+  showNotif('🔍 Leyendo la factura…','warn');
+  let datos=null, motivo='';
+  try{
+    const b64=dataUrl.split(',')[1];
+    const resp=await fetch('/api/chat',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        max_tokens:1000,
+        system:'Eres un lector de facturas peruanas. Devuelves SOLO un objeto JSON válido, sin texto alrededor y sin bloques de código.',
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
+          {type:'text',text:'Lee esta factura y devuelve SOLO este JSON:\n{"fecha":"YYYY-MM-DD","numero":"serie-correlativo","ruc":"RUC del PROVEEDOR (quien emite)","proveedor":"razón social del proveedor","producto":"resumen corto de lo comprado","sinIgv":number,"igv":number,"conIgv":number}\nReglas: montos como número sin símbolo ni separador de miles. Si un dato no aparece usa "" para textos y 0 para números. El RUC peruano tiene 11 dígitos. No inventes datos.'}
+        ]}]
+      })
+    });
+    const j=await resp.json();
+    if(j&&j.error==='sin_api_key'){ motivo='El lector automático no está configurado (falta la clave de API en el servidor).'; }
+    else{
+      const txt=(j&&j.content&&j.content[0]&&j.content[0].text)||'';
+      const m=txt.match(/\{[\s\S]*\}/);
+      if(m){ try{ datos=JSON.parse(m[0]); }catch(e){ motivo='La respuesta del lector no se pudo interpretar.'; } }
+      else motivo='El lector no devolvió datos legibles.';
+    }
+  }catch(e){ motivo='No se pudo contactar el lector automático (¿sin conexión?).'; }
+
+  const base={ foto:dataUrl, fecha:hoy() };
+  if(datos){
+    const n=v=>{ const x=parseFloat(v); return isNaN(x)?0:Math.round(x*100)/100; };
+    let sin=n(datos.sinIgv), igv=n(datos.igv), con=n(datos.conIgv);
+    // Completar lo que falte con el IGV de 18%, sin pisar lo que sí vino en la factura
+    if(con<=0 && sin>0) con=Math.round(sin*(1+CMP_IGV)*100)/100;
+    if(sin<=0 && con>0) sin=Math.round(con/(1+CMP_IGV)*100)/100;
+    if(igv<=0 && con>0 && sin>0) igv=Math.round((con-sin)*100)/100;
+    const f=String(datos.fecha||'').slice(0,10);
+    Object.assign(base,{
+      fecha:/^\d{4}-\d{2}-\d{2}$/.test(f)?f:hoy(),
+      numero:String(datos.numero||''), ruc:String(datos.ruc||'').replace(/\D/g,''),
+      proveedor:String(datos.proveedor||''), producto:String(datos.producto||''),
+      sinIgv:sin||'', igv:igv||'', conIgv:con||''
+    });
+  }
+  base._aviso=true;
+  cmpAbrirFactura(base);
+  const av=document.getElementById('cmpf-aviso-ia');
+  if(av){
+    av.style.display='block';
+    if(datos){
+      av.style.background='rgba(34,211,165,0.12)'; av.style.border='1px solid rgba(34,211,165,0.4)'; av.style.color='#22d3a5';
+      av.innerHTML='✓ Datos leídos de la foto. <b>Revísalos antes de guardar</b> — sobre todo la fecha y los montos.';
+    }else{
+      av.style.background='rgba(245,158,11,0.12)'; av.style.border='1px solid rgba(245,158,11,0.4)'; av.style.color='#f59e0b';
+      av.innerHTML='⚠ '+motivo+' La foto quedó adjunta: completa los datos a mano.';
+    }
+  }
+  showNotif(datos?'✓ Factura leída — revisa los datos':'⚠ Lectura automática no disponible','warn');
+}
+
+// ── MODAL PRESUPUESTO ──
+function cmpAbrirPresupuesto(datos){
+  const g=id=>document.getElementById(id); const d=datos||{};
+  g('cmpp-id').value=d.id||'';
+  g('cmpp-fecha').value=d.fecha||hoy();
+  g('cmpp-monto').value=(d.monto!=null&&d.monto!=='')?d.monto:'';
+  g('cmpp-responsable').value=d.responsable||'';
+  g('cmpp-obs').value=d.obs||'';
+  abrirModal('modal-cmp-presupuesto');
+}
+function cmpGuardarPresupuesto(){
+  const g=id=>document.getElementById(id);
+  const monto=parseFloat(g('cmpp-monto').value)||0;
+  if(monto<=0){ showNotif('⚠ El monto entregado debe ser mayor a 0','error'); return; }
+  comprasNorm();
+  const id=g('cmpp-id').value||('PR'+Date.now()+Math.random().toString(36).slice(2,7));
+  const reg={ id, _ts:Date.now(), fecha:g('cmpp-fecha').value||hoy(), monto,
+    responsable:g('cmpp-responsable').value.trim(), obs:g('cmpp-obs').value.trim() };
+  const i=state.compras.presupuestos.findIndex(p=>p.id===id);
+  if(i>=0) state.compras.presupuestos[i]={...state.compras.presupuestos[i],...reg}; else state.compras.presupuestos.push(reg);
+  comprasSave();
+  cerrarModal('modal-cmp-presupuesto');
+  renderComprasPresupuestos();
+  showNotif('✓ Presupuesto registrado: '+cmpMoney(monto));
+}
+function cmpEditarPresupuesto(id){ const p=comprasNorm().presupuestos.find(x=>x.id===id); if(p) cmpAbrirPresupuesto(p); }
+function cmpEliminarPresupuesto(id){
+  const p=comprasNorm().presupuestos.find(x=>x.id===id); if(!p) return;
+  if(!confirm('¿Eliminar el presupuesto de '+cmpMoney(p.monto)+'?')) return;
+  state.compras.presupuestos=state.compras.presupuestos.filter(x=>x.id!==id);
+  comprasSave(); renderComprasPresupuestos();
+  showNotif('🗑 Presupuesto eliminado','warn');
+}
+
+// ── VISTA: FACTURAS ──
+function renderComprasFacturas(){
+  comprasLoad();
+  const per=cmpPoblarSelect('cmp-periodo'); if(!per) return;
+  const fs=cmpFacturasDe(per);
+  const totCon=fs.reduce((s,f)=>s+(Number(f.conIgv)||0),0);
+  const totSin=fs.reduce((s,f)=>s+(Number(f.sinIgv)||0),0);
+  const totIgv=fs.reduce((s,f)=>s+(Number(f.igv)||0),0);
+  const prov=new Set(fs.map(f=>(f.proveedor||'').trim().toUpperCase()).filter(Boolean)).size;
+  const v=(typeof ventanaMes==='function')?ventanaMes(per):null;
+  const k=document.getElementById('cmp-fact-kpis');
+  if(k) k.innerHTML=`
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Ciclo <b style="color:var(--text2)">${v?v.ini+' → '+v.fin:per}</b> · control de compras, independiente del costo operativo</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px">
+      <div class="kpi-card" style="padding:12px 14px"><div class="kpi-label" style="font-size:10px">Total con IGV</div><div class="kpi-value" style="font-size:20px;color:var(--gold-light)">${cmpMoney(totCon)}</div></div>
+      <div class="kpi-card" style="padding:12px 14px"><div class="kpi-label" style="font-size:10px">Total sin IGV</div><div class="kpi-value" style="font-size:20px;color:#60a5fa">${cmpMoney(totSin)}</div></div>
+      <div class="kpi-card" style="padding:12px 14px"><div class="kpi-label" style="font-size:10px">IGV</div><div class="kpi-value" style="font-size:20px;color:#a855f7">${cmpMoney(totIgv)}</div></div>
+      <div class="kpi-card" style="padding:12px 14px"><div class="kpi-label" style="font-size:10px">Facturas · Proveedores</div><div class="kpi-value" style="font-size:20px;color:#22d3a5">${fs.length} · ${prov}</div></div>
+    </div>`;
+  const w=document.getElementById('cmp-fact-wrap'); if(!w) return;
+  if(!fs.length){ w.innerHTML='<div style="text-align:center;color:var(--text3);padding:28px">Sin facturas en este ciclo. Usa <b>Subir Factura (foto)</b> o <b>Registrar Factura</b>.</div>'; return; }
+  w.innerHTML=`<div class="table-wrap" style="overflow-x:auto"><table style="width:100%;min-width:max-content">
+    <thead><tr style="font-size:10px;color:var(--text3)">
+      <th style="padding:8px">Fecha</th><th style="padding:8px">N°</th><th style="padding:8px">RUC</th>
+      <th style="padding:8px">Proveedor</th><th style="padding:8px">Producto</th>
+      <th style="padding:8px;text-align:right">Sin IGV</th><th style="padding:8px;text-align:right">IGV</th>
+      <th style="padding:8px;text-align:right">Con IGV</th><th style="padding:8px">Foto</th><th style="padding:8px"></th>
+    </tr></thead><tbody>
+    ${fs.map(f=>`<tr style="border-top:1px solid var(--border2)">
+      <td style="padding:7px 8px;font-size:12px;white-space:nowrap">${f.fecha||'—'}</td>
+      <td style="padding:7px 8px;font-size:11px;font-family:'DM Mono',monospace">${f.numero||'—'}</td>
+      <td style="padding:7px 8px;font-size:11px;font-family:'DM Mono',monospace">${f.ruc||'—'}</td>
+      <td style="padding:7px 8px;font-size:12px;font-weight:600">${f.proveedor||'—'}</td>
+      <td style="padding:7px 8px;font-size:11px;color:var(--text3);max-width:220px;white-space:normal">${f.producto||'—'}</td>
+      <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace">${cmpMoney(f.sinIgv)}</td>
+      <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;color:#a855f7">${cmpMoney(f.igv)}</td>
+      <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;color:var(--gold-light);font-weight:700">${cmpMoney(f.conIgv)}</td>
+      <td style="padding:7px 8px;text-align:center">${f.foto?`<img src="${f.foto}" onclick="cmpVerFoto('${f.id}')" style="width:34px;height:34px;object-fit:cover;border-radius:5px;cursor:pointer;border:1px solid var(--border)">`:'<span style="color:var(--text3);font-size:11px">—</span>'}</td>
+      <td style="padding:7px 8px;white-space:nowrap">
+        <button onclick="cmpEditarFactura('${f.id}')" style="background:none;border:none;color:#60a5fa;cursor:pointer;font-size:13px" title="Editar">✏</button>
+        <button onclick="cmpEliminarFactura('${f.id}')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:13px" title="Eliminar">🗑</button>
+      </td></tr>`).join('')}
+    </tbody></table></div>`;
+}
+function cmpVerFoto(id){
+  const f=comprasNorm().facturas.find(x=>x.id===id); if(!f||!f.foto) return;
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;cursor:zoom-out';
+  ov.onclick=()=>ov.remove();
+  ov.innerHTML=`<img src="${f.foto}" style="max-width:96%;max-height:96%;border-radius:10px">`;
+  document.body.appendChild(ov);
+}
+
+// ── VISTA: PRESUPUESTOS ──
+function renderComprasPresupuestos(){
+  comprasLoad();
+  const per=cmpPoblarSelect('cmp-periodo-pre'); if(!per) return;
+  const ps=cmpPresupuestosDe(per);
+  const tot=ps.reduce((s,p)=>s+(Number(p.monto)||0),0);
+  const w=document.getElementById('cmp-pre-wrap'); if(!w) return;
+  const cab=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:16px">
+      <div class="kpi-card" style="padding:12px 14px"><div class="kpi-label" style="font-size:10px">Total entregado en el ciclo</div><div class="kpi-value" style="font-size:22px;color:#22d3a5">${cmpMoney(tot)}</div></div>
+      <div class="kpi-card" style="padding:12px 14px"><div class="kpi-label" style="font-size:10px">Entregas</div><div class="kpi-value" style="font-size:22px;color:#60a5fa">${ps.length}</div></div>
+    </div>`;
+  if(!ps.length){ w.innerHTML=cab+'<div style="text-align:center;color:var(--text3);padding:28px">Sin entregas registradas en este ciclo.</div>'; return; }
+  w.innerHTML=cab+`<div class="table-wrap" style="overflow-x:auto"><table style="width:100%">
+    <thead><tr style="font-size:10px;color:var(--text3)"><th style="padding:8px">Fecha</th><th style="padding:8px">Entregado a</th><th style="padding:8px">Concepto</th><th style="padding:8px;text-align:right">Monto</th><th style="padding:8px"></th></tr></thead>
+    <tbody>${ps.map(p=>`<tr style="border-top:1px solid var(--border2)">
+      <td style="padding:7px 8px;font-size:12px;white-space:nowrap">${p.fecha||'—'}</td>
+      <td style="padding:7px 8px;font-size:12px;font-weight:600">${p.responsable||'—'}</td>
+      <td style="padding:7px 8px;font-size:11px;color:var(--text3)">${p.obs||'—'}</td>
+      <td style="padding:7px 8px;font-size:13px;text-align:right;font-family:'DM Mono',monospace;color:#22d3a5;font-weight:700">${cmpMoney(p.monto)}</td>
+      <td style="padding:7px 8px;white-space:nowrap">
+        <button onclick="cmpEditarPresupuesto('${p.id}')" style="background:none;border:none;color:#60a5fa;cursor:pointer;font-size:13px">✏</button>
+        <button onclick="cmpEliminarPresupuesto('${p.id}')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:13px">🗑</button>
+      </td></tr>`).join('')}</tbody></table></div>`;
+}
+
+// ── VISTA: BALANCE + GRÁFICA ÚNICA DEL CICLO ──
+let _cmpChart=null;
+function renderComprasBalance(){
+  comprasLoad();
+  const per=cmpPoblarSelect('cmp-periodo-bal'); if(!per) return;
+  const fs=cmpFacturasDe(per), ps=cmpPresupuestosDe(per);
+  const gastado=fs.reduce((s,f)=>s+(Number(f.conIgv)||0),0);
+  const entregado=ps.reduce((s,p)=>s+(Number(p.monto)||0),0);
+  const saldo=entregado-gastado;
+  const v=(typeof ventanaMes==='function')?ventanaMes(per):null;
+  const pct=entregado>0?Math.min(100,Math.round(gastado/entregado*100)):0;
+  const w=document.getElementById('cmp-bal-wrap'); if(!w) return;
+
+  // Días del ciclo (26 → 25): etiquetas y total comprado por día
+  const dias=[];
+  if(v){
+    let d=new Date(v.ini+'T00:00:00'); const fin=new Date(v.fin+'T00:00:00');
+    while(d<=fin && dias.length<40){ dias.push(d.toISOString().slice(0,10)); d=new Date(d.getTime()+86400000); }
+  }
+  const porDia={}; dias.forEach(d=>porDia[d]=0);
+  fs.forEach(f=>{ const d=String(f.fecha||'').slice(0,10); if(porDia[d]!==undefined) porDia[d]+=Number(f.conIgv)||0; });
+  const maxDia=Math.max(...dias.map(d=>porDia[d]),0);
+  const diaTop=dias.filter(d=>porDia[d]===maxDia&&maxDia>0)[0]||null;
+
+  w.innerHTML=`
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Ciclo <b style="color:var(--text2)">${v?v.ini+' → '+v.fin:per}</b> · ${dias.length} días</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:18px">
+      <div class="kpi-card" style="padding:14px 16px"><div class="kpi-label" style="font-size:10px">Presupuesto entregado</div><div class="kpi-value" style="font-size:22px;color:#22d3a5">${cmpMoney(entregado)}</div></div>
+      <div class="kpi-card" style="padding:14px 16px"><div class="kpi-label" style="font-size:10px">Gastado en compras</div><div class="kpi-value" style="font-size:22px;color:var(--gold-light)">${cmpMoney(gastado)}</div></div>
+      <div class="kpi-card" style="padding:14px 16px"><div class="kpi-label" style="font-size:10px">${saldo>=0?'Saldo disponible':'Sobregiro'}</div><div class="kpi-value" style="font-size:22px;color:${saldo>=0?'#60a5fa':'#ef4444'}">${cmpMoney(Math.abs(saldo))}</div></div>
+      <div class="kpi-card" style="padding:14px 16px"><div class="kpi-label" style="font-size:10px">Ejecutado</div><div class="kpi-value" style="font-size:22px;color:${pct>=100?'#ef4444':'#f59e0b'}">${entregado>0?pct+'%':'—'}</div></div>
+    </div>
+    <div class="card" style="padding:14px 16px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:6px"><span>Ejecución del presupuesto</span><span>${cmpMoney(gastado)} de ${cmpMoney(entregado)}</span></div>
+      <div class="progress-bar" style="height:10px"><div class="progress-fill ${pct>=100?'red':'green'}" style="width:${pct}%"></div></div>
+      ${saldo<0?`<div style="margin-top:8px;font-size:11px;color:#ef4444">⚠ Se gastó ${cmpMoney(-saldo)} por encima de lo entregado.</div>`:''}
+    </div>
+    <div class="card" style="padding:16px">
+      <div class="section-title" style="margin-top:0;font-size:13px">📈 Compras por día del ciclo</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:10px">${diaTop?`Día de mayor compra: <b style="color:var(--gold-light)">${diaTop}</b> con ${cmpMoney(maxDia)}`:'Sin compras registradas en este ciclo.'}</div>
+      <div style="height:260px"><canvas id="cmp-chart"></canvas></div>
+    </div>`;
+
+  try{ if(_cmpChart){ _cmpChart.destroy(); _cmpChart=null; } }catch(e){}
+  if(typeof Chart==='undefined') return;
+  const cv=document.getElementById('cmp-chart'); if(!cv) return;
+  _cmpChart=new Chart(cv.getContext('2d'),{
+    type:'bar',
+    data:{ labels:dias.map(d=>d.slice(8,10)+'/'+d.slice(5,7)),
+      datasets:[{ label:'Compras del día (con IGV)', data:dias.map(d=>Math.round(porDia[d]*100)/100),
+        backgroundColor:dias.map(d=>porDia[d]===maxDia&&maxDia>0?'#fbbf24':'rgba(96,165,250,0.75)'),
+        borderRadius:4 }] },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false},
+        tooltip:{ callbacks:{ label:c=>'S/ '+Number(c.raw||0).toLocaleString('es-PE',{minimumFractionDigits:2}) } } },
+      scales:{ x:{ ticks:{color:'#8b93a7',font:{size:9},maxRotation:90,minRotation:0}, grid:{display:false} },
+        y:{ beginAtZero:true, ticks:{color:'#8b93a7',font:{size:9},callback:v=>'S/ '+Number(v).toLocaleString('es-PE')}, grid:{color:'rgba(255,255,255,0.05)'} } } }
+  });
+}
+
+// ── EXCEL DEL CICLO ──
+async function cmpExportarExcel(){
+  if(typeof ExcelJS==='undefined'){ showNotif('Librería Excel no disponible','error'); return; }
+  comprasLoad();
+  const per=(document.getElementById('cmp-periodo')||{}).value||periodoActual();
+  const fs=cmpFacturasDe(per), ps=cmpPresupuestosDe(per);
+  const v=(typeof ventanaMes==='function')?ventanaMes(per):{ini:'',fin:''};
+  const wb=new ExcelJS.Workbook(); wb.creator='MUKICLOUD';
+
+  const s1=wb.addWorksheet('Facturas');
+  s1.addRow(['CONTROL DE COMPRAS — CICLO '+per+' ('+v.ini+' al '+v.fin+')']);
+  s1.getRow(1).font={bold:true,size:13};
+  s1.addRow([]);
+  s1.addRow(['Fecha','N° Factura','RUC','Proveedor','Producto','Sin IGV','IGV','Con IGV']);
+  s1.getRow(3).font={bold:true};
+  fs.slice().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha))).forEach(f=>{
+    s1.addRow([f.fecha||'',f.numero||'',f.ruc||'',f.proveedor||'',f.producto||'',
+      Number(f.sinIgv)||0,Number(f.igv)||0,Number(f.conIgv)||0]);
+  });
+  const tot=r=>fs.reduce((s,f)=>s+(Number(f[r])||0),0);
+  const fila=s1.addRow(['','','','','TOTAL',tot('sinIgv'),tot('igv'),tot('conIgv')]);
+  fila.font={bold:true};
+  s1.columns=[{width:12},{width:18},{width:14},{width:30},{width:34},{width:14},{width:12},{width:14}];
+  [6,7,8].forEach(c=>s1.getColumn(c).numFmt='#,##0.00');
+
+  const s2=wb.addWorksheet('Presupuestos');
+  s2.addRow(['PRESUPUESTOS ENTREGADOS — CICLO '+per]); s2.getRow(1).font={bold:true,size:13};
+  s2.addRow([]);
+  s2.addRow(['Fecha','Entregado a','Concepto','Monto']); s2.getRow(3).font={bold:true};
+  ps.slice().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha))).forEach(p=>s2.addRow([p.fecha||'',p.responsable||'',p.obs||'',Number(p.monto)||0]));
+  const entregado=ps.reduce((s,p)=>s+(Number(p.monto)||0),0), gastado=tot('conIgv');
+  s2.addRow([]); const f2=s2.addRow(['','','TOTAL ENTREGADO',entregado]); f2.font={bold:true};
+  s2.columns=[{width:12},{width:28},{width:36},{width:16}];
+  s2.getColumn(4).numFmt='#,##0.00';
+
+  const s3=wb.addWorksheet('Balance');
+  s3.addRow(['BALANCE DEL CICLO '+per+' ('+v.ini+' al '+v.fin+')']); s3.getRow(1).font={bold:true,size:13};
+  s3.addRow([]);
+  s3.addRow(['Presupuesto entregado',entregado]);
+  s3.addRow(['Gastado en compras (con IGV)',gastado]);
+  s3.addRow([entregado-gastado>=0?'Saldo disponible':'Sobregiro',Math.abs(entregado-gastado)]);
+  s3.addRow(['Ejecutado (%)',entregado>0?Math.round(gastado/entregado*100):0]);
+  s3.getColumn(1).width=32; s3.getColumn(2).width=18; s3.getColumn(2).numFmt='#,##0.00';
+  s3.getRow(3).font={bold:true}; s3.getRow(5).font={bold:true};
+
+  try{
+    const buf=await wb.xlsx.writeBuffer();
+    const url=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+    const a=document.createElement('a'); a.href=url; a.download='Compras_'+per+'.xlsx'; a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),2000);
+    showNotif('📊 Excel de compras generado');
+  }catch(e){ showNotif('No se pudo generar el Excel','error'); }
+}
+
 const CICLO_2625_DESDE = '2026-07';   // periodo (YYYY-MM) desde el que el ciclo 26→25 está activo
                                       // Julio 2026 = 26 jun → 25 jul (calendario operativo real de la mina)
 function cicloActivo(){ try{ return periodoActual() >= CICLO_2625_DESDE; }catch(e){ return false; } }
