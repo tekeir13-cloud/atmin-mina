@@ -3733,7 +3733,15 @@ select option{background:var(--coal3);}
     <div class="section-title" style="margin:14px 0 8px;font-size:12px">Agregar producto</div>
     <div class="form-grid">
       <div class="form-group"><label>Almacén origen</label><select id="sa-almacen" onchange="poblarProductosSalida()"><option value="">Todos los almacenes</option><option value="General">Insumos</option><option value="Mantenimiento">Mantenimiento</option></select></div>
-      <div class="form-group" style="grid-column:1/-1"><label>Producto en stock <span style="color:var(--text3);font-size:10px">(todos los materiales con stock disponible)</span></label><select id="sa-producto" onchange="autollenarSalida()"><option value="">— Seleccionar —</option></select></div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>Producto en stock <span style="color:var(--text3);font-size:10px">(mantén Ctrl o Cmd para elegir varios)</span></label>
+        <input type="text" id="sa-buscar" placeholder="🔍 Filtrar por nombre o código..." oninput="salidaBuscar(this.value)" style="width:100%;padding:7px 11px;border-radius:7px;border:1px solid var(--border);background:var(--coal4);color:var(--text1);font-size:12px;margin-bottom:6px">
+        <select id="sa-producto" multiple size="7" onchange="autollenarSalida()" style="width:100%"><option value="">— Seleccionar —</option></select>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
+          <button class="btn btn-outline" style="font-size:11px;padding:5px 12px;border-color:#22d3a5;color:#22d3a5" onclick="agregarVariosSalida()">➕ Agregar seleccionados al carrito</button>
+          <span id="sa-sel-info" style="font-size:11px;color:var(--text3)"></span>
+        </div>
+      </div>
       <div class="form-group"><label>U.M.</label><input type="text" id="sa-unidad" readonly style="opacity:0.8"></div>
       <div class="form-group"><label>Stock disponible</label><div id="sa-stock-disp" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:9px 11px;font-size:13px;color:var(--text3)">—</div></div>
       <div class="form-group"><label>P.U. sin IGV (S/)</label><input type="number" id="sa-precio" min="0" step="any" oninput="calcImporteSalida()"></div>
@@ -4031,7 +4039,8 @@ select option{background:var(--coal3);}
     <div class="form-group" style="margin-bottom:12px"><label>Descripción del trabajo</label><textarea id="kit-desc" rows="2" placeholder="Ej: Cambio de aceite, filtros y revisión de fajas..." style="width:100%;resize:vertical"></textarea></div>
     <div class="card" style="margin-bottom:12px;background:var(--coal3)">
       <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">🔩 Piezas del almacén de mantenimiento</div>
-      <div id="kit-stock-aviso" style="font-size:10px;color:var(--text3);margin-bottom:8px"></div>
+      <div id="kit-stock-aviso" style="font-size:10px;color:var(--text3);margin-bottom:6px"></div>
+      <input type="text" id="kit-buscar" placeholder="🔍 Filtrar materiales por nombre o código..." oninput="kitBuscar(this.value)" style="width:100%;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--coal4);color:var(--text1);font-size:12px;margin-bottom:8px">
       <div id="kit-piezas-rows"></div>
       <button class="btn btn-outline" style="font-size:11px;padding:5px 12px;margin-top:6px" onclick="kitAddPiezaRow()">+ Agregar pieza</button>
       <div style="font-size:12px;color:var(--text3);margin-top:10px;text-align:right">Costo de piezas: <strong id="kit-costo-piezas" style="color:var(--text)">S/ 0.00</strong></div>
@@ -8750,6 +8759,7 @@ function abrirSalidaModal(){
   g('sa-maquina').value='';g('sa-cantidad').value='';g('sa-destino').value='2820';
   g('sa-stock-disp').textContent='—';g('sa-importe').textContent='S/ 0.00';
   salidaCart=[];renderSalidaCart();
+  window._saQ=''; const _sb=g('sa-buscar'); if(_sb) _sb.value='';
   poblarProductosSalida();
   poblarOperariosSalida();
   toggleOperarioSalida();
@@ -8771,17 +8781,28 @@ function toggleOperarioSalida(){
   const wrap=document.getElementById('sa-operario-wrap');
   if(wrap) wrap.style.display = (dest==='operario') ? '' : 'none';
 }
+// Filtra el listado de materiales de la salida sin perder lo ya cargado en el carrito.
+function salidaBuscar(v){ window._saQ=v; poblarProductosSalida();
+  const i=document.getElementById('sa-buscar');
+  if(i){ i.focus(); try{ i.setSelectionRange(i.value.length,i.value.length); }catch(e){} }
+}
 function poblarProductosSalida(){
   const alm=document.getElementById('sa-almacen').value;
+  const _q=String(window._saQ||'').trim().toLowerCase();
   // alm vacío = "Todos los almacenes": aparecen TODOS los materiales con stock. Cada ítem de la
   // salida conserva su propio almacén, por lo que mezclar ambos no altera la contabilidad.
-  const stock=filtrarPorMaestro(calcStock()).filter(r=>r.stock>0&&(!alm||r.almacen===alm)).sort((a,b)=>(a.producto||a.descripcion).localeCompare(b.producto||b.descripcion));
+  const stock=filtrarPorMaestro(calcStock())
+    .filter(r=>r.stock>0&&(!alm||r.almacen===alm))
+    .filter(r=>!_q || String(r.producto||r.descripcion||'').toLowerCase().includes(_q) || String(r.codigo||'').toLowerCase().includes(_q))
+    .sort((a,b)=>(a.producto||a.descripcion).localeCompare(b.producto||b.descripcion));
   const sel=document.getElementById('sa-producto');
   const almTag=r=>(!alm)?` · ${r.almacen==='Mantenimiento'?'Mant.':'Insumos'}`:'';
-  sel.innerHTML='<option value="">— Seleccionar —</option>'+stock.map(r=>`<option value="${escAttr(r.key)}">${r.producto?r.producto+' — ':''}${r.descripcion}${r.codigo?' ('+r.codigo+')':''} (stock: ${fmt3(r.stock)} ${r.unidad})${almTag(r)}</option>`).join('');
+  sel.innerHTML=stock.map(r=>`<option value="${escAttr(r.key)}">${r.producto?r.producto+' — ':''}${r.descripcion}${r.codigo?' ('+r.codigo+')':''} (stock: ${fmt3(r.stock)} ${r.unidad})${almTag(r)}</option>`).join('');
+  const _inf=document.getElementById('sa-sel-info');
+  if(_inf) _inf.textContent=stock.length+' material'+(stock.length!==1?'es':'')+' con stock'+(_q?' (filtrado)':'');
   document.getElementById('sa-unidad').value='';
   document.getElementById('sa-precio').value='';document.getElementById('sa-stock-disp').textContent='—';
-  if(!stock.length) sel.innerHTML='<option value="">Sin productos con stock disponible</option>';
+  if(!stock.length) sel.innerHTML='<option value="" disabled>Sin materiales con stock'+(_q?' para ese filtro':'')+'</option>';
 }
 // Stock disponible considerando lo que ya está en el carrito
 function stockDisponibleSalida(key){
@@ -8792,7 +8813,11 @@ function stockDisponibleSalida(key){
 }
 
 function autollenarSalida(){
-  const key=document.getElementById('sa-producto').value;
+  const _s=document.getElementById('sa-producto');
+  const _sel=[..._s.selectedOptions].map(o=>o.value).filter(Boolean);
+  const _inf=document.getElementById('sa-sel-info');
+  if(_inf&&_sel.length>1){ _inf.textContent=_sel.length+' materiales seleccionados — usa "Agregar seleccionados"'; }
+  const key=_sel[0]||'';
   const r=stockDisponibleSalida(key);
   if(!r)return;
   document.getElementById('sa-unidad').value=r.unidad;
@@ -8820,13 +8845,47 @@ function agregarItemSalida(){
   g('sa-producto').value='';g('sa-unidad').value='';g('sa-precio').value='';g('sa-cantidad').value='';
   g('sa-stock-disp').textContent='—';g('sa-importe').textContent='S/ 0.00';
 }
+// Carga al carrito TODOS los materiales marcados en el listado, cada uno con cantidad 1.
+// La cantidad de cada línea se ajusta después en la propia hoja.
+function agregarVariosSalida(){
+  const sel=document.getElementById('sa-producto');
+  const keys=[...sel.selectedOptions].map(o=>o.value).filter(Boolean);
+  if(!keys.length){ showNotif('⚠ Marca uno o más materiales de la lista','error'); return; }
+  let ok=0, sin=0;
+  keys.forEach(k=>{
+    const r=stockDisponibleSalida(k);
+    if(!r || r.disp<=0){ sin++; return; }
+    salidaCart.push({key:r.key,almacen:r.almacen,codigo:r.codigo,producto:r.producto,descripcion:r.descripcion,
+      unidad:r.unidad,precio:r.precio||0,cantidad:1,importe:1*(r.precio||0)});
+    ok++;
+  });
+  renderSalidaCart();
+  const g=id=>document.getElementById(id);
+  g('sa-cantidad').value=''; g('sa-stock-disp').textContent='—'; g('sa-importe').textContent='S/ 0.00';
+  [...sel.options].forEach(o=>o.selected=false);
+  showNotif(ok?('✓ '+ok+' material'+(ok!==1?'es':'')+' al carrito — ajusta las cantidades en la hoja'+(sin?' · '+sin+' sin stock':'')):'⚠ Ninguno tenía stock disponible', ok?'ok':'error');
+}
+// Cambiar la cantidad de una línea ya cargada, desde la propia hoja
+function cambiarCantSalida(idx,val){
+  const i=salidaCart[idx]; if(!i) return;
+  const c=parseFloat(val)||0;
+  const r=calcStock().find(x=>x.key===i.key);
+  const enOtras=salidaCart.filter((x,n)=>n!==idx&&x.key===i.key).reduce((a,x)=>a+x.cantidad,0);
+  const disp=(r?r.stock:0)-enOtras;
+  if(c>disp){ showNotif('⚠ Stock insuficiente de '+(i.producto||i.descripcion)+' (disp. '+fmt3(disp)+')','error'); }
+  i.cantidad=Math.max(0,Math.min(c,disp));
+  i.importe=i.cantidad*(i.precio||0);
+  renderSalidaCart();
+}
 function quitarItemSalida(idx){salidaCart.splice(idx,1);renderSalidaCart();}
 function renderSalidaCart(){
   const tb=document.getElementById('sa-cart-tbody');
   if(tb) tb.innerHTML=salidaCart.length?salidaCart.map((i,idx)=>`<tr>
     <td><span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${i.almacen==='Mantenimiento'?'rgba(201,168,76,0.15);color:#d4b75e':'rgba(96,165,250,0.15);color:#60a5fa'}">${i.almacen}</span></td>
     <td><strong>${i.producto||''}</strong><br><span style="font-size:10px;color:var(--text3)">${i.descripcion||''}</span></td>
-    <td>${i.unidad}</td><td>${fmt3(i.cantidad)}</td><td>${fmtS2(i.precio)}</td><td style="color:#f87171;font-weight:700">${fmtS2(i.importe)}</td>
+    <td>${i.unidad}</td>
+    <td><input type="number" min="0" step="any" value="${i.cantidad}" onchange="cambiarCantSalida(${idx},this.value)" style="width:70px;background:var(--coal4);border:1px solid var(--border);border-radius:5px;padding:3px 6px;color:var(--text);font-size:12px;text-align:center"></td>
+    <td>${fmtS2(i.precio)}</td><td style="color:#f87171;font-weight:700">${fmtS2(i.importe)}</td>
     <td><button onclick="quitarItemSalida(${idx})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px">🗑</button></td></tr>`).join('')
     :`<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:14px">Aún no has agregado ítems</td></tr>`;
   const tot=salidaCart.reduce((a,i)=>a+i.importe,0);
@@ -14451,6 +14510,15 @@ function renderMantenimiento(){
 // ── Solicitud de Kit de Mantenimiento ──
 // Resuelve el CÓDIGO real del producto a partir de la clave interna del stock. Sirve para los
 // kits guardados antes de esta corrección, que llevan el key también en el campo `codigo`.
+function kitAlmacenDeKey(key){
+  const k=String(key||'');
+  try{
+    const r=(typeof calcStock==='function'?calcStock():[]).find(x=>x.key===k);
+    if(r&&r.almacen) return r.almacen;
+  }catch(e){}
+  const m=/^([^|]+)\|/.exec(k);          // "Mantenimiento|C:ALM-085" → "Mantenimiento"
+  return m?m[1]:'General';
+}
 function kitCodigoDeKey(key){
   const k=String(key||'');
   try{
@@ -14467,7 +14535,9 @@ function kitCodigoDeKey(key){
 function kitSalidaDePieza(p,kitId,equipo,solicitante,idx){
   const ts=Date.now()+(idx||0);
   return { id:'SM'+ts, _ts:ts, grupo:'KIT-'+kitId,
-    fecha:hoy(), destino:'mantenimiento', almacen:'Mantenimiento', maquina:equipo,
+    // El almacén sale de la PIEZA: un kit puede llevar material de Insumos y de Mantenimiento,
+    // y cada salida tiene que descontar del almacén que corresponde.
+    fecha:hoy(), destino:'mantenimiento', almacen:p.almacen||kitAlmacenDeKey(p.key||''), maquina:equipo,
     solicitante:solicitante||'—',
     codigo:p.codigo&&!String(p.codigo).includes('|')?p.codigo:kitCodigoDeKey(p.key||p.codigo),
     producto:p.nombre, descripcion:p.nombre,
@@ -14475,13 +14545,14 @@ function kitSalidaDePieza(p,kitId,equipo,solicitante,idx){
     cantidad:p.cant, importe:p.cant*(p.costo||0) };
 }
 function kitRepOptions(sel,saved){
-  // SOLO lo que hay HOY en el Almacén de Mantenimiento, con su stock vigente. Misma fuente y
-  // mismo filtro de maestro que la vista de Stock, para que el selector y el almacén coincidan
-  // pieza por pieza y no haya listas paralelas.
+  // TODO el material con stock: Insumos y Mantenimiento. Misma fuente y mismo filtro de maestro
+  // que la vista de Stock, para que el selector y el almacén coincidan pieza por pieza.
   let base=(typeof calcStock==='function')?calcStock():[];
   if(typeof filtrarPorMaestro==='function') base=filtrarPorMaestro(base);
+  const q=String(window._kitQ||'').trim().toLowerCase();
   const prods=base
-    .filter(p=>p.almacen==='Mantenimiento'&&p.stock>0)
+    .filter(p=>p.stock>0)
+    .filter(p=>!q || String(p.producto||p.descripcion||'').toLowerCase().includes(q) || String(p.codigo||'').toLowerCase().includes(q))
     .sort((a,b)=>String(a.producto||a.descripcion||'').localeCompare(String(b.producto||b.descripcion||'')));
   // Si la pieza ya guardada fue despachada (stock 0), ya no aparece en el stock disponible.
   // La inyectamos igual para poder mostrarla seleccionada al editar una solicitud aprobada.
@@ -14491,11 +14562,11 @@ function kitRepOptions(sel,saved){
   }
   return prods.map(p=>{
     const nombre=p.producto||p.descripcion||'';
-    const etiqueta=p._despachada?'(despachada)':`stock ${p.stock}`;
+    const etiqueta=p._despachada?'(despachada)':`stock ${p.stock} · ${p.almacen==='Mantenimiento'?'Mant.':'Insumos'}`;
     // data-codigo = CÓDIGO REAL del producto. Antes solo viajaba p.key (la clave interna
     // "Mantenimiento|C:ALM-085") y la salida del despacho se guardaba con ese key como código,
     // así que el descuento no caía sobre la fila del almacén y el stock nunca bajaba.
-    return `<option value="${escAttr(p.key)}" data-codigo="${escAttr(p.codigo||'')}" data-precio="${p.precio||0}" data-unidad="${p.unidad||'UND'}" data-nombre="${escAttr(nombre)}" ${sel===p.key?'selected':''}>${nombre}${p.codigo?' ('+p.codigo+')':''} — ${p.unidad||'UND'} (${etiqueta})</option>`;
+    return `<option value="${escAttr(p.key)}" data-codigo="${escAttr(p.codigo||'')}" data-almacen="${escAttr(p.almacen||'General')}" data-precio="${p.precio||0}" data-unidad="${p.unidad||'UND'}" data-nombre="${escAttr(nombre)}" ${sel===p.key?'selected':''}>${nombre}${p.codigo?' ('+p.codigo+')':''} — ${p.unidad||'UND'} (${etiqueta})</option>`;
   }).join('');
 }
 // Aviso bajo el título: cuántas piezas hay hoy en el Almacén de Mantenimiento y, si están todas
@@ -14504,15 +14575,27 @@ function kitStockAviso(){
   const el=document.getElementById('kit-stock-aviso'); if(!el) return;
   let base=(typeof calcStock==='function')?calcStock():[];
   if(typeof filtrarPorMaestro==='function') base=filtrarPorMaestro(base);
-  const mant=base.filter(p=>p.almacen==='Mantenimiento');
-  const con=mant.filter(p=>p.stock>0).length;
-  if(con>0){
-    el.innerHTML=`Conectado al Almacén de Mantenimiento: <b style="color:#22d3a5">${con}</b> pieza${con!==1?'s':''} con stock disponible${mant.length>con?` · ${mant.length-con} en cero`:''}.`;
-  }else if(mant.length){
-    el.innerHTML=`<span style="color:#f59e0b">⚠ Las ${mant.length} piezas del Almacén de Mantenimiento están en cero.</span> Registra el ingreso en Logística → Almacén eligiendo destino <b>Mantenimiento</b>.`;
+  const conStock=base.filter(p=>p.stock>0);
+  const nM=conStock.filter(p=>p.almacen==='Mantenimiento').length, nI=conStock.length-nM;
+  if(conStock.length){
+    el.innerHTML=`Conectado al almacén: <b style="color:#22d3a5">${conStock.length}</b> material${conStock.length!==1?'es':''} con stock · ${nM} Mantenimiento · ${nI} Insumos.`;
   }else{
-    el.innerHTML='<span style="color:#f59e0b">⚠ No hay productos asignados al Almacén de Mantenimiento.</span> Revisa el almacén de cada producto en Logística → Productos.';
+    el.innerHTML='<span style="color:#f59e0b">⚠ No hay materiales con stock disponible.</span> Registra los ingresos en Logística → Almacén.';
   }
+}
+// Filtra el desplegable de materiales del kit sin perder lo ya cargado en las filas.
+function kitBuscar(v){
+  window._kitQ=v;
+  const wrap=document.getElementById('kit-piezas-rows'); if(!wrap) return;
+  const filas=[...wrap.querySelectorAll('.kit-pieza-row')].map(r=>({
+    id:(r.querySelector('.kit-pieza-id')||{}).value||'',
+    cant:(r.querySelector('.kit-pieza-cant')||{}).value||''
+  }));
+  wrap.innerHTML='';
+  (filas.length?filas:[{id:'',cant:''}]).forEach(f=>kitAddPiezaRow(f.id,f.cant));
+  kitRecalcCosto();
+  const i=document.getElementById('kit-buscar');
+  if(i){ i.focus(); try{ i.setSelectionRange(i.value.length,i.value.length); }catch(e){} }
 }
 function kitAddPiezaRow(id,cant,saved){
   const wrap=document.getElementById('kit-piezas-rows');if(!wrap)return;
@@ -14563,6 +14646,7 @@ function abrirModalKitMant(){
   const g=i=>document.getElementById(i);
   g('kit-id').value='';g('kit-fecha').value=hoy();g('kit-equipo').value='Compresora';g('kit-tipo').value='Preventivo';
   g('kit-resp').value='';g('kit-desc').value='';g('kit-manoobra').value='';g('kit-estado').value='ok';
+  window._kitQ=''; const _kb=g('kit-buscar'); if(_kb) _kb.value='';
   g('kit-piezas-rows').innerHTML='';kitAddPiezaRow();kitRecalcCosto();
   if(g('kit-jackleg')) g('kit-jackleg').value='';
   kitEquipoChange();
@@ -14609,6 +14693,7 @@ function guardarKitMant(){
       // key = clave interna del stock; codigo = código real del producto. Antes se guardaba el
       // key en ambos campos y el despacho no encontraba la fila del almacén que debía descontar.
       piezas.push({key,codigo:(opt&&opt.getAttribute('data-codigo'))||kitCodigoDeKey(key),nombre,
+        almacen:(opt&&opt.getAttribute('data-almacen'))||kitAlmacenDeKey(key),
         unidad:(opt&&opt.getAttribute('data-unidad'))||'UND',cant,
         costo:parseFloat(opt&&opt.getAttribute('data-precio'))||0});
     }
@@ -15036,15 +15121,17 @@ function aprobarLogKitLog(id){
     showNotif('⛔ Requiere aprobación de Operaciones primero','error');return;
   }
   if(!m.aprobLog)m.aprobLog={ok:false,resp:'',fecha:''};
-  // Guarda de stock: validar contra el stock real del almacén de Mantenimiento (calcStock por key)
-  const stkMant=(typeof calcStock==='function')?calcStock().filter(r=>r.almacen==='Mantenimiento'):[];
+  // Guarda de stock contra TODO el almacén (Insumos y Mantenimiento): el kit puede llevar
+  // material de cualquiera de los dos, y validar solo contra Mantenimiento bloqueaba el
+  // despacho de piezas de Insumos aunque tuvieran stock de sobra.
+  const stk=(typeof calcStock==='function')?calcStock():[];
   const norm=s=>String(s||'').trim().toUpperCase();
   for(const p of (m.repuestos||[])){
     if(!p.key||!p.cant) continue;
-    // Coincidir por código o por nombre (los ingresos antiguos no traen código)
-    const r=stkMant.find(x=>x.key===p.key || norm(x.codigo)===norm(p.codigo||p.key) || norm(x.producto||x.descripcion)===norm(p.nombre));
+    // Coincidir por clave, por código o por nombre (los ingresos antiguos no traen código)
+    const r=stk.find(x=>x.key===p.key || norm(x.codigo)===norm(p.codigo||p.key) || norm(x.producto||x.descripcion)===norm(p.nombre));
     const disp=r?(r.stock||0):0;
-    if(p.cant>disp){showNotif(`⚠ Stock insuficiente de ${p.nombre} en Almacén Mantenimiento (disp. ${disp}) — no se puede aprobar el despacho`,'error');return;}
+    if(p.cant>disp){showNotif(`⚠ Stock insuficiente de ${p.nombre} en ${r?(r.almacen==='Mantenimiento'?'Almacén Mantenimiento':'Insumos'):'el almacén'} (disp. ${disp}) — no se puede aprobar el despacho`,'error');return;}
   }
   const def=(typeof usuarioActivo!=='undefined'&&usuarioActivo&&usuarioActivo.nombre)?usuarioActivo.nombre:'';
   const resp=(prompt('Responsable que aprueba el despacho (Logística):',def)||'').trim();
