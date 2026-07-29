@@ -6802,7 +6802,25 @@ function guardarProductoCatalogo(){
   showNotif('Producto guardado','ok');
 }
 function eliminarProducto(id){
-  if(!confirm('¿Eliminar este producto del catálogo?'))return;
+  // AVISO CON MOVIMIENTOS: borrar un producto del maestro deja sus ingresos y salidas sin
+  // referencia, y el artículo desaparece del almacén con todo su stock aunque el historial lo
+  // siga mostrando. Antes se borraba en silencio y el stock se perdía de vista sin explicación.
+  const p=(state.almacen.productos||[]).find(x=>x.id===id);
+  const cod=String((p&&p.codigo)||'').trim().toUpperCase();
+  let movs=0, neto=0;
+  if(cod){
+    const cuenta=(arr,signo)=>(arr||[]).forEach(m=>{
+      if(String(m&&m.codigo||'').trim().toUpperCase()===cod){ movs++; neto+=signo*(Number(m.cantidad)||0); }
+    });
+    cuenta(state.almacen.ingresos,1); cuenta(state.almacen.inventarioInicial,1); cuenta(state.almacen.salidas,-1);
+  }
+  if(movs){
+    if(!confirm('⚠ "'+((p&&p.nombre)||'este producto')+'" tiene '+movs+' movimiento(s) registrados'+
+      (neto?' y un stock de '+neto:'')+'.\n\nSi lo eliminas, esos movimientos quedan sin producto: el artículo DESAPARECE del almacén con su stock, aunque siga en el historial.\n\n'+
+      'Si lo que quieres es corregirlo, cancela y usa Editar — al cambiar el código los movimientos se arrastran solos.\n\n¿Eliminar de todas formas?')) return;
+  }else{
+    if(!confirm('¿Eliminar este producto del catálogo?'))return;
+  }
   state.almacen.productos=(state.almacen.productos||[]).filter(p=>p.id!==id);
   state.almacen.productosTs=Date.now();
   // Lápida: el borrado se impone en todos los equipos (inmune a fusiones y relojes distintos)
@@ -8134,6 +8152,31 @@ function almacenAvisoHuerfanos(){
     <button class="btn btn-outline" style="font-size:11px;padding:6px 14px;border-color:#f87171;color:#f87171" onclick="verHuerfanos()">Ver y recuperar</button>
   </div>`;
 }
+// Sugiere el producto del maestro que MÁS se parece al nombre de un movimiento huérfano.
+// Los ingresos suelen escribirse con la marca o una palabra de más ("BALDE DE REFRIGERANTE
+// VISTONY" contra "BALDE DE REFRIGERANTE" del catálogo), y buscar a mano entre cientos de
+// productos es inviable. Se compara por palabras compartidas, no por texto exacto.
+function _palabras(s){
+  return String(s||'').toUpperCase()
+    .replace(/[^A-ZÁÉÍÓÚÑ0-9\s\/"']/g,' ')
+    .split(/\s+/).filter(w=>w.length>1);
+}
+function _similitud(a,b){
+  const A=_palabras(a), B=_palabras(b);
+  if(!A.length||!B.length) return 0;
+  const setB=new Set(B);
+  let comunes=0; A.forEach(w=>{ if(setB.has(w)) comunes++; });
+  return (2*comunes)/(A.length+B.length);      // Dice: 1 = idénticos
+}
+function sugerirProductoMaestro(nombre){
+  const prods=(state.almacen&&state.almacen.productos)||[];
+  let mejor=null, score=0;
+  prods.forEach(p=>{
+    const s=_similitud(nombre,p.nombre);
+    if(s>score){ score=s; mejor=p; }
+  });
+  return (mejor&&score>=0.5)?{producto:mejor,score:Math.round(score*100)}:null;
+}
 function verHuerfanos(){
   document.getElementById('huerfanos-modal')?.remove();
   const h=almacenHuerfanos();
@@ -8153,6 +8196,7 @@ function verHuerfanos(){
     const f=String(m.fecha||'').slice(0,10);
     if(f){ if(!gr.desde||f<gr.desde) gr.desde=f; if(!gr.hasta||f>gr.hasta) gr.hasta=f; }
   });
+  Object.values(grupos).forEach(gr=>{ try{ gr._sug=sugerirProductoMaestro(gr.nombre); }catch(e){ gr._sug=null; } });
   window._hfGrupos=grupos;
   const filas=Object.values(grupos).map(gr=>`
     <tr style="border-top:1px solid var(--border2)">
@@ -8160,10 +8204,11 @@ function verHuerfanos(){
       <td style="padding:8px;font-size:12px;text-align:center">${gr.movs.length}</td>
       <td style="padding:8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace">${fmt3(gr.cant)}</td>
       <td style="padding:8px">
-        <select id="hf-${escAttr(gr.clave)}" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:11px">
+        <select id="hf-${escAttr(gr.clave)}" style="width:100%;background:var(--coal4);border:1px solid ${gr._sug?'#22d3a5':'var(--border)'};border-radius:6px;padding:5px 8px;color:var(--text);font-size:11px">
           <option value="">— Asignar a un producto que ya existe —</option>
-          ${prods.map(p=>`<option value="${escAttr(p.codigo)}">${p.nombre} (${p.codigo})</option>`).join('')}
+          ${prods.map(p=>`<option value="${escAttr(p.codigo)}"${(gr._sug&&gr._sug.producto.codigo===p.codigo)?' selected':''}>${p.nombre} (${p.codigo})</option>`).join('')}
         </select>
+        ${gr._sug?`<div style="font-size:10px;color:#22d3a5;margin-top:3px">✓ Sugerido: ${gr._sug.producto.nombre} · ${gr._sug.score}% de parecido</div>`:'<div style="font-size:10px;color:var(--text3);margin-top:3px">Sin parecido en el maestro — conviene crearlo</div>'}
       </td>
       <td style="padding:8px;white-space:nowrap">
         <button class="btn btn-gold" style="font-size:11px;padding:5px 10px" onclick="recuperarHuerfano('${escAttr(gr.clave)}')">Asignar</button>
@@ -8181,7 +8226,8 @@ function verHuerfanos(){
       <thead><tr style="font-size:10px;color:var(--text3)"><th style="padding:7px 8px">Artículo</th><th style="padding:7px 8px;text-align:center">Movs.</th><th style="padding:7px 8px;text-align:right">Neto</th><th style="padding:7px 8px;width:280px">Producto del maestro</th><th style="padding:7px 8px"></th></tr></thead>
       <tbody>${filas}</tbody></table></div>
     <div class="btn-row" style="margin-top:14px">
-      <button class="btn btn-gold" onclick="crearEnMaestroHuerfano('*')">+ Crear TODOS en el maestro</button>
+      <button class="btn btn-gold" onclick="asignarSugeridosHuerfanos()">✓ Asignar todos los sugeridos</button>
+      <button class="btn btn-outline" style="border-color:#22d3a5;color:#22d3a5" onclick="crearEnMaestroHuerfano('*')">+ Crear TODOS en el maestro</button>
       <button class="btn btn-outline" onclick="document.getElementById('huerfanos-modal').remove()">Cerrar</button>
     </div>
   </div>`;
@@ -8192,6 +8238,35 @@ function verHuerfanos(){
 // reaparece en Almacén General, Costo de Inventario y Productos con el stock que sale del propio
 // historial de ingresos y salidas. Si no trae código, se le asigna uno nuevo y se sella en sus
 // movimientos. Pasar '*' da de alta todos los pendientes de una vez.
+// Aplica de una vez todas las sugerencias: reasigna cada artículo huérfano al producto del
+// maestro que le corresponde, sin crear duplicados en el catálogo.
+function asignarSugeridosHuerfanos(){
+  const grupos=window._hfGrupos||{};
+  const conSug=Object.values(grupos).filter(gr=>gr&&gr._sug);
+  if(!conSug.length){ showNotif('No hay sugerencias que aplicar','warn'); return; }
+  if(!confirm('Asignar '+conSug.length+' artículo(s) al producto del maestro sugerido.\n\n'+
+    conSug.slice(0,8).map(gr=>'· '+gr.nombre+'  →  '+gr._sug.producto.nombre+' ('+gr._sug.score+'%)').join('\n')+
+    (conSug.length>8?'\n… y '+(conSug.length-8)+' más':'')+
+    '\n\nSus movimientos pasan a ese código y el stock vuelve a contarse. El historial no se toca.')) return;
+  let total=0;
+  conSug.forEach(gr=>{
+    const nuevo=gr._sug.producto.codigo;
+    const esNom=String(gr.clave).indexOf('N:')===0;
+    const obj=esNom?String(gr.clave).slice(2):String(gr.clave);
+    const toca=x=>{ if(!x) return false; const c=String(x.codigo||'').trim().toUpperCase();
+      return esNom?(!c && String(x.producto||x.descripcion||'').trim().toUpperCase()===obj):(c===obj); };
+    ['ingresos','salidas','inventarioInicial'].forEach(k=>{
+      (state.almacen[k]||[]).forEach(x=>{ if(toca(x)){ x.codigo=nuevo; total++; } });
+    });
+  });
+  if(!total){ showNotif('No se encontraron movimientos que reasignar','warn'); return; }
+  almacenSave();
+  try{ renderStockVigente(); }catch(e){}
+  try{ renderProductos(); }catch(e){}
+  document.getElementById('huerfanos-modal')?.remove();
+  showNotif('✓ '+conSug.length+' artículo(s) reasignado(s) · '+total+' movimientos — ya aparecen en el almacén');
+  try{ almacenAvisoHuerfanos(); }catch(e){}
+}
 function crearEnMaestroHuerfano(clave){
   const grupos=window._hfGrupos||{};
   const lista=(clave==='*')?Object.values(grupos):[grupos[clave]].filter(Boolean);
