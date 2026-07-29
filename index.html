@@ -6557,6 +6557,31 @@ function _almClonLight(alm){
 // de migración/apertura se quedan con el valor más alto o el que exista. Es la MISMA regla que el
 // arranque, extraída para usarla también al SUBIR (read-merge-write) y evitar que un snapshot pise
 // los movimientos de otra computadora.
+// Une dos maestros de productos SIN perder altas de ninguno de los dos equipos.
+// Identidad: primero por id; si no coincide, por código (evita duplicar el mismo artículo dado
+// de alta por separado en dos equipos). Para un producto presente en ambos, gana la versión del
+// snapshot con productosTs más reciente, conservando el id original para no romper las lápidas.
+function _mergeProductos(a,b,tsA,tsB){
+  const bGana = Number(tsB||0) >= Number(tsA||0);
+  const out=[], porId={}, porCod={};
+  const put=(p,gana)=>{
+    if(!p) return;
+    const id=(p.id!=null&&p.id!=='')?('id:'+String(p.id)):'';
+    const cod=String(p.codigo||'').trim().toUpperCase(); const kc=cod?('c:'+cod):'';
+    const prev=(id&&porId[id])||(kc&&porCod[kc])||null;
+    if(!prev){
+      const reg={...p};
+      out.push(reg);
+      if(id) porId[id]=reg;
+      if(kc) porCod[kc]=reg;
+      return;
+    }
+    if(gana){ const idOrig=prev.id; Object.assign(prev,p); prev.id=idOrig; }
+  };
+  (bGana?(a||[]):(b||[])).forEach(p=>put(p,false));   // primero el más viejo
+  (bGana?(b||[]):(a||[])).forEach(p=>put(p,true));    // luego el más nuevo, que se impone
+  return out;
+}
 function _almMergeSnaps(a,b){
   a=a||{}; b=b||{};
   const M=(x,y)=>(typeof mergeSnapById==='function')?mergeSnapById(x||[], y||[]):(((x&&x.length)?x:y)||[]);
@@ -6564,9 +6589,12 @@ function _almMergeSnaps(a,b){
   // del Compresorista (que marca _ts nuevo) NO la pisa una copia vieja "sin confirmar" de Logística.
   const Mts=(x,y)=>(typeof mergeById_ts==='function')?mergeById_ts(x||[], y||[]):M(x,y);
   const exA=a.explosivos||{ingresos:[],salidas:[]}, exB=b.explosivos||{ingresos:[],salidas:[]};
-  let productos=a.productos||[], productosTs=Number(a.productosTs||0);
-  if(Number(b.productosTs||0) > productosTs){ productos=b.productos||productos; productosTs=Number(b.productosTs||0); }
-  else if(!productos.length && (b.productos||[]).length){ productos=b.productos; }
+  // EL MAESTRO SE FUSIONA POR PRODUCTO, NO SE REEMPLAZA ENTERO.
+  // Antes ganaba la LISTA COMPLETA del snapshot con productosTs mayor: si un equipo daba de alta
+  // productos y otro sincronizaba después con un maestro más viejo, esas altas DESAPARECÍAN sin
+  // dejar rastro. Ahora se unen por producto y solo un borrado con lápida los quita.
+  let productos=_mergeProductos(a.productos, b.productos, a.productosTs, b.productosTs);
+  let productosTs=Math.max(Number(a.productosTs||0), Number(b.productosTs||0));
   if(typeof _prodsVivos==='function') productos=_prodsVivos(productos);   // borrados no reviven
   const out={ ...a, ...b,
     ingresos:M(a.ingresos,b.ingresos), salidas:Mts(a.salidas,b.salidas),
@@ -7009,6 +7037,11 @@ function importarMaestroExcel(input){
 // precio y almacén; el inventario inicial es la existencia REAL de ese corte (ids fijos IX####
 // para que la fusión entre equipos no duplique).
 function almacenSeedProductos(){
+  // Los productos que TÚ diste de alta no se pierden al sembrar el catálogo de fábrica.
+  // Esta siembra reemplazaba la lista entera, así que si corría en un equipo con altas propias
+  // todavía sin sincronizar (caché limpiada, equipo nuevo, marca de versión ausente) esas altas
+  // desaparecían. Se guardan aquí y se reponen al final.
+  const _propios=((state.almacen&&state.almacen.productos)||[]).filter(p=>p&&!/^MP\d+$/.test(String(p.id||'')));
   state.almacen.productos=[
     {"id": "MP0001", "codigo": "1", "nombre": "FRENO 7/8 HEXÁGONAL  RNS53F-36A", "unidad": "PZA", "precio": 221.41, "almacen": "Mantenimiento"},
     {"id": "MP0002", "codigo": "2", "nombre": "PERNO SUJETADOR   RNS53F-36TA", "unidad": "PZA", "precio": 149.31, "almacen": "Mantenimiento"},
@@ -7386,6 +7419,18 @@ function almacenSeedProductos(){
     {"id": "MP0374", "codigo": "FIL-038", "nombre": "FILTRO DE AIRE PRIMARIO A5105", "unidad": "PZA", "precio": 0, "almacen": "Mantenimiento"},
     {"id": "MP0375", "codigo": "FIL-039", "nombre": "FILTRO DE AIRE P838813", "unidad": "PZA", "precio": 0, "almacen": "Mantenimiento"},
   ];
+  // Reponer las altas propias que no estén ya en el catálogo de fábrica (por código o nombre)
+  try{
+    const cods=new Set(state.almacen.productos.map(p=>String(p.codigo||'').trim().toUpperCase()));
+    const noms=new Set(state.almacen.productos.map(p=>String(p.nombre||'').trim().toUpperCase()));
+    let rep=0;
+    _propios.forEach(p=>{
+      const c=String(p.codigo||'').trim().toUpperCase(), nn=String(p.nombre||'').trim().toUpperCase();
+      if((c&&cods.has(c))||(nn&&noms.has(nn))) return;
+      state.almacen.productos.push(p); if(c) cods.add(c); if(nn) noms.add(nn); rep++;
+    });
+    if(rep) console.info('[maestro] se conservaron '+rep+' productos dados de alta en este equipo');
+  }catch(e){}
 }
 function almacenSeedInventarioInicial(){
   state.almacen.inventarioInicial=[
