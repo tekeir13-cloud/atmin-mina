@@ -2559,6 +2559,7 @@ select option{background:var(--coal3);}
         <option value="Mantenimiento">Mantenimiento</option>
       </select>
       <div style="flex:1"></div>
+      <button class="btn btn-outline" style="padding:7px 14px;font-size:12px;border-color:#60a5fa;color:#60a5fa" onclick="verIngresadosDelMes()">📥 Ingresados en el mes</button>
       <button class="btn btn-outline" style="padding:7px 14px;font-size:12px;border-color:#22c55e;color:#22c55e" onclick="exportarStockExcel()">📊 Exportar Excel</button>
     </div>
     <div id="stock-huerfanos"></div>
@@ -8329,6 +8330,65 @@ function recuperarHuerfano(clave){
   document.getElementById('huerfanos-modal')?.remove();
   showNotif('✓ '+n+' movimiento'+(n!==1?'s':'')+' recuperado'+(n!==1?'s':'')+' — ya aparecen en el almacén');
   try{ almacenAvisoHuerfanos(); }catch(e){}
+}
+// ── QUÉ ENTRÓ AL ALMACÉN EN UN MES, Y CÓMO ESTÁ SU STOCK HOY ──
+// Responde "qué productos ingresé en julio y cuánto me queda", incluidos los que hoy no se
+// ven en el almacén porque su código ya no está en el maestro (esos salen marcados).
+function verIngresadosDelMes(mes){
+  document.getElementById('ingmes-modal')?.remove();
+  const meses=[...new Set(((state.almacen&&state.almacen.ingresos)||[]).map(i=>String(i.fecha||'').slice(0,7)).filter(Boolean))].sort().reverse();
+  if(!meses.length){ showNotif('No hay ingresos registrados','warn'); return; }
+  const m=mes||meses[0];
+  const ings=((state.almacen&&state.almacen.ingresos)||[]).filter(i=>String(i.fecha||'').slice(0,7)===m);
+  // Stock actual por clave de producto
+  const stock=(typeof calcStock==='function')?calcStock():[];
+  const visibles=new Set(((typeof filtrarPorMaestro==='function')?filtrarPorMaestro(stock):stock).map(r=>r.key));
+  const porKey={}; stock.forEach(r=>porKey[r.key]=r);
+  const grupos={};
+  ings.forEach(i=>{
+    const cod=String(i.codigo||'').trim();
+    const k=(i.almacen||'General')+'|'+(cod?('C:'+cod.toUpperCase()):String(i.producto||i.descripcion||'').toUpperCase());
+    if(!grupos[k]) grupos[k]={nombre:i.producto||i.descripcion||'—',codigo:cod,almacen:i.almacen||'General',
+      unidad:i.unidad||'',ingresado:0,fechas:[],key:(typeof prodKey==='function')?prodKey(i.almacen,cod,i.descripcion):k};
+    grupos[k].ingresado+=Number(i.cantidad)||0;
+    const f=String(i.fecha||'').slice(0,10); if(f&&grupos[k].fechas.indexOf(f)<0) grupos[k].fechas.push(f);
+  });
+  const filas=Object.values(grupos).sort((a,b)=>String(a.nombre).localeCompare(String(b.nombre))).map(gr=>{
+    const r=porKey[gr.key];
+    const seVe=r&&visibles.has(gr.key);
+    const st=r?r.stock:0;
+    return `<tr style="border-top:1px solid var(--border2)${seVe?'':';background:rgba(239,68,68,0.07)'}">
+      <td style="padding:7px 9px;font-size:12px"><b>${gr.nombre}</b><br><span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">${gr.codigo||'sin código'}</span></td>
+      <td style="padding:7px 9px;font-size:11px;text-align:center">${gr.almacen==='Mantenimiento'?'Mant.':'Insumos'}</td>
+      <td style="padding:7px 9px;font-size:11px;color:var(--text3)">${gr.fechas.sort().join(', ')}</td>
+      <td style="padding:7px 9px;font-size:12px;text-align:right;font-family:'DM Mono',monospace">${fmt3(gr.ingresado)} ${gr.unidad||''}</td>
+      <td style="padding:7px 9px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;color:${seVe?(st>0?'#22d3a5':'var(--text3)'):'#f87171'};font-weight:700">${seVe?fmt3(st):'—'}</td>
+      <td style="padding:7px 9px;font-size:11px;text-align:center">${seVe?'<span style="color:#22d3a5">✓ en almacén</span>':'<span style="color:#f87171">✗ no se ve</span>'}</td>
+    </tr>`;
+  }).join('');
+  const noVis=Object.values(grupos).filter(gr=>!(porKey[gr.key]&&visibles.has(gr.key))).length;
+  const ov=document.createElement('div');
+  ov.id='ingmes-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.onclick=e=>{ if(e.target===ov) ov.remove(); };
+  ov.innerHTML=`<div class="card" style="max-width:min(900px,96vw);max-height:86vh;overflow:auto;padding:18px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+      <div class="section-title" style="margin:0">📥 Ingresado en el mes</div>
+      <select onchange="verIngresadosDelMes(this.value)" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px">
+        ${meses.map(x=>`<option value="${x}"${x===m?' selected':''}>${x}</option>`).join('')}
+      </select>
+      <span style="font-size:11px;color:var(--text3)">${Object.keys(grupos).length} producto(s) · ${ings.length} ingreso(s)</span>
+    </div>
+    ${noVis?`<div style="font-size:11px;color:#f87171;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:8px 11px;margin-bottom:10px">⚠ ${noVis} producto(s) de este mes NO se ven en el almacén. Usa <b>Ver y recuperar</b> en Almacén General para devolverlos.</div>`:''}
+    <div class="table-wrap" style="margin:0"><table style="width:100%">
+      <thead><tr style="font-size:10px;color:var(--text3)">
+        <th style="padding:7px 9px">Producto</th><th style="padding:7px 9px;text-align:center">Almacén</th>
+        <th style="padding:7px 9px">Fechas de ingreso</th><th style="padding:7px 9px;text-align:right">Ingresado</th>
+        <th style="padding:7px 9px;text-align:right">Stock hoy</th><th style="padding:7px 9px;text-align:center">Estado</th>
+      </tr></thead><tbody>${filas}</tbody></table></div>
+    <div class="btn-row" style="margin-top:14px"><button class="btn btn-outline" onclick="document.getElementById('ingmes-modal').remove()">Cerrar</button></div>
+  </div>`;
+  document.body.appendChild(ov);
 }
 function verDesgloseValor(){
   document.getElementById('desglose-valor-modal')?.remove();
