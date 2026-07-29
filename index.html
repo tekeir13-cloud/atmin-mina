@@ -4028,7 +4028,8 @@ select option{background:var(--coal3);}
     </div>
     <div class="form-group" style="margin-bottom:12px"><label>Descripción del trabajo</label><textarea id="kit-desc" rows="2" placeholder="Ej: Cambio de aceite, filtros y revisión de fajas..." style="width:100%;resize:vertical"></textarea></div>
     <div class="card" style="margin-bottom:12px;background:var(--coal3)">
-      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">🔩 Piezas del almacén de mantenimiento</div>
+      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">🔩 Piezas del almacén de mantenimiento</div>
+      <div id="kit-stock-aviso" style="font-size:10px;color:var(--text3);margin-bottom:8px"></div>
       <div id="kit-piezas-rows"></div>
       <button class="btn btn-outline" style="font-size:11px;padding:5px 12px;margin-top:6px" onclick="kitAddPiezaRow()">+ Agregar pieza</button>
       <div style="font-size:12px;color:var(--text3);margin-top:10px;text-align:right">Costo de piezas: <strong id="kit-costo-piezas" style="color:var(--text)">S/ 0.00</strong></div>
@@ -7858,18 +7859,27 @@ function calcStock(){
   // S/ 2,208 cuando el maestro dice S/ 3.80). Aquí se impone el precio del maestro al final, ya
   // hechas las sumas. Si el maestro no tiene precio cargado (0 o vacío) se conserva el del
   // movimiento como respaldo, para no dejar en cero el valor de un producto sin precio en catálogo.
+  // EL NOMBRE Y LA UNIDAD TAMBIÉN LOS MANDA EL MAESTRO.
+  // Se mostraban los del movimiento, así que corregir un producto en el catálogo (p. ej. "Balde
+  // de grasa Bistone" → "Bistony") no se veía en el stock, ni en el selector de piezas del kit,
+  // ni en el de salidas: seguía apareciendo el nombre viejo del papel con que entró.
   const _pmCod={}, _pmNom={};
   ((state.almacen&&state.almacen.productos)||[]).forEach(p=>{
     if(!p) return;
-    const pr=Number(p.precio)||0; if(pr<=0) return;
-    const c=String(p.codigo||'').trim().toUpperCase(); if(c) _pmCod[c]=pr;
-    const n=String(p.nombre||'').trim().toUpperCase(); if(n && _pmNom[n]===undefined) _pmNom[n]=pr;
+    const c=String(p.codigo||'').trim().toUpperCase();
+    const n=String(p.nombre||'').trim().toUpperCase();
+    const reg={precio:Number(p.precio)||0, nombre:p.nombre||'', unidad:p.unidad||''};
+    if(c) _pmCod[c]=reg;
+    if(n && _pmNom[n]===undefined) _pmNom[n]=reg;
   });
   Object.values(map).forEach(r=>{
     const c=String(r.codigo||'').trim().toUpperCase();
     let pm = c ? _pmCod[c] : undefined;
     if(pm===undefined) pm=_pmNom[String(r.producto||r.descripcion||'').trim().toUpperCase()];
-    if(pm!==undefined) r.precio=pm;
+    if(!pm) return;
+    if(pm.precio>0) r.precio=pm.precio;      // sin precio en catálogo se conserva el del movimiento
+    if(pm.nombre){ r.producto=pm.nombre; r.descripcion=pm.nombre; }
+    if(pm.unidad) r.unidad=pm.unidad;
   });
   Object.values(map).forEach(r=>r.stock=r.ingreso-r.salida);
   return Object.values(map);
@@ -13943,9 +13953,38 @@ function renderMantenimiento(){
 }
 
 // ── Solicitud de Kit de Mantenimiento ──
+// Resuelve el CÓDIGO real del producto a partir de la clave interna del stock. Sirve para los
+// kits guardados antes de esta corrección, que llevan el key también en el campo `codigo`.
+function kitCodigoDeKey(key){
+  const k=String(key||'');
+  try{
+    const r=(typeof calcStock==='function'?calcStock():[]).find(x=>x.key===k);
+    if(r&&r.codigo) return String(r.codigo);
+  }catch(e){}
+  const m=/\|C:(.+)$/.exec(k);           // "Mantenimiento|C:ALM-085" → "ALM-085"
+  return m?m[1]:k;
+}
+// Construye la SALIDA de almacén de una pieza del kit, con el código real y marca de tiempo.
+// El `_ts` es imprescindible: el corte de stock (stockCorteTs) descarta los movimientos sin
+// marca, y los ids 'SM…' no calzan con el patrón [IS]+13 dígitos del que se deducía la fecha,
+// así que estas salidas quedaban FUERA del stock y el almacén nunca se descontaba.
+function kitSalidaDePieza(p,kitId,equipo,solicitante,idx){
+  const ts=Date.now()+(idx||0);
+  return { id:'SM'+ts, _ts:ts, grupo:'KIT-'+kitId,
+    fecha:hoy(), destino:'mantenimiento', almacen:'Mantenimiento', maquina:equipo,
+    solicitante:solicitante||'—',
+    codigo:p.codigo&&!String(p.codigo).includes('|')?p.codigo:kitCodigoDeKey(p.key||p.codigo),
+    producto:p.nombre, descripcion:p.nombre,
+    unidad:p.unidad||'UND', precio:p.costo||0,
+    cantidad:p.cant, importe:p.cant*(p.costo||0) };
+}
 function kitRepOptions(sel,saved){
-  // SOLO lo que hay en el almacén de Mantenimiento (stock disponible)
-  const prods=(typeof calcStock==='function'?calcStock():[])
+  // SOLO lo que hay HOY en el Almacén de Mantenimiento, con su stock vigente. Misma fuente y
+  // mismo filtro de maestro que la vista de Stock, para que el selector y el almacén coincidan
+  // pieza por pieza y no haya listas paralelas.
+  let base=(typeof calcStock==='function')?calcStock():[];
+  if(typeof filtrarPorMaestro==='function') base=filtrarPorMaestro(base);
+  const prods=base
     .filter(p=>p.almacen==='Mantenimiento'&&p.stock>0)
     .sort((a,b)=>String(a.producto||a.descripcion||'').localeCompare(String(b.producto||b.descripcion||'')));
   // Si la pieza ya guardada fue despachada (stock 0), ya no aparece en el stock disponible.
@@ -13957,15 +13996,37 @@ function kitRepOptions(sel,saved){
   return prods.map(p=>{
     const nombre=p.producto||p.descripcion||'';
     const etiqueta=p._despachada?'(despachada)':`stock ${p.stock}`;
-    return `<option value="${escAttr(p.key)}" data-precio="${p.precio||0}" data-unidad="${p.unidad||'UND'}" data-nombre="${escAttr(nombre)}" ${sel===p.key?'selected':''}>${nombre}${p.codigo?' ('+p.codigo+')':''} — ${p.unidad||'UND'} (${etiqueta})</option>`;
+    // data-codigo = CÓDIGO REAL del producto. Antes solo viajaba p.key (la clave interna
+    // "Mantenimiento|C:ALM-085") y la salida del despacho se guardaba con ese key como código,
+    // así que el descuento no caía sobre la fila del almacén y el stock nunca bajaba.
+    return `<option value="${escAttr(p.key)}" data-codigo="${escAttr(p.codigo||'')}" data-precio="${p.precio||0}" data-unidad="${p.unidad||'UND'}" data-nombre="${escAttr(nombre)}" ${sel===p.key?'selected':''}>${nombre}${p.codigo?' ('+p.codigo+')':''} — ${p.unidad||'UND'} (${etiqueta})</option>`;
   }).join('');
+}
+// Aviso bajo el título: cuántas piezas hay hoy en el Almacén de Mantenimiento y, si están todas
+// en cero, dónde mirar. Evita quedarse con un desplegable vacío sin saber por qué.
+function kitStockAviso(){
+  const el=document.getElementById('kit-stock-aviso'); if(!el) return;
+  let base=(typeof calcStock==='function')?calcStock():[];
+  if(typeof filtrarPorMaestro==='function') base=filtrarPorMaestro(base);
+  const mant=base.filter(p=>p.almacen==='Mantenimiento');
+  const con=mant.filter(p=>p.stock>0).length;
+  if(con>0){
+    el.innerHTML=`Conectado al Almacén de Mantenimiento: <b style="color:#22d3a5">${con}</b> pieza${con!==1?'s':''} con stock disponible${mant.length>con?` · ${mant.length-con} en cero`:''}.`;
+  }else if(mant.length){
+    el.innerHTML=`<span style="color:#f59e0b">⚠ Las ${mant.length} piezas del Almacén de Mantenimiento están en cero.</span> Registra el ingreso en Logística → Almacén eligiendo destino <b>Mantenimiento</b>.`;
+  }else{
+    el.innerHTML='<span style="color:#f59e0b">⚠ No hay productos asignados al Almacén de Mantenimiento.</span> Revisa el almacén de cada producto en Logística → Productos.';
+  }
 }
 function kitAddPiezaRow(id,cant,saved){
   const wrap=document.getElementById('kit-piezas-rows');if(!wrap)return;
+  try{ kitStockAviso(); }catch(e){}
   const div=document.createElement('div');
   div.className='kit-pieza-row';
   div.style.cssText='display:grid;grid-template-columns:2fr 1fr auto;gap:8px;margin-bottom:6px';
-  div.innerHTML=`<select class="kit-pieza-id" onchange="kitRecalcCosto()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px"><option value="">— Pieza —</option>${kitRepOptions(id,saved)}</select>
+  const _ops=kitRepOptions(id,saved);
+  const _n=(_ops.match(/<option /g)||[]).length;
+  div.innerHTML=`<select class="kit-pieza-id" onchange="kitRecalcCosto()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px"><option value="">${_n?`— Pieza — (${_n} en Almacén Mantenimiento)`:'— Sin piezas con stock en Almacén Mantenimiento —'}</option>${_ops}</select>
     <input type="number" class="kit-pieza-cant" min="0" step="1" placeholder="Cant." value="${cant||''}" oninput="kitRecalcCosto()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
     <button class="btn btn-outline" style="font-size:11px;padding:4px 10px;color:#f87171;border-color:#f87171" onclick="this.parentElement.remove();kitRecalcCosto()">✕</button>`;
   wrap.appendChild(div);
@@ -14045,11 +14106,15 @@ function guardarKitMant(){
   document.querySelectorAll('#kit-piezas-rows .kit-pieza-row').forEach(row=>{
     const sel=row.querySelector('.kit-pieza-id');
     const opt=sel&&sel.options[sel.selectedIndex];
-    const codigo=sel?sel.value:'';
+    const key=sel?sel.value:'';
     const cant=parseFloat(row.querySelector('.kit-pieza-cant')?.value)||0;
-    if(codigo&&cant>0){
+    if(key&&cant>0){
       const nombre=(opt&&opt.getAttribute('data-nombre'))||'';
-      piezas.push({key:codigo,codigo,nombre,unidad:(opt&&opt.getAttribute('data-unidad'))||'UND',cant,costo:parseFloat(opt&&opt.getAttribute('data-precio'))||0});
+      // key = clave interna del stock; codigo = código real del producto. Antes se guardaba el
+      // key en ambos campos y el despacho no encontraba la fila del almacén que debía descontar.
+      piezas.push({key,codigo:(opt&&opt.getAttribute('data-codigo'))||kitCodigoDeKey(key),nombre,
+        unidad:(opt&&opt.getAttribute('data-unidad'))||'UND',cant,
+        costo:parseFloat(opt&&opt.getAttribute('data-precio'))||0});
     }
   });
   const horasMant=parseFloat(g('kit-manoobra').value)||0;
@@ -14067,15 +14132,7 @@ function guardarKitMant(){
     const baseE=Date.now();
     piezas.forEach((p,idx)=>{
       if(!p.key||!p.cant)return;
-      state.almacen.salidas.push({
-        id:'SM'+(baseE+idx),grupo:'KIT-'+editId,
-        fecha:hoy(),destino:'mantenimiento',
-        almacen:'Mantenimiento',maquina:g('kit-equipo').value,
-        solicitante:resp||'—',
-        codigo:p.key,producto:p.nombre,descripcion:p.nombre,
-        unidad:p.unidad||'UND',precio:p.costo||0,
-        cantidad:p.cant,importe:p.cant*(p.costo||0)
-      });
+      state.almacen.salidas.push(kitSalidaDePieza(p,editId,g('kit-equipo').value,resp,idx));
     });
     almacenSave();
   }
@@ -14501,22 +14558,11 @@ function aprobarLogKitLog(id){
     if(!p.key||!p.cant) return;
     state.almacen=state.almacen||{ingresos:[],salidas:[],inventarioInicial:[],solicitudesCompra:[]};
     state.almacen.salidas=state.almacen.salidas||[];
-    state.almacen.salidas.push({
-      id:'SM'+(base+idx),grupo:'KIT-'+m.id,
-      fecha:hoy(),destino:'mantenimiento',
-      almacen:'Mantenimiento',maquina:m.equipo,
-      solicitante:m.resp||'—',
-      codigo:p.key,producto:p.nombre,descripcion:p.nombre,
-      unidad:p.unidad||'UND',precio:p.costo||0,
-      cantidad:p.cant,importe:p.cant*(p.costo||0)
-    });
+    state.almacen.salidas.push(kitSalidaDePieza(p,m.id,m.equipo,m.resp,idx));
   });
-  // Descontar stock del almacén de repuestos (simétrico con rechazarLogKitLog que lo repone)
-  (m.repuestos||[]).forEach(p=>{
-    const r=(state.mantRepuestos||[]).find(x=>x.id===p.id);
-    if(r)r.stock=(r.stock||0)-(p.cant||0);
-  });
-  mantRepSave();
+  // El descuento REAL es la salida de almacén de arriba, sobre el stock de Mantenimiento.
+  // (Antes se intentaba descontar además de state.mantRepuestos, una lista aparte de piezas de
+  //  ejemplo cuyos ids nunca calzan con los del kit: nunca hacía nada y confundía el origen.)
   almacenSave();
   m.aprobLog={ok:true,resp,fecha:hoy()};
   mantKitSave();renderSolicitudMantLog();try{if(typeof renderDashboard==='function')renderDashboard();}catch(e){}showNotif('✓ Aprobado por Logística · stock despachado');
@@ -14531,12 +14577,8 @@ function rechazarLogKitLog(id){
   // Y devolver también las unidades al almacén de repuestos (mantRepuestos), que se descontó al aprobar.
   if(m.aprobLog&&m.aprobLog.ok){
     state.almacen=state.almacen||{};
+    // Quitar las salidas del kit devuelve el stock al almacén de Mantenimiento por sí solo.
     state.almacen.salidas=(state.almacen.salidas||[]).filter(s=>s.grupo!=='KIT-'+id);
-    (m.repuestos||[]).forEach(p=>{
-      const rr=(state.mantRepuestos||[]).find(x=>x.id===p.id);
-      if(rr) rr.stock=(rr.stock||0)+(p.cant||0);
-    });
-    if(typeof mantRepSave==='function') mantRepSave();
     almacenSave();
   }
   m.aprobLog={ok:false,rechazado:true,resp,fecha:hoy(),motivo};
@@ -14574,12 +14616,12 @@ function generarValeDespacho(id){
   const hr=ws.getRow(R);head.forEach((h,i)=>{const c=hr.getCell(i+1);c.value=h;c.font={bold:true,color:{argb:'FFFFFFFF'}};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:C_HEAD}};c.alignment={horizontal:'center',vertical:'middle'};c.border=allB;});hr.height=18;R++;
   let totPiezas=0;
   (m.repuestos||[]).forEach(p=>{
-    const r=(state.mantRepuestos||[]).find(x=>x.id===p.id)||{};
-    const cu=(r.costo!=null?r.costo:p.costo)||0;const ct=cu*(p.cant||0);totPiezas+=ct;
+    // Los datos salen de la pieza del kit, que ya trae el código real del almacén
+    const cu=(p.costo!=null?p.costo:0)||0;const ct=cu*(p.cant||0);totPiezas+=ct;
     const row=ws.getRow(R);
-    row.getCell(1).value=r.codigo||p.id||'—';
-    row.getCell(2).value=r.nombre||p.nombre||'—';
-    row.getCell(3).value=r.unidad||'Unidad';
+    row.getCell(1).value=(p.codigo&&!String(p.codigo).includes('|'))?p.codigo:((typeof kitCodigoDeKey==='function')?kitCodigoDeKey(p.key||p.codigo):(p.codigo||'—'));
+    row.getCell(2).value=p.nombre||'—';
+    row.getCell(3).value=p.unidad||'Unidad';
     row.getCell(4).value=p.cant||0;
     row.getCell(5).value=cu;row.getCell(5).numFmt='#,##0.00';
     row.getCell(6).value=ct;row.getCell(6).numFmt='#,##0.00';
