@@ -6816,11 +6816,30 @@ function guardarPrecioInline(id,val){
   almacenSave();
   showNotif('Precio actualizado','ok');
 }
+// El buscador del maestro conserva su valor y el foco aunque la vista se repinte entera.
+function prodBuscar(v){
+  window._prodQ=v;
+  renderProductos();
+  const i=document.getElementById('prod-buscar');
+  if(i){ i.focus(); try{ i.setSelectionRange(i.value.length,i.value.length); }catch(e){} }
+}
+function prodFiltrarAlmacen(v){ window._prodAlm=v; renderProductos(); }
 function renderProductos(){
   const el=document.getElementById('log-productos');
   if(!el)return;
   const allProds=(state.almacen&&state.almacen.productos)||[];
-  const prods=allProds;
+  // Buscador y filtro del maestro. El valor vive fuera del DOM porque esta vista se reconstruye
+  // entera en cada render: si se leyera del input, se perdería al repintar mientras se escribe.
+  const _q=String(window._prodQ||'').trim().toLowerCase();
+  const _af=String(window._prodAlm||'');
+  const prods=allProds.filter(p=>{
+    if(_af && (p.almacen||'General')!==_af) return false;
+    if(!_q) return true;
+    return String(p.codigo||'').toLowerCase().includes(_q)
+        || String(p.nombre||'').toLowerCase().includes(_q)
+        || String(p.unidad||'').toLowerCase().includes(_q);
+  });
+  const _conteoTxt=(_q||_af)?`${prods.length} de ${allProds.length} productos`:`${allProds.length} productos en el maestro`;
   const comb=paramsGetComb()||{pet:24.5,gas:21.0};
   const exp=paramsGetExp()||{...COMP_PRECIOS_EXP_DEFAULT};
 
@@ -6859,6 +6878,16 @@ function renderProductos(){
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
       <div style="font-size:16px;font-weight:700;color:var(--text)">📦 Maestro de Productos</div>
       <button class="btn btn-gold" style="font-size:12px" onclick="abrirModalProducto()">+ Nuevo Producto</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+      <input type="text" id="prod-buscar" placeholder="🔍 Buscar por código, nombre o unidad..." value="${escAttr(window._prodQ||'')}" oninput="prodBuscar(this.value)" style="padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--coal4);color:var(--text1);font-size:12px;width:280px">
+      <select onchange="prodFiltrarAlmacen(this.value)" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px">
+        <option value=""${_af===''?' selected':''}>Todos los almacenes</option>
+        <option value="General"${_af==='General'?' selected':''}>Insumos</option>
+        <option value="Mantenimiento"${_af==='Mantenimiento'?' selected':''}>Mantenimiento</option>
+      </select>
+      <span style="font-size:11px;color:var(--text3)">${_conteoTxt}</span>
+      ${(_q||_af)?`<button class="btn btn-outline" style="font-size:11px;padding:5px 12px" onclick="prodBuscar('');prodFiltrarAlmacen('')">Limpiar</button>`:''}
     </div>
     <div style="margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <span style="font-size:11px;color:var(--text3)">${prods.length} productos</span>
@@ -8114,22 +8143,32 @@ function verHuerfanos(){
   const grupos={};
   h.forEach(m=>{
     const k=String(m.codigo||'').trim().toUpperCase()||('N:'+String(m.producto||m.descripcion||'').trim().toUpperCase());
-    if(!grupos[k]) grupos[k]={clave:k,codigo:m.codigo||'',nombre:m.producto||m.descripcion||'—',movs:[],cant:0};
-    grupos[k].movs.push(m);
-    grupos[k].cant+=(m._tipo==='Salida'?-1:1)*(Number(m.cantidad)||0);
+    if(!grupos[k]) grupos[k]={clave:k,codigo:m.codigo||'',nombre:m.producto||m.descripcion||'—',
+      unidad:m.unidad||'UND',precio:Number(m.precio)||0,almacen:m.almacen||'General',movs:[],cant:0,desde:'',hasta:''};
+    const gr=grupos[k];
+    gr.movs.push(m);
+    gr.cant+=(m._tipo==='Salida'?-1:1)*(Number(m.cantidad)||0);
+    if(!gr.unidad&&m.unidad) gr.unidad=m.unidad;
+    if(!gr.precio&&Number(m.precio)) gr.precio=Number(m.precio);
+    const f=String(m.fecha||'').slice(0,10);
+    if(f){ if(!gr.desde||f<gr.desde) gr.desde=f; if(!gr.hasta||f>gr.hasta) gr.hasta=f; }
   });
+  window._hfGrupos=grupos;
   const filas=Object.values(grupos).map(gr=>`
     <tr style="border-top:1px solid var(--border2)">
-      <td style="padding:8px;font-size:12px"><b>${gr.nombre}</b><br><span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">${gr.codigo||'sin código'}</span></td>
+      <td style="padding:8px;font-size:12px"><b>${gr.nombre}</b><br><span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">${gr.codigo||'sin código'}</span>${gr.desde?`<br><span style="font-size:10px;color:var(--text3)">${gr.desde===gr.hasta?gr.desde:gr.desde+' → '+gr.hasta}</span>`:''}</td>
       <td style="padding:8px;font-size:12px;text-align:center">${gr.movs.length}</td>
       <td style="padding:8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace">${fmt3(gr.cant)}</td>
       <td style="padding:8px">
         <select id="hf-${escAttr(gr.clave)}" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:11px">
-          <option value="">— Asignar a un producto del maestro —</option>
+          <option value="">— Asignar a un producto que ya existe —</option>
           ${prods.map(p=>`<option value="${escAttr(p.codigo)}">${p.nombre} (${p.codigo})</option>`).join('')}
         </select>
       </td>
-      <td style="padding:8px"><button class="btn btn-gold" style="font-size:11px;padding:5px 12px" onclick="recuperarHuerfano('${escAttr(gr.clave)}')">Recuperar</button></td>
+      <td style="padding:8px;white-space:nowrap">
+        <button class="btn btn-gold" style="font-size:11px;padding:5px 10px" onclick="recuperarHuerfano('${escAttr(gr.clave)}')">Asignar</button>
+        <button class="btn btn-outline" style="font-size:11px;padding:5px 10px;border-color:#22d3a5;color:#22d3a5" onclick="crearEnMaestroHuerfano('${escAttr(gr.clave)}')" title="Da de alta el producto en el maestro con su propio código">+ Crear en maestro</button>
+      </td>
     </tr>`).join('');
   const ov=document.createElement('div');
   ov.id='huerfanos-modal';
@@ -8141,9 +8180,56 @@ function verHuerfanos(){
     <div class="table-wrap" style="margin:0"><table style="width:100%">
       <thead><tr style="font-size:10px;color:var(--text3)"><th style="padding:7px 8px">Artículo</th><th style="padding:7px 8px;text-align:center">Movs.</th><th style="padding:7px 8px;text-align:right">Neto</th><th style="padding:7px 8px;width:280px">Producto del maestro</th><th style="padding:7px 8px"></th></tr></thead>
       <tbody>${filas}</tbody></table></div>
-    <div class="btn-row" style="margin-top:14px"><button class="btn btn-outline" onclick="document.getElementById('huerfanos-modal').remove()">Cerrar</button></div>
+    <div class="btn-row" style="margin-top:14px">
+      <button class="btn btn-gold" onclick="crearEnMaestroHuerfano('*')">+ Crear TODOS en el maestro</button>
+      <button class="btn btn-outline" onclick="document.getElementById('huerfanos-modal').remove()">Cerrar</button>
+    </div>
   </div>`;
   document.body.appendChild(ov);
+}
+// Da de alta en el maestro los artículos que solo existen en el historial. Si el movimiento ya
+// trae código, se respeta ese mismo código y no hace falta tocar ningún movimiento: el artículo
+// reaparece en Almacén General, Costo de Inventario y Productos con el stock que sale del propio
+// historial de ingresos y salidas. Si no trae código, se le asigna uno nuevo y se sella en sus
+// movimientos. Pasar '*' da de alta todos los pendientes de una vez.
+function crearEnMaestroHuerfano(clave){
+  const grupos=window._hfGrupos||{};
+  const lista=(clave==='*')?Object.values(grupos):[grupos[clave]].filter(Boolean);
+  if(!lista.length){ showNotif('No hay artículos que dar de alta','warn'); return; }
+  if(clave==='*' && !confirm('Dar de alta en el maestro '+lista.length+' artículo(s) que hoy solo existen en el historial.\n\nCada uno conserva su código si ya lo tenía, y su stock se recalcula desde sus ingresos y salidas. No se borra nada.')) return;
+  if(!state.almacen.productos) state.almacen.productos=[];
+  const usados=new Set(state.almacen.productos.map(p=>String(p.codigo||'').trim().toUpperCase()));
+  let altas=0, sellados=0;
+  lista.forEach(gr=>{
+    if(!gr) return;
+    const nombre=String(gr.nombre||'').trim(); if(!nombre||nombre==='—') return;
+    let cod=String(gr.codigo||'').trim();
+    if(!cod || usados.has(cod.toUpperCase())){
+      cod=(typeof generarCodigoProducto==='function')?generarCodigoProducto():('ART-'+Date.now());
+      while(usados.has(cod.toUpperCase())) cod=cod.replace(/(\d+)$/,m=>String(Number(m)+1).padStart(m.length,'0'));
+      // sellar el código nuevo en los movimientos del artículo
+      const esNom=String(gr.clave).indexOf('N:')===0;
+      const obj=esNom?String(gr.clave).slice(2):String(gr.clave);
+      const toca=x=>{ if(!x) return false; const c=String(x.codigo||'').trim().toUpperCase();
+        return esNom?(!c && String(x.producto||x.descripcion||'').trim().toUpperCase()===obj):(c===obj); };
+      ['ingresos','salidas','inventarioInicial'].forEach(k=>{
+        (state.almacen[k]||[]).forEach(x=>{ if(toca(x)){ x.codigo=cod; sellados++; } });
+      });
+    }
+    usados.add(cod.toUpperCase());
+    state.almacen.productos.push({id:'P'+Date.now()+Math.random().toString(36).slice(2,6),
+      codigo:cod, nombre, unidad:gr.unidad||'UND', precio:Number(gr.precio)||0, almacen:gr.almacen||'General'});
+    altas++;
+  });
+  if(!altas){ showNotif('No se pudo dar de alta ningún artículo','warn'); return; }
+  state.almacen.productosTs=Date.now();
+  almacenSave();
+  try{ renderStockVigente(); }catch(e){}
+  try{ renderProductos(); }catch(e){}
+  try{ renderInventario(); }catch(e){}
+  document.getElementById('huerfanos-modal')?.remove();
+  showNotif('✓ '+altas+' producto'+(altas!==1?'s':'')+' dado'+(altas!==1?'s':'')+' de alta en el maestro'+(sellados?' · '+sellados+' movimientos actualizados':'')+' — ya aparecen con su stock');
+  try{ almacenAvisoHuerfanos(); }catch(e){}
 }
 function recuperarHuerfano(clave){
   const sel=document.getElementById('hf-'+clave);
