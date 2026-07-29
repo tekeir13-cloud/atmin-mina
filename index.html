@@ -4676,6 +4676,9 @@ async function cargarAlmacenCombustibleSB(){
     // Apertura de petróleo del periodo (1650 gln). Se aplica DESPUÉS de traer la nube, por id
     // determinista: nunca duplica ni pisa los ingresos/consumos reales de otros equipos.
     try{ if(typeof aplicarAperturaPetroleo==='function') aplicarAperturaPetroleo(); }catch(e){}
+    // El historial de ingresos manda sobre el maestro: alinea nombres, une equivalentes y da de
+    // alta lo que falte, para que ningún ingreso quede invisible. Corre una sola vez.
+    try{ if(typeof almacenReconciliarIngresos==='function') await almacenReconciliarIngresos(); }catch(e){}
     // ── COMPRAS (módulo de control, independiente del costeo) ──
     try{
       const compNube=await sbLoadModulo('compras');
@@ -8114,6 +8117,113 @@ function poblarFiltroAlmacenes(selId){
 }
 // Desglose del VALOR en stock: muestra los productos que más aportan (stock × precio), para
 // detectar de un vistazo qué está inflando el total (precio o cantidad rara, duplicados, etc.).
+// ══════════════════════════════════════════════════════════════
+// RECONCILIACIÓN AUTOMÁTICA: EL HISTORIAL DE INGRESOS MANDA SOBRE EL MAESTRO
+// ══════════════════════════════════════════════════════════════
+// Corre SOLA una vez (marca versionada que se propaga por sincronización) y deja el maestro
+// en línea con lo que realmente se ingresó, para que ningún ingreso quede invisible:
+//   · Ingreso con código que YA está en el maestro → se respeta ese código y el producto pasa a
+//     llamarse como dice el ingreso (el historial manda sobre el nombre del catálogo).
+//   · Ingreso cuyo código NO existe (o sin código) → si hay un producto claramente equivalente
+//     en el maestro, se le arrastran los movimientos y ese producto toma el nombre del ingreso.
+//   · Si no se parece a nada → se da de alta con código nuevo y el nombre del ingreso.
+// Antes de tocar nada se guarda un respaldo completo.
+const ALM_RECON_V = 1;
+async function almacenReconciliarIngresos(forzar){
+  try{
+    if(!state.almacen) return false;
+    if(!forzar && (Number(state.almacen.reconIngV)||0) >= ALM_RECON_V) return false;
+    const prods = state.almacen.productos || (state.almacen.productos=[]);
+    const ingresos = state.almacen.ingresos || [];
+    if(!prods.length){ state.almacen.reconIngV=ALM_RECON_V; return false; }
+
+    // Agrupar los ingresos por artículo, quedándose con el nombre del ingreso MÁS RECIENTE
+    const grupos={};
+    ingresos.forEach(i=>{
+      if(!i) return;
+      const nombre=String(i.producto||i.descripcion||'').trim();
+      if(!nombre) return;
+      const cod=String(i.codigo||'').trim();
+      const k=cod?('C:'+cod.toUpperCase()):('N:'+nombre.toUpperCase());
+      const ts=Number(i._ts)||Date.parse(String(i.fecha||'')+'T00:00:00')||0;
+      if(!grupos[k]||ts>=grupos[k].ts) grupos[k]={...(grupos[k]||{}),ts,nombre,unidad:i.unidad||((grupos[k]||{}).unidad)||'UND',
+        precio:Number(i.precio)||((grupos[k]||{}).precio)||0,almacen:i.almacen||((grupos[k]||{}).almacen)||'General'};
+      grupos[k].clave=k; grupos[k].codigo=cod;
+    });
+    const lista=Object.values(grupos);
+    if(!lista.length){ state.almacen.reconIngV=ALM_RECON_V; return false; }
+
+    try{ if(typeof respaldoCompleto==='function') await respaldoCompleto(true); }catch(e){}
+
+    const porCod={}; prods.forEach(p=>{ const c=String(p.codigo||'').trim().toUpperCase(); if(c) porCod[c]=p; });
+    const usados=new Set(Object.keys(porCod));
+    let renombrados=0, altas=0, reasignados=0, movs=0;
+    const detalle=[];
+
+    lista.forEach(gr=>{
+      const cod=String(gr.codigo||'').trim().toUpperCase();
+      // 1) El código ya está en el maestro → se queda ahí; solo se alinea el nombre
+      if(cod && porCod[cod]){
+        const p=porCod[cod];
+        if(String(p.nombre||'').trim()!==gr.nombre){
+          detalle.push('renombrado: "'+p.nombre+'" → "'+gr.nombre+'" ('+p.codigo+')');
+          p.nombre=gr.nombre; renombrados++;
+        }
+        return;
+      }
+      // 2) Código muerto o ingreso sin código → buscar el equivalente en el maestro
+      const sug=(typeof sugerirProductoMaestro==='function')?sugerirProductoMaestro(gr.nombre):null;
+      if(sug && sug.score>=60){
+        const destino=sug.producto, nuevoCod=String(destino.codigo||'').trim();
+        const esNom=gr.clave.indexOf('N:')===0;
+        const obj=esNom?gr.clave.slice(2):gr.clave.slice(2);
+        const toca=x=>{ if(!x) return false; const c=String(x.codigo||'').trim().toUpperCase();
+          return esNom?(!c && String(x.producto||x.descripcion||'').trim().toUpperCase()===obj):(c===obj); };
+        let n=0;
+        ['ingresos','salidas','inventarioInicial'].forEach(k=>{
+          (state.almacen[k]||[]).forEach(x=>{ if(toca(x)){ x.codigo=nuevoCod; n++; } });
+        });
+        if(n){ reasignados++; movs+=n; }
+        if(String(destino.nombre||'').trim()!==gr.nombre){
+          detalle.push('unido: "'+gr.nombre+'" → '+nuevoCod+' (antes "'+destino.nombre+'")');
+          destino.nombre=gr.nombre; renombrados++;
+        }else detalle.push('unido: "'+gr.nombre+'" → '+nuevoCod);
+        return;
+      }
+      // 3) No se parece a nada → alta con el nombre del ingreso
+      let nuevo=cod;
+      if(!nuevo || usados.has(nuevo)){
+        nuevo=(typeof generarCodigoProducto==='function')?generarCodigoProducto():('ART-'+Date.now());
+        while(usados.has(nuevo.toUpperCase())) nuevo=nuevo.replace(/(\d+)$/,m=>String(Number(m)+1).padStart(m.length,'0'));
+        const esNom=gr.clave.indexOf('N:')===0;
+        const obj=gr.clave.slice(2);
+        const toca=x=>{ if(!x) return false; const c=String(x.codigo||'').trim().toUpperCase();
+          return esNom?(!c && String(x.producto||x.descripcion||'').trim().toUpperCase()===obj):(c===obj); };
+        ['ingresos','salidas','inventarioInicial'].forEach(k=>{
+          (state.almacen[k]||[]).forEach(x=>{ if(toca(x)){ x.codigo=nuevo; movs++; } });
+        });
+      }
+      usados.add(String(nuevo).toUpperCase());
+      const alta={id:'P'+Date.now()+Math.random().toString(36).slice(2,6),codigo:nuevo,nombre:gr.nombre,
+        unidad:gr.unidad||'UND',precio:Number(gr.precio)||0,almacen:gr.almacen||'General'};
+      prods.push(alta); porCod[String(nuevo).toUpperCase()]=alta; altas++;
+      detalle.push('creado: "'+gr.nombre+'" ('+nuevo+')');
+    });
+
+    state.almacen.reconIngV=ALM_RECON_V;
+    state.almacen.productosTs=Date.now();
+    if(typeof almacenSave==='function') almacenSave();
+    const tocado=renombrados+altas+reasignados;
+    if(tocado){
+      try{ console.info('[maestro] reconciliación con el historial de ingresos:\n'+detalle.join('\n')); }catch(e){}
+      try{ showNotif('✓ Maestro alineado con el historial: '+altas+' producto(s) creado(s), '+renombrados+' renombrado(s), '+reasignados+' unido(s) · '+movs+' movimientos actualizados','ok'); }catch(e){}
+      try{ if(typeof renderStockVigente==='function') renderStockVigente(); }catch(e){}
+      try{ if(typeof renderProductos==='function') renderProductos(); }catch(e){}
+    }
+    return tocado>0;
+  }catch(e){ console.warn('[recon ingresos]', e); return false; }
+}
+
 // ══════════════════════════════════════════════════════════════
 // MOVIMIENTOS HUÉRFANOS — ingresos/salidas cuyo código ya no está en el maestro
 // ══════════════════════════════════════════════════════════════
