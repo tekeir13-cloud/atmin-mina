@@ -4443,7 +4443,9 @@ function navigate(page){
 }
 // Mapa explícito de todos los panes por módulo
 const MODULE_PANES = {
-  'log': ['almacen','historial','inventario','solicitudcompra','productos','explosivos','stockremanente','subalmacen2820','solicitudmantlog','combustible'],
+  // OJO: cada pane nuevo del módulo DEBE listarse aquí. modTab oculta los panes por esta lista,
+  // así que uno ausente se queda visible encima del que acabas de abrir.
+  'log': ['almacen','historial','inventario','solicitudcompra','productos','explosivos','stockremanente','subalmacen2820','solicitudmantlog','combustible','estadisticas'],
   'rrhh': ['planilla','tareomes','tareas','personal','costorrhh','servicios','planillaint'],
   'op': ['tablero','avance','solicitudes','vsproyectado','valorizaciones'],
   'mant': ['registro','costosmant'],
@@ -9424,10 +9426,17 @@ function renderInventario(){
   if(filtroAlm) stock=stock.filter(r=>r.almacen===filtroAlm);
   stock=stock.sort((a,b)=>a.almacen.localeCompare(b.almacen)||(a.producto||a.descripcion).localeCompare(b.producto||b.descripcion));
   const valorStock=stock.reduce((a,r)=>a+r.stock*r.precio,0);
+  // MISMA FÓRMULA QUE EL HISTORIAL: importe guardado y, si falta, cantidad × precio. Antes esta
+  // vista ignoraba las salidas viejas sin importe y no cuadraba con el total del historial.
+  const _imp=s=>Number(s.importe)||((Number(s.cantidad)||0)*(Number(s.precio)||0));
   const sals=state.almacen.salidas.filter(s=>filtroMes(s.fecha,mes)&&(!filtroAlm||s.almacen===filtroAlm));
-  const gasto=sals.reduce((a,s)=>a+(Number(s.importe)||0),0);
-  const gGen=state.almacen.salidas.filter(s=>filtroMes(s.fecha,mes)&&s.almacen==='General').reduce((a,s)=>a+(Number(s.importe)||0),0);
-  const gMant=state.almacen.salidas.filter(s=>filtroMes(s.fecha,mes)&&s.almacen==='Mantenimiento').reduce((a,s)=>a+(Number(s.importe)||0),0);
+  const gasto=sals.reduce((a,s)=>a+_imp(s),0);
+  const gGen=state.almacen.salidas.filter(s=>filtroMes(s.fecha,mes)&&s.almacen==='General').reduce((a,s)=>a+_imp(s),0);
+  const gMant=state.almacen.salidas.filter(s=>filtroMes(s.fecha,mes)&&s.almacen==='Mantenimiento').reduce((a,s)=>a+_imp(s),0);
+  // Ventana real que se está sumando + total histórico, para que se vea de dónde sale cada cifra
+  // y por qué el historial completo puede ser mayor que el gasto del ciclo.
+  const _vent=(typeof ventanaMes==='function')?ventanaMes(mes):null;
+  const gastoTodo=state.almacen.salidas.filter(s=>!filtroAlm||s.almacen===filtroAlm).reduce((a,s)=>a+_imp(s),0);
   const g=id=>document.getElementById(id);
   // Semáforos de stock: 🟢 OK (≥10) · 🟡 bajo (1-9) · 🔴 agotado (≤0)
   const conStock=stock.filter(r=>r.stock>0);
@@ -9455,9 +9464,11 @@ function renderInventario(){
         <div style="font-size:10px;color:var(--text3)">${conStock.length} productos</div>
       </div>
       <div class="card" style="padding:14px 16px">
-        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Gasto del Mes</div>
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Gasto del ciclo</div>
         <div style="font-size:22px;font-weight:800;color:#f87171">${fmtS2(gasto)}</div>
+        <div style="font-size:10px;color:var(--text3)">${_vent?_vent.ini+' → '+_vent.fin:mes} · ${sals.length} salidas</div>
         <div style="font-size:10px;color:var(--text3)">Gen: ${fmtS2(gGen)} · Mant: ${fmtS2(gMant)}</div>
+        ${Math.abs(gastoTodo-gasto)>0.01?`<div style="font-size:10px;color:var(--text3);margin-top:5px;border-top:1px solid var(--border);padding-top:5px">Todo el historial: <b style="color:var(--text2)">${fmtS2(gastoTodo)}</b><br>${fmtS2(gastoTodo-gasto)} son de otros ciclos</div>`:''}
       </div>
     </div>`;
   const tb=g('inv-tbody');
