@@ -4453,6 +4453,14 @@ const MODULE_PANES = {
   'cmp': ['facturas','informe','presupuestos','balance']
 };
 
+// Prefijo del módulo → id de su página. El prefijo de los panes ('log') NO es el id de la
+// página ('page-logistica'), así que el selector '#page-'+mod no encontraba NINGÚN tab y el
+// resaltado se iba acumulando: parecía que varias pestañas estaban abiertas a la vez.
+const MOD_PAGE = { log:'logistica', rrhh:'rrhh', op:'operaciones', mant:'mantenimiento', fin:'finanzas', cmp:'compras' };
+function _modTabs(mod){
+  const pg=document.getElementById('page-'+(MOD_PAGE[mod]||mod));
+  return pg?pg.querySelectorAll('.mod-tab'):[];
+}
 function modTab(mod, pane, btn){
   // Ocultar TODOS los panes del módulo explícitamente por ID
   const panes = MODULE_PANES[mod] || [];
@@ -4461,7 +4469,9 @@ function modTab(mod, pane, btn){
     if(el){ el.classList.remove('active'); el.style.display = 'none'; }
   });
   // Desactivar todos los tabs
-  document.querySelectorAll('#page-' + mod + ' .mod-tab').forEach(t => t.classList.remove('active'));
+  _modTabs(mod).forEach(t => t.classList.remove('active'));
+  // Si no llegó el botón (llamadas por código), marcar el que apunta a este pane
+  if(!btn){ btn=[..._modTabs(mod)].find(t=>(t.getAttribute('onclick')||'').includes("'"+pane+"'"))||null; }
   // Activar el pane seleccionado
   const target = document.getElementById(mod + '-' + pane);
   if(target){ target.classList.add('active'); target.style.display = 'block'; }
@@ -5025,12 +5035,14 @@ function activarPrimerTab(mod, pane){
     if(el){ el.classList.remove('active'); el.style.display = 'none'; }
   });
   // Desactivar todos los tabs
-  document.querySelectorAll('#page-' + mod + ' .mod-tab').forEach(t => t.classList.remove('active'));
+  _modTabs(mod).forEach(t => t.classList.remove('active'));
   // Activar el pane inicial
   const target = document.getElementById(mod + '-' + pane);
   if(target){ target.classList.add('active'); target.style.display = 'block'; }
-  // Activar primer tab
-  const ft = document.querySelector('#page-' + mod + ' .mod-tab');
+  // Activar el tab que corresponde a ese pane (no siempre es el primero: los permisos
+  // pueden ocultar tabs, y marcar el primero dejaba resaltada una pestaña que no es la abierta)
+  const tabs=[..._modTabs(mod)];
+  const ft = tabs.find(t=>(t.getAttribute('onclick')||'').includes("'"+pane+"'")) || tabs[0];
   if(ft) ft.classList.add('active');
 }
 function renderPage(page){
