@@ -21645,6 +21645,15 @@ function cmpCargarLib(url,globalName){
   return _cmpLibs[url];
 }
 // Texto completo de un PDF, página por página, respetando saltos de línea por coordenada Y.
+// Red de seguridad: si aun así quedó un número partido ("3 750 . 42" o "1, 234.50"), se vuelve
+// a pegar. Solo toca dígitos con sus separadores; no altera el texto de las descripciones.
+function _cmpRepararNumeros(t){
+  let s=String(t||'');
+  s=s.replace(/(\d)\s+([.,])\s*(\d)/g,'$1$2$3');   // "750 . 42" → "750.42"
+  s=s.replace(/(\d)([.,])\s+(\d)/g,'$1$2$3');      // "750, 42"  → "750,42"
+  s=s.replace(/(\d)\s(\d{3})\b(?!\s*\d)/g,'$1$2'); // "3 750"    → "3750"
+  return s;
+}
 async function cmpTextoDePdf(dataUrl){
   const pdfjs=await cmpCargarLib(CMP_LIB_PDFJS,'pdfjsLib');
   try{ pdfjs.GlobalWorkerOptions.workerSrc=CMP_LIB_PDFJS_WORKER; }catch(e){}
@@ -21661,10 +21670,23 @@ async function cmpTextoDePdf(dataUrl){
     tc.items.forEach(it=>{
       const y=Math.round((it.transform&&it.transform[5])||0);
       const k=Math.round(y/3)*3;
-      (filas[k]=filas[k]||[]).push({x:(it.transform&&it.transform[4])||0,s:it.str});
+      (filas[k]=filas[k]||[]).push({x:(it.transform&&it.transform[4])||0, w:Number(it.width)||0, s:it.str});
     });
     Object.keys(filas).map(Number).sort((a,b)=>b-a).forEach(k=>{
-      const t=filas[k].sort((a,b)=>a.x-b.x).map(o=>o.s).join(' ').replace(/\s+/g,' ').trim();
+      // UNIR SEGÚN LA DISTANCIA REAL ENTRE TROZOS, NO SIEMPRE CON UN ESPACIO.
+      // Los PDF de SUNAT parten los números en varios trozos ("3", "750", ".", "42"); si se
+      // pegaba un espacio entre cada uno, "3,750.42" se convertía en "3 750 . 42" y el lector
+      // terminaba tomando cifras sueltas (4.24 en vez de 3,750.42). Ahora solo se pone espacio
+      // cuando hay un hueco visible entre un trozo y el siguiente.
+      const its=filas[k].sort((a,b)=>a.x-b.x);
+      let t='';
+      its.forEach((o,i)=>{
+        if(i===0){ t=o.s; return; }
+        const prev=its[i-1];
+        const hueco=o.x-(prev.x+prev.w);
+        t += (hueco>0.9?' ':'') + o.s;
+      });
+      t=_cmpRepararNumeros(t.replace(/\s+/g,' ').trim());
       if(t) lineas.push(t);
     });
   }
@@ -21751,9 +21773,11 @@ function cmpParsearFacturaTexto(lineas){
         const t=sinTildes(L[i]);
         if(!re.test(t)) continue;
         if(excluir && excluir.test(t)) continue;
-        const propios=numsDe(L[i].replace(/^[^\d]*/,''));
+        // Se ignoran los ceros: renglones como "Descuentos : S/ 0.00" o "Valor de Venta de
+        // Operaciones Gratuitas : S/ 0.00" comparten etiqueta con el monto que sí importa.
+        const propios=numsDe(L[i].replace(/^[^\d]*/,'')).filter(v=>v>0);
         if(propios.length) return propios[propios.length-1];
-        for(let k=1;k<=3&&L[i+k];k++){ const n2=numsDe(L[i+k]); if(n2.length) return n2[0]; }
+        for(let k=1;k<=3&&L[i+k];k++){ const n2=numsDe(L[i+k]).filter(v=>v>0); if(n2.length) return n2[0]; }
       }
     }
     return 0;
@@ -21762,7 +21786,10 @@ function cmpParsearFacturaTexto(lineas){
   const NO_TOTAL=/SUB\s*-?\s*TOTAL|TOTAL\s*DESCUENTO|TOTAL\s*ITEMS|DESCUENTO/;
   let con=porEtiqueta([/IMPORTE\s*TOTAL/,/TOTAL\s*A\s*PAGAR/,/TOTAL\s*S\/?\s*[\d.,]/,/\bTOTAL\b/],NO_TOTAL);
   let igv=porEtiqueta([/I\.?\s?G\.?\s?V\.?/,/IMPUESTO\s*GENERAL/]);
-  let sin=porEtiqueta([/OP\.?\s*GRAVADA/,/OPERACION(ES)?\s*GRAVADA/,/VALOR\s*DE\s*VENTA/,/SUB\s*-?\s*TOTAL/,/SUBTOTAL/,/BASE\s*IMPONIBLE/]);
+  // "Valor Venta" (sin el "de"), "Sub Total Ventas" y "Base Imponible" son los nombres que usan
+  // las facturas de SUNAT para la base. Se excluye la fila de operaciones GRATUITAS, que vale 0.
+  let sin=porEtiqueta([/OP\.?\s*GRAVADA/,/OPERACION(ES)?\s*GRAVADA/,/VALOR\s*(DE\s*)?VENTA/,
+    /SUB\s*-?\s*TOTAL/,/SUBTOTAL/,/BASE\s*IMPONIBLE/],/GRATUITA/);
 
   // ¿Cuadran? base + IGV = total, con IGV ≈ 18% de la base
   const cuadra=(b,i,t)=>b>0&&i>0&&t>0&&Math.abs(b+i-t)<=0.05&&Math.abs(i-b*CMP_IGV)<=Math.max(0.05,b*0.005);
@@ -21826,7 +21853,10 @@ function cmpParsearFacturaTexto(lineas){
     const desc=m[3].trim();
     if(!desc||desc.length<2) return;
     if(imp<=0&&pu<=0) return;
-    items.push({descripcion:desc,cantidad:cant,unidad:m[2].toUpperCase(),precioUnit:pu,importe:imp});
+    // Muchas facturas ponen a la derecha el ICBPER (0.00) en vez del importe: si el importe
+    // salió 0 pero hay precio unitario, se calcula cantidad × precio.
+    const impFinal=(imp>0)?imp:R2(cant*pu);
+    items.push({descripcion:desc,cantidad:cant,unidad:m[2].toUpperCase(),precioUnit:pu,importe:impFinal});
   });
   out.items=items;
   if(items.length) out.producto=items.map(i=>i.descripcion).slice(0,3).join(' · ');
@@ -22172,6 +22202,32 @@ function cmpArchivarCiclos(){
   return cambios;
 }
 function cmpArchivados(){ return Object.values(cmpArchivo()).sort((a,b)=>String(b.periodo).localeCompare(String(a.periodo))); }
+// Borrar una factura de un mes ya archivado. Se quita del archivo Y de la lista viva (si sigue
+// ahí), y los totales del mes se recalculan sobre lo que queda: la carpeta nunca queda descuadrada.
+function cmpEliminarArchivada(per,idx){
+  const a=cmpArchivo()[per]; if(!a||!Array.isArray(a.facturas)) return;
+  const f=a.facturas[idx]; if(!f) return;
+  if(!confirm('¿Eliminar esta factura de '+cmpMesLabel(per)+'?\n\n'+
+    (f.proveedor||'—')+' · '+(f.numero||'sin número')+' · '+cmpMoney(f.conIgv)+
+    '\n\nSe quita del mes archivado y sus montos dejan de sumar.')) return;
+  a.facturas.splice(idx,1);
+  // Quitarla también de las facturas vivas (misma fecha + número + RUC)
+  const mismo=x=>String(x.fecha||'')===String(f.fecha||'') && String(x.numero||'')===String(f.numero||'')
+    && String(x.ruc||'')===String(f.ruc||'');
+  state.compras.facturas=(state.compras.facturas||[]).filter(x=>!mismo(x));
+  // Recalcular el cuadro del mes con lo que queda
+  const S=k=>a.facturas.reduce((s,x)=>s+(Number(x[k])||0),0);
+  a.nFacturas=a.facturas.length; a.sinIgv=S('sinIgv'); a.igv=S('igv'); a.conIgv=S('conIgv');
+  const prov={};
+  a.facturas.forEach(x=>{ const k=(x.ruc||'').trim()||((x.proveedor||'—').trim().toUpperCase());
+    if(!prov[k]) prov[k]={ruc:x.ruc||'',nombre:x.proveedor||'—',n:0,sinIgv:0,igv:0,conIgv:0};
+    const p=prov[k]; p.n++; p.sinIgv+=Number(x.sinIgv)||0; p.igv+=Number(x.igv)||0; p.conIgv+=Number(x.conIgv)||0; });
+  a.proveedores=Object.values(prov).sort((x,y)=>y.conIgv-x.conIgv);
+  a._ts=Date.now();
+  if(!a.facturas.length) delete cmpArchivo()[per];   // mes sin facturas: se va la carpeta
+  comprasSave(); renderComprasInforme();
+  showNotif('🗑 Factura eliminada de '+cmpMesLabel(per),'warn');
+}
 function cmpVerArchivo(per){
   const a=cmpArchivo()[per]; if(!a) return;
   window._cmpArchAbierto=(window._cmpArchAbierto===per)?'':per;
@@ -22262,8 +22318,8 @@ function cmpHistorialArchivadoHTML(){
           <th style="padding:5px 7px">Fecha</th><th style="padding:5px 7px">N°</th><th style="padding:5px 7px">RUC</th>
           <th style="padding:5px 7px">Proveedor</th><th style="padding:5px 7px">Producto</th>
           <th style="padding:5px 7px;text-align:right">Sin IGV</th><th style="padding:5px 7px;text-align:right">IGV</th>
-          <th style="padding:5px 7px;text-align:right">Con IGV</th><th style="padding:5px 7px">Origen</th></tr></thead><tbody>
-        ${(abierta.facturas||[]).slice().sort((x,y)=>String(x.fecha).localeCompare(String(y.fecha))).map(f=>`<tr style="border-top:1px solid var(--border2)">
+          <th style="padding:5px 7px;text-align:right">Con IGV</th><th style="padding:5px 7px">Origen</th><th style="padding:5px 7px"></th></tr></thead><tbody>
+        ${(abierta.facturas||[]).map((f,i)=>({f,i})).sort((x,y)=>String(x.f.fecha).localeCompare(String(y.f.fecha))).map(({f,i})=>`<tr style="border-top:1px solid var(--border2)">
           <td style="padding:5px 7px;font-size:11px;white-space:nowrap">${f.fecha||'—'}</td>
           <td style="padding:5px 7px;font-size:10px;font-family:'DM Mono',monospace">${f.numero||'—'}</td>
           <td style="padding:5px 7px;font-size:10px;font-family:'DM Mono',monospace">${f.ruc||'—'}</td>
@@ -22273,13 +22329,14 @@ function cmpHistorialArchivadoHTML(){
           <td style="padding:5px 7px;font-size:11px;text-align:right;font-family:'DM Mono',monospace;color:#a855f7">${cmpMoney(f.igv)}</td>
           <td style="padding:5px 7px;font-size:11px;text-align:right;font-family:'DM Mono',monospace;color:var(--gold-light);font-weight:700">${cmpMoney(f.conIgv)}</td>
           <td style="padding:5px 7px;font-size:10px;color:var(--text3)">${f.leidoDe==='pdf'?'📄 PDF':(f.leidoDe==='foto'?'📷 QR':'✍ Manual')}</td>
+          <td style="padding:5px 7px;text-align:center"><button onclick="cmpEliminarArchivada('${abierta.periodo}',${i})" title="Eliminar esta factura del mes" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:13px">🗑</button></td>
         </tr>`).join('')}
         <tr style="border-top:2px solid var(--border)">
           <td colspan="5" style="padding:7px;font-size:11px;font-weight:700">TOTAL DEL MES</td>
           <td style="padding:7px;font-size:11px;text-align:right;font-weight:700;font-family:'DM Mono',monospace">${cmpMoney(abierta.sinIgv)}</td>
           <td style="padding:7px;font-size:11px;text-align:right;font-weight:700;font-family:'DM Mono',monospace">${cmpMoney(abierta.igv)}</td>
           <td style="padding:7px;font-size:11px;text-align:right;font-weight:700;font-family:'DM Mono',monospace;color:var(--gold-light)">${cmpMoney(abierta.conIgv)}</td>
-          <td></td></tr>
+          <td colspan="2"></td></tr>
       </tbody></table></div>
     </div>`:'';
 
