@@ -5234,6 +5234,31 @@ function renderStockRemanente(){
       <td style="padding:7px 8px"><button onclick="eliminarRemSalida('${ev.id}')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:13px" title="Eliminar salida">🗑</button></td></tr>`;
   }).join('') : `<tr><td colspan="7" style="padding:16px;text-align:center;color:var(--text3)">Sin movimientos.</td></tr>`;
 
+  // ── ESTADÍSTICAS: egreso reportado por el Compresorista vs salidas dadas ──
+  // Se cuentan las MISMAS fuentes que el historial de arriba: los egresos contables que reporta
+  // el Compresorista (entradas al remanente) y las salidas que Logística entrega desde aquí.
+  // Los egresos previos a la apertura NO cuentan (ya están dentro del saldo inicial).
+  const _egr={}, _sal={};
+  remEgresosContables().forEach(e=>{ _egr[e.codigo]=(_egr[e.codigo]||0)+(Number(e.cant)||0); });
+  (state.remanenteSalidas||[]).forEach(s=>{ _sal[s.producto]=(_sal[s.producto]||0)+(Number(s.cantidad)||0); });
+  const statsFilas=cat.filter(c=>(_egr[c.id]||0)||(_sal[c.id]||0)).map(c=>({
+    id:c.id, nombre:c.nombre, upCaja:c.upCaja, esMecha:c.id==='NEITHER',
+    egr:_egr[c.id]||0, sal:_sal[c.id]||0
+  }));
+  const totEgr=statsFilas.reduce((a,f)=>a+f.egr,0), totSal=statsFilas.reduce((a,f)=>a+f.sal,0);
+  const cajasDe=f=>f.esMecha?0:Math.floor(f.egr/f.upCaja);
+  const totCajasEgr=statsFilas.reduce((a,f)=>a+(f.esMecha?0:Math.floor(f.egr/f.upCaja)),0);
+  const totCajasSal=statsFilas.reduce((a,f)=>a+(f.esMecha?0:Math.floor(f.sal/f.upCaja)),0);
+  const statsRows=statsFilas.length?statsFilas.map(f=>`<tr style="border-top:1px solid var(--border)">
+      <td style="padding:7px 8px;font-weight:600">${f.nombre}</td>
+      <td style="padding:7px 8px;text-align:right;color:#22c55e;font-weight:700">${fmtN(f.egr)}</td>
+      <td style="padding:7px 8px;color:var(--text3);font-size:11px">${remLabelCajas(f.id,f.egr)}</td>
+      <td style="padding:7px 8px;text-align:right;color:#f87171;font-weight:700">${fmtN(f.sal)}</td>
+      <td style="padding:7px 8px;color:var(--text3);font-size:11px">${remLabelCajas(f.id,f.sal)}</td>
+      <td style="padding:7px 8px;text-align:right;font-weight:800;color:${(f.egr-f.sal)>=0?'#60a5fa':'#f59e0b'}">${fmtN(f.egr-f.sal)}</td>
+    </tr>`).join('')
+    :`<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--text3)">Todavía no hay egresos reportados ni salidas dadas.</td></tr>`;
+
   cont.innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
       <div class="section-title" style="margin:0">📉 Stock Remanente</div>
@@ -5259,7 +5284,60 @@ function renderStockRemanente(){
         <tbody>${histRows}</tbody>
       </table></div>
     </div>
+
+    <div style="background:var(--coal2);border:1px solid var(--border);border-radius:16px;padding:16px;margin-top:18px">
+      <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:4px">📊 Estadísticas del remanente</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:14px">Egreso reportado por el Compresorista (entra al remanente) vs salidas dadas desde aquí. Los egresos previos a la apertura no cuentan: ya están en el saldo inicial.</div>
+      <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));margin-bottom:16px">
+        <div class="kpi-card" style="padding:14px 16px">
+          <div class="kpi-label" style="font-size:10px">Total egreso reportado</div>
+          <div class="kpi-value" style="font-size:21px;color:#22c55e">${fmtN(totEgr)} und</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:3px">${totCajasEgr} caja${totCajasEgr!==1?'s':''} completas</div>
+        </div>
+        <div class="kpi-card" style="padding:14px 16px">
+          <div class="kpi-label" style="font-size:10px">Total de salidas</div>
+          <div class="kpi-value" style="font-size:21px;color:#f87171">${fmtN(totSal)} und</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:3px">${totCajasSal} caja${totCajasSal!==1?'s':''} completas</div>
+        </div>
+        <div class="kpi-card" style="padding:14px 16px">
+          <div class="kpi-label" style="font-size:10px">Diferencia</div>
+          <div class="kpi-value" style="font-size:21px;color:${(totEgr-totSal)>=0?'#60a5fa':'#f59e0b'}">${fmtN(totEgr-totSal)} und</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:3px">reportado − entregado</div>
+        </div>
+      </div>
+      <div style="height:280px;margin-bottom:16px"><canvas id="rem-chart"></canvas></div>
+      <div class="table-wrap"><table style="width:100%;font-size:12px;border-collapse:collapse">
+        <thead><tr style="color:var(--text3);text-align:left">
+          <th style="padding:6px 8px">Explosivo</th>
+          <th style="padding:6px 8px;text-align:right">Egreso reportado</th><th style="padding:6px 8px">En cajas</th>
+          <th style="padding:6px 8px;text-align:right">Salidas dadas</th><th style="padding:6px 8px">En cajas</th>
+          <th style="padding:6px 8px;text-align:right">Diferencia</th>
+        </tr></thead>
+        <tbody>${statsRows}</tbody>
+      </table></div>
+    </div>
   `;
+  // Gráfico: unidades por explosivo (las cajas van en la tabla y en las tarjetas, porque cada
+  // explosivo tiene un tamaño de caja distinto y mezclarlos en un eje sería engañoso).
+  try{ if(window._remChart){ window._remChart.destroy(); window._remChart=null; } }catch(e){}
+  if(typeof Chart==='undefined' || !statsFilas.length) return;
+  const cv=document.getElementById('rem-chart'); if(!cv) return;
+  const etiq=f=>f.nombre+(f.esMecha?' (m)':' ('+f.upCaja+'/caja)');
+  try{
+    window._remChart=new Chart(cv.getContext('2d'),{
+      type:'bar',
+      data:{labels:statsFilas.map(etiq),datasets:[
+        {label:'Egreso reportado por compresorista',data:statsFilas.map(f=>f.egr),backgroundColor:'rgba(34,197,94,0.75)',borderRadius:3},
+        {label:'Salidas dadas',data:statsFilas.map(f=>f.sal),backgroundColor:'rgba(248,113,113,0.75)',borderRadius:3}]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{labels:{color:'#9aa4b2',boxWidth:12,font:{size:11}}},
+          tooltip:{callbacks:{label:c=>{ const f=statsFilas[c.dataIndex];
+            return c.dataset.label+': '+fmtN(c.parsed.y)+(f.esMecha?' m':' und')+' · '+remLabelCajas(f.id,c.parsed.y); }}}},
+        scales:{x:{ticks:{color:'#6b7280',font:{size:9},maxRotation:35},grid:{display:false}},
+          y:{beginAtZero:true,title:{display:true,text:'unidades',color:'#6b7280',font:{size:10}},
+             ticks:{color:'#6b7280',font:{size:10}},grid:{color:'rgba(255,255,255,0.05)'}}}}
+    });
+  }catch(e){}
 }
 // ── Salida de Stock Remanente ──
 function remDisponible(id){
