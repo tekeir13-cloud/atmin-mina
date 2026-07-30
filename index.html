@@ -3568,8 +3568,9 @@ select option{background:var(--coal3);}
   <div class="mod-pane active" style="display:block" id="cmp-facturas">
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
       <button class="btn btn-gold" onclick="cmpAbrirFactura()">+ Registrar Factura</button>
-      <button class="btn btn-outline" style="border-color:#22d3a5;color:#22d3a5" onclick="document.getElementById('cmp-foto-input').click()">📷 Subir Factura (foto o PDF)</button>
+      <button class="btn btn-outline" style="border-color:#22d3a5;color:#22d3a5" onclick="document.getElementById('cmp-foto-input').click()" title="Lee el documento y autorrellena RUC, proveedor, fecha, producto y montos. El archivo no se guarda.">📷 Leer Factura (foto o PDF)</button>
       <input type="file" id="cmp-foto-input" accept="image/*,application/pdf,.pdf" style="display:none" onchange="cmpLeerFoto(this)">
+      <span style="font-size:10px;color:var(--text3);max-width:280px;line-height:1.35">Se copian los datos al formulario. El documento <b>no se archiva</b>: solo quedan los datos y el Excel.</span>
       <div style="flex:1"></div>
       <label style="font-size:11px;color:var(--text3)">Ciclo:</label>
       <select id="cmp-periodo" onchange="renderComprasFacturas()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px"></select>
@@ -21449,6 +21450,12 @@ function comprasNorm(){
   if(!state.compras || typeof state.compras!=='object') state.compras={facturas:[],presupuestos:[]};
   if(!Array.isArray(state.compras.facturas)) state.compras.facturas=[];
   if(!Array.isArray(state.compras.presupuestos)) state.compras.presupuestos=[];
+  // EL MÓDULO NO ARCHIVA FACTURAS: guarda los DATOS, no el documento. Las imágenes y PDFs que
+  // se guardaron antes se sueltan aquí (pesaban cientos de KB cada uno y llenaban el
+  // almacenamiento). Solo se conserva la marca de que ese registro se leyó de un documento.
+  let limpio=0;
+  state.compras.facturas.forEach(f=>{ if(f&&f.foto){ f.leidoDe=cmpEsPdf(f.foto)?'pdf':'foto'; delete f.foto; limpio++; } });
+  if(limpio){ try{ localStorage.setItem(COMPRAS_KEY,JSON.stringify(state.compras)); }catch(e){} }
   return state.compras;
 }
 function comprasLoad(){
@@ -21516,15 +21523,18 @@ function cmpAbrirFactura(datos){
   g('cmpf-sinigv').value=(d.sinIgv!=null&&d.sinIgv!=='')?d.sinIgv:'';
   g('cmpf-igv').value=(d.igv!=null&&d.igv!=='')?d.igv:'';
   g('cmpf-conigv').value=(d.conIgv!=null&&d.conIgv!=='')?d.conIgv:'';
+  // Vista previa SOLO mientras revisas: al guardar, el documento se descarta.
   _cmpFotoPend=d.foto||null;
+  _cmpLeidoDe=d._leidoDe||d.leidoDe||'';
   _cmpItemsPend=Array.isArray(d.items)?d.items:[];
   cmpRenderItems();
   const pv=g('cmpf-foto-prev');
-  pv.innerHTML=_cmpFotoPend?cmpAdjuntoHTML(_cmpFotoPend):'';
+  pv.innerHTML=_cmpFotoPend?(cmpAdjuntoHTML(_cmpFotoPend)+
+    '<div style="font-size:10px;color:var(--text3);margin:-4px 0 10px">👁 Vista previa para que compares mientras revisas. <b>El documento no se guarda</b>: solo se registran los datos.</div>'):'';
   const av=g('cmpf-aviso-ia'); if(!datos||!datos._aviso){ av.style.display='none'; }
   abrirModal('modal-cmp-factura');
 }
-let _cmpFotoPend=null, _cmpItemsPend=[];
+let _cmpFotoPend=null, _cmpItemsPend=[], _cmpLeidoDe='';
 function cmpEsPdf(dataUrl){ return String(dataUrl||'').startsWith('data:application/pdf'); }
 function cmpAdjuntoHTML(dataUrl){
   if(cmpEsPdf(dataUrl)) return `<div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:10px 12px"><span style="font-size:20px">📄</span><span style="font-size:12px;color:var(--text2)">PDF de la factura adjunto</span><a href="${dataUrl}" target="_blank" style="margin-left:auto;font-size:11px;color:#60a5fa">Abrir</a></div>`;
@@ -21571,12 +21581,15 @@ function cmpGuardarFactura(){
   const id=g('cmpf-id').value||('FC'+Date.now()+Math.random().toString(36).slice(2,7));
   const reg={ id, _ts:Date.now(), fecha, numero:g('cmpf-numero').value.trim(),
     ruc:g('cmpf-ruc').value.trim(), proveedor, producto:g('cmpf-producto').value.trim(),
-    sinIgv:num('cmpf-sinigv'), igv:num('cmpf-igv'), conIgv, foto:_cmpFotoPend||null,
+    sinIgv:num('cmpf-sinigv'), igv:num('cmpf-igv'), conIgv,
+    // El documento NO se guarda: solo queda la marca de cómo se leyeron los datos.
+    leidoDe:_cmpLeidoDe||'',
     items:Array.isArray(_cmpItemsPend)?_cmpItemsPend:[] };
   const i=state.compras.facturas.findIndex(f=>f.id===id);
-  if(i>=0) state.compras.facturas[i]={...state.compras.facturas[i],...reg}; else state.compras.facturas.push(reg);
+  if(i>=0){ state.compras.facturas[i]={...state.compras.facturas[i],...reg}; delete state.compras.facturas[i].foto; }
+  else state.compras.facturas.push(reg);
   comprasSave();
-  _cmpFotoPend=null; _cmpItemsPend=[];
+  _cmpFotoPend=null; _cmpItemsPend=[]; _cmpLeidoDe='';
   cerrarModal('modal-cmp-factura');
   renderComprasFacturas();
   showNotif('✓ Factura registrada: '+proveedor+' · '+cmpMoney(conIgv));
@@ -21674,7 +21687,8 @@ async function cmpLeerFoto(input){
     }
   }catch(e){ motivo='No se pudo contactar el lector automático (¿sin conexión?).'; }
 
-  const base={ foto:dataUrl, fecha:hoy() };
+  // El dataUrl viaja SOLO para la vista previa del modal; no se guarda con la factura.
+  const base={ foto:dataUrl, _leidoDe:esPdf?'pdf':'foto', fecha:hoy() };
   if(datos){
     const n=v=>{ const x=parseFloat(v); return isNaN(x)?0:Math.round(x*100)/100; };
     let sin=n(datos.sinIgv), igv=n(datos.igv), con=n(datos.conIgv);
@@ -21704,10 +21718,10 @@ async function cmpLeerFoto(input){
     av.style.display='block';
     if(datos){
       av.style.background='rgba(34,211,165,0.12)'; av.style.border='1px solid rgba(34,211,165,0.4)'; av.style.color='#22d3a5';
-      av.innerHTML='✓ Datos leídos de la foto. <b>Revísalos antes de guardar</b> — sobre todo la fecha y los montos.';
+      av.innerHTML='✓ Datos copiados '+(esPdf?'del PDF':'de la foto')+': RUC, proveedor, fecha, producto y montos. <b>Revísalos antes de guardar</b> — sobre todo la fecha y los montos. El documento no se archiva, solo los datos.';
     }else{
       av.style.background='rgba(245,158,11,0.12)'; av.style.border='1px solid rgba(245,158,11,0.4)'; av.style.color='#f59e0b';
-      av.innerHTML='⚠ '+motivo+' La foto quedó adjunta: completa los datos a mano.';
+      av.innerHTML='⚠ '+motivo+' Tienes el documento a la vista abajo: copia los datos a mano.';
     }
   }
   showNotif(datos?'✓ Factura leída — revisa los datos':'⚠ Lectura automática no disponible','warn');
@@ -21767,13 +21781,13 @@ function renderComprasFacturas(){
       <div class="kpi-card" style="padding:12px 14px"><div class="kpi-label" style="font-size:10px">Facturas · Proveedores</div><div class="kpi-value" style="font-size:20px;color:#22d3a5">${fs.length} · ${prov}</div></div>
     </div>`;
   const w=document.getElementById('cmp-fact-wrap'); if(!w) return;
-  if(!fs.length){ w.innerHTML='<div style="text-align:center;color:var(--text3);padding:28px">Sin facturas en este ciclo. Usa <b>Subir Factura (foto)</b> o <b>Registrar Factura</b>.</div>'; return; }
+  if(!fs.length){ w.innerHTML='<div style="text-align:center;color:var(--text3);padding:28px">Sin facturas en este ciclo. Usa <b>Leer Factura (foto o PDF)</b> o <b>Registrar Factura</b>.</div>'; return; }
   w.innerHTML=`<div class="table-wrap" style="overflow-x:auto"><table style="width:100%;min-width:max-content">
     <thead><tr style="font-size:10px;color:var(--text3)">
       <th style="padding:8px">Fecha</th><th style="padding:8px">N°</th><th style="padding:8px">RUC</th>
       <th style="padding:8px">Proveedor</th><th style="padding:8px">Producto</th>
       <th style="padding:8px;text-align:right">Sin IGV</th><th style="padding:8px;text-align:right">IGV</th>
-      <th style="padding:8px;text-align:right">Con IGV</th><th style="padding:8px">Foto</th><th style="padding:8px"></th>
+      <th style="padding:8px;text-align:right">Con IGV</th><th style="padding:8px">Origen</th><th style="padding:8px"></th>
     </tr></thead><tbody>
     ${fs.map(f=>`<tr style="border-top:1px solid var(--border2)">
       <td style="padding:7px 8px;font-size:12px;white-space:nowrap">${f.fecha||'—'}</td>
@@ -21784,7 +21798,7 @@ function renderComprasFacturas(){
       <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace">${cmpMoney(f.sinIgv)}</td>
       <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;color:#a855f7">${cmpMoney(f.igv)}</td>
       <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;color:var(--gold-light);font-weight:700">${cmpMoney(f.conIgv)}</td>
-      <td style="padding:7px 8px;text-align:center">${f.foto?(cmpEsPdf(f.foto)?`<span onclick="cmpVerFoto('${f.id}')" title="Ver PDF" style="cursor:pointer;font-size:19px">📄</span>`:`<img src="${f.foto}" onclick="cmpVerFoto('${f.id}')" style="width:34px;height:34px;object-fit:cover;border-radius:5px;cursor:pointer;border:1px solid var(--border)">`):'<span style="color:var(--text3);font-size:11px">—</span>'}</td>
+      <td style="padding:7px 8px;text-align:center;font-size:11px;color:var(--text3)" title="${f.leidoDe?'Los datos se leyeron automáticamente del documento; el archivo no se guarda':'Registrada a mano'}">${f.leidoDe==='pdf'?'📄 PDF':(f.leidoDe==='foto'?'📷 Foto':'✍ Manual')}</td>
       <td style="padding:7px 8px;white-space:nowrap">
         <button onclick="cmpEditarFactura('${f.id}')" style="background:none;border:none;color:#60a5fa;cursor:pointer;font-size:13px" title="Editar">✏</button>
         <button onclick="cmpEliminarFactura('${f.id}')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:13px" title="Eliminar">🗑</button>
