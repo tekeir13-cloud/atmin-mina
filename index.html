@@ -3572,7 +3572,7 @@ select option{background:var(--coal3);}
       <input type="file" id="cmp-foto-input" accept="image/*,application/pdf,.pdf" style="display:none" onchange="cmpLeerFoto(this)">
       <span style="font-size:10px;color:var(--text3);max-width:320px;line-height:1.35">Se lee <b>en esta computadora</b>: del texto del PDF, o del código QR si es una foto. El documento no sale de aquí <b>ni se archiva</b> — solo quedan los datos y el Excel.</span>
       <div style="flex:1"></div>
-      <label style="font-size:11px;color:var(--text3)">Ciclo:</label>
+      <label style="font-size:11px;color:var(--text3)">Mes:</label>
       <select id="cmp-periodo" onchange="renderComprasFacturas()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px"></select>
       <button class="btn btn-outline" style="border-color:#22c55e;color:#22c55e" onclick="cmpExportarExcel()">📊 Excel</button>
     </div>
@@ -3583,11 +3583,10 @@ select option{background:var(--coal3);}
   <!-- ════ TAB: INFORME ════ -->
   <div class="mod-pane" style="display:none" id="cmp-informe">
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
-      <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--text)">📑 Informe de Compras del Ciclo</div>
+      <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--text)">📑 Informe de Compras del Mes</div>
       <div style="flex:1"></div>
-      <label style="font-size:11px;color:var(--text3)">Ciclo:</label>
+      <label style="font-size:11px;color:var(--text3)">Mes:</label>
       <select id="cmp-periodo-inf" onchange="renderComprasInforme()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px"></select>
-      <button class="btn btn-outline" style="border-color:#22c55e;color:#22c55e" onclick="cmpExportarExcel()">📊 Excel</button>
     </div>
     <div id="cmp-inf-wrap"></div>
   </div>
@@ -3597,7 +3596,7 @@ select option{background:var(--coal3);}
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
       <button class="btn btn-gold" onclick="cmpAbrirPresupuesto()">+ Registrar Presupuesto Entregado</button>
       <div style="flex:1"></div>
-      <label style="font-size:11px;color:var(--text3)">Ciclo:</label>
+      <label style="font-size:11px;color:var(--text3)">Mes:</label>
       <select id="cmp-periodo-pre" onchange="renderComprasPresupuestos()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px"></select>
     </div>
     <div id="cmp-pre-wrap"></div>
@@ -3608,7 +3607,7 @@ select option{background:var(--coal3);}
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
       <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--text)">📊 Balance del Ciclo</div>
       <div style="flex:1"></div>
-      <label style="font-size:11px;color:var(--text3)">Ciclo:</label>
+      <label style="font-size:11px;color:var(--text3)">Mes:</label>
       <select id="cmp-periodo-bal" onchange="renderComprasBalance()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px"></select>
     </div>
     <div id="cmp-bal-wrap"></div>
@@ -21444,7 +21443,7 @@ const _origRenderTabla = typeof renderTablaCompresorista === 'function' ? render
 // AISLADO A PROPÓSITO: nada de lo que se registra aquí entra en calcCostos, finCostoTotal,
 // los egresos del Dashboard ni el gasto de Finanzas. Es un módulo de CONTROL: responde
 // "cuánto se compró y cuánto queda del presupuesto entregado", nada más.
-// Usa el mismo ciclo 26→25 del resto del sistema (ventanaMes/filtroMes).
+// Cada mes calendario vive solo: del 1 al ultimo dia (cmpVentana).
 const COMPRAS_KEY='atmin_compras';
 function comprasNorm(){
   if(!state.compras || typeof state.compras!=='object') state.compras={facturas:[],presupuestos:[]};
@@ -21472,29 +21471,37 @@ function cmpMoney(n){ return 'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimu
 function cmpPeriodos(){
   const c=comprasNorm();
   const set=new Set();
-  const add=f=>{ const d=String(f||'').slice(0,10); if(!d) return;
-    // a qué periodo 26→25 pertenece la fecha: si el día es >= 26 pertenece al mes siguiente
-    const y=+d.slice(0,4), m=+d.slice(5,7), dd=+d.slice(8,10);
-    let py=y, pm=m; if(dd>=26){ pm++; if(pm>12){pm=1;py++;} }
-    set.add(py+'-'+String(pm).padStart(2,'0'));
-  };
+  const add=f=>{ const d=String(f||'').slice(0,7); if(d.length===7) set.add(d); };
   c.facturas.forEach(x=>add(x.fecha)); c.presupuestos.forEach(x=>add(x.fecha));
-  try{ set.add(periodoActual()); }catch(e){ set.add(hoy().slice(0,7)); }
+  Object.keys(c.archivo||{}).forEach(k=>set.add(k));
+  set.add(cmpMesActual());
   return [...set].filter(Boolean).sort().reverse();
 }
 function cmpPoblarSelect(id){
   const sel=document.getElementById(id); if(!sel) return null;
   const per=cmpPeriodos();
   const prev=sel.value;
-  sel.innerHTML=per.map(p=>`<option value="${p}">${(typeof periodoLabel==='function')?periodoLabel(p):p}</option>`).join('');
-  // Por defecto el ciclo VIGENTE, no el más nuevo con datos: si alguien registra una factura
-  // con fecha adelantada, el módulo no debe saltar a un ciclo futuro al abrirlo.
+  sel.innerHTML=per.map(p=>`<option value="${p}">${cmpMesLabel(p)}</option>`).join('');
+  // Por defecto el MES VIGENTE, no el más nuevo con datos: si alguien registra una factura
+  // con fecha adelantada, el módulo no debe saltar a un mes futuro al abrirlo.
   let porDefecto=per[0];
-  try{ const act=periodoActual(); if(per.includes(act)) porDefecto=act; }catch(e){}
+  const act=cmpMesActual(); if(per.includes(act)) porDefecto=act;
   sel.value=(prev&&per.includes(prev))?prev:porDefecto;
   return sel.value;
 }
-function cmpEnPeriodo(fecha,per){ return (typeof filtroMes==='function')?filtroMes(fecha,per):String(fecha||'').startsWith(per); }
+// COMPRAS VA POR MES CALENDARIO (del 1 al último día del mes), NO por el ciclo 26→25 del resto
+// de la app: una factura del 28 de julio es de JULIO. El mes se archiva al terminar.
+function cmpMesDe(fecha){ return String(fecha||'').slice(0,7); }
+function cmpEnPeriodo(fecha,per){ return cmpMesDe(fecha)===String(per||'').slice(0,7); }
+function cmpVentana(per){
+  const p=String(per||'').slice(0,7); const [y,m]=p.split('-').map(Number);
+  if(!y||!m) return {ini:p+'-01',fin:p+'-31',dias:31};
+  const ult=new Date(y,m,0).getDate();
+  return { ini:p+'-01', fin:p+'-'+String(ult).padStart(2,'0'), dias:ult };
+}
+const CMP_MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre'];
+function cmpMesLabel(per){ const p=String(per||'').slice(0,7); const [y,m]=p.split('-').map(Number); return (CMP_MESES[m-1]||p)+' '+(y||''); }
+function cmpMesActual(){ return hoy().slice(0,7); }
 function cmpFacturasDe(per){ return comprasNorm().facturas.filter(f=>cmpEnPeriodo(f.fecha,per)).sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha))); }
 function cmpPresupuestosDe(per){ return comprasNorm().presupuestos.filter(p=>cmpEnPeriodo(p.fecha,per)).sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha))); }
 
@@ -21726,31 +21733,70 @@ function cmpParsearFacturaTexto(lineas){
            || buscarFecha(/\b(\d{2})[\/\-](\d{2})[\/\-](\d{4})\b/)
            || buscarFecha(/\b(\d{4})-(\d{2})-(\d{2})\b/);
 
-  // ── Montos por etiqueta (se toma el ÚLTIMO número del renglón etiquetado)
-  const ultimoNum=l=>{ const m=String(l).match(/-?[\d.,]+\s*$/); return m?nEs(m[0]):0; };
-  const porEtiqueta=(res)=>{
+  // ── MONTOS ──────────────────────────────────────────────────────────────────────
+  // Dos pasadas y una comprobación. Leer un número suelto de un PDF es fácil de errar (la
+  // etiqueta y su importe pueden caer en renglones distintos, o "SUB TOTAL" se confunde con
+  // "TOTAL"), así que al final SIEMPRE se verifica que los tres montos cuadren entre sí:
+  //     IGV = base x 18%   y   total = base + IGV
+  // Si no cuadran, se busca en TODOS los números del documento la terna que sí cuadra. Eso es
+  // lo que hace que el importe leído sea el correcto y no un número cualquiera de la hoja.
+  const R2=n=>Math.round(n*100)/100;
+  const numsDe=t=>{ const out=[]; const re=/-?\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})|-?\d+[.,]\d{2}|-?\d+/g; let m;
+    while((m=re.exec(String(t)))){ const v=nEs(m[0]); if(v>0) out.push(v); } return out; };
+  // Valor de una etiqueta: el último número de SU renglón; si no hay, el primero de los
+  // siguientes renglones (los importes suelen ir en una columna aparte).
+  const porEtiqueta=(res,excluir)=>{
     for(const re of res){
       for(let i=L.length-1;i>=0;i--){
-        if(re.test(sinTildes(L[i]))){
-          const v=ultimoNum(L[i]);
-          if(v>0) return v;
-          // el monto puede haber quedado en el renglón siguiente
-          if(L[i+1]){ const v2=ultimoNum(L[i+1]); if(v2>0) return v2; }
-        }
+        const t=sinTildes(L[i]);
+        if(!re.test(t)) continue;
+        if(excluir && excluir.test(t)) continue;
+        const propios=numsDe(L[i].replace(/^[^\d]*/,''));
+        if(propios.length) return propios[propios.length-1];
+        for(let k=1;k<=3&&L[i+k];k++){ const n2=numsDe(L[i+k]); if(n2.length) return n2[0]; }
       }
     }
     return 0;
   };
-  let con=porEtiqueta([/IMPORTE\s*TOTAL/,/TOTAL\s*A\s*PAGAR/,/^TOTAL\s*S\/?\s*[\d.,]/,/\bTOTAL\b/]);
-  let igv=porEtiqueta([/I\.?\s?G\.?\s?V/,/IMPUESTO\s*GENERAL/]);
-  let sin=porEtiqueta([/OP\.?\s*GRAVADA/,/OPERACIONES?\s*GRAVADAS?/,/SUB\s*-?\s*TOTAL/,/VALOR\s*DE\s*VENTA/,/SUBTOTAL/]);
-  // Completar con el IGV de 18% lo que no venga en el documento
-  if(con<=0&&sin>0&&igv>0) con=Math.round((sin+igv)*100)/100;
-  if(con<=0&&sin>0) con=Math.round(sin*(1+CMP_IGV)*100)/100;
-  if(sin<=0&&con>0&&igv>0) sin=Math.round((con-igv)*100)/100;
-  if(sin<=0&&con>0) sin=Math.round(con/(1+CMP_IGV)*100)/100;
-  if(igv<=0&&con>0&&sin>0) igv=Math.round((con-sin)*100)/100;
+  // "SUB TOTAL"/"SUBTOTAL" NO es el importe total: se excluye del patrón genérico TOTAL.
+  const NO_TOTAL=/SUB\s*-?\s*TOTAL|TOTAL\s*DESCUENTO|TOTAL\s*ITEMS|DESCUENTO/;
+  let con=porEtiqueta([/IMPORTE\s*TOTAL/,/TOTAL\s*A\s*PAGAR/,/TOTAL\s*S\/?\s*[\d.,]/,/\bTOTAL\b/],NO_TOTAL);
+  let igv=porEtiqueta([/I\.?\s?G\.?\s?V\.?/,/IMPUESTO\s*GENERAL/]);
+  let sin=porEtiqueta([/OP\.?\s*GRAVADA/,/OPERACION(ES)?\s*GRAVADA/,/VALOR\s*DE\s*VENTA/,/SUB\s*-?\s*TOTAL/,/SUBTOTAL/,/BASE\s*IMPONIBLE/]);
+
+  // ¿Cuadran? base + IGV = total, con IGV ≈ 18% de la base
+  const cuadra=(b,i,t)=>b>0&&i>0&&t>0&&Math.abs(b+i-t)<=0.05&&Math.abs(i-b*CMP_IGV)<=Math.max(0.05,b*0.005);
+  if(!cuadra(sin,igv,con)){
+    // Completar el que falte a partir de los otros dos y volver a comprobar
+    let b=sin,g=igv,t=con;
+    if(t<=0&&b>0&&g>0) t=R2(b+g);
+    if(b<=0&&t>0&&g>0) b=R2(t-g);
+    if(g<=0&&t>0&&b>0) g=R2(t-b);
+    if(cuadra(b,g,t)){ sin=b; igv=g; con=t; }
+    else{
+      // Última red: buscar entre TODOS los números del documento la terna que cuadra.
+      // Se prefiere el total más grande (el bloque de totales va al final de la factura).
+      const todos=[...new Set(numsDe(todo))].sort((a,b2)=>b2-a);
+      let mejor=null;
+      for(const t2 of todos){
+        for(const b2 of todos){
+          if(b2>=t2) continue;
+          const g2=R2(t2-b2);
+          if(cuadra(b2,g2,t2)){ mejor={sin:b2,igv:g2,con:t2}; break; }
+        }
+        if(mejor) break;
+      }
+      if(mejor){ sin=mejor.sin; igv=mejor.igv; con=mejor.con; }
+      else{
+        // Nada cuadra: al menos dejar coherente lo que sí se leyó (regla del 18%)
+        if(con>0){ sin=R2(con/(1+CMP_IGV)); igv=R2(con-sin); }
+        else if(sin>0){ igv=R2(sin*CMP_IGV); con=R2(sin+igv); }
+        else if(igv>0){ sin=R2(igv/CMP_IGV); con=R2(sin+igv); }
+      }
+    }
+  }
   out.sinIgv=sin; out.igv=igv; out.conIgv=con;
+  out.montosCuadran=cuadra(sin,igv,con);
 
   // ── Razón social del emisor: el renglón con forma societaria más cercano al inicio.
   // Se descarta el bloque del cliente (viene tras "SEÑOR(ES)"/"CLIENTE"/"ADQUIRIENTE").
@@ -21888,6 +21934,7 @@ async function cmpLeerFoto(input){
       av.style.background='rgba(34,211,165,0.12)'; av.style.border='1px solid rgba(34,211,165,0.4)'; av.style.color='#22d3a5';
       av.innerHTML='\u2713 Datos le\u00eddos del '+via+', <b>en esta computadora</b> \u2014 el documento no sale de aqu\u00ed ni se archiva.'
         +' <b>Rev\u00edsalos antes de guardar.</b>'
+        +(datos.montosCuadran===false?'<br>\u26a0 <b>Revisa los montos con cuidado</b>: no cuadran entre s\u00ed (base + IGV \u2260 total). Corr\u00edgelos antes de guardar.':'')
         +(provRecordado?'<br>\u2139 El QR no trae la raz\u00f3n social: se puso la que ya usaste para el RUC '+base.ruc+'.':'')
         +(faltaProv?'<br>\u2139 El QR no incluye la raz\u00f3n social ni el detalle: complet\u00e1los abajo, o sube el PDF y salen solos.':'');
     }else{
@@ -21941,10 +21988,10 @@ function renderComprasFacturas(){
   const totSin=fs.reduce((s,f)=>s+(Number(f.sinIgv)||0),0);
   const totIgv=fs.reduce((s,f)=>s+(Number(f.igv)||0),0);
   const prov=new Set(fs.map(f=>(f.proveedor||'').trim().toUpperCase()).filter(Boolean)).size;
-  const v=(typeof ventanaMes==='function')?ventanaMes(per):null;
+  const v=cmpVentana(per);
   const k=document.getElementById('cmp-fact-kpis');
   if(k) k.innerHTML=`
-    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Ciclo <b style="color:var(--text2)">${v?v.ini+' → '+v.fin:per}</b> · control de compras, independiente del costo operativo</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">${cmpMesLabel(per)} <b style="color:var(--text2)">${v?v.ini+' → '+v.fin:per}</b> · control de compras, independiente del costo operativo</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px">
       <div class="kpi-card" style="padding:12px 14px"><div class="kpi-label" style="font-size:10px">Total con IGV</div><div class="kpi-value" style="font-size:20px;color:var(--gold-light)">${cmpMoney(totCon)}</div></div>
       <div class="kpi-card" style="padding:12px 14px"><div class="kpi-label" style="font-size:10px">Total sin IGV</div><div class="kpi-value" style="font-size:20px;color:#60a5fa">${cmpMoney(totSin)}</div></div>
@@ -22080,16 +22127,14 @@ function cmpConsolidado(per){
   };
 }
 // ═══════════════════════════════════════════════════════════════════════════
-// ARCHIVO DE CICLOS CERRADOS (26 → 25)
-// Cada ciclo vive solo, igual que el resto de la app: al pasar el 25 el ciclo queda cerrado,
-// se guarda una FOTO de su cuadro (totales, proveedores, productos y las facturas con sus
-// datos) y el ciclo nuevo arranca en cero. Un ciclo cerrado a mano desde "Cerrar Periodo"
-// queda BLOQUEADO: su foto ya no se recalcula, para que el número archivado no cambie nunca.
-// Aquí no se guarda ningún PDF ni foto: solo los datos que se leyeron de la factura.
+// ARCHIVO DE MESES CERRADOS (mes calendario: del 1 al 30/31)
+// Cada mes vive solo: al terminar el mes se guarda una FOTO de su cuadro (totales, proveedores,
+// productos y las facturas con sus datos) y el mes nuevo arranca en cero. Un mes cerrado a mano
+// desde "Cerrar Periodo" queda BLOQUEADO: su foto ya no se recalcula, para que el número
+// archivado no cambie nunca. Aquí no se guarda ningún PDF ni foto: solo los datos leídos.
 // ═══════════════════════════════════════════════════════════════════════════
 function cmpCicloCerrado(per){
-  const v=(typeof ventanaMes==='function')?ventanaMes(per):null;
-  if(v && v.fin && v.fin < hoy()) return true;                       // el ciclo ya terminó
+  if(String(per||'').slice(0,7) < cmpMesActual()) return true;       // el mes ya terminó
   return ((state.mesesCerrados)||[]).includes(per);                  // o se cerró a mano
 }
 function cmpBloqueado(per){ return ((state.mesesCerrados)||[]).includes(per); }
@@ -22108,7 +22153,7 @@ function cmpArchivarCiclos(){
     const bloq=cmpBloqueado(per);
     // Sin cambios y todavía sin cerrar a mano: nada que hacer.
     if(prev && !bloq && prev.nFacturas===c.facturas.length && Math.abs((prev.conIgv||0)-c.conIgv)<0.01) return;
-    const v=(typeof ventanaMes==='function')?ventanaMes(per):{ini:'',fin:''};
+    const v=cmpVentana(per);
     arch[per]={
       periodo:per, ini:v.ini, fin:v.fin,
       cerradoEl:(prev&&prev.cerradoEl)||hoy(), _ts:Date.now(),
@@ -22138,7 +22183,7 @@ async function cmpExportarArchivo(per){
   if(typeof ExcelJS==='undefined'){ showNotif('Librería Excel no disponible','error'); return; }
   const wb=new ExcelJS.Workbook(); wb.creator='MUKICLOUD';
   const s=wb.addWorksheet('Facturas '+per);
-  s.addRow(['COMPRAS — CICLO CERRADO '+per+' ('+a.ini+' al '+a.fin+')']); s.getRow(1).font={bold:true,size:13};
+  s.addRow(['COMPRAS — MES CERRADO '+cmpMesLabel(per)+' ('+a.ini+' al '+a.fin+')']); s.getRow(1).font={bold:true,size:13};
   s.addRow(['Archivado el '+(a.cerradoEl||'—')+(a.bloqueado?' · ciclo cerrado y bloqueado':'')]);
   s.addRow([]);
   s.addRow(['Fecha','N° Factura','RUC','Proveedor','Producto','Sin IGV','IGV','Con IGV','Origen']);
@@ -22154,7 +22199,7 @@ async function cmpExportarArchivo(per){
   const det=(a.facturas||[]).filter(f=>(f.items||[]).length);
   if(det.length){
     const sd=wb.addWorksheet('Detalle '+per);
-    sd.addRow(['DETALLE — CICLO '+per]); sd.getRow(1).font={bold:true,size:13}; sd.addRow([]);
+    sd.addRow(['DETALLE — '+cmpMesLabel(per)]); sd.getRow(1).font={bold:true,size:13}; sd.addRow([]);
     sd.addRow(['Fecha','N° Factura','Proveedor','Descripción','Cantidad','U.M.','P. Unitario','Importe']);
     sd.getRow(3).font={bold:true};
     det.forEach(f=>(f.items||[]).forEach(i=>sd.addRow([f.fecha||'',f.numero||'',f.proveedor||'',i.descripcion||'',
@@ -22164,63 +22209,85 @@ async function cmpExportarArchivo(per){
   }
   const buf=await wb.xlsx.writeBuffer();
   const url=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
-  const a2=document.createElement('a'); a2.href=url; a2.download='Compras_'+per+'_cerrado.xlsx'; a2.click();
+  const a2=document.createElement('a'); a2.href=url; a2.download='Compras_'+per+'_'+cmpMesLabel(per).replace(' ','_')+'.xlsx'; a2.click();
   setTimeout(()=>URL.revokeObjectURL(url),4000);
-  showNotif('✓ Excel del ciclo '+per);
+  showNotif('✓ Excel de '+cmpMesLabel(per));
 }
 // Bloque del historial archivado que se pinta al final del Informe
 function cmpHistorialArchivadoHTML(){
   const arr=cmpArchivados();
   if(!arr.length) return `<div class="card" style="padding:16px;margin-top:16px">
-      <div class="section-title" style="margin-top:0;font-size:13px">📁 Historial de ciclos cerrados</div>
-      <div style="font-size:12px;color:var(--text3);padding:8px 0">Todavía no hay ciclos cerrados. Al pasar el 25, el ciclo se archiva solo y aparece aquí con su cuadro y su Excel.</div>
+      <div class="section-title" style="margin-top:0;font-size:13px">📁 Historial de meses cerrados</div>
+      <div style="font-size:12px;color:var(--text3);padding:8px 0">Todavía no hay meses cerrados. Al terminar el mes se archiva solo y aparece aquí su carpeta, con sus facturas y su Excel.</div>
     </div>`;
   const abierto=window._cmpArchAbierto||'';
+  const totCon=arr.reduce((x,a)=>x+(Number(a.conIgv)||0),0);
+  const abierta=abierto?arr.find(a=>a.periodo===abierto):null;
+  // Carpetas: una por mes cerrado. Al hacer clic se abre y muestra sus facturas.
+  const carpetas=arr.map(a=>{
+    const act=abierto===a.periodo;
+    return `<div onclick="cmpVerArchivo('${a.periodo}')" title="Ver las facturas de ${cmpMesLabel(a.periodo)}"
+      style="cursor:pointer;background:${act?'var(--accent-dim)':'var(--coal3)'};border:1px solid ${act?'var(--accent-border)':'var(--border)'};
+             border-radius:12px;padding:14px 16px;min-width:186px;flex:1 1 186px;transition:all .15s ease">
+      <div style="display:flex;align-items:center;gap:9px">
+        <span style="font-size:26px;line-height:1">${act?'📂':'📁'}</span>
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:800;color:${act?'var(--accent-light)':'var(--text)'};white-space:nowrap">${cmpMesLabel(a.periodo)}</div>
+          <div style="font-size:10px;color:var(--text3)">${a.nFacturas} factura${a.nFacturas!==1?'s':''} · ${a.bloqueado?'🔒 cerrado':'archivado'}</div>
+        </div>
+      </div>
+      <div style="font-size:17px;font-weight:800;color:var(--gold-light);font-family:'DM Mono',monospace;margin-top:9px">${cmpMoney(a.conIgv)}</div>
+      <div style="font-size:10px;color:var(--text3)">${a.ini} → ${a.fin}</div>
+    </div>`;
+  }).join('');
+
+  const detalle=abierta?`
+    <div style="background:var(--coal3);border:1px solid var(--accent-border);border-radius:12px;padding:14px;margin-top:14px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+        <span style="font-size:20px">📂</span>
+        <div style="font-size:13px;font-weight:800;color:var(--text)">${cmpMesLabel(abierta.periodo)}</div>
+        <span style="font-size:10px;color:var(--text3)">${abierta.ini} → ${abierta.fin} · ${abierta.nFacturas} factura${abierta.nFacturas!==1?'s':''} · archivado el ${abierta.cerradoEl||'—'}</span>
+        <div style="flex:1"></div>
+        <button class="btn btn-outline" style="padding:5px 12px;font-size:11px;border-color:#22c55e;color:#22c55e" onclick="cmpExportarArchivo('${abierta.periodo}')">📊 Excel de ${cmpMesLabel(abierta.periodo)}</button>
+        <button class="btn btn-outline" style="padding:5px 12px;font-size:11px" onclick="cmpVerArchivo('${abierta.periodo}')">✕ Cerrar carpeta</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:12px">
+        <div class="kpi-card" style="padding:10px 12px"><div class="kpi-label" style="font-size:9px">Sin IGV</div><div class="kpi-value" style="font-size:16px;color:#60a5fa">${cmpMoney(abierta.sinIgv)}</div></div>
+        <div class="kpi-card" style="padding:10px 12px"><div class="kpi-label" style="font-size:9px">IGV</div><div class="kpi-value" style="font-size:16px;color:#a855f7">${cmpMoney(abierta.igv)}</div></div>
+        <div class="kpi-card" style="padding:10px 12px"><div class="kpi-label" style="font-size:9px">Con IGV</div><div class="kpi-value" style="font-size:16px;color:var(--gold-light)">${cmpMoney(abierta.conIgv)}</div></div>
+        <div class="kpi-card" style="padding:10px 12px"><div class="kpi-label" style="font-size:9px">Proveedores</div><div class="kpi-value" style="font-size:16px;color:#22d3a5">${(abierta.proveedores||[]).length}</div></div>
+      </div>
+      <div class="table-wrap" style="max-height:340px;overflow:auto;margin:0"><table style="width:100%">
+        <thead><tr style="font-size:9px;color:var(--text3)">
+          <th style="padding:5px 7px">Fecha</th><th style="padding:5px 7px">N°</th><th style="padding:5px 7px">RUC</th>
+          <th style="padding:5px 7px">Proveedor</th><th style="padding:5px 7px">Producto</th>
+          <th style="padding:5px 7px;text-align:right">Sin IGV</th><th style="padding:5px 7px;text-align:right">IGV</th>
+          <th style="padding:5px 7px;text-align:right">Con IGV</th><th style="padding:5px 7px">Origen</th></tr></thead><tbody>
+        ${(abierta.facturas||[]).slice().sort((x,y)=>String(x.fecha).localeCompare(String(y.fecha))).map(f=>`<tr style="border-top:1px solid var(--border2)">
+          <td style="padding:5px 7px;font-size:11px;white-space:nowrap">${f.fecha||'—'}</td>
+          <td style="padding:5px 7px;font-size:10px;font-family:'DM Mono',monospace">${f.numero||'—'}</td>
+          <td style="padding:5px 7px;font-size:10px;font-family:'DM Mono',monospace">${f.ruc||'—'}</td>
+          <td style="padding:5px 7px;font-size:11px;font-weight:600">${f.proveedor||'—'}</td>
+          <td style="padding:5px 7px;font-size:10px;color:var(--text3);max-width:210px;white-space:normal">${f.producto||'—'}</td>
+          <td style="padding:5px 7px;font-size:11px;text-align:right;font-family:'DM Mono',monospace">${cmpMoney(f.sinIgv)}</td>
+          <td style="padding:5px 7px;font-size:11px;text-align:right;font-family:'DM Mono',monospace;color:#a855f7">${cmpMoney(f.igv)}</td>
+          <td style="padding:5px 7px;font-size:11px;text-align:right;font-family:'DM Mono',monospace;color:var(--gold-light);font-weight:700">${cmpMoney(f.conIgv)}</td>
+          <td style="padding:5px 7px;font-size:10px;color:var(--text3)">${f.leidoDe==='pdf'?'📄 PDF':(f.leidoDe==='foto'?'📷 QR':'✍ Manual')}</td>
+        </tr>`).join('')}
+        <tr style="border-top:2px solid var(--border)">
+          <td colspan="5" style="padding:7px;font-size:11px;font-weight:700">TOTAL DEL MES</td>
+          <td style="padding:7px;font-size:11px;text-align:right;font-weight:700;font-family:'DM Mono',monospace">${cmpMoney(abierta.sinIgv)}</td>
+          <td style="padding:7px;font-size:11px;text-align:right;font-weight:700;font-family:'DM Mono',monospace">${cmpMoney(abierta.igv)}</td>
+          <td style="padding:7px;font-size:11px;text-align:right;font-weight:700;font-family:'DM Mono',monospace;color:var(--gold-light)">${cmpMoney(abierta.conIgv)}</td>
+          <td></td></tr>
+      </tbody></table></div>
+    </div>`:'';
+
   return `<div class="card" style="padding:16px;margin-top:16px">
-    <div class="section-title" style="margin-top:0;font-size:13px">📁 Historial de ciclos cerrados <span style="font-size:10px;color:var(--text3);font-weight:400">— ${arr.length} ciclo${arr.length!==1?'s':''} archivado${arr.length!==1?'s':''}</span></div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Cada ciclo va del 26 al 25 y se archiva al cerrarse; el ciclo nuevo arranca en cero. Solo se guardan los datos de la factura, nunca el archivo.</div>
-    <div class="table-wrap" style="overflow-x:auto;margin:0"><table style="width:100%">
-      <thead><tr style="font-size:10px;color:var(--text3)">
-        <th style="padding:7px 8px">Ciclo</th><th style="padding:7px 8px">Del → al</th>
-        <th style="padding:7px 8px;text-align:center">Facturas</th>
-        <th style="padding:7px 8px;text-align:right">Sin IGV</th><th style="padding:7px 8px;text-align:right">IGV</th>
-        <th style="padding:7px 8px;text-align:right">Con IGV</th><th style="padding:7px 8px">Estado</th><th style="padding:7px 8px"></th>
-      </tr></thead><tbody>
-      ${arr.map(a=>`<tr style="border-top:1px solid var(--border2)">
-        <td style="padding:7px 8px;font-size:12px;font-weight:700">${a.periodo}</td>
-        <td style="padding:7px 8px;font-size:11px;color:var(--text3);white-space:nowrap">${a.ini} → ${a.fin}</td>
-        <td style="padding:7px 8px;font-size:12px;text-align:center">${a.nFacturas}</td>
-        <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace">${cmpMoney(a.sinIgv)}</td>
-        <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;color:#a855f7">${cmpMoney(a.igv)}</td>
-        <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;color:var(--gold-light);font-weight:700">${cmpMoney(a.conIgv)}</td>
-        <td style="padding:7px 8px;font-size:10px;color:${a.bloqueado?'#22d3a5':'var(--text3)'}">${a.bloqueado?'🔒 Cerrado':'📁 Archivado'}</td>
-        <td style="padding:7px 8px;white-space:nowrap">
-          <button onclick="cmpVerArchivo('${a.periodo}')" style="background:none;border:none;color:#60a5fa;cursor:pointer;font-size:11px">${abierto===a.periodo?'▲ Ocultar':'▼ Ver'}</button>
-          <button onclick="cmpExportarArchivo('${a.periodo}')" style="background:none;border:none;color:#22c55e;cursor:pointer;font-size:11px" title="Excel de este ciclo">📊</button>
-        </td></tr>
-      ${abierto===a.periodo?`<tr><td colspan="8" style="padding:0 8px 12px">
-        <div style="background:var(--coal3);border:1px solid var(--border);border-radius:10px;padding:12px">
-          <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px">Facturas del ciclo ${a.periodo}</div>
-          <div class="table-wrap" style="max-height:320px;overflow:auto;margin:0"><table style="width:100%">
-            <thead><tr style="font-size:9px;color:var(--text3)">
-              <th style="padding:5px 7px">Fecha</th><th style="padding:5px 7px">N°</th><th style="padding:5px 7px">RUC</th>
-              <th style="padding:5px 7px">Proveedor</th><th style="padding:5px 7px">Producto</th>
-              <th style="padding:5px 7px;text-align:right">Sin IGV</th><th style="padding:5px 7px;text-align:right">IGV</th>
-              <th style="padding:5px 7px;text-align:right">Con IGV</th><th style="padding:5px 7px">Origen</th></tr></thead><tbody>
-            ${(a.facturas||[]).map(f=>`<tr style="border-top:1px solid var(--border2)">
-              <td style="padding:5px 7px;font-size:11px;white-space:nowrap">${f.fecha||'—'}</td>
-              <td style="padding:5px 7px;font-size:10px;font-family:'DM Mono',monospace">${f.numero||'—'}</td>
-              <td style="padding:5px 7px;font-size:10px;font-family:'DM Mono',monospace">${f.ruc||'—'}</td>
-              <td style="padding:5px 7px;font-size:11px;font-weight:600">${f.proveedor||'—'}</td>
-              <td style="padding:5px 7px;font-size:10px;color:var(--text3);max-width:200px;white-space:normal">${f.producto||'—'}</td>
-              <td style="padding:5px 7px;font-size:11px;text-align:right;font-family:'DM Mono',monospace">${cmpMoney(f.sinIgv)}</td>
-              <td style="padding:5px 7px;font-size:11px;text-align:right;font-family:'DM Mono',monospace;color:#a855f7">${cmpMoney(f.igv)}</td>
-              <td style="padding:5px 7px;font-size:11px;text-align:right;font-family:'DM Mono',monospace;color:var(--gold-light);font-weight:700">${cmpMoney(f.conIgv)}</td>
-              <td style="padding:5px 7px;font-size:10px;color:var(--text3)">${f.leidoDe==='pdf'?'📄 PDF':(f.leidoDe==='foto'?'📷 QR':'✍ Manual')}</td>
-            </tr>`).join('')}
-          </tbody></table></div>
-        </div></td></tr>`:''}`).join('')}
-    </tbody></table></div>
+    <div class="section-title" style="margin-top:0;font-size:13px">📁 Historial de meses cerrados <span style="font-size:10px;color:var(--text3);font-weight:400">— ${arr.length} mes${arr.length!==1?'es':''} · ${cmpMoney(totCon)} acumulado</span></div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Cada mes tiene su carpeta. Ábrela para ver sus facturas y bajar su Excel. Al terminar el mes se archiva solo y se abre la carpeta del mes siguiente.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px">${carpetas}</div>
+    ${detalle}
   </div>`;
 }
 function renderComprasInforme(){
@@ -22232,10 +22299,10 @@ function renderComprasInforme(){
   // se quedaba en blanco y parecía que no había nada guardado).
   if(!per){ if(w0) w0.innerHTML=cmpHistorialArchivadoHTML(); return; }
   const c=cmpConsolidado(per);
-  const v=(typeof ventanaMes==='function')?ventanaMes(per):null;
+  const v=cmpVentana(per);
   const w=document.getElementById('cmp-inf-wrap'); if(!w) return;
   if(!c.facturas.length){
-    w.innerHTML=`<div style="font-size:11px;color:var(--text3);margin-bottom:10px">Ciclo <b style="color:var(--text2)">${v?v.ini+' → '+v.fin:per}</b></div>
+    w.innerHTML=`<div style="font-size:11px;color:var(--text3);margin-bottom:10px">${cmpMesLabel(per)} <b style="color:var(--text2)">${v?v.ini+' → '+v.fin:per}</b></div>
       <div style="text-align:center;color:var(--text3);padding:28px">Sin facturas en este ciclo. Sube una factura (foto o PDF) y el informe se arma solo.</div>`
       +cmpHistorialArchivadoHTML();
     return;
@@ -22245,7 +22312,7 @@ function renderComprasInforme(){
   const barra=(p,col)=>`<div style="background:var(--coal4);border-radius:3px;height:5px;margin-top:3px;overflow:hidden"><div style="height:100%;width:${Math.min(100,p)}%;background:${col};border-radius:3px"></div></div>`;
 
   w.innerHTML=`
-    <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Ciclo <b style="color:var(--text2)">${v?v.ini+' → '+v.fin:per}</b> · consolidado de ${c.facturas.length} factura${c.facturas.length!==1?'s':''}${c.conDetalle?` · ${c.conDetalle} con detalle digitalizado`:''}</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:12px">${cmpMesLabel(per)} <b style="color:var(--text2)">${v?v.ini+' → '+v.fin:per}</b> · consolidado de ${c.facturas.length} factura${c.facturas.length!==1?'s':''}${c.conDetalle?` · ${c.conDetalle} con detalle digitalizado`:''}</div>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:18px">
       <div class="kpi-card" style="padding:12px 14px"><div class="kpi-label" style="font-size:10px">Total con IGV</div><div class="kpi-value" style="font-size:20px;color:var(--gold-light)">${cmpMoney(c.conIgv)}</div></div>
@@ -22303,7 +22370,7 @@ function renderComprasInforme(){
           <td style="padding:8px;font-size:12px;text-align:right;font-weight:700;font-family:'DM Mono',monospace;color:var(--gold-light)">${cmpMoney(c.sumaDetalle)}</td>
           <td></td></tr>
       </tbody></table></div>
-      <div style="font-size:10px;color:var(--text3);margin-top:8px">La suma del detalle es sin IGV y solo cubre las facturas con detalle leído; por eso puede no cuadrar con el total del ciclo.</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:8px">La suma del detalle es sin IGV y solo cubre las facturas con detalle leído; por eso puede no cuadrar con el total del mes.</div>
       `:'<div style="text-align:center;color:var(--text3);padding:22px;font-size:12px">Ninguna factura de este ciclo tiene detalle digitalizado todavía.<br>Sube la factura como <b>PDF</b> o foto y el lector transcribe sus líneas.</div>'}
     </div>`
     +cmpHistorialArchivadoHTML();
@@ -22318,11 +22385,11 @@ function renderComprasBalance(){
   const gastado=fs.reduce((s,f)=>s+(Number(f.conIgv)||0),0);
   const entregado=ps.reduce((s,p)=>s+(Number(p.monto)||0),0);
   const saldo=entregado-gastado;
-  const v=(typeof ventanaMes==='function')?ventanaMes(per):null;
+  const v=cmpVentana(per);
   const pct=entregado>0?Math.min(100,Math.round(gastado/entregado*100)):0;
   const w=document.getElementById('cmp-bal-wrap'); if(!w) return;
 
-  // Días del ciclo (26 → 25): etiquetas y total comprado por día
+  // Días del mes: etiquetas y total comprado por día
   const dias=[];
   if(v){
     let d=new Date(v.ini+'T00:00:00'); const fin=new Date(v.fin+'T00:00:00');
@@ -22334,7 +22401,7 @@ function renderComprasBalance(){
   const diaTop=dias.filter(d=>porDia[d]===maxDia&&maxDia>0)[0]||null;
 
   w.innerHTML=`
-    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Ciclo <b style="color:var(--text2)">${v?v.ini+' → '+v.fin:per}</b> · ${dias.length} días</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">${cmpMesLabel(per)} <b style="color:var(--text2)">${v?v.ini+' → '+v.fin:per}</b> · ${dias.length} días</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:18px">
       <div class="kpi-card" style="padding:14px 16px"><div class="kpi-label" style="font-size:10px">Presupuesto entregado</div><div class="kpi-value" style="font-size:22px;color:#22d3a5">${cmpMoney(entregado)}</div></div>
       <div class="kpi-card" style="padding:14px 16px"><div class="kpi-label" style="font-size:10px">Gastado en compras</div><div class="kpi-value" style="font-size:22px;color:var(--gold-light)">${cmpMoney(gastado)}</div></div>
@@ -22347,7 +22414,7 @@ function renderComprasBalance(){
       ${saldo<0?`<div style="margin-top:8px;font-size:11px;color:#ef4444">⚠ Se gastó ${cmpMoney(-saldo)} por encima de lo entregado.</div>`:''}
     </div>
     <div class="card" style="padding:16px">
-      <div class="section-title" style="margin-top:0;font-size:13px">📈 Compras por día del ciclo</div>
+      <div class="section-title" style="margin-top:0;font-size:13px">📈 Compras por día del mes</div>
       <div style="font-size:11px;color:var(--text3);margin-bottom:10px">${diaTop?`Día de mayor compra: <b style="color:var(--gold-light)">${diaTop}</b> con ${cmpMoney(maxDia)}`:'Sin compras registradas en este ciclo.'}</div>
       <div style="height:260px"><canvas id="cmp-chart"></canvas></div>
     </div>`;
@@ -22375,11 +22442,11 @@ async function cmpExportarExcel(){
   comprasLoad();
   const per=(document.getElementById('cmp-periodo')||{}).value||periodoActual();
   const fs=cmpFacturasDe(per), ps=cmpPresupuestosDe(per);
-  const v=(typeof ventanaMes==='function')?ventanaMes(per):{ini:'',fin:''};
+  const v=cmpVentana(per);
   const wb=new ExcelJS.Workbook(); wb.creator='MUKICLOUD';
 
   const s1=wb.addWorksheet('Facturas');
-  s1.addRow(['CONTROL DE COMPRAS — CICLO '+per+' ('+v.ini+' al '+v.fin+')']);
+  s1.addRow(['CONTROL DE COMPRAS — '+cmpMesLabel(per)+' ('+v.ini+' al '+v.fin+')']);
   s1.getRow(1).font={bold:true,size:13};
   s1.addRow([]);
   s1.addRow(['Fecha','N° Factura','RUC','Proveedor','Producto','Sin IGV','IGV','Con IGV']);
@@ -22398,7 +22465,7 @@ async function cmpExportarExcel(){
   const conItems=fs.filter(f=>Array.isArray(f.items)&&f.items.length);
   if(conItems.length){
     const sd=wb.addWorksheet('Detalle');
-    sd.addRow(['DETALLE DE FACTURAS — CICLO '+per]); sd.getRow(1).font={bold:true,size:13};
+    sd.addRow(['DETALLE DE FACTURAS — '+cmpMesLabel(per)]); sd.getRow(1).font={bold:true,size:13};
     sd.addRow([]);
     sd.addRow(['Fecha','N° Factura','Proveedor','Descripción','Cantidad','U.M.','P. Unitario','Importe']);
     sd.getRow(3).font={bold:true};
@@ -22410,15 +22477,15 @@ async function cmpExportarExcel(){
     [7,8].forEach(c=>sd.getColumn(c).numFmt='#,##0.00');
   }
 
-  // Historial de ciclos ya cerrados, para tener todo el año en un solo archivo
+  // Historial de meses ya cerrados, para tener todo el año en un solo archivo
   const arch=cmpArchivados();
   if(arch.length){
-    const sh=wb.addWorksheet('Ciclos cerrados');
-    sh.addRow(['HISTORIAL DE CICLOS CERRADOS (26 → 25)']); sh.getRow(1).font={bold:true,size:13};
+    const sh=wb.addWorksheet('Meses cerrados');
+    sh.addRow(['HISTORIAL DE MESES CERRADOS']); sh.getRow(1).font={bold:true,size:13};
     sh.addRow([]);
-    sh.addRow(['Ciclo','Desde','Hasta','Facturas','Sin IGV','IGV','Con IGV','Estado']);
+    sh.addRow(['Mes','Desde','Hasta','Facturas','Sin IGV','IGV','Con IGV','Estado']);
     sh.getRow(3).font={bold:true};
-    arch.slice().reverse().forEach(a=>sh.addRow([a.periodo,a.ini,a.fin,a.nFacturas||0,
+    arch.slice().reverse().forEach(a=>sh.addRow([cmpMesLabel(a.periodo),a.ini,a.fin,a.nFacturas||0,
       Number(a.sinIgv)||0,Number(a.igv)||0,Number(a.conIgv)||0,a.bloqueado?'Cerrado':'Archivado']));
     const tt=sh.addRow(['','','TOTAL',arch.reduce((s,a)=>s+(a.nFacturas||0),0),
       arch.reduce((s,a)=>s+(Number(a.sinIgv)||0),0), arch.reduce((s,a)=>s+(Number(a.igv)||0),0),
