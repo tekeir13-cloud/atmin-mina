@@ -22079,15 +22079,165 @@ function cmpConsolidado(per){
     productos:Object.values(prod).map(p=>({...p,proveedores:[...p.proveedores]})).sort((a,b)=>b.importe-a.importe)
   };
 }
+// ═══════════════════════════════════════════════════════════════════════════
+// ARCHIVO DE CICLOS CERRADOS (26 → 25)
+// Cada ciclo vive solo, igual que el resto de la app: al pasar el 25 el ciclo queda cerrado,
+// se guarda una FOTO de su cuadro (totales, proveedores, productos y las facturas con sus
+// datos) y el ciclo nuevo arranca en cero. Un ciclo cerrado a mano desde "Cerrar Periodo"
+// queda BLOQUEADO: su foto ya no se recalcula, para que el número archivado no cambie nunca.
+// Aquí no se guarda ningún PDF ni foto: solo los datos que se leyeron de la factura.
+// ═══════════════════════════════════════════════════════════════════════════
+function cmpCicloCerrado(per){
+  const v=(typeof ventanaMes==='function')?ventanaMes(per):null;
+  if(v && v.fin && v.fin < hoy()) return true;                       // el ciclo ya terminó
+  return ((state.mesesCerrados)||[]).includes(per);                  // o se cerró a mano
+}
+function cmpBloqueado(per){ return ((state.mesesCerrados)||[]).includes(per); }
+function cmpArchivo(){ const c=comprasNorm(); if(!c.archivo||typeof c.archivo!=='object') c.archivo={}; return c.archivo; }
+// Genera/actualiza la foto de cada ciclo ya cerrado. Idempotente: no duplica ni pisa lo bloqueado.
+function cmpArchivarCiclos(){
+  const arch=cmpArchivo(); let cambios=0;
+  cmpPeriodos().forEach(per=>{
+    if(!cmpCicloCerrado(per)) return;
+    const c=cmpConsolidado(per);
+    if(!c.facturas.length) return;
+    const prev=arch[per];
+    // Ya congelado por un cierre de periodo: su cuadro NO se vuelve a calcular nunca, aunque
+    // después aparezca una factura con fecha de ese ciclo.
+    if(prev && prev.bloqueado) return;
+    const bloq=cmpBloqueado(per);
+    // Sin cambios y todavía sin cerrar a mano: nada que hacer.
+    if(prev && !bloq && prev.nFacturas===c.facturas.length && Math.abs((prev.conIgv||0)-c.conIgv)<0.01) return;
+    const v=(typeof ventanaMes==='function')?ventanaMes(per):{ini:'',fin:''};
+    arch[per]={
+      periodo:per, ini:v.ini, fin:v.fin,
+      cerradoEl:(prev&&prev.cerradoEl)||hoy(), _ts:Date.now(),
+      bloqueado:bloq,
+      nFacturas:c.facturas.length, sinIgv:c.sinIgv, igv:c.igv, conIgv:c.conIgv,
+      proveedores:c.proveedores.map(p=>({ruc:p.ruc,nombre:p.nombre,n:p.n,sinIgv:p.sinIgv,igv:p.igv,conIgv:p.conIgv})),
+      productos:c.productos.slice(0,200).map(p=>({descripcion:p.descripcion,unidad:p.unidad,cantidad:p.cantidad,importe:p.importe,n:p.n})),
+      // Las facturas se archivan SIN el documento: solo los datos que alimentan el Excel.
+      facturas:c.facturas.map(f=>({fecha:f.fecha,numero:f.numero,ruc:f.ruc,proveedor:f.proveedor,
+        producto:f.producto,sinIgv:f.sinIgv,igv:f.igv,conIgv:f.conIgv,leidoDe:f.leidoDe||'',
+        items:Array.isArray(f.items)?f.items:[]}))
+    };
+    cambios++;
+  });
+  if(cambios) comprasSave();
+  return cambios;
+}
+function cmpArchivados(){ return Object.values(cmpArchivo()).sort((a,b)=>String(b.periodo).localeCompare(String(a.periodo))); }
+function cmpVerArchivo(per){
+  const a=cmpArchivo()[per]; if(!a) return;
+  window._cmpArchAbierto=(window._cmpArchAbierto===per)?'':per;
+  renderComprasInforme();
+}
+// Excel de un ciclo ya archivado (los mismos datos, congelados)
+async function cmpExportarArchivo(per){
+  const a=cmpArchivo()[per]; if(!a){ showNotif('Ese ciclo no está archivado','error'); return; }
+  if(typeof ExcelJS==='undefined'){ showNotif('Librería Excel no disponible','error'); return; }
+  const wb=new ExcelJS.Workbook(); wb.creator='MUKICLOUD';
+  const s=wb.addWorksheet('Facturas '+per);
+  s.addRow(['COMPRAS — CICLO CERRADO '+per+' ('+a.ini+' al '+a.fin+')']); s.getRow(1).font={bold:true,size:13};
+  s.addRow(['Archivado el '+(a.cerradoEl||'—')+(a.bloqueado?' · ciclo cerrado y bloqueado':'')]);
+  s.addRow([]);
+  s.addRow(['Fecha','N° Factura','RUC','Proveedor','Producto','Sin IGV','IGV','Con IGV','Origen']);
+  s.getRow(4).font={bold:true};
+  (a.facturas||[]).slice().sort((x,y)=>String(x.fecha).localeCompare(String(y.fecha))).forEach(f=>{
+    s.addRow([f.fecha||'',f.numero||'',f.ruc||'',f.proveedor||'',f.producto||'',
+      Number(f.sinIgv)||0,Number(f.igv)||0,Number(f.conIgv)||0,
+      f.leidoDe==='pdf'?'PDF':(f.leidoDe==='foto'?'Foto (QR)':'Manual')]);
+  });
+  const t=s.addRow(['','','','','TOTAL',a.sinIgv||0,a.igv||0,a.conIgv||0,'']); t.font={bold:true};
+  s.columns=[{width:12},{width:18},{width:14},{width:30},{width:34},{width:14},{width:12},{width:14},{width:12}];
+  [6,7,8].forEach(c=>s.getColumn(c).numFmt='#,##0.00');
+  const det=(a.facturas||[]).filter(f=>(f.items||[]).length);
+  if(det.length){
+    const sd=wb.addWorksheet('Detalle '+per);
+    sd.addRow(['DETALLE — CICLO '+per]); sd.getRow(1).font={bold:true,size:13}; sd.addRow([]);
+    sd.addRow(['Fecha','N° Factura','Proveedor','Descripción','Cantidad','U.M.','P. Unitario','Importe']);
+    sd.getRow(3).font={bold:true};
+    det.forEach(f=>(f.items||[]).forEach(i=>sd.addRow([f.fecha||'',f.numero||'',f.proveedor||'',i.descripcion||'',
+      Number(i.cantidad)||0,i.unidad||'',Number(i.precioUnit)||0,Number(i.importe)||0])));
+    sd.columns=[{width:12},{width:18},{width:28},{width:44},{width:11},{width:8},{width:14},{width:14}];
+    [7,8].forEach(c=>sd.getColumn(c).numFmt='#,##0.00');
+  }
+  const buf=await wb.xlsx.writeBuffer();
+  const url=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  const a2=document.createElement('a'); a2.href=url; a2.download='Compras_'+per+'_cerrado.xlsx'; a2.click();
+  setTimeout(()=>URL.revokeObjectURL(url),4000);
+  showNotif('✓ Excel del ciclo '+per);
+}
+// Bloque del historial archivado que se pinta al final del Informe
+function cmpHistorialArchivadoHTML(){
+  const arr=cmpArchivados();
+  if(!arr.length) return `<div class="card" style="padding:16px;margin-top:16px">
+      <div class="section-title" style="margin-top:0;font-size:13px">📁 Historial de ciclos cerrados</div>
+      <div style="font-size:12px;color:var(--text3);padding:8px 0">Todavía no hay ciclos cerrados. Al pasar el 25, el ciclo se archiva solo y aparece aquí con su cuadro y su Excel.</div>
+    </div>`;
+  const abierto=window._cmpArchAbierto||'';
+  return `<div class="card" style="padding:16px;margin-top:16px">
+    <div class="section-title" style="margin-top:0;font-size:13px">📁 Historial de ciclos cerrados <span style="font-size:10px;color:var(--text3);font-weight:400">— ${arr.length} ciclo${arr.length!==1?'s':''} archivado${arr.length!==1?'s':''}</span></div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Cada ciclo va del 26 al 25 y se archiva al cerrarse; el ciclo nuevo arranca en cero. Solo se guardan los datos de la factura, nunca el archivo.</div>
+    <div class="table-wrap" style="overflow-x:auto;margin:0"><table style="width:100%">
+      <thead><tr style="font-size:10px;color:var(--text3)">
+        <th style="padding:7px 8px">Ciclo</th><th style="padding:7px 8px">Del → al</th>
+        <th style="padding:7px 8px;text-align:center">Facturas</th>
+        <th style="padding:7px 8px;text-align:right">Sin IGV</th><th style="padding:7px 8px;text-align:right">IGV</th>
+        <th style="padding:7px 8px;text-align:right">Con IGV</th><th style="padding:7px 8px">Estado</th><th style="padding:7px 8px"></th>
+      </tr></thead><tbody>
+      ${arr.map(a=>`<tr style="border-top:1px solid var(--border2)">
+        <td style="padding:7px 8px;font-size:12px;font-weight:700">${a.periodo}</td>
+        <td style="padding:7px 8px;font-size:11px;color:var(--text3);white-space:nowrap">${a.ini} → ${a.fin}</td>
+        <td style="padding:7px 8px;font-size:12px;text-align:center">${a.nFacturas}</td>
+        <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace">${cmpMoney(a.sinIgv)}</td>
+        <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;color:#a855f7">${cmpMoney(a.igv)}</td>
+        <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;color:var(--gold-light);font-weight:700">${cmpMoney(a.conIgv)}</td>
+        <td style="padding:7px 8px;font-size:10px;color:${a.bloqueado?'#22d3a5':'var(--text3)'}">${a.bloqueado?'🔒 Cerrado':'📁 Archivado'}</td>
+        <td style="padding:7px 8px;white-space:nowrap">
+          <button onclick="cmpVerArchivo('${a.periodo}')" style="background:none;border:none;color:#60a5fa;cursor:pointer;font-size:11px">${abierto===a.periodo?'▲ Ocultar':'▼ Ver'}</button>
+          <button onclick="cmpExportarArchivo('${a.periodo}')" style="background:none;border:none;color:#22c55e;cursor:pointer;font-size:11px" title="Excel de este ciclo">📊</button>
+        </td></tr>
+      ${abierto===a.periodo?`<tr><td colspan="8" style="padding:0 8px 12px">
+        <div style="background:var(--coal3);border:1px solid var(--border);border-radius:10px;padding:12px">
+          <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px">Facturas del ciclo ${a.periodo}</div>
+          <div class="table-wrap" style="max-height:320px;overflow:auto;margin:0"><table style="width:100%">
+            <thead><tr style="font-size:9px;color:var(--text3)">
+              <th style="padding:5px 7px">Fecha</th><th style="padding:5px 7px">N°</th><th style="padding:5px 7px">RUC</th>
+              <th style="padding:5px 7px">Proveedor</th><th style="padding:5px 7px">Producto</th>
+              <th style="padding:5px 7px;text-align:right">Sin IGV</th><th style="padding:5px 7px;text-align:right">IGV</th>
+              <th style="padding:5px 7px;text-align:right">Con IGV</th><th style="padding:5px 7px">Origen</th></tr></thead><tbody>
+            ${(a.facturas||[]).map(f=>`<tr style="border-top:1px solid var(--border2)">
+              <td style="padding:5px 7px;font-size:11px;white-space:nowrap">${f.fecha||'—'}</td>
+              <td style="padding:5px 7px;font-size:10px;font-family:'DM Mono',monospace">${f.numero||'—'}</td>
+              <td style="padding:5px 7px;font-size:10px;font-family:'DM Mono',monospace">${f.ruc||'—'}</td>
+              <td style="padding:5px 7px;font-size:11px;font-weight:600">${f.proveedor||'—'}</td>
+              <td style="padding:5px 7px;font-size:10px;color:var(--text3);max-width:200px;white-space:normal">${f.producto||'—'}</td>
+              <td style="padding:5px 7px;font-size:11px;text-align:right;font-family:'DM Mono',monospace">${cmpMoney(f.sinIgv)}</td>
+              <td style="padding:5px 7px;font-size:11px;text-align:right;font-family:'DM Mono',monospace;color:#a855f7">${cmpMoney(f.igv)}</td>
+              <td style="padding:5px 7px;font-size:11px;text-align:right;font-family:'DM Mono',monospace;color:var(--gold-light);font-weight:700">${cmpMoney(f.conIgv)}</td>
+              <td style="padding:5px 7px;font-size:10px;color:var(--text3)">${f.leidoDe==='pdf'?'📄 PDF':(f.leidoDe==='foto'?'📷 QR':'✍ Manual')}</td>
+            </tr>`).join('')}
+          </tbody></table></div>
+        </div></td></tr>`:''}`).join('')}
+    </tbody></table></div>
+  </div>`;
+}
 function renderComprasInforme(){
   comprasLoad();
-  const per=cmpPoblarSelect('cmp-periodo-inf'); if(!per) return;
+  cmpArchivarCiclos();
+  const w0=document.getElementById('cmp-inf-wrap');
+  const per=cmpPoblarSelect('cmp-periodo-inf');
+  // Sin ciclo vigente que mostrar, el historial archivado igual se ve (antes la pestaña
+  // se quedaba en blanco y parecía que no había nada guardado).
+  if(!per){ if(w0) w0.innerHTML=cmpHistorialArchivadoHTML(); return; }
   const c=cmpConsolidado(per);
   const v=(typeof ventanaMes==='function')?ventanaMes(per):null;
   const w=document.getElementById('cmp-inf-wrap'); if(!w) return;
   if(!c.facturas.length){
     w.innerHTML=`<div style="font-size:11px;color:var(--text3);margin-bottom:10px">Ciclo <b style="color:var(--text2)">${v?v.ini+' → '+v.fin:per}</b></div>
-      <div style="text-align:center;color:var(--text3);padding:28px">Sin facturas en este ciclo. Sube una factura (foto o PDF) y el informe se arma solo.</div>`;
+      <div style="text-align:center;color:var(--text3);padding:28px">Sin facturas en este ciclo. Sube una factura (foto o PDF) y el informe se arma solo.</div>`
+      +cmpHistorialArchivadoHTML();
     return;
   }
   const pctC=n=>c.conIgv>0?Math.round(n/c.conIgv*100):0;
@@ -22155,7 +22305,8 @@ function renderComprasInforme(){
       </tbody></table></div>
       <div style="font-size:10px;color:var(--text3);margin-top:8px">La suma del detalle es sin IGV y solo cubre las facturas con detalle leído; por eso puede no cuadrar con el total del ciclo.</div>
       `:'<div style="text-align:center;color:var(--text3);padding:22px;font-size:12px">Ninguna factura de este ciclo tiene detalle digitalizado todavía.<br>Sube la factura como <b>PDF</b> o foto y el lector transcribe sus líneas.</div>'}
-    </div>`;
+    </div>`
+    +cmpHistorialArchivadoHTML();
 }
 
 // ── VISTA: BALANCE + GRÁFICA ÚNICA DEL CICLO ──
@@ -22257,6 +22408,23 @@ async function cmpExportarExcel(){
     });
     sd.columns=[{width:12},{width:18},{width:28},{width:44},{width:11},{width:8},{width:14},{width:14}];
     [7,8].forEach(c=>sd.getColumn(c).numFmt='#,##0.00');
+  }
+
+  // Historial de ciclos ya cerrados, para tener todo el año en un solo archivo
+  const arch=cmpArchivados();
+  if(arch.length){
+    const sh=wb.addWorksheet('Ciclos cerrados');
+    sh.addRow(['HISTORIAL DE CICLOS CERRADOS (26 → 25)']); sh.getRow(1).font={bold:true,size:13};
+    sh.addRow([]);
+    sh.addRow(['Ciclo','Desde','Hasta','Facturas','Sin IGV','IGV','Con IGV','Estado']);
+    sh.getRow(3).font={bold:true};
+    arch.slice().reverse().forEach(a=>sh.addRow([a.periodo,a.ini,a.fin,a.nFacturas||0,
+      Number(a.sinIgv)||0,Number(a.igv)||0,Number(a.conIgv)||0,a.bloqueado?'Cerrado':'Archivado']));
+    const tt=sh.addRow(['','','TOTAL',arch.reduce((s,a)=>s+(a.nFacturas||0),0),
+      arch.reduce((s,a)=>s+(Number(a.sinIgv)||0),0), arch.reduce((s,a)=>s+(Number(a.igv)||0),0),
+      arch.reduce((s,a)=>s+(Number(a.conIgv)||0),0),'']); tt.font={bold:true};
+    sh.columns=[{width:12},{width:13},{width:13},{width:11},{width:15},{width:13},{width:15},{width:13}];
+    [5,6,7].forEach(c=>sh.getColumn(c).numFmt='#,##0.00');
   }
 
   // Consolidados del informe: por proveedor y por producto
@@ -22512,6 +22680,8 @@ async function cerrarPeriodo(periodo){
   if(!state.mesesCerrados) state.mesesCerrados=[];
   if(!state.mesesCerrados.includes(periodo)){ state.mesesCerrados.push(periodo); if(typeof saveState==='function') saveState(); }
   try{ sbSyncModulo('mant_repuestos', state.mantRepuestos||[]); }catch(e){}
+  // COMPRAS: archivar el cuadro del ciclo y dejarlo bloqueado, para que su total no cambie más.
+  try{ if(typeof cmpArchivarCiclos==='function'){ comprasLoad(); cmpArchivarCiclos(); } }catch(e){}
 
   showNotif('🔒 Periodo '+label+' cerrado: respaldo guardado, stocks arrastrados y consumo reiniciado','ok');
   try{ if(typeof refrescarVistaActual==='function') refrescarVistaActual(); }catch(e){}
