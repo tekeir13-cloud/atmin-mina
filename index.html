@@ -21638,6 +21638,10 @@ function cmpEliminarFactura(id){
 const CMP_LIB_PDFJS='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
 const CMP_LIB_PDFJS_WORKER='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 const CMP_LIB_JSQR='https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+// Lector de texto en imágenes (OCR). Corre dentro del navegador: la foto no se sube a ningún lado.
+const CMP_LIB_TESS='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+const CMP_TESS_WORKER='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js';
+const CMP_TESS_CORE='https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.0';
 const _cmpLibs={};
 function cmpCargarLib(url,globalName){
   if(window[globalName]) return Promise.resolve(window[globalName]);
@@ -21739,6 +21743,47 @@ async function cmpQrDeImagen(dataUrl){
     if(q&&q.data) return q.data;
   }
   return null;
+}
+// TEXTO DE UNA FOTO (OCR). El QR de la SUNAT trae los montos exactos pero NO dice qué se compró:
+// eso solo está escrito en el cuerpo de la factura. Aquí se lee ese texto con un reconocedor que
+// corre dentro del navegador — la foto no se envía a ningún servidor. Devuelve los renglones.
+// Prepara la foto para el OCR: la lleva a un tamaño cómodo (ampliando si vino chica), la pasa a
+// escala de grises y le sube el contraste. Sobre una foto tal cual, la letra pequeña de la tabla
+// del detalle sale ilegible; con este paso se reconoce mucho mejor.
+async function cmpPrepararOcr(dataUrl){
+  const img=await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=()=>rej(new Error('imagen inválida')); i.src=dataUrl; });
+  const lado=Math.max(img.width,img.height)||1;
+  const OBJ=2600;
+  let esc=OBJ/lado; if(esc>3) esc=3; if(esc<1) esc=1;      // ampliar poco; nunca reducir
+  const w=Math.round(img.width*esc), h=Math.round(img.height*esc);
+  const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+  const cx=cv.getContext('2d');
+  cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality='high';
+  cx.drawImage(img,0,0,w,h);
+  try{
+    const d=cx.getImageData(0,0,w,h), p=d.data;
+    for(let i=0;i<p.length;i+=4){
+      let g=0.299*p[i]+0.587*p[i+1]+0.114*p[i+2];
+      g=(g-128)*1.45+128;                                   // contraste
+      g=g<0?0:(g>255?255:g);
+      p[i]=p[i+1]=p[i+2]=g;
+    }
+    cx.putImageData(d,0,0);
+  }catch(e){}
+  return cv.toDataURL('image/png');
+}
+async function cmpOcrImagen(dataUrl, aviso){
+  const T=await cmpCargarLib(CMP_LIB_TESS,'Tesseract');
+  let img=dataUrl; try{ img=await cmpPrepararOcr(dataUrl); }catch(e){}
+  const r=await T.recognize(img,'spa',{
+    workerPath:CMP_TESS_WORKER, corePath:CMP_TESS_CORE,
+    logger:m=>{ if(aviso&&m&&m.status==='recognizing text'){ aviso(Math.round((m.progress||0)*100)); } }
+  });
+  const d=(r&&r.data)||{};
+  const lineas=Array.isArray(d.lines)&&d.lines.length
+    ? d.lines.map(l=>String(l.text||'').replace(/\s+/g,' ').trim())
+    : String(d.text||'').split('\n').map(x=>x.replace(/\s+/g,' ').trim());
+  return lineas.filter(Boolean).map(_cmpRepararNumeros);
 }
 // QR de la SUNAT: RUC | tipo | serie | correlativo | IGV | TOTAL | fecha | tipoDocAdq | numDocAdq | ...
 function cmpParsearQrSunat(txt){
@@ -21859,10 +21904,21 @@ function cmpParsearFacturaTexto(lineas){
   // ── Razón social del emisor: el renglón con forma societaria más cercano al inicio.
   // Se descarta el bloque del cliente (viene tras "SEÑOR(ES)"/"CLIENTE"/"ADQUIRIENTE").
   const corte=(()=>{ for(let i=0;i<L.length;i++){ if(/SE[NÑ]OR|CLIENTE|ADQUIRIENTE|RAZON\s*SOCIAL\s*DEL\s*CLIENTE/.test(sinTildes(L[i]))) return i; } return L.length; })();
-  const soc=/\b(S\.?\s?A\.?\s?C\.?|S\.?A\.?A\.?|S\.?\s?A\.?|E\.?\s?I\.?\s?R\.?\s?L\.?|S\.?\s?R\.?\s?L\.?|S\.?\s?C\.?\s?R\.?\s?L\.?)\s*$/i;
+  // La forma societaria puede no estar al final del renglón: en una FOTO el OCR junta la
+  // cabecera con la caja de la derecha ("DMUEBLES E.I.R.L. FACTURA ELECTRONICA"). Se busca en
+  // cualquier parte y se corta ahí. También se toleran los puntos que el OCR lee como guiones.
+  const soc=/^(.{3,80}?\b(?:S[.\-\s]{0,2}A[.\-\s]{0,2}C|S[.\-\s]{0,2}A[.\-\s]{0,2}A|S[.\-\s]{0,2}A|E[.\-\s]{0,2}I[.\-\s]{0,2}R[.\-\s]{0,2}L|S[.\-\s]{0,2}R[.\-\s]{0,2}L|S[.\-\s]{0,2}C[.\-\s]{0,2}R[.\-\s]{0,2}L)\b\.?)/i;
   for(let i=0;i<Math.min(corte,25);i++){
     const t=L[i].trim();
-    if(t.length>5&&t.length<90&&soc.test(t)&&!/RUC/i.test(t)){ out.proveedor=t.replace(/\s+/g,' '); break; }
+    if(t.length<6||/^R\.?U\.?C/i.test(t)) continue;
+    const m=t.match(soc);
+    if(m && m[1] && m[1].trim().length>5){
+      // El OCR confunde los puntos con guiones: "DMUEBLES E-.I.R.L." → "DMUEBLES E.I.R.L."
+      out.proveedor=m[1].replace(/\s+/g,' ').trim()
+        .replace(/(^|\s)((?:[A-Za-z][.\-]{0,2}){1,3}[A-Za-z])\.?\s*$/,
+          (t,esp,forma)=>esp+forma.replace(/[^A-Za-z]/g,'').toUpperCase().split('').join('.')+'.');
+      break;
+    }
   }
   if(!out.proveedor){
     // Sin forma societaria: el primer renglón razonable antes del RUC
@@ -21929,17 +21985,23 @@ function cmpParsearFacturaTexto(lineas){
   }
   if(!items.length){
     // Método antiguo: cantidad + unidad al inicio y dos números al final
-    const reIt=new RegExp('^\\s*(?:\\d{1,3}\\s+)?([\\d.,]+)\\s+'+UM+'\\s+(.+?)\\s+([\\d.,]+)\\s+([\\d.,]+)\\s*$','i');
-    const reIt2=new RegExp('^\\s*(?:\\d{1,3}\\s+)?([\\d.,]+)\\s+'+UM+'\\s+(.+?)\\s+([\\d.,]+)\\s*$','i');
+    // La cantidad al inicio es OPCIONAL: leyendo una FOTO, el OCR suele perder la primera
+    // columna y la línea empieza directamente por la unidad ("UNIDAD MESA CONFERENCIA ... 3750.48").
+    // 1) con cantidad al inicio (lo normal en un PDF)   2) sin ella (lo que suele pasar en una foto)
+    const reItQ  =new RegExp('^\\s*(?:\\d{1,3}\\s+)?([\\d.,]+)\\s+'+UM+'\\s+(.+?)\\s+([\\d.,]+)(?:\\s+([\\d.,]+))?\\s*$','i');
+    const reItSinQ=new RegExp('^\\s*()'+UM+'\\s+(.+?)\\s+([\\d.,]+)(?:\\s+([\\d.,]+))?\\s*$','i');
     L.forEach(l=>{
-      let m=l.match(reIt), cant, pu, imp, desc;
-      if(m){ cant=nEs(m[1]); desc=m[3].trim(); pu=nEs(m[4]); imp=nEs(m[5]); }
-      else{ m=l.match(reIt2); if(!m) return; cant=nEs(m[1]); desc=m[3].trim(); pu=nEs(m[4]); imp=0; }
+      const m=l.match(reItQ)||l.match(reItSinQ); if(!m) return;
+      const cant=nEs(m[1])||1;
+      const desc=String(m[3]||'').trim();
+      const n1=nEs(m[4]), n2=nEs(m[5]);
+      // Con dos números son precio unitario e importe; con uno solo es el precio unitario.
+      const pu=n2>0?n1:n1, imp=n2>0?n2:0;
       if(!desc||desc.length<2) return;
       if(imp<=0&&pu<=0) return;
       // Muchas facturas ponen a la derecha el ICBPER (0.00) en vez del importe: si el importe
       // salió 0 pero hay precio unitario, se calcula cantidad × precio.
-      items.push({descripcion:desc,cantidad:cant||1,unidad:m[2].toUpperCase(),precioUnit:pu,importe:(imp>0)?imp:R2((cant||1)*pu)});
+      items.push({descripcion:desc,cantidad:cant,unidad:m[2].toUpperCase(),precioUnit:pu,importe:(imp>0)?imp:R2(cant*pu)});
     });
   }
   // Limpieza final: fuera lo que sea claramente parte de los totales o basura de una sola letra
@@ -22010,14 +22072,28 @@ async function cmpLeerFoto(input){
       }
     }catch(e){ motivo='No se pudo abrir el lector de PDF ('+(e&&e.message||'error')+').'; }
   }else{
+    // FOTO: dos lecturas que se complementan.
+    //  · El QR da los montos, el RUC, el número y la fecha EXACTOS (viene codificado, no se lee
+    //    de la imagen, así que no hay margen de error).
+    //  · El texto de la foto (OCR) da lo que el QR no trae: la razón social y, sobre todo,
+    //    QUÉ SE COMPRÓ con su detalle. Si no hay QR, el texto se usa para todo.
+    let porQr=null, porTexto=null;
+    try{ const qr=await cmpQrDeImagen(dataUrl); if(qr) porQr=cmpParsearQrSunat(qr); }catch(e){}
     try{
-      const qr=await cmpQrDeImagen(dataUrl);
-      if(!qr) motivo='No se encontr\u00f3 el c\u00f3digo QR en la foto. Ac\u00e9rcate al QR, con buena luz y sin sombras \u2014 o sube el PDF de la factura.';
-      else{
-        datos=cmpParsearQrSunat(qr); via='c\u00f3digo QR';
-        if(!datos) motivo='El QR de la foto no es el de una factura electr\u00f3nica.';
-      }
-    }catch(e){ motivo='No se pudo cargar el lector de QR ('+(e&&e.message||'error')+').'; }
+      showNotif('\ud83d\udd0d Leyendo el texto de la foto\u2026 (la primera vez tarda un poco)','warn');
+      const lineas=await cmpOcrImagen(dataUrl, pct=>{ if(pct%25===0) showNotif('\ud83d\udd0d Leyendo la factura\u2026 '+pct+'%','warn'); });
+      if(lineas.length>3) porTexto=cmpParsearFacturaTexto(lineas);
+    }catch(e){ /* sin OCR se sigue con lo que dé el QR */ }
+
+    if(porQr&&porTexto){
+      // El QR manda en los números; el texto aporta nombre, producto y detalle.
+      datos={ ...porTexto, ...porQr,
+        proveedor:porTexto.proveedor||'', producto:porTexto.producto||'',
+        items:porTexto.items||[], montosCuadran:true };
+      via='c\u00f3digo QR + texto de la foto';
+    } else if(porQr){ datos=porQr; via='c\u00f3digo QR'; }
+    else if(porTexto && (porTexto.ruc||porTexto.conIgv)){ datos=porTexto; via='texto de la foto'; }
+    else motivo='No se pudo leer la foto: no se encontr\u00f3 el c\u00f3digo QR ni texto reconocible. Ac\u00e9rcate m\u00e1s, con buena luz y sin sombras \u2014 o sube el PDF de la factura, que se lee exacto.';
   }
 
   // El dataUrl viaja SOLO para la vista previa del modal; no se guarda con la factura.
@@ -22052,7 +22128,8 @@ async function cmpLeerFoto(input){
         +' <b>Rev\u00edsalos antes de guardar.</b>'
         +(datos.montosCuadran===false?'<br>\u26a0 <b>Revisa los montos con cuidado</b>: no cuadran entre s\u00ed (base + IGV \u2260 total). Corr\u00edgelos antes de guardar.':'')
         +(provRecordado?'<br>\u2139 El QR no trae la raz\u00f3n social: se puso la que ya usaste para el RUC '+base.ruc+'.':'')
-        +(faltaProv?'<br>\u2139 El QR no incluye la raz\u00f3n social ni el detalle: complet\u00e1los abajo, o sube el PDF y salen solos.':'');
+        +(faltaProv?'<br>\u2139 No se pudo leer la raz\u00f3n social: compl\u00e9tala abajo. Con el PDF sale sola.':'')
+        +((!esPdf&&!(datos.items||[]).length&&!datos.producto)?'<br>\u2139 No se reconoci\u00f3 el detalle en la foto: escribe qu\u00e9 se compr\u00f3. Con el PDF se transcribe l\u00ednea por l\u00ednea.':'');
     }else{
       av.style.background='rgba(245,158,11,0.12)'; av.style.border='1px solid rgba(245,158,11,0.4)'; av.style.color='#f59e0b';
       av.innerHTML='\u26a0 '+motivo+' Tienes el documento a la vista abajo: copia los datos a mano.';
