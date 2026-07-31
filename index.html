@@ -3921,7 +3921,7 @@ select option{background:var(--coal3);}
 
 <!-- ════ MODAL: INGRESO EXPLOSIVO ════ -->
 <div class="modal-overlay" id="modal-explo-ingreso" onclick="if(event.target===this)cerrarModal('modal-explo-ingreso')">
-  <div class="modal" style="width:min(600px,96vw)">
+  <div class="modal" style="width:min(640px,96vw);max-height:92vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <div class="modal-title" style="margin-bottom:0;color:#60a5fa">⬇ Ingreso de Explosivos — NV3190</div>
       <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-explo-ingreso')">✕</button>
@@ -3947,7 +3947,11 @@ select option{background:var(--coal3);}
       <div class="form-group" style="margin:0"><label>Cajas</label><input type="number" id="exi-cajas" min="0" step="1" placeholder="0" oninput="calcTotalExplo('exi')"></div>
       <div class="form-group" style="margin:0"><label>Unidades</label><input type="number" id="exi-unidades" min="0" step="1" placeholder="0" oninput="calcTotalExplo('exi')"></div>
     </div>
-    <span id="exi-total" style="display:none"></span>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn btn-outline" style="border-color:#60a5fa;color:#60a5fa;padding:8px 16px;font-size:12px" onclick="agregarExploAlVale('exi')">➕ Agregar al vale</button>
+      <span id="exi-total" style="font-size:12px;color:var(--text3)"></span>
+    </div>
+    <div id="exi-cart"></div>
     <div class="btn-row">
       <button class="btn btn-gold" onclick="guardarExploIngreso()">✓ Registrar Ingreso</button>
       <button class="btn btn-outline" onclick="cerrarModal('modal-explo-ingreso')">Cancelar</button>
@@ -4008,7 +4012,7 @@ select option{background:var(--coal3);}
 
 <!-- ════ MODAL: SALIDA EXPLOSIVO ════ -->
 <div class="modal-overlay" id="modal-explo-salida" onclick="if(event.target===this)cerrarModal('modal-explo-salida')">
-  <div class="modal" style="width:min(600px,96vw)">
+  <div class="modal" style="width:min(640px,96vw);max-height:92vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <div class="modal-title" style="margin-bottom:0;color:#f87171">⬆ Salida de Explosivos — NV3190</div>
       <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-explo-salida')">✕</button>
@@ -4033,8 +4037,12 @@ select option{background:var(--coal3);}
         <span id="exs-stock-disp" style="font-size:14px;font-weight:700;color:#22c55e;margin-left:8px">—</span></div>
         <div id="exs-stock-warn" style="font-size:12px;color:#f87171;font-weight:600;display:none">⚠ Excede el stock</div>
       </div>
-      <span id="exs-total" style="display:none"></span>
+      <span id="exs-total" style="font-size:12px;color:var(--text3)"></span>
     </div>
+    <div style="margin-bottom:12px">
+      <button class="btn btn-outline" style="border-color:#f87171;color:#f87171;padding:8px 16px;font-size:12px" onclick="agregarExploAlVale('exs')">➕ Agregar al vale</button>
+    </div>
+    <div id="exs-cart"></div>
     <div class="btn-row">
       <button class="btn btn-gold" onclick="guardarExploSalida()">✓ Registrar Salida</button>
       <button class="btn btn-outline" onclick="cerrarModal('modal-explo-salida')">Cancelar</button>
@@ -10039,10 +10047,83 @@ function calcTotalExplo(pfx){
   if(el)el.textContent=c?(esMecha?`${total} m (${cajas} rollo${cajas!==1?'s':''} + ${und} m)`:`${total} ${c.unidad}`):'Selecciona producto y cantidad';
   return total;
 }
+// ═══════════════════════════════════════════════════════════════════════════
+// UN VALE CON VARIOS EXPLOSIVOS
+// Un mismo vale puede traer 5 tipos distintos. Se arma un carrito y al guardar se crea UN
+// REGISTRO POR TIPO, exactamente con la misma forma de siempre (producto, cajas, unidades,
+// totalUnidades) — el stock se calcula igual que antes, no cambia ninguna fórmula. Lo único
+// que se agrega es el campo 'grupo', que hermana las líneas del mismo vale.
+// ═══════════════════════════════════════════════════════════════════════════
+let exploCartI=[], exploCartS=[];
+function _exploCart(pfx){ return pfx==='exi'?exploCartI:exploCartS; }
+function _exploSetCart(pfx,arr){ if(pfx==='exi') exploCartI=arr; else exploCartS=arr; }
+// Cuánto de un explosivo ya está cargado en el carrito (para no pasarse del stock en la salida)
+function exploEnCarrito(pfx,prodId){
+  return _exploCart(pfx).filter(x=>x.producto===prodId).reduce((s,x)=>s+(Number(x.total)||0),0);
+}
+function agregarExploAlVale(pfx){
+  const g=id=>document.getElementById(id);
+  const prodId=g(pfx+'-producto').value;
+  if(!prodId){ showNotif('⚠ Selecciona el tipo de explosivo','error'); return false; }
+  const total=calcTotalExplo(pfx);
+  if(total<=0){ showNotif('⚠ Ingresa cajas o unidades','error'); return false; }
+  if(pfx==='exs'){
+    const disp=(exploStockActual()[prodId]||0)-exploEnCarrito('exs',prodId);
+    if(total>disp){
+      const c=exploGetCat(prodId);
+      showNotif('⚠ Stock insuficiente de '+((c&&c.nombre)||prodId)+'. Quedan '+disp+' '+((c&&c.unidad)||'und')+(exploEnCarrito('exs',prodId)?' (ya cargaste '+exploEnCarrito('exs',prodId)+' en este vale)':''),'error');
+      return false;
+    }
+  }
+  const arr=_exploCart(pfx);
+  arr.push({ producto:prodId, cajas:parseInt(g(pfx+'-cajas').value)||0,
+    unidades:parseInt(g(pfx+'-unidades').value)||0, total });
+  _exploSetCart(pfx,arr);
+  // Limpiar para el siguiente tipo (la fecha y el vale se mantienen)
+  g(pfx+'-producto').value=''; g(pfx+'-cajas').value=''; g(pfx+'-unidades').value='';
+  if(pfx==='exs'){ try{ autoFillExploSalida(); }catch(e){} } else { calcTotalExplo('exi'); }
+  renderExploCart(pfx);
+  try{ g(pfx+'-producto').focus(); }catch(e){}
+  return true;
+}
+function quitarExploDelVale(pfx,idx){
+  const arr=_exploCart(pfx); arr.splice(idx,1); _exploSetCart(pfx,arr);
+  renderExploCart(pfx);
+  if(pfx==='exs'){ try{ autoFillExploSalida(); }catch(e){} }
+}
+function renderExploCart(pfx){
+  const w=document.getElementById(pfx+'-cart'); if(!w) return;
+  const arr=_exploCart(pfx);
+  const col=pfx==='exi'?'#60a5fa':'#f87171';
+  if(!arr.length){
+    w.innerHTML='<div style="font-size:11px;color:var(--text3);border:1px dashed var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px">Elige un explosivo, pon la cantidad y pulsa <b>Agregar al vale</b>. Puedes cargar todos los tipos que traiga el vale.</div>';
+    return;
+  }
+  const tot=arr.reduce((s,x)=>s+x.total,0);
+  w.innerHTML=`<div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:12px;background:var(--coal3)">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:7px">
+      🧨 En este vale — ${arr.length} tipo${arr.length!==1?'s':''}</div>
+    <table style="width:100%;font-size:12px;border-collapse:collapse">
+      <thead><tr style="font-size:9px;color:var(--text3);text-align:left">
+        <th style="padding:4px 6px">Explosivo</th><th style="padding:4px 6px;text-align:right">Cajas</th>
+        <th style="padding:4px 6px;text-align:right">Sueltas</th><th style="padding:4px 6px;text-align:right">Total</th><th></th></tr></thead>
+      <tbody>${arr.map((x,i)=>{ const c=exploGetCat(x.producto), mecha=c&&c.id==='NEITHER';
+        return `<tr style="border-top:1px solid var(--border2)">
+          <td style="padding:5px 6px;font-weight:600">${(c&&c.nombre)||x.producto}</td>
+          <td style="padding:5px 6px;text-align:right">${x.cajas||0}${mecha?' rollo(s)':''}</td>
+          <td style="padding:5px 6px;text-align:right">${x.unidades||0}${mecha?' m':''}</td>
+          <td style="padding:5px 6px;text-align:right;font-weight:700;color:${col}">${x.total} ${mecha?'m':((c&&c.unidad)||'und')}</td>
+          <td style="padding:5px 6px;text-align:right"><button onclick="quitarExploDelVale('${pfx}',${i})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:13px" title="Quitar">🗑</button></td>
+        </tr>`; }).join('')}</tbody>
+    </table>
+    <div style="font-size:11px;color:var(--text3);margin-top:6px;text-align:right">Total del vale: <b style="color:var(--text2)">${tot} und</b> en ${arr.length} línea${arr.length!==1?'s':''}</div>
+  </div>`;
+}
 function abrirModalExploIngreso(){
   const g=id=>document.getElementById(id);
   g('exi-fecha').value=hoy();g('exi-vale').value='';g('exi-producto').value='';
-  g('exi-cajas').value='';g('exi-unidades').value='';g('exi-total').textContent='Selecciona producto y cantidad';
+  g('exi-cajas').value='';g('exi-unidades').value='';g('exi-total').textContent='';
+  exploCartI=[]; renderExploCart('exi');
   abrirModal('modal-explo-ingreso');
 }
 // Sube una foto (base64) a Supabase Storage y devuelve la URL pública (compartible entre dispositivos).
@@ -10061,23 +10142,30 @@ async function subirFotoStorage(base64, carpeta){
 }
 async function guardarExploIngreso(){
   const g=id=>document.getElementById(id);
-  const prodId=g('exi-producto').value;
-  if(!prodId){showNotif('⚠ Selecciona el tipo de explosivo','error');return;}
   const vale=g('exi-vale').value.trim();
   if(!vale){showNotif('⚠ Ingresa el N° de vale','error');return;}
-  const total=calcTotalExplo('exi');
-  if(total<=0){showNotif('⚠ Ingresa cajas o unidades','error');return;}
+  // Si quedó una línea escrita sin agregar, se agrega sola: así el uso de siempre
+  // (un solo explosivo, sin tocar el botón) funciona exactamente igual que antes.
+  if(g('exi-producto').value && calcTotalExplo('exi')>0){ if(!agregarExploAlVale('exi')) return; }
+  const lineas=_exploCart('exi');
+  if(!lineas.length){showNotif('⚠ Agrega al menos un explosivo al vale','error');return;}
   if(!state.almacen.explosivos)state.almacen.explosivos={ingresos:[],salidas:[]};
-  const reg={
-    id:'EI'+Date.now(),_ts:Date.now(),fecha:g('exi-fecha').value||hoy(),vale,
-    producto:prodId,cajas:parseInt(g('exi-cajas').value)||0,
-    unidades:parseInt(g('exi-unidades').value)||0,totalUnidades:total,
-    origen:'Polvorin Santa Maria'
-  };
-  state.almacen.explosivos.ingresos.push(reg);
+  const fecha=g('exi-fecha').value||hoy();
+  const base=Date.now(), grupo='GEI'+base;
+  lineas.forEach((x,i)=>{
+    state.almacen.explosivos.ingresos.push({
+      id:'EI'+(base+i)+Math.random().toString(36).slice(2,6),_ts:base+i,fecha,vale,grupo,
+      producto:x.producto,cajas:x.cajas,unidades:x.unidades,totalUnidades:x.total,
+      origen:'Polvorin Santa Maria'
+    });
+  });
   almacenSave();
+  exploCartI=[];
   cerrarModal('modal-explo-ingreso');renderExploTab();
-  showNotif(`✓ Ingreso registrado: ${total} ${exploGetCat(prodId)?.unidad||'und'} de ${exploGetCat(prodId)?.nombre}`);
+  const n=lineas.length;
+  showNotif(n===1
+    ? `✓ Ingreso registrado: ${lineas[0].total} ${exploGetCat(lineas[0].producto)?.unidad||'und'} de ${exploGetCat(lineas[0].producto)?.nombre}`
+    : `✓ Vale ${vale} registrado: ${n} tipos de explosivo`);
 }
 function autoFillExploSalida(){
   const prodId=document.getElementById('exs-producto')?.value;
@@ -10118,6 +10206,7 @@ function abrirModalExploSalida(){
   g('exs-unidades').value='';
   const warn=g('exs-stock-warn');if(warn)warn.style.display='none';
   const disp=g('exs-stock-disp');if(disp)disp.textContent='—';
+  exploCartS=[]; renderExploCart('exs');
   const stock=exploStockActual();
   const sel=g('exs-producto');
   if(sel){
@@ -10133,26 +10222,39 @@ function abrirModalExploSalida(){
 }
 async function guardarExploSalida(){
   const g=id=>document.getElementById(id);
-  const prodId=g('exs-producto').value;
-  if(!prodId){showNotif('⚠ Selecciona el tipo de explosivo','error');return;}
   const vale=g('exs-vale').value.trim();
   if(!vale){showNotif('⚠ Ingresa el N° de vale','error');return;}
-  const total=calcTotalExplo('exs');
-  if(total<=0){showNotif('⚠ Ingresa cajas o unidades','error');return;}
-  const stock=exploStockActual();
-  if(total>(stock[prodId]||0)){showNotif(`⚠ Stock insuficiente. Disponible: ${stock[prodId]||0} ${exploGetCat(prodId)?.unidad||'und'}`,'error');return;}
+  if(g('exs-producto').value && calcTotalExplo('exs')>0){ if(!agregarExploAlVale('exs')) return; }
+  const lineas=_exploCart('exs');
+  if(!lineas.length){showNotif('⚠ Agrega al menos un explosivo al vale','error');return;}
+  // Comprobación final contra el stock real, sumando lo que pide el vale por tipo
+  const stock=exploStockActual(), pedido={};
+  lineas.forEach(x=>{ pedido[x.producto]=(pedido[x.producto]||0)+x.total; });
+  for(const p in pedido){
+    if(pedido[p]>(stock[p]||0)){
+      const c=exploGetCat(p);
+      showNotif(`⚠ Stock insuficiente de ${(c&&c.nombre)||p}. Pide ${pedido[p]} y hay ${stock[p]||0} ${(c&&c.unidad)||'und'}`,'error');
+      return;
+    }
+  }
   if(!state.almacen.explosivos)state.almacen.explosivos={ingresos:[],salidas:[]};
-  const reg={
-    id:'ES'+Date.now(),_ts:Date.now(),fecha:g('exs-fecha').value||hoy(),vale,
-    producto:prodId,cajas:parseInt(g('exs-cajas').value)||0,
-    unidades:parseInt(g('exs-unidades').value)||0,totalUnidades:total,
-    destino:'Almacen NV2820'
-  };
-  state.almacen.explosivos.salidas.push(reg);
+  const fecha=g('exs-fecha').value||hoy();
+  const base=Date.now(), grupo='GES'+base;
+  lineas.forEach((x,i)=>{
+    state.almacen.explosivos.salidas.push({
+      id:'ES'+(base+i)+Math.random().toString(36).slice(2,6),_ts:base+i,fecha,vale,grupo,
+      producto:x.producto,cajas:x.cajas,unidades:x.unidades,totalUnidades:x.total,
+      destino:'Almacen NV2820'
+    });
+  });
   almacenSave();
+  exploCartS=[];
   cerrarModal('modal-explo-salida');renderExploTab();
   try{ if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
-  showNotif(`✓ Salida registrada: ${total} ${exploGetCat(prodId)?.unidad||'und'} de ${exploGetCat(prodId)?.nombre}`);
+  const n=lineas.length;
+  showNotif(n===1
+    ? `✓ Salida registrada: ${lineas[0].total} ${exploGetCat(lineas[0].producto)?.unidad||'und'} de ${exploGetCat(lineas[0].producto)?.nombre}`
+    : `✓ Vale ${vale} registrado: ${n} tipos de explosivo`);
 }
 
 // ── Editar / eliminar movimientos de explosivos NV3190 con ajuste correcto del stock ──
@@ -10252,7 +10354,7 @@ async function exportarExplosivosExcel(){
   const t1=ws1.getCell('A1');t1.value='TRAZABILIDAD DE EXPLOSIVOS — Polvorín NV3190';
   t1.font={bold:true,size:13,color:{argb:C_HEAD}};
   ws1.getRow(2).height=4;
-  const head1=['Fecha','Tipo','N° Vale / Guía','Explosivo','Cajas','Unidades','Total Und.','Unidad','Ruta','Foto Vale'];
+  const head1=['Fecha','Tipo','N° Vale / Guía','Explosivo','Cajas / Rollos','Sueltas','Total','Unidad','Ruta','Foto Vale'];
   const hr1=ws1.getRow(3);
   head1.forEach((h,i)=>{const c=hr1.getCell(i+1);c.value=h;c.font={bold:true,color:{argb:'FFFFFFFF'},size:11};
     c.fill={type:'pattern',pattern:'solid',fgColor:{argb:C_HEAD}};c.alignment={horizontal:'center',vertical:'middle'};c.border=allB;});
@@ -10275,11 +10377,32 @@ async function exportarExplosivosExcel(){
     ...sals.map(r=>({...r,tipo:'SALIDA',ruta:'NV3190 → Almacén NV2820'}))
   ].sort(_valeCmp);
   let rowIdx=4;
+  // Cierre de cada vale: como un vale puede traer VARIOS explosivos, al terminar sus líneas se
+  // agrega una fila de subtotal para que se lea de un vistazo cuánto trajo/salió ese vale.
+  let _valeAct=null, _valeTipo=null, _valeTot=0, _valeN=0;
+  const _cerrarVale=()=>{
+    if(_valeAct===null||_valeN<=1){ _valeN=0; _valeTot=0; return; }
+    const row=ws1.getRow(rowIdx);
+    row.getCell(3).value='Total vale '+_valeAct;
+    row.getCell(4).value=_valeN+' tipos de explosivo';
+    row.getCell(7).value=_valeTot;
+    for(let i=1;i<=10;i++){ const cc=row.getCell(i);
+      cc.border=allB; cc.font={bold:true,size:10,color:{argb:C_HEAD}};
+      cc.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF3F4F6'}};
+      cc.alignment={horizontal:i===4?'left':'center',vertical:'middle'}; }
+    rowIdx++; _valeN=0; _valeTot=0;
+  };
   movs.forEach(r=>{
+    const _k=(r.tipo||'')+'|'+(r.vale||'');
+    if(_valeAct!==null && _k!==(_valeTipo+'|'+_valeAct)) _cerrarVale();
+    _valeAct=r.vale||'—'; _valeTipo=r.tipo||''; _valeN++; _valeTot+=Number(r.totalUnidades)||0;
     const c=exploGetCat(r.producto);const bg=r.tipo==='INGRESO'?C_AZUL:C_ROJO;
-    const upCaja=c?.upCaja||1;
+    // La mecha rápida se guarda en METROS: su "caja" es un ROLLO de 150 m, no las 10 unidades
+    // del catálogo. Sin esto, 175 m salían como "17 cajas + 5" en vez de "1 rollo + 25 m".
+    const _mecha=c&&c.id==='NEITHER';
+    const upCaja=_mecha?((c.mPorRollo)||150):((c&&c.upCaja)||1);
     const cajasR=Math.floor((r.totalUnidades||0)/upCaja);
-    const sueltasR=(r.totalUnidades||0)%upCaja;
+    const sueltasR=Math.round(((r.totalUnidades||0)%upCaja)*100)/100;
     const row=ws1.getRow(rowIdx);
     row.getCell(1).value=fmtF(r.fecha);
     row.getCell(2).value=r.tipo;
@@ -10288,7 +10411,7 @@ async function exportarExplosivosExcel(){
     row.getCell(5).value=cajasR;
     row.getCell(6).value=sueltasR;
     row.getCell(7).value=r.totalUnidades||0;
-    row.getCell(8).value=c?.unidad||'und';
+    row.getCell(8).value=_mecha?'m':((c&&c.unidad)||'und');
     row.getCell(9).value=r.ruta;
     // estilos base
     for(let i=1;i<=10;i++){const cc=row.getCell(i);cc.border=allB;cc.alignment={horizontal:i===4||i===9?'left':'center',vertical:'middle'};cc.font={size:10};}
@@ -10315,6 +10438,82 @@ async function exportarExplosivosExcel(){
     }
     rowIdx++;
   });
+  _cerrarVale();
+  // Totales generales de la hoja
+  {
+    const fila=ws1.getRow(rowIdx+1);
+    const tIn=ings.reduce((a,i)=>a+(Number(i.totalUnidades)||0),0);
+    const tOut=sals.reduce((a,i)=>a+(Number(i.totalUnidades)||0),0);
+    fila.getCell(3).value='TOTAL GENERAL';
+    fila.getCell(4).value=ings.length+' ingresos · '+sals.length+' salidas';
+    fila.getCell(6).value='Ingresado';
+    fila.getCell(7).value=tIn;
+    fila.getCell(9).value='Salido: '+tOut;
+    for(let i=1;i<=10;i++){ const cc=fila.getCell(i);
+      cc.border=allB; cc.font={bold:true,size:10,color:{argb:'FFFFFFFF'}};
+      cc.fill={type:'pattern',pattern:'solid',fgColor:{argb:C_HEAD}};
+      cc.alignment={horizontal:i===4||i===9?'left':'center',vertical:'middle'}; }
+  }
+  try{ ws1.autoFilter={from:{row:3,column:1},to:{row:Math.max(4,rowIdx-1),column:9}}; }catch(e){}
+  ws1.pageSetup={orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0};
+
+  // ── Hoja: RESUMEN POR VALE (un vale puede traer varios explosivos) ──
+  {
+    const wsv=wb.addWorksheet('Vales',{views:[{state:'frozen',ySplit:3}]});
+    wsv.columns=[{width:16},{width:13},{width:12},{width:34},{width:11},{width:11},{width:13},{width:10}];
+    wsv.mergeCells('A1:H1');
+    const tv=wsv.getCell('A1'); tv.value='RESUMEN POR VALE — Polvorín NV3190';
+    tv.font={bold:true,size:13,color:{argb:C_HEAD}};
+    const headV=['N° Vale / Guía','Tipo','Fecha','Explosivo','Cajas / Rollos','Sueltas','Total','Unidad'];
+    const hrv=wsv.getRow(3);
+    headV.forEach((h,i)=>{const c=hrv.getCell(i+1);c.value=h;c.font={bold:true,color:{argb:'FFFFFFFF'},size:11};
+      c.fill={type:'pattern',pattern:'solid',fgColor:{argb:C_HEAD}};c.alignment={horizontal:'center',vertical:'middle'};c.border=allB;});
+    hrv.height=20;
+    // Agrupar por vale + tipo
+    const grupos={};
+    movs.forEach(r=>{ const k=(r.tipo||'')+'|'+(r.vale||'—');
+      if(!grupos[k]) grupos[k]={vale:r.vale||'—',tipo:r.tipo,fecha:r.fecha,lineas:[],total:0};
+      grupos[k].lineas.push(r); grupos[k].total+=Number(r.totalUnidades)||0;
+      if((r.fecha||'')<(grupos[k].fecha||'')) grupos[k].fecha=r.fecha; });
+    let rv=4;
+    Object.values(grupos).forEach(gr=>{
+      gr.lineas.forEach((r,i)=>{
+        const c=exploGetCat(r.producto);
+        const mecha=c&&c.id==='NEITHER';
+        const up=mecha?((c.mPorRollo)||150):((c&&c.upCaja)||1);
+        const row=wsv.getRow(rv);
+        row.getCell(1).value=i===0?gr.vale:'';
+        row.getCell(2).value=i===0?gr.tipo:'';
+        row.getCell(3).value=i===0?fmtF(gr.fecha):'';
+        row.getCell(4).value=(c&&c.nombre)||r.producto;
+        row.getCell(5).value=Math.floor((r.totalUnidades||0)/up);
+        row.getCell(6).value=Math.round(((r.totalUnidades||0)%up)*100)/100;
+        row.getCell(7).value=r.totalUnidades||0;
+        row.getCell(8).value=mecha?'m':((c&&c.unidad)||'und');
+        for(let k2=1;k2<=8;k2++){ const cc=row.getCell(k2); cc.border=allB; cc.font={size:10};
+          cc.alignment={horizontal:k2===4?'left':'center',vertical:'middle'}; }
+        if(i===0){
+          row.getCell(1).font={bold:true,size:10,color:{argb:C_VALEFG}};
+          row.getCell(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:C_VALEBG}};
+          row.getCell(2).font={bold:true,size:10,color:{argb:'FFFFFFFF'}};
+          row.getCell(2).fill={type:'pattern',pattern:'solid',fgColor:{argb:gr.tipo==='INGRESO'?C_AZUL:C_ROJO}};
+        }
+        rv++;
+      });
+      if(gr.lineas.length>1){
+        const row=wsv.getRow(rv);
+        row.getCell(4).value='Total del vale — '+gr.lineas.length+' tipos';
+        row.getCell(7).value=gr.total;
+        for(let k2=1;k2<=8;k2++){ const cc=row.getCell(k2); cc.border=allB;
+          cc.font={bold:true,size:10,color:{argb:C_HEAD}};
+          cc.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF3F4F6'}};
+          cc.alignment={horizontal:k2===4?'left':'center',vertical:'middle'}; }
+        rv++;
+      }
+    });
+    try{ wsv.autoFilter={from:{row:3,column:1},to:{row:Math.max(4,rv-1),column:8}}; }catch(e){}
+    wsv.pageSetup={orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0};
+  }
 
   // ── Hoja 2: Balance de Stock ──
   const stock=exploStockActual();
