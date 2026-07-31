@@ -21571,7 +21571,14 @@ function cmpRenderItems(){
         <td style="padding:5px 7px;font-size:11px;text-align:right;font-family:'DM Mono',monospace">${i.importe?cmpMoney(i.importe):''}</td></tr>`).join('')}
       </tbody></table>
     </div>
-    <div style="font-size:10px;color:var(--text3);margin-top:4px">Suma del detalle: <b style="color:var(--text2)">${cmpMoney(sum)}</b></div>
+    <div style="font-size:10px;color:var(--text3);margin-top:4px">Suma del detalle: <b style="color:var(--text2)">${cmpMoney(sum)}</b>${(()=>{
+      // Comparar contra la base imponible: si cuadran, el detalle se leyó completo.
+      const base=parseFloat((document.getElementById('cmpf-sinigv')||{}).value)||0;
+      if(base<=0||sum<=0) return '';
+      return (Math.abs(sum-base)<=0.05)
+        ? ' <span style="color:#22d3a5">✓ cuadra con el monto sin IGV</span>'
+        : ' <span style="color:#f59e0b">⚠ el monto sin IGV es '+cmpMoney(base)+' — revisa si falta alguna línea</span>';
+    })()}</div>
   </div>`;
 }
 function cmpGuardarFactura(){
@@ -21651,7 +21658,11 @@ function _cmpRepararNumeros(t){
   let s=String(t||'');
   s=s.replace(/(\d)\s+([.,])\s*(\d)/g,'$1$2$3');   // "750 . 42" → "750.42"
   s=s.replace(/(\d)([.,])\s+(\d)/g,'$1$2$3');      // "750, 42"  → "750,42"
-  s=s.replace(/(\d)\s(\d{3})\b(?!\s*\d)/g,'$1$2'); // "3 750"    → "3750"
+  // Miles separados: solo se pegan cuando lo que sigue son 3 dígitos con sus decimales
+  // ("3 750.42" → "3750.42"). No se toca cuando el dígito viene de una fracción o de un
+  // código, para no convertir "FIERRO 1/2 500.02" en "1/2500.02".
+  // (el primer grupo debe ir suelto: así "DT25 400.00" no se vuelve "DT25400.00")
+  s=s.replace(/(^|\s)(\d{1,3})\s(\d{3}[.,]\d{2})\b/g,'$1$2$3');
   return s;
 }
 async function cmpTextoDePdf(dataUrl){
@@ -21661,13 +21672,17 @@ async function cmpTextoDePdf(dataUrl){
   const bin=atob(b64); const arr=new Uint8Array(bin.length);
   for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
   const doc=await pdfjs.getDocument({data:arr}).promise;
-  const lineas=[];
+  const lineas=[], celdasPorFila=[];
   for(let p=1;p<=doc.numPages;p++){
     const pg=await doc.getPage(p);
     const tc=await pg.getTextContent();
     // Agrupar por coordenada Y (con tolerancia) para reconstruir cada renglón
     const filas={};
     tc.items.forEach(it=>{
+      // Los trozos que son SOLO espacios se descartan: pdf.js los emite con el ancho del hueco
+      // entre columnas, y al conservarlos todas las columnas quedaban pegadas en una sola celda
+      // (la tabla del detalle se volvía un renglón único e ilegible por columnas).
+      if(!it||!it.str||!it.str.trim()) return;
       const y=Math.round((it.transform&&it.transform[5])||0);
       const k=Math.round(y/3)*3;
       (filas[k]=filas[k]||[]).push({x:(it.transform&&it.transform[4])||0, w:Number(it.width)||0, s:it.str});
@@ -21679,18 +21694,34 @@ async function cmpTextoDePdf(dataUrl){
       // terminaba tomando cifras sueltas (4.24 en vez de 3,750.42). Ahora solo se pone espacio
       // cuando hay un hueco visible entre un trozo y el siguiente.
       const its=filas[k].sort((a,b)=>a.x-b.x);
-      let t='';
+      // Además de la línea de texto se conservan las CELDAS con su posición: así el detalle
+      // de la factura se puede leer por columnas reales (cantidad, unidad, descripción,
+      // precio, importe) en vez de adivinar por el orden de las palabras.
+      const celdas=[]; let t='';
       its.forEach((o,i)=>{
-        if(i===0){ t=o.s; return; }
+        if(i===0){ t=o.s; celdas.push({x:o.x,w:o.w,s:o.s}); return; }
         const prev=its[i-1];
         const hueco=o.x-(prev.x+prev.w);
-        t += (hueco>0.9?' ':'') + o.s;
+        if(hueco>0.9){ t+=' '+o.s; celdas.push({x:o.x,w:o.w,s:o.s}); }
+        else{ t+=o.s; const c=celdas[celdas.length-1]; c.s+=o.s; c.w=(o.x+o.w)-c.x; }
       });
       t=_cmpRepararNumeros(t.replace(/\s+/g,' ').trim());
-      if(t) lineas.push(t);
+      if(!t) return;
+      lineas.push(t);
+      // Celdas contiguas separadas por un espacio simple se juntan (una palabra suelta no es
+      // una columna); una columna nueva empieza cuando hay un salto claro.
+      const cel=[];
+      celdas.forEach(c=>{
+        c.s=_cmpRepararNumeros(c.s.trim()); if(!c.s) return;
+        const ant=cel[cel.length-1];
+        if(ant && (c.x-(ant.x+ant.w))<6){ ant.s+=' '+c.s; ant.w=(c.x+c.w)-ant.x; }
+        else cel.push({x:c.x,w:c.w,s:c.s});
+      });
+      celdasPorFila.push({y:k, texto:t, celdas:cel});
     });
   }
   try{ doc.destroy(); }catch(e){}
+  lineas.filas=celdasPorFila;
   return lineas;
 }
 // Código QR de una imagen (el de la SUNAT en la esquina de la factura)
@@ -21842,24 +21873,79 @@ function cmpParsearFacturaTexto(lineas){
     }
   }
 
-  // ── Detalle línea por línea: renglones que empiezan con cantidad + unidad y terminan en importe
+  // ── DETALLE DE LO COMPRADO ─────────────────────────────────────────────────────
+  // Se lee por COLUMNAS REALES de la tabla, no adivinando por el orden de las palabras.
+  // 1) Se busca el renglón de encabezados (Cantidad · Unidad · Descripción · Valor Unitario ·
+  //    Importe) y se anota en qué X está cada columna.
+  // 2) Cada renglón de abajo se reparte en esas columnas por la posición de sus celdas.
+  // 3) Los renglones que solo traen texto se pegan como continuación de la descripción anterior
+  //    (las descripciones largas se parten en varias líneas).
+  // Si el PDF no trae encabezados reconocibles, se usa el método antiguo por patrón de texto.
+  const UM='(UND|UNID|UNIDAD|UNIDADES|NIU|ZZ|PZA|PZ|KG|KGM|GRM|GLN|GAL|LT|LTR|LITRO|MTR|M2|M3|ML|CJA|CAJA|BLS|BOL|BOLSA|JGO|SET|PAR|ROL|ROLLO|TON|DOC|SAC|SACO|BID|CIL|SER|SERVICIO)';
   const items=[];
-  const UM='(UND|UNID|UNIDAD|NIU|PZA|PZ|KG|KGM|GLN|GAL|LT|LTR|MTR|M|ML|CJA|CAJA|BLS|BOL|JGO|SET|PAR|ROL|TON|DOC|SAC|BID|CIL)';
-  const reIt=new RegExp('^\\s*([\\d.,]+)\\s+'+UM+'\\s+(.+?)\\s+([\\d.,]+)\\s+([\\d.,]+)\\s*$','i');
-  L.forEach(l=>{
-    const m=l.match(reIt);
-    if(!m) return;
-    const cant=nEs(m[1]), pu=nEs(m[4]), imp=nEs(m[5]);
-    const desc=m[3].trim();
-    if(!desc||desc.length<2) return;
-    if(imp<=0&&pu<=0) return;
-    // Muchas facturas ponen a la derecha el ICBPER (0.00) en vez del importe: si el importe
-    // salió 0 pero hay precio unitario, se calcula cantidad × precio.
-    const impFinal=(imp>0)?imp:R2(cant*pu);
-    items.push({descripcion:desc,cantidad:cant,unidad:m[2].toUpperCase(),precioUnit:pu,importe:impFinal});
-  });
-  out.items=items;
-  if(items.length) out.producto=items.map(i=>i.descripcion).slice(0,3).join(' · ');
+  const filas=(lineas&&lineas.filas)||[];
+  const COLS=[
+    {k:'cant', re:/^(CANT|CANTIDAD|CTD|QTY)\b/},
+    {k:'um',   re:/(UNIDAD|U\.?\s?M\.?|MEDIDA|UM)\b/},
+    {k:'desc', re:/(DESCRIPCI|DETALLE|CONCEPTO|PRODUCTO|ARTICULO|BIEN|SERVICIO)/},
+    {k:'pu',   re:/(VALOR\s*UNIT|PRECIO\s*UNIT|P\.?\s?UNIT|V\.?\s?UNIT|PRECIO)/},
+    {k:'imp',  re:/(IMPORTE|VALOR\s*VENTA|SUB\s*TOTAL|TOTAL)/}
+  ];
+  let hIdx=-1, mapa=null;
+  for(let i=0;i<filas.length;i++){
+    const cel=filas[i].celdas||[]; if(cel.length<3) continue;
+    const m={};
+    cel.forEach(c=>{ const t=sinTildes(c.s);
+      COLS.forEach(col=>{ if(m[col.k]==null && col.re.test(t)) m[col.k]={x:c.x,w:c.w}; }); });
+    // Hace falta al menos descripción + (cantidad o precio) para tomarlo como encabezado
+    if(m.desc && (m.cant||m.pu||m.imp)){ hIdx=i; mapa=m; break; }
+  }
+  if(mapa){
+    // Fronteras entre columnas: el punto medio entre el final de una y el inicio de la siguiente
+    const orden=Object.keys(mapa).map(k=>({k,x:mapa[k].x,w:mapa[k].w})).sort((a,b)=>a.x-b.x);
+    const limite=[];
+    for(let i=0;i<orden.length-1;i++) limite.push({k:orden[i].k, hasta:(orden[i].x+orden[i].w+orden[i+1].x)/2});
+    const colDe=x=>{ for(const l of limite){ if(x<l.hasta) return l.k; } return orden[orden.length-1].k; };
+    const FIN=/SUB\s*-?\s*TOTAL|OP\.?\s*GRAVAD|VALOR\s*(DE\s*)?VENTA|I\.?\s?G\.?\s?V|IMPORTE\s*TOTAL|TOTAL\s*A\s*PAGAR|^SON\s*:|ANTICIPO|DESCUENTO|OTROS\s*(CARGOS|TRIBUTOS)|REDONDEO|ICBPER|REPRESENTACION\s*IMPRESA/;
+    for(let i=hIdx+1;i<filas.length;i++){
+      const f=filas[i], cel=f.celdas||[];
+      if(!cel.length) continue;
+      if(FIN.test(sinTildes(f.texto))) break;        // empezó el bloque de totales
+      const cajas={};
+      cel.forEach(c=>{ const k=colDe(c.x+c.w/2); cajas[k]=(cajas[k]?cajas[k]+' ':'')+c.s; });
+      const cant=nEs(cajas.cant), pu=nEs(cajas.pu), imp=nEs(cajas.imp);
+      const desc=String(cajas.desc||'').replace(/\s+/g,' ').trim();
+      const hayNumero=cant>0||pu>0||imp>0;
+      if(!hayNumero && desc && items.length){
+        // Renglón de continuación: se pega a la descripción de la línea anterior
+        items[items.length-1].descripcion=(items[items.length-1].descripcion+' '+desc).replace(/\s+/g,' ').trim();
+        continue;
+      }
+      if(!desc || desc.length<2) continue;
+      if(!hayNumero) continue;
+      items.push({ descripcion:desc, cantidad:cant||1, unidad:String(cajas.um||'').replace(/\s+/g,' ').trim().toUpperCase()||'UND',
+        precioUnit:pu||(cant>0&&imp>0?R2(imp/cant):0), importe:imp||R2((cant||1)*pu) });
+    }
+  }
+  if(!items.length){
+    // Método antiguo: cantidad + unidad al inicio y dos números al final
+    const reIt=new RegExp('^\\s*(?:\\d{1,3}\\s+)?([\\d.,]+)\\s+'+UM+'\\s+(.+?)\\s+([\\d.,]+)\\s+([\\d.,]+)\\s*$','i');
+    const reIt2=new RegExp('^\\s*(?:\\d{1,3}\\s+)?([\\d.,]+)\\s+'+UM+'\\s+(.+?)\\s+([\\d.,]+)\\s*$','i');
+    L.forEach(l=>{
+      let m=l.match(reIt), cant, pu, imp, desc;
+      if(m){ cant=nEs(m[1]); desc=m[3].trim(); pu=nEs(m[4]); imp=nEs(m[5]); }
+      else{ m=l.match(reIt2); if(!m) return; cant=nEs(m[1]); desc=m[3].trim(); pu=nEs(m[4]); imp=0; }
+      if(!desc||desc.length<2) return;
+      if(imp<=0&&pu<=0) return;
+      // Muchas facturas ponen a la derecha el ICBPER (0.00) en vez del importe: si el importe
+      // salió 0 pero hay precio unitario, se calcula cantidad × precio.
+      items.push({descripcion:desc,cantidad:cant||1,unidad:m[2].toUpperCase(),precioUnit:pu,importe:(imp>0)?imp:R2((cant||1)*pu)});
+    });
+  }
+  // Limpieza final: fuera lo que sea claramente parte de los totales o basura de una sola letra
+  out.items=items.filter(i=>i.descripcion.length>2 && !/^(SUB\s*TOTAL|TOTAL|IGV|ICBPER|DESCUENTO)/i.test(i.descripcion));
+  out.sumaDetalle=R2(out.items.reduce((s,i)=>s+(Number(i.importe)||0),0));
+  if(out.items.length) out.producto=out.items.map(i=>i.descripcion).slice(0,4).join(' · ');
   return out;
 }
 // ── LECTOR DE FACTURAS (documento → datos) ──
