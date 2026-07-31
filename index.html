@@ -4071,7 +4071,7 @@ select option{background:var(--coal3);}
     <div class="card" style="margin-bottom:12px;background:var(--coal3)">
       <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">🔩 Piezas del almacén de mantenimiento</div>
       <div id="kit-stock-aviso" style="font-size:10px;color:var(--text3);margin-bottom:6px"></div>
-      <input type="text" id="kit-buscar" placeholder="🔍 Filtrar materiales por nombre o código..." oninput="kitBuscar(this.value)" style="width:100%;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--coal4);color:var(--text1);font-size:12px;margin-bottom:8px">
+      <div style="font-size:10px;color:var(--text3);margin-bottom:8px">Cada pieza tiene su propio buscador: escribe el código o el nombre y elige. Buscar en una fila <b>no cambia</b> lo que ya elegiste en las otras.</div>
       <div id="kit-piezas-rows"></div>
       <button class="btn btn-outline" style="font-size:11px;padding:5px 12px;margin-top:6px" onclick="kitAddPiezaRow()">+ Agregar pieza</button>
       <div style="font-size:12px;color:var(--text3);margin-top:10px;text-align:right">Costo de piezas: <strong id="kit-costo-piezas" style="color:var(--text)">S/ 0.00</strong></div>
@@ -15086,16 +15086,22 @@ function kitSalidaDePieza(p,kitId,equipo,solicitante,idx){
     unidad:p.unidad||'UND', precio:p.costo||0,
     cantidad:p.cant, importe:p.cant*(p.costo||0) };
 }
-function kitRepOptions(sel,saved){
+function kitRepOptions(sel,saved,q){
   // TODO el material con stock: Insumos y Mantenimiento. Misma fuente y mismo filtro de maestro
   // que la vista de Stock, para que el selector y el almacén coincidan pieza por pieza.
   let base=(typeof calcStock==='function')?calcStock():[];
   if(typeof filtrarPorMaestro==='function') base=filtrarPorMaestro(base);
-  const q=String(window._kitQ||'').trim().toLowerCase();
+  q=String(q!==undefined?q:'').trim().toLowerCase();
   const prods=base
     .filter(p=>p.stock>0)
     .filter(p=>!q || String(p.producto||p.descripcion||'').toLowerCase().includes(q) || String(p.codigo||'').toLowerCase().includes(q))
     .sort((a,b)=>String(a.producto||a.descripcion||'').localeCompare(String(b.producto||b.descripcion||'')));
+  // LA PIEZA YA ELEGIDA EN ESTA FILA NO SE PIERDE AL BUSCAR OTRA COSA: aunque no coincida con
+  // el texto del buscador, se vuelve a incluir para que siga seleccionada.
+  if(sel && !prods.some(p=>p.key===sel)){
+    const ya=base.find(p=>p.key===sel);
+    if(ya) prods.unshift(ya);
+  }
   // Si la pieza ya guardada fue despachada (stock 0), ya no aparece en el stock disponible.
   // La inyectamos igual para poder mostrarla seleccionada al editar una solicitud aprobada.
   if(saved&&saved.key&&!prods.some(p=>p.key===saved.key)){
@@ -15125,31 +15131,37 @@ function kitStockAviso(){
     el.innerHTML='<span style="color:#f59e0b">⚠ No hay materiales con stock disponible.</span> Registra los ingresos en Logística → Almacén.';
   }
 }
-// Filtra el desplegable de materiales del kit sin perder lo ya cargado en las filas.
-function kitBuscar(v){
-  window._kitQ=v;
-  const wrap=document.getElementById('kit-piezas-rows'); if(!wrap) return;
-  const filas=[...wrap.querySelectorAll('.kit-pieza-row')].map(r=>({
-    id:(r.querySelector('.kit-pieza-id')||{}).value||'',
-    cant:(r.querySelector('.kit-pieza-cant')||{}).value||''
-  }));
-  wrap.innerHTML='';
-  (filas.length?filas:[{id:'',cant:''}]).forEach(f=>kitAddPiezaRow(f.id,f.cant));
+// BUSCADOR POR FILA. Antes había uno solo para todo el kit y al escribir se volvían a dibujar
+// TODAS las filas con el nuevo filtro: la pieza que ya habías elegido en una fila anterior
+// desaparecía de su lista y esa fila se quedaba vacía. Ahora cada fila filtra únicamente su
+// propio desplegable y las demás no se tocan.
+function kitFiltrarFila(inp){
+  const row=inp&&inp.closest('.kit-pieza-row'); if(!row) return;
+  const sel=row.querySelector('.kit-pieza-id'); if(!sel) return;
+  const elegido=sel.value;                       // se conserva lo ya elegido en ESTA fila
+  const ops=kitRepOptions(elegido,null,inp.value);
+  const n=(ops.match(/<option /g)||[]).length;
+  sel.innerHTML=`<option value="">${n?'— Elige la pieza — ('+n+')':'— Sin coincidencias —'}</option>`+ops;
+  if(elegido) sel.value=elegido;
   kitRecalcCosto();
-  const i=document.getElementById('kit-buscar');
-  if(i){ i.focus(); try{ i.setSelectionRange(i.value.length,i.value.length); }catch(e){} }
 }
+// Se mantiene por compatibilidad: ya no hay buscador general.
+function kitBuscar(v){ window._kitQ=''; }
 function kitAddPiezaRow(id,cant,saved){
   const wrap=document.getElementById('kit-piezas-rows');if(!wrap)return;
   try{ kitStockAviso(); }catch(e){}
   const div=document.createElement('div');
   div.className='kit-pieza-row';
-  div.style.cssText='display:grid;grid-template-columns:2fr 1fr auto;gap:8px;margin-bottom:6px';
-  const _ops=kitRepOptions(id,saved);
+  div.style.cssText='display:grid;grid-template-columns:2fr 1fr auto;gap:8px;margin-bottom:6px;align-items:start';
+  const _ops=kitRepOptions(id,saved,'');
   const _n=(_ops.match(/<option /g)||[]).length;
-  div.innerHTML=`<select class="kit-pieza-id" onchange="kitRecalcCosto()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px"><option value="">${_n?`— Pieza — (${_n} en Almacén Mantenimiento)`:'— Sin piezas con stock en Almacén Mantenimiento —'}</option>${_ops}</select>
-    <input type="number" class="kit-pieza-cant" min="0" step="1" placeholder="Cant." value="${cant||''}" oninput="kitRecalcCosto()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
-    <button class="btn btn-outline" style="font-size:11px;padding:4px 10px;color:#f87171;border-color:#f87171" onclick="this.parentElement.remove();kitRecalcCosto()">✕</button>`;
+  const _est='background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;width:100%';
+  div.innerHTML=`<div>
+      <input type="text" class="kit-pieza-q" placeholder="🔍 Buscar por nombre o código…" oninput="kitFiltrarFila(this)" style="${_est};margin-bottom:4px">
+      <select class="kit-pieza-id" onchange="kitRecalcCosto()" style="${_est}"><option value="">${_n?`— Elige la pieza — (${_n} con stock)`:'— Sin materiales con stock —'}</option>${_ops}</select>
+    </div>
+    <input type="number" class="kit-pieza-cant" min="0" step="1" placeholder="Cant." value="${cant||''}" oninput="kitRecalcCosto()" style="${_est}">
+    <button class="btn btn-outline" style="font-size:11px;padding:4px 10px;color:#f87171;border-color:#f87171" onclick="this.closest('.kit-pieza-row').remove();kitRecalcCosto()">✕</button>`;
   wrap.appendChild(div);
 }
 const KIT_TARIFA_HORA = 37.5; // S/ por hora jefe de mantenimiento
