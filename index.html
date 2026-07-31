@@ -22398,37 +22398,73 @@ function cmpVerArchivo(per){
 }
 // Excel de un ciclo ya archivado (los mismos datos, congelados)
 async function cmpExportarArchivo(per){
-  const a=cmpArchivo()[per]; if(!a){ showNotif('Ese ciclo no está archivado','error'); return; }
+  const a=cmpArchivo()[per]; if(!a){ showNotif('Ese mes no está archivado','error'); return; }
   if(typeof ExcelJS==='undefined'){ showNotif('Librería Excel no disponible','error'); return; }
-  const wb=new ExcelJS.Workbook(); wb.creator='MUKICLOUD';
-  const s=wb.addWorksheet('Facturas '+per);
-  s.addRow(['COMPRAS — MES CERRADO '+cmpMesLabel(per)+' ('+a.ini+' al '+a.fin+')']); s.getRow(1).font={bold:true,size:13};
-  s.addRow(['Archivado el '+(a.cerradoEl||'—')+(a.bloqueado?' · ciclo cerrado y bloqueado':'')]);
-  s.addRow([]);
-  s.addRow(['Fecha','N° Factura','RUC','Proveedor','Producto','Sin IGV','IGV','Con IGV','Origen']);
-  s.getRow(4).font={bold:true};
-  (a.facturas||[]).slice().sort((x,y)=>String(x.fecha).localeCompare(String(y.fecha))).forEach(f=>{
-    s.addRow([f.fecha||'',f.numero||'',f.ruc||'',f.proveedor||'',f.producto||'',
-      Number(f.sinIgv)||0,Number(f.igv)||0,Number(f.conIgv)||0,
-      f.leidoDe==='pdf'?'PDF':(f.leidoDe==='foto'?'Foto (QR)':'Manual')]);
-  });
-  const t=s.addRow(['','','','','TOTAL',a.sinIgv||0,a.igv||0,a.conIgv||0,'']); t.font={bold:true};
-  s.columns=[{width:12},{width:18},{width:14},{width:30},{width:34},{width:14},{width:12},{width:14},{width:12}];
-  [6,7,8].forEach(c=>s.getColumn(c).numFmt='#,##0.00');
-  const det=(a.facturas||[]).filter(f=>(f.items||[]).length);
+  const wb=new ExcelJS.Workbook(); wb.creator='MUKICLOUD'; wb.company='TEMUAL'; wb.created=new Date();
+  const fac=(a.facturas||[]).slice().sort((x,y)=>String(x.fecha).localeCompare(String(y.fecha)));
+
+  // ── FACTURAS DEL MES ──
+  const c1=[{t:'Fecha',w:12,a:'center'},{t:'N° Factura',w:18},{t:'RUC',w:14,a:'center'},
+    {t:'Proveedor',w:34,wrap:true},{t:'Producto / Detalle',w:44,wrap:true},
+    {t:'Sin IGV',w:14,a:'right',fmt:_xMoneda},{t:'IGV',w:13,a:'right',fmt:_xMoneda},
+    {t:'Con IGV',w:15,a:'right',fmt:_xMoneda},{t:'Origen',w:12,a:'center'}];
+  const s1=wb.addWorksheet('Facturas');
+  _xTitulo(s1,'COMPRAS — '+cmpMesLabel(per).toUpperCase()+(a.bloqueado?'  (MES CERRADO)':'  (MES ARCHIVADO)'),c1.length,
+    'Del '+a.ini+' al '+a.fin+'  ·  '+fac.length+' factura'+(fac.length!==1?'s':'')+'  ·  archivado el '+(a.cerradoEl||'—'));
+  const d1=_xCabecera(s1,4,c1);
+  fac.forEach(f=>s1.addRow([f.fecha||'',f.numero||'',f.ruc||'',f.proveedor||'',f.producto||'',
+    Number(f.sinIgv)||0,Number(f.igv)||0,Number(f.conIgv)||0,
+    f.leidoDe==='pdf'?'PDF':(f.leidoDe==='foto'?'Foto (QR)':'Manual')]));
+  const u1=s1.rowCount;
+  if(u1>=d1) _xCuerpo(s1,d1,u1,c1);
+  s1.addRow(['','','','','TOTAL DEL MES',Number(a.sinIgv)||0,Number(a.igv)||0,Number(a.conIgv)||0,'']);
+  _xTotal(s1,s1.rowCount,c1);
+  _xRematar(s1,4,u1,c1.length,'FF1F3864');
+
+  // ── DETALLE ──
+  const det=fac.filter(f=>(f.items||[]).length);
   if(det.length){
-    const sd=wb.addWorksheet('Detalle '+per);
-    sd.addRow(['DETALLE — '+cmpMesLabel(per)]); sd.getRow(1).font={bold:true,size:13}; sd.addRow([]);
-    sd.addRow(['Fecha','N° Factura','Proveedor','Descripción','Cantidad','U.M.','P. Unitario','Importe']);
-    sd.getRow(3).font={bold:true};
-    det.forEach(f=>(f.items||[]).forEach(i=>sd.addRow([f.fecha||'',f.numero||'',f.proveedor||'',i.descripcion||'',
-      Number(i.cantidad)||0,i.unidad||'',Number(i.precioUnit)||0,Number(i.importe)||0])));
-    sd.columns=[{width:12},{width:18},{width:28},{width:44},{width:11},{width:8},{width:14},{width:14}];
-    [7,8].forEach(c=>sd.getColumn(c).numFmt='#,##0.00');
+    const c2=[{t:'Fecha',w:12,a:'center'},{t:'N° Factura',w:18},{t:'Proveedor',w:32,wrap:true},
+      {t:'Descripción',w:52,wrap:true},{t:'Cantidad',w:12,a:'right',fmt:_xCant},
+      {t:'U.M.',w:9,a:'center'},{t:'P. Unitario',w:15,a:'right',fmt:_xMoneda},{t:'Importe',w:15,a:'right',fmt:_xMoneda}];
+    const sd=wb.addWorksheet('Detalle');
+    const nL=det.reduce((x,f)=>x+f.items.length,0);
+    _xTitulo(sd,'DETALLE DE LAS COMPRAS — '+cmpMesLabel(per).toUpperCase(),c2.length,
+      nL+' línea'+(nL!==1?'s':'')+' en '+det.length+' factura'+(det.length!==1?'s':''));
+    const d2=_xCabecera(sd,4,c2);
+    det.forEach(f=>(f.items||[]).forEach(i=>sd.addRow([f.fecha||'',f.numero||'',f.proveedor||'',
+      i.descripcion||'',Number(i.cantidad)||0,i.unidad||'',Number(i.precioUnit)||0,Number(i.importe)||0])));
+    const u2=sd.rowCount;
+    if(u2>=d2) _xCuerpo(sd,d2,u2,c2);
+    const sum=Math.round(det.reduce((x,f)=>x+f.items.reduce((y,i)=>y+(Number(i.importe)||0),0),0)*100)/100;
+    sd.addRow(['','','','TOTAL DEL DETALLE','','','',sum]);
+    _xTotal(sd,sd.rowCount,c2);
+    _xRematar(sd,4,u2,c2.length,'FF2E75B6');
   }
+
+  // ── POR PROVEEDOR ──
+  const prov=(a.proveedores||[]).slice().sort((x,y)=>(y.conIgv||0)-(x.conIgv||0));
+  if(prov.length){
+    const c3=[{t:'RUC',w:14,a:'center'},{t:'Proveedor',w:38,wrap:true},{t:'Facturas',w:10,a:'center'},
+      {t:'Sin IGV',w:15,a:'right',fmt:_xMoneda},{t:'IGV',w:14,a:'right',fmt:_xMoneda},
+      {t:'Con IGV',w:16,a:'right',fmt:_xMoneda},{t:'% del total',w:12,a:'right',fmt:'0.0%'}];
+    const sp=wb.addWorksheet('Por proveedor');
+    _xTitulo(sp,'ACUMULADO POR PROVEEDOR — '+cmpMesLabel(per).toUpperCase(),c3.length,
+      prov.length+' proveedor'+(prov.length!==1?'es':''));
+    const d3=_xCabecera(sp,4,c3);
+    prov.forEach(p=>sp.addRow([p.ruc||'',p.nombre||'',p.n||0,Number(p.sinIgv)||0,Number(p.igv)||0,
+      Number(p.conIgv)||0,(a.conIgv>0)?((p.conIgv||0)/a.conIgv):0]));
+    const u3=sp.rowCount;
+    if(u3>=d3) _xCuerpo(sp,d3,u3,c3);
+    sp.addRow(['','TOTAL','',Number(a.sinIgv)||0,Number(a.igv)||0,Number(a.conIgv)||0,a.conIgv>0?1:0]);
+    _xTotal(sp,sp.rowCount,c3);
+    _xRematar(sp,4,u3,c3.length,'FF7030A0');
+  }
+
   const buf=await wb.xlsx.writeBuffer();
   const url=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
-  const a2=document.createElement('a'); a2.href=url; a2.download='Compras_'+per+'_'+cmpMesLabel(per).replace(' ','_')+'.xlsx'; a2.click();
+  const a2=document.createElement('a'); a2.href=url;
+  a2.download='Compras_'+cmpMesLabel(per).replace(' ','_')+'.xlsx'; a2.click();
   setTimeout(()=>URL.revokeObjectURL(url),4000);
   showNotif('✓ Excel de '+cmpMesLabel(per));
 }
@@ -22508,6 +22544,67 @@ function cmpHistorialArchivadoHTML(){
     <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Cada mes tiene su carpeta. Ábrela para ver sus facturas y bajar su Excel. Al terminar el mes se archiva solo y se abre la carpeta del mes siguiente.</div>
     <div style="display:flex;flex-wrap:wrap;gap:10px">${carpetas}</div>
     ${detalle}
+  </div>`;
+}
+// DETALLE COMPLETO DE LAS COMPRAS DEL MES
+// El "Acumulado por producto" junta lo repetido y no deja ver la compra tal como llegó. Aquí va
+// TODO el detalle leído, factura por factura y línea por línea, en orden de fecha. Viene plegado
+// para no alargar el informe; se abre con el botón.
+function cmpToggleDetalleInf(){ window._cmpDetInf=!window._cmpDetInf; renderComprasInforme();
+  if(window._cmpDetInf){ setTimeout(()=>{ const e=document.getElementById('cmp-det-completo'); if(e) e.scrollIntoView({behavior:'smooth',block:'start'}); },60); } }
+function cmpDetalleCompletoHTML(per,c){
+  const fs=(c.facturas||[]).slice().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
+  const conDet=fs.filter(f=>Array.isArray(f.items)&&f.items.length);
+  const sinDet=fs.filter(f=>!(Array.isArray(f.items)&&f.items.length));
+  const nLineas=conDet.reduce((s2,f)=>s2+f.items.length,0);
+  const abierto=!!window._cmpDetInf;
+  const cab=`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div class="section-title" style="margin:0;font-size:13px">📋 Detalle completo de las compras</div>
+      <span style="font-size:10px;color:var(--text3)">${nLineas} línea${nLineas!==1?'s':''} en ${conDet.length} factura${conDet.length!==1?'s':''}${sinDet.length?' · '+sinDet.length+' sin detalle':''}</span>
+      <div style="flex:1"></div>
+      <button class="btn btn-outline" style="padding:6px 14px;font-size:11px" onclick="cmpToggleDetalleInf()">${abierto?'▲ Ocultar detalle':'▼ Ver detalle'}</button>
+    </div>`;
+  if(!nLineas&&!sinDet.length) return '';
+  if(!abierto) return `<div class="card" style="padding:16px;margin-top:16px" id="cmp-det-completo">${cab}
+    <div style="font-size:11px;color:var(--text3);margin-top:8px">Cada factura con sus líneas tal como se leyeron del documento.</div></div>`;
+  const filasDe=f=>{
+    const suma=f.items.reduce((s2,i)=>s2+(Number(i.importe)||0),0);
+    return `<tr style="background:var(--coal3)">
+        <td colspan="6" style="padding:8px;border-top:2px solid var(--border)">
+          <span style="font-size:12px;font-weight:800;color:var(--text)">${f.proveedor||'—'}</span>
+          <span style="font-size:10px;color:var(--text3);margin-left:8px">${f.fecha||'—'} · ${f.numero||'sin número'} · RUC ${f.ruc||'—'}</span>
+          <span style="float:right;font-size:11px;color:var(--gold-light);font-family:'DM Mono',monospace;font-weight:700">${cmpMoney(f.conIgv)} con IGV</span>
+        </td></tr>`
+      +f.items.map((i,k)=>`<tr style="border-top:1px solid var(--border2)">
+        <td style="padding:6px 8px;font-size:10px;color:var(--text3);text-align:right;width:28px">${k+1}</td>
+        <td style="padding:6px 8px;font-size:12px;white-space:normal">${i.descripcion||'—'}</td>
+        <td style="padding:6px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace">${(Math.round((Number(i.cantidad)||0)*1000)/1000).toLocaleString('es-PE')}</td>
+        <td style="padding:6px 8px;font-size:11px;text-align:center;color:var(--text3)">${i.unidad||'—'}</td>
+        <td style="padding:6px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace">${cmpMoney(i.precioUnit)}</td>
+        <td style="padding:6px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;color:var(--gold-light);font-weight:700">${cmpMoney(i.importe)}</td>
+      </tr>`).join('')
+      +`<tr><td colspan="5" style="padding:5px 8px;font-size:10px;color:var(--text3);text-align:right">Suma de las ${f.items.length} línea${f.items.length!==1?'s':''}</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:right;font-family:'DM Mono',monospace;color:var(--text2);font-weight:700">${cmpMoney(suma)}</td></tr>`;
+  };
+  return `<div class="card" style="padding:16px;margin-top:16px" id="cmp-det-completo">${cab}
+    <div style="font-size:11px;color:var(--text3);margin:8px 0 12px">Cada factura con sus líneas tal como se leyeron del documento, en orden de fecha.</div>
+    ${nLineas?`<div class="table-wrap" style="overflow-x:auto;margin:0"><table style="width:100%">
+      <thead><tr style="font-size:10px;color:var(--text3)">
+        <th style="padding:7px 8px"></th><th style="padding:7px 8px">Descripción</th>
+        <th style="padding:7px 8px;text-align:right">Cantidad</th><th style="padding:7px 8px;text-align:center">U.M.</th>
+        <th style="padding:7px 8px;text-align:right">P. Unitario</th><th style="padding:7px 8px;text-align:right">Importe</th>
+      </tr></thead><tbody>
+      ${conDet.map(filasDe).join('')}
+      <tr style="border-top:2px solid var(--border)">
+        <td colspan="5" style="padding:8px;font-size:12px;font-weight:800">TOTAL DEL DETALLE — ${nLineas} línea${nLineas!==1?'s':''}</td>
+        <td style="padding:8px;font-size:12px;text-align:right;font-weight:800;font-family:'DM Mono',monospace;color:var(--gold-light)">${cmpMoney(c.sumaDetalle)}</td></tr>
+    </tbody></table></div>`:''}
+    ${sinDet.length?`<div style="margin-top:12px;background:var(--coal3);border:1px solid var(--border);border-radius:10px;padding:10px 12px">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px">Sin detalle leído (${sinDet.length})</div>
+      ${sinDet.map(f=>`<div style="font-size:11px;color:var(--text3);padding:3px 0">
+        ${f.fecha||'—'} · <b style="color:var(--text2)">${f.proveedor||'—'}</b> · ${f.numero||'sin número'} · ${cmpMoney(f.conIgv)}${f.producto?' · '+f.producto:''}</div>`).join('')}
+      <div style="font-size:10px;color:var(--text3);margin-top:6px">Se registraron a mano o el documento no traía una tabla legible.</div>
+    </div>`:''}
   </div>`;
 }
 function renderComprasInforme(){
@@ -22591,8 +22688,9 @@ function renderComprasInforme(){
           <td></td></tr>
       </tbody></table></div>
       <div style="font-size:10px;color:var(--text3);margin-top:8px">La suma del detalle es sin IGV y solo cubre las facturas con detalle leído; por eso puede no cuadrar con el total del mes.</div>
-      `:'<div style="text-align:center;color:var(--text3);padding:22px;font-size:12px">Ninguna factura de este ciclo tiene detalle digitalizado todavía.<br>Sube la factura como <b>PDF</b> o foto y el lector transcribe sus líneas.</div>'}
+      `:'<div style="text-align:center;color:var(--text3);padding:22px;font-size:12px">Ninguna factura de este mes tiene detalle digitalizado todavía.<br>Sube la factura como <b>PDF</b> o foto y el lector transcribe sus líneas.</div>'}
     </div>`
+    +cmpDetalleCompletoHTML(per,c)
     +cmpHistorialArchivadoHTML();
 }
 
@@ -22657,105 +22755,255 @@ function renderComprasBalance(){
 }
 
 // ── EXCEL DEL CICLO ──
+// ═══════════════════════════════════════════════════════════════════════════
+// ESTILO DE LOS EXCEL DE COMPRAS
+// Un solo juego de ayudas para que todas las hojas salgan iguales: titulo, cabecera con color,
+// filas con borde y franjas alternas, totales resaltados, columnas anchas segun su contenido,
+// panel congelado, filtro automatico y hoja lista para imprimir.
+// ═══════════════════════════════════════════════════════════════════════════
+const XL={
+  azul:'FF1F3864', azulSuave:'FFD9E1F2', gris:'FFF7F9FC', linea:'FFBFC7D5',
+  oro:'FFFFF2CC', verde:'FF548235', rojo:'FFC00000'
+};
+function _xBorde(c,color){ const b={style:'thin',color:{argb:color||XL.linea}};
+  c.border={top:b,left:b,bottom:b,right:b}; }
+function _xTitulo(ws,texto,nCols,sub){
+  ws.mergeCells(1,1,1,nCols);
+  const t=ws.getCell(1,1);
+  t.value=texto;
+  t.font={bold:true,size:14,color:{argb:'FFFFFFFF'},name:'Calibri'};
+  t.fill={type:'pattern',pattern:'solid',fgColor:{argb:XL.azul}};
+  t.alignment={vertical:'middle',horizontal:'left',indent:1};
+  ws.getRow(1).height=26;
+  if(sub){
+    ws.mergeCells(2,1,2,nCols);
+    const u=ws.getCell(2,1);
+    u.value=sub;
+    u.font={italic:true,size:10,color:{argb:'FF595959'}};
+    u.alignment={vertical:'middle',horizontal:'left',indent:1};
+    ws.getRow(2).height=16;
+  }
+}
+// Cabecera de tabla en la fila indicada. Devuelve la fila donde empiezan los datos.
+function _xCabecera(ws,fila,cols){
+  const r=ws.getRow(fila);
+  cols.forEach((c,i)=>{
+    const cel=r.getCell(i+1);
+    cel.value=c.t;
+    cel.font={bold:true,size:10,color:{argb:XL.azul}};
+    cel.fill={type:'pattern',pattern:'solid',fgColor:{argb:XL.azulSuave}};
+    cel.alignment={vertical:'middle',horizontal:c.a||'left',wrapText:true};
+    _xBorde(cel);
+  });
+  r.height=22;
+  ws.columns=cols.map(c=>({width:c.w||14}));
+  return fila+1;
+}
+// Pinta las filas de datos con borde, franjas alternas, alineacion y formato numerico.
+function _xCuerpo(ws,desde,hasta,cols){
+  for(let f=desde;f<=hasta;f++){
+    const r=ws.getRow(f);
+    const par=((f-desde)%2)===1;
+    cols.forEach((c,i)=>{
+      const cel=r.getCell(i+1);
+      cel.alignment={vertical:'middle',horizontal:c.a||'left',wrapText:!!c.wrap};
+      if(c.fmt) cel.numFmt=c.fmt;
+      cel.font={size:10};
+      if(par) cel.fill={type:'pattern',pattern:'solid',fgColor:{argb:XL.gris}};
+      _xBorde(cel);
+    });
+    r.height=(cols.some(c=>c.wrap)?undefined:16);
+  }
+}
+function _xTotal(ws,fila,cols){
+  const r=ws.getRow(fila);
+  cols.forEach((c,i)=>{
+    const cel=r.getCell(i+1);
+    cel.font={bold:true,size:10,color:{argb:XL.azul}};
+    cel.fill={type:'pattern',pattern:'solid',fgColor:{argb:XL.oro}};
+    cel.alignment={vertical:'middle',horizontal:c.a||'left'};
+    if(c.fmt) cel.numFmt=c.fmt;
+    _xBorde(cel);
+  });
+  r.height=19;
+}
+// Congelar la cabecera, filtro automatico y hoja lista para imprimir
+function _xRematar(ws,filaCab,ultimaFila,nCols,color){
+  ws.views=[{state:'frozen',ySplit:filaCab}];
+  if(ultimaFila>filaCab){
+    try{ ws.autoFilter={from:{row:filaCab,column:1},to:{row:ultimaFila,column:nCols}}; }catch(e){}
+  }
+  ws.pageSetup={orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0,
+    margins:{left:0.4,right:0.4,top:0.5,bottom:0.5,header:0.3,footer:0.3}};
+  try{ ws.headerFooter={oddFooter:'&LMUKICLOUD&CPágina &P de &N&R&D'}; }catch(e){}
+  if(color) ws.properties.tabColor={argb:color};
+}
+const _xMoneda='"S/" #,##0.00';
+const _xCant='#,##0.###';
+
 async function cmpExportarExcel(){
   if(typeof ExcelJS==='undefined'){ showNotif('Librería Excel no disponible','error'); return; }
   comprasLoad();
-  const per=(document.getElementById('cmp-periodo')||{}).value||periodoActual();
-  const fs=cmpFacturasDe(per), ps=cmpPresupuestosDe(per);
+  const per=(document.getElementById('cmp-periodo')||{}).value||cmpMesActual();
+  const fs=cmpFacturasDe(per).slice().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
+  const ps=cmpPresupuestosDe(per).slice().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
   const v=cmpVentana(per);
-  const wb=new ExcelJS.Workbook(); wb.creator='MUKICLOUD';
+  const wb=new ExcelJS.Workbook();
+  wb.creator='MUKICLOUD'; wb.company='TEMUAL'; wb.created=new Date();
 
+  // ── HOJA 1: FACTURAS ──────────────────────────────────────────────────────
+  const c1=[
+    {t:'Fecha',w:12,a:'center'}, {t:'N° Factura',w:18}, {t:'RUC',w:14,a:'center'},
+    {t:'Proveedor',w:34,wrap:true}, {t:'Producto / Detalle',w:44,wrap:true},
+    {t:'Sin IGV',w:14,a:'right',fmt:_xMoneda}, {t:'IGV',w:13,a:'right',fmt:_xMoneda},
+    {t:'Con IGV',w:15,a:'right',fmt:_xMoneda}, {t:'Origen',w:12,a:'center'}
+  ];
   const s1=wb.addWorksheet('Facturas');
-  s1.addRow(['CONTROL DE COMPRAS — '+cmpMesLabel(per)+' ('+v.ini+' al '+v.fin+')']);
-  s1.getRow(1).font={bold:true,size:13};
-  s1.addRow([]);
-  s1.addRow(['Fecha','N° Factura','RUC','Proveedor','Producto','Sin IGV','IGV','Con IGV']);
-  s1.getRow(3).font={bold:true};
-  fs.slice().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha))).forEach(f=>{
-    s1.addRow([f.fecha||'',f.numero||'',f.ruc||'',f.proveedor||'',f.producto||'',
-      Number(f.sinIgv)||0,Number(f.igv)||0,Number(f.conIgv)||0]);
-  });
-  const tot=r=>fs.reduce((s,f)=>s+(Number(f[r])||0),0);
-  const fila=s1.addRow(['','','','','TOTAL',tot('sinIgv'),tot('igv'),tot('conIgv')]);
-  fila.font={bold:true};
-  s1.columns=[{width:12},{width:18},{width:14},{width:30},{width:34},{width:14},{width:12},{width:14}];
-  [6,7,8].forEach(c=>s1.getColumn(c).numFmt='#,##0.00');
+  _xTitulo(s1,'CONTROL DE COMPRAS — '+cmpMesLabel(per).toUpperCase(),c1.length,
+    'Del '+v.ini+' al '+v.fin+'  ·  '+fs.length+' factura'+(fs.length!==1?'s':'')+'  ·  generado el '+hoy());
+  const d1=_xCabecera(s1,4,c1);
+  fs.forEach(f=>s1.addRow([f.fecha||'',f.numero||'',f.ruc||'',f.proveedor||'',f.producto||'',
+    Number(f.sinIgv)||0,Number(f.igv)||0,Number(f.conIgv)||0,
+    f.leidoDe==='pdf'?'PDF':(f.leidoDe==='foto'?'Foto (QR)':'Manual')]));
+  const u1=s1.rowCount;
+  if(u1>=d1) _xCuerpo(s1,d1,u1,c1);
+  const R2x=n2=>Math.round((Number(n2)||0)*100)/100;
+  const tot=k=>R2x(fs.reduce((s2,f)=>s2+(Number(f[k])||0),0));
+  s1.addRow(['','','','','TOTAL DEL MES',tot('sinIgv'),tot('igv'),tot('conIgv'),'']);
+  _xTotal(s1,s1.rowCount,c1);
+  _xRematar(s1,4,u1,c1.length,'FF1F3864');
 
-  // Detalle línea por línea de las facturas que lo tengan
+  // ── HOJA 2: DETALLE LÍNEA POR LÍNEA ───────────────────────────────────────
   const conItems=fs.filter(f=>Array.isArray(f.items)&&f.items.length);
   if(conItems.length){
+    const c2=[
+      {t:'Fecha',w:12,a:'center'}, {t:'N° Factura',w:18}, {t:'Proveedor',w:32,wrap:true},
+      {t:'Descripción',w:52,wrap:true}, {t:'Cantidad',w:12,a:'right',fmt:_xCant},
+      {t:'U.M.',w:9,a:'center'}, {t:'P. Unitario',w:15,a:'right',fmt:_xMoneda},
+      {t:'Importe',w:15,a:'right',fmt:_xMoneda}
+    ];
     const sd=wb.addWorksheet('Detalle');
-    sd.addRow(['DETALLE DE FACTURAS — '+cmpMesLabel(per)]); sd.getRow(1).font={bold:true,size:13};
-    sd.addRow([]);
-    sd.addRow(['Fecha','N° Factura','Proveedor','Descripción','Cantidad','U.M.','P. Unitario','Importe']);
-    sd.getRow(3).font={bold:true};
-    conItems.slice().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha))).forEach(f=>{
-      f.items.forEach(i=>sd.addRow([f.fecha||'',f.numero||'',f.proveedor||'',i.descripcion||'',
-        Number(i.cantidad)||0,i.unidad||'',Number(i.precioUnit)||0,Number(i.importe)||0]));
-    });
-    sd.columns=[{width:12},{width:18},{width:28},{width:44},{width:11},{width:8},{width:14},{width:14}];
-    [7,8].forEach(c=>sd.getColumn(c).numFmt='#,##0.00');
+    const nL=conItems.reduce((s2,f)=>s2+f.items.length,0);
+    _xTitulo(sd,'DETALLE DE LAS COMPRAS — '+cmpMesLabel(per).toUpperCase(),c2.length,
+      nL+' línea'+(nL!==1?'s':'')+' en '+conItems.length+' factura'+(conItems.length!==1?'s':'')+'  ·  tal como se leyeron del documento');
+    const d2=_xCabecera(sd,4,c2);
+    conItems.forEach(f=>f.items.forEach(i=>sd.addRow([f.fecha||'',f.numero||'',f.proveedor||'',
+      i.descripcion||'',Number(i.cantidad)||0,i.unidad||'',Number(i.precioUnit)||0,Number(i.importe)||0])));
+    const u2=sd.rowCount;
+    if(u2>=d2) _xCuerpo(sd,d2,u2,c2);
+    const sum=R2x(conItems.reduce((s2,f)=>s2+f.items.reduce((x,i)=>x+(Number(i.importe)||0),0),0));
+    sd.addRow(['','','','TOTAL DEL DETALLE','','','',sum]);
+    _xTotal(sd,sd.rowCount,c2);
+    _xRematar(sd,4,u2,c2.length,'FF2E75B6');
   }
 
-  // Historial de meses ya cerrados, para tener todo el año en un solo archivo
-  const arch=cmpArchivados();
-  if(arch.length){
-    const sh=wb.addWorksheet('Meses cerrados');
-    sh.addRow(['HISTORIAL DE MESES CERRADOS']); sh.getRow(1).font={bold:true,size:13};
-    sh.addRow([]);
-    sh.addRow(['Mes','Desde','Hasta','Facturas','Sin IGV','IGV','Con IGV','Estado']);
-    sh.getRow(3).font={bold:true};
-    arch.slice().reverse().forEach(a=>sh.addRow([cmpMesLabel(a.periodo),a.ini,a.fin,a.nFacturas||0,
-      Number(a.sinIgv)||0,Number(a.igv)||0,Number(a.conIgv)||0,a.bloqueado?'Cerrado':'Archivado']));
-    const tt=sh.addRow(['','','TOTAL',arch.reduce((s,a)=>s+(a.nFacturas||0),0),
-      arch.reduce((s,a)=>s+(Number(a.sinIgv)||0),0), arch.reduce((s,a)=>s+(Number(a.igv)||0),0),
-      arch.reduce((s,a)=>s+(Number(a.conIgv)||0),0),'']); tt.font={bold:true};
-    sh.columns=[{width:12},{width:13},{width:13},{width:11},{width:15},{width:13},{width:15},{width:13}];
-    [5,6,7].forEach(c=>sh.getColumn(c).numFmt='#,##0.00');
-  }
-
-  // Consolidados del informe: por proveedor y por producto
+  // ── HOJA 3: INFORME (por proveedor y por producto) ────────────────────────
   const cons=cmpConsolidado(per);
   const si=wb.addWorksheet('Informe');
-  si.addRow(['INFORME DE COMPRAS — CICLO '+per+' ('+v.ini+' al '+v.fin+')']); si.getRow(1).font={bold:true,size:13};
-  si.addRow([]);
-  si.addRow(['ACUMULADO POR PROVEEDOR']); si.getRow(3).font={bold:true};
-  si.addRow(['RUC','Proveedor','Facturas','Sin IGV','IGV','Con IGV']); si.getRow(4).font={bold:true};
-  cons.proveedores.forEach(p=>si.addRow([p.ruc||'',p.nombre||'',p.n,p.sinIgv,p.igv,p.conIgv]));
-  const fp=si.addRow(['','TOTAL','',cons.sinIgv,cons.igv,cons.conIgv]); fp.font={bold:true};
-  si.addRow([]);
-  const rProd=si.rowCount+1;
-  si.addRow(['ACUMULADO POR PRODUCTO (del detalle digitalizado)']); si.getRow(rProd).font={bold:true};
-  si.addRow(['Producto','Veces','Cantidad','U.M.','Importe']); si.getRow(rProd+1).font={bold:true};
-  cons.productos.forEach(p=>si.addRow([p.descripcion,p.n,p.cantidad,p.unidad||'',p.importe]));
-  const fpr=si.addRow(['SUMA DEL DETALLE','','','',cons.sumaDetalle]); fpr.font={bold:true};
-  si.columns=[{width:44},{width:12},{width:14},{width:10},{width:16},{width:16}];
-  [4,5,6].forEach(c=>si.getColumn(c).numFmt='#,##0.00');
+  const cP=[{t:'RUC',w:14,a:'center'},{t:'Proveedor',w:38,wrap:true},{t:'Facturas',w:10,a:'center'},
+    {t:'Sin IGV',w:15,a:'right',fmt:_xMoneda},{t:'IGV',w:14,a:'right',fmt:_xMoneda},
+    {t:'Con IGV',w:16,a:'right',fmt:_xMoneda},{t:'% del total',w:12,a:'right',fmt:'0.0%'}];
+  _xTitulo(si,'INFORME DE COMPRAS — '+cmpMesLabel(per).toUpperCase(),cP.length,
+    'Del '+v.ini+' al '+v.fin+'  ·  '+cons.proveedores.length+' proveedor'+(cons.proveedores.length!==1?'es':''));
+  si.getCell(4,1).value='ACUMULADO POR PROVEEDOR';
+  si.getCell(4,1).font={bold:true,size:11,color:{argb:XL.azul}};
+  const dP=_xCabecera(si,5,cP);
+  cons.proveedores.forEach(p=>si.addRow([p.ruc||'',p.nombre||'',p.n,p.sinIgv,p.igv,p.conIgv,
+    cons.conIgv>0?(p.conIgv/cons.conIgv):0]));
+  const uP=si.rowCount;
+  if(uP>=dP) _xCuerpo(si,dP,uP,cP);
+  si.addRow(['','TOTAL','',cons.sinIgv,cons.igv,cons.conIgv,cons.conIgv>0?1:0]);
+  _xTotal(si,si.rowCount,cP);
 
+  si.addRow([]);
+  const rTit=si.rowCount+1;
+  si.getCell(rTit,1).value='ACUMULADO POR PRODUCTO  (del detalle leído de cada factura)';
+  si.getCell(rTit,1).font={bold:true,size:11,color:{argb:XL.azul}};
+  const cPr=[{t:'Producto',w:52,wrap:true},{t:'Veces',w:9,a:'center'},{t:'Cantidad',w:13,a:'right',fmt:_xCant},
+    {t:'U.M.',w:9,a:'center'},{t:'Importe',w:16,a:'right',fmt:_xMoneda},{t:'% del detalle',w:13,a:'right',fmt:'0.0%'},{t:'',w:10}];
+  const filaCabPr=rTit+1;
+  const r2=si.getRow(filaCabPr);
+  cPr.forEach((c,i)=>{ const cel=r2.getCell(i+1); cel.value=c.t;
+    cel.font={bold:true,size:10,color:{argb:XL.azul}};
+    cel.fill={type:'pattern',pattern:'solid',fgColor:{argb:XL.azulSuave}};
+    cel.alignment={vertical:'middle',horizontal:c.a||'left',wrapText:true}; _xBorde(cel); });
+  r2.height=22;
+  const dPr=filaCabPr+1;
+  cons.productos.forEach(p=>si.addRow([p.descripcion,p.n,p.cantidad,p.unidad||'',p.importe,
+    cons.sumaDetalle>0?(p.importe/cons.sumaDetalle):0,'']));
+  const uPr=si.rowCount;
+  if(uPr>=dPr) _xCuerpo(si,dPr,uPr,cPr);
+  si.addRow(['SUMA DEL DETALLE','','','',R2x(cons.sumaDetalle),cons.sumaDetalle>0?1:0,'']);
+  _xTotal(si,si.rowCount,cPr);
+  // El ancho lo manda la tabla más ancha de la hoja
+  si.columns=cP.map((c,i)=>({width:Math.max(c.w||14,(cPr[i]&&cPr[i].w)||0)}));
+  _xRematar(si,5,uP,cP.length,'FF7030A0');
+  try{ si.autoFilter=null; }catch(e){}
+
+  // ── HOJA 4: PRESUPUESTOS ──────────────────────────────────────────────────
+  const cB=[{t:'Fecha',w:12,a:'center'},{t:'Entregado a',w:30,wrap:true},{t:'Concepto',w:44,wrap:true},
+    {t:'Monto',w:16,a:'right',fmt:_xMoneda}];
   const s2=wb.addWorksheet('Presupuestos');
-  s2.addRow(['PRESUPUESTOS ENTREGADOS — CICLO '+per]); s2.getRow(1).font={bold:true,size:13};
-  s2.addRow([]);
-  s2.addRow(['Fecha','Entregado a','Concepto','Monto']); s2.getRow(3).font={bold:true};
-  ps.slice().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha))).forEach(p=>s2.addRow([p.fecha||'',p.responsable||'',p.obs||'',Number(p.monto)||0]));
-  const entregado=ps.reduce((s,p)=>s+(Number(p.monto)||0),0), gastado=tot('conIgv');
-  s2.addRow([]); const f2=s2.addRow(['','','TOTAL ENTREGADO',entregado]); f2.font={bold:true};
-  s2.columns=[{width:12},{width:28},{width:36},{width:16}];
-  s2.getColumn(4).numFmt='#,##0.00';
+  _xTitulo(s2,'PRESUPUESTOS ENTREGADOS — '+cmpMesLabel(per).toUpperCase(),cB.length,
+    ps.length+' entrega'+(ps.length!==1?'s':'')+' registrada'+(ps.length!==1?'s':''));
+  const dB=_xCabecera(s2,4,cB);
+  ps.forEach(p=>s2.addRow([p.fecha||'',p.responsable||'',p.obs||'',Number(p.monto)||0]));
+  const uB=s2.rowCount;
+  if(uB>=dB) _xCuerpo(s2,dB,uB,cB);
+  const entregado=R2x(ps.reduce((s3,p)=>s3+(Number(p.monto)||0),0)), gastado=tot('conIgv');
+  s2.addRow(['','','TOTAL ENTREGADO',entregado]);
+  _xTotal(s2,s2.rowCount,cB);
+  _xRematar(s2,4,uB,cB.length,'FF548235');
 
+  // ── HOJA 5: BALANCE ───────────────────────────────────────────────────────
   const s3=wb.addWorksheet('Balance');
-  s3.addRow(['BALANCE DEL CICLO '+per+' ('+v.ini+' al '+v.fin+')']); s3.getRow(1).font={bold:true,size:13};
-  s3.addRow([]);
+  const cBa=[{t:'Concepto',w:36},{t:'Monto',w:18,a:'right',fmt:_xMoneda}];
+  _xTitulo(s3,'BALANCE — '+cmpMesLabel(per).toUpperCase(),cBa.length,'Del '+v.ini+' al '+v.fin);
+  const dBa=_xCabecera(s3,4,cBa);
+  const saldo=entregado-gastado;
   s3.addRow(['Presupuesto entregado',entregado]);
   s3.addRow(['Gastado en compras (con IGV)',gastado]);
-  s3.addRow([entregado-gastado>=0?'Saldo disponible':'Sobregiro',Math.abs(entregado-gastado)]);
-  s3.addRow(['Ejecutado (%)',entregado>0?Math.round(gastado/entregado*100):0]);
-  s3.getColumn(1).width=32; s3.getColumn(2).width=18; s3.getColumn(2).numFmt='#,##0.00';
-  s3.getRow(3).font={bold:true}; s3.getRow(5).font={bold:true};
+  s3.addRow([saldo>=0?'Saldo disponible':'Sobregiro',R2x(Math.abs(saldo))]);
+  s3.addRow(['Base imponible del mes',tot('sinIgv')]);
+  s3.addRow(['IGV del mes',tot('igv')]);
+  const uBa=s3.rowCount;
+  _xCuerpo(s3,dBa,uBa,cBa);
+  // El saldo se pinta segun si alcanza o no
+  const celSaldo=s3.getCell(dBa+2,2);
+  celSaldo.font={bold:true,size:11,color:{argb:saldo>=0?XL.verde:XL.rojo}};
+  s3.addRow(['Ejecutado del presupuesto',entregado>0?(gastado/entregado):0]);
+  s3.getCell(s3.rowCount,2).numFmt='0.0%';
+  _xTotal(s3,s3.rowCount,cBa);
+  _xRematar(s3,4,uBa,cBa.length,'FFBF8F00');
+  try{ s3.autoFilter=null; }catch(e){}
+
+  // ── HOJA 6: MESES CERRADOS ────────────────────────────────────────────────
+  const arch=cmpArchivados();
+  if(arch.length){
+    const cH=[{t:'Mes',w:16},{t:'Desde',w:13,a:'center'},{t:'Hasta',w:13,a:'center'},
+      {t:'Facturas',w:10,a:'center'},{t:'Sin IGV',w:16,a:'right',fmt:_xMoneda},
+      {t:'IGV',w:14,a:'right',fmt:_xMoneda},{t:'Con IGV',w:16,a:'right',fmt:_xMoneda},{t:'Estado',w:13,a:'center'}];
+    const sh=wb.addWorksheet('Meses cerrados');
+    _xTitulo(sh,'HISTORIAL DE MESES CERRADOS',cH.length,
+      arch.length+' mes'+(arch.length!==1?'es':'')+' archivado'+(arch.length!==1?'s':''));
+    const dH=_xCabecera(sh,4,cH);
+    arch.slice().reverse().forEach(a=>sh.addRow([cmpMesLabel(a.periodo),a.ini,a.fin,a.nFacturas||0,
+      Number(a.sinIgv)||0,Number(a.igv)||0,Number(a.conIgv)||0,a.bloqueado?'Cerrado':'Archivado']));
+    const uH=sh.rowCount;
+    if(uH>=dH) _xCuerpo(sh,dH,uH,cH);
+    sh.addRow(['TOTAL','','',arch.reduce((s3,a)=>s3+(a.nFacturas||0),0),
+      R2x(arch.reduce((s3,a)=>s3+(Number(a.sinIgv)||0),0)),
+      R2x(arch.reduce((s3,a)=>s3+(Number(a.igv)||0),0)),
+      R2x(arch.reduce((s3,a)=>s3+(Number(a.conIgv)||0),0)),'']);
+    _xTotal(sh,sh.rowCount,cH);
+    _xRematar(sh,4,uH,cH.length,'FF808080');
+  }
 
   try{
     const buf=await wb.xlsx.writeBuffer();
     const url=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
-    const a=document.createElement('a'); a.href=url; a.download='Compras_'+per+'.xlsx'; a.click();
+    const a=document.createElement('a'); a.href=url;
+    a.download='Compras_'+cmpMesLabel(per).replace(' ','_')+'.xlsx'; a.click();
     setTimeout(()=>URL.revokeObjectURL(url),2000);
     showNotif('📊 Excel de compras generado');
   }catch(e){ showNotif('No se pudo generar el Excel','error'); }
