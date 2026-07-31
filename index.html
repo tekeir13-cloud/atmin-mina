@@ -3054,9 +3054,18 @@ select option{background:var(--coal3);}
   <div class="mod-pane active" style="display:block" id="mant-registro">
     <div class="kpi-grid">
       <div class="kpi-card"><div class="kpi-label">Costo Kits Hoy</div><div class="kpi-value red" id="mant-costo-hoy">S/ 0</div></div>
-      <div class="kpi-card"><div class="kpi-label">Costo Kits Mes</div><div class="kpi-value warn" id="mant-costo-mes">S/ 0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Costo Kits del Ciclo</div><div class="kpi-value warn" id="mant-costo-mes">S/ 0</div></div>
       <div class="kpi-card"><div class="kpi-label">Pendientes</div><div class="kpi-value red" id="mant-pendientes">0</div></div>
-      <div class="kpi-card"><div class="kpi-label">Completados Mes</div><div class="kpi-value green" id="mant-completados">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Completados del Ciclo</div><div class="kpi-value green" id="mant-completados">0</div></div>
+    </div>
+    <div class="card" style="margin-bottom:14px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+      <label style="font-size:11px;color:var(--text3)">Ciclo (26 → 25):</label>
+      <select id="mant-ciclo" onchange="renderMantenimiento()" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px"></select>
+      <span id="mant-ciclo-rango" style="font-size:11px;color:var(--text3)"></span>
+      <div style="flex:1"></div>
+      <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="mant-ver-todo" onchange="renderMantenimiento()"> Ver todo el historial
+      </label>
     </div>
     <div class="card" style="margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
       <div>
@@ -3070,6 +3079,15 @@ select option{background:var(--coal3);}
   <div class="mod-pane" style="display:none" id="mant-costosmant">
     <div class="section-title">💲 Costo de Mantenimiento</div>
     <div style="font-size:12px;color:var(--text3);margin:-6px 0 14px">Suma de costos por cada salida de kit despachada (piezas + horas hombre), por máquina.</div>
+    <div class="card" style="margin-bottom:14px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+      <label style="font-size:11px;color:var(--text3)">Ciclo (26 → 25):</label>
+      <select id="mantc-ciclo" onchange="renderCostosMant()" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px"></select>
+      <span id="mantc-ciclo-rango" style="font-size:11px;color:var(--text3)"></span>
+      <div style="flex:1"></div>
+      <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="mantc-ver-todo" onchange="renderCostosMant()"> Acumulado histórico
+      </label>
+    </div>
     <div id="mant-costos-grid"></div>
     <div class="card" style="margin-top:18px"><div class="section-title">Distribución de Costos</div><div id="mant-costos-dist"></div></div>
   </div>
@@ -8603,7 +8621,8 @@ function verIngresadosDelMes(mes){
   const meses=[...new Set(((state.almacen&&state.almacen.ingresos)||[]).map(i=>String(i.fecha||'').slice(0,7)).filter(Boolean))].sort().reverse();
   if(!meses.length){ showNotif('No hay ingresos registrados','warn'); return; }
   const m=mes||meses[0];
-  const ings=((state.almacen&&state.almacen.ingresos)||[]).filter(i=>String(i.fecha||'').slice(0,7)===m);
+  // Ciclo 26 → 25, igual que el resto de Logística: lo ingresado el 26 pertenece al ciclo nuevo.
+  const ings=((state.almacen&&state.almacen.ingresos)||[]).filter(i=>(typeof filtroMes==='function')?filtroMes(i.fecha,m):String(i.fecha||'').slice(0,7)===m);
   // Stock actual por clave de producto
   const stock=(typeof calcStock==='function')?calcStock():[];
   const visibles=new Set(((typeof filtrarPorMaestro==='function')?filtrarPorMaestro(stock):stock).map(r=>r.key));
@@ -14987,16 +15006,54 @@ function mantRepSeed(){
   mantRepSave();
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// MANTENIMIENTO SIGUE EL CICLO 26 → 25, IGUAL QUE LOGÍSTICA Y OPERACIONES
+// Antes esta pestaña sumaba TODO el historial: el "costo del mes" nunca se reiniciaba y los
+// kits del ciclo anterior seguían cargando al nuevo. Ahora todo se filtra por el ciclo elegido
+// (del 26 del mes anterior al 25 del mes de cierre) usando la MISMA función que el resto de la
+// app (enVentana/filtroMes). Nada se borra: se puede ver el historial completo con la casilla.
+// ═══════════════════════════════════════════════════════════════════════════
+function mantCiclos(){
+  const set=new Set();
+  (state.mantenimiento||[]).forEach(m=>{ const f=String(m&&m.fecha||'').slice(0,10);
+    if(f.length===10&&typeof periodoDeFecha==='function') set.add(periodoDeFecha(f)); });
+  try{ set.add(periodoActual()); }catch(e){}
+  return [...set].filter(Boolean).sort().reverse();
+}
+function mantPoblarCiclo(idSel,idRango){
+  const sel=document.getElementById(idSel); if(!sel) return '';
+  const ciclos=mantCiclos();
+  const prev=sel.value;
+  if(sel.options.length!==ciclos.length||!prev){
+    sel.innerHTML=ciclos.map(p=>`<option value="${p}">${(typeof periodoLabel==='function')?periodoLabel(p):p}</option>`).join('');
+    let def=ciclos[0];
+    try{ const a=periodoActual(); if(ciclos.includes(a)) def=a; }catch(e){}
+    sel.value=(prev&&ciclos.includes(prev))?prev:def;
+  }
+  const r=document.getElementById(idRango);
+  if(r){ const v=(typeof ventanaMes==='function')?ventanaMes(sel.value):null; r.textContent=v?(v.ini+' → '+v.fin):''; }
+  return sel.value;
+}
 function renderMantenimiento(){
   mantRepLoad();mantKitLoad();
-  const ch=state.mantenimiento.filter(m=>m.fecha===hoy()).reduce((s,m)=>s+(m.costo||0),0);
-  const cm=state.mantenimiento.reduce((s,m)=>s+(m.costo||0),0);
+  const ciclo=mantPoblarCiclo('mant-ciclo','mant-ciclo-rango');
+  const verTodo=!!(document.getElementById('mant-ver-todo')||{}).checked;
+  const enCiclo=m=>verTodo||!ciclo||((typeof enVentana==='function')?enVentana(m.fecha,ciclo):String(m.fecha||'').slice(0,7)===ciclo);
+  const lista=(state.mantenimiento||[]).filter(enCiclo);
+  const ch=lista.filter(m=>m.fecha===hoy()).reduce((s,m)=>s+(m.costo||0),0);
+  const cm=lista.reduce((s,m)=>s+(m.costo||0),0);
   document.getElementById('mant-costo-hoy').textContent=fmtS(ch);document.getElementById('mant-costo-mes').textContent=fmtS(cm);
-  document.getElementById('mant-pendientes').textContent=state.mantenimiento.filter(m=>m.estado==='pendiente').length;
-  document.getElementById('mant-completados').textContent=state.mantenimiento.filter(m=>m.estado==='ok').length;
+  document.getElementById('mant-pendientes').textContent=lista.filter(m=>m.estado==='pendiente').length;
+  document.getElementById('mant-completados').textContent=lista.filter(m=>m.estado==='ok').length;
   const lst=document.getElementById('mant-lista');
-  if(!state.mantenimiento.length){lst.innerHTML='<div class="card"><div class="empty-state">Sin solicitudes de kit. Crea la primera con ➕.</div></div>';return;}
-  lst.innerHTML=sortRegistros(state.mantenimiento).map(m=>{
+  if(!lista.length){
+    const total=(state.mantenimiento||[]).length;
+    lst.innerHTML='<div class="card"><div class="empty-state">'+
+      (total?('Sin solicitudes en este ciclo. Hay '+total+' en el historial: marca «Ver todo el historial» para verlas.'):'Sin solicitudes de kit. Crea la primera con ➕.')+
+      '</div></div>';
+    return;
+  }
+  lst.innerHTML=sortRegistros(lista).map(m=>{
     const ops=m.aprobOps||{ok:false,resp:'',fecha:''};
     const log=m.aprobLog||{ok:false,resp:'',fecha:''};
     let estLbl,estCls;
@@ -15792,8 +15849,12 @@ function generarValeDespacho(id){
   showNotif('✓ Vale de despacho generado');
 }
 function renderCostosMant(){
-  // Sumar costos por cada SALIDA de kit despachada (aprobada por Logística), agrupado por máquina
-  const kits=(state.mantenimiento||[]).filter(m=>m.aprobLog&&m.aprobLog.ok);
+  // Sumar costos por cada SALIDA de kit despachada (aprobada por Logística), agrupado por máquina.
+  // Solo el CICLO elegido (26 → 25): al empezar un ciclo nuevo el costo arranca en cero.
+  const ciclo=mantPoblarCiclo('mantc-ciclo','mantc-ciclo-rango');
+  const verTodo=!!(document.getElementById('mantc-ver-todo')||{}).checked;
+  const enCiclo=m=>verTodo||!ciclo||((typeof enVentana==='function')?enVentana(m.fecha,ciclo):String(m.fecha||'').slice(0,7)===ciclo);
+  const kits=(state.mantenimiento||[]).filter(m=>m.aprobLog&&m.aprobLog.ok).filter(enCiclo);
   const groups={};
   kits.forEach(m=>{
     const key=m.equipo||m.equipoBase||'—';
@@ -15808,7 +15869,7 @@ function renderCostosMant(){
   const grid=document.getElementById('mant-costos-grid');
   if(grid) grid.innerHTML=data.length?`
     <div style="background:var(--coal4);border:1px solid var(--border);border-radius:14px;padding:14px 18px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
-      <div style="font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Costo total de mantenimiento</div>
+      <div style="font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Costo de mantenimiento ${verTodo?'(histórico)':'del ciclo'}</div>
       <div style="font-size:24px;font-weight:900;color:#e67e22">${fmtS(totalGeneral)}</div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px">
@@ -15823,7 +15884,7 @@ function renderCostosMant(){
         <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:6px;margin-top:2px"><span style="color:var(--text2);font-weight:700">Total</span><strong style="color:#e67e22;font-size:14px">${fmtS(d.total)}</strong></div>
         <div style="font-size:10px;color:var(--text3);text-align:right">${d.n} salida${d.n>1?'s':''} de kit</div>
       </div>
-    </div>`).join('')}</div>`:'<div class="empty-state" style="padding:20px">Aún no hay salidas de kit despachadas. Se suman aquí cuando Logística aprueba un kit.</div>';
+    </div>`).join('')}</div>`:'<div class="empty-state" style="padding:20px">Sin salidas de kit despachadas en este ciclo. Se suman aquí cuando Logística aprueba un kit.</div>';
   const dist=document.getElementById('mant-costos-dist');
   if(dist) dist.innerHTML=data.length?data.map(d=>`<div class="progress-row"><div class="progress-label" style="min-width:160px;font-size:11px">${EI[d.base]||''} ${d.equipo}</div><div class="progress-bar"><div class="progress-fill" style="width:${Math.round((d.total/mx)*100)}%;background:#e67e22"></div></div><div class="progress-val">${fmtS(d.total)}</div></div>`).join(''):'<div class="empty-state">Sin datos</div>';
 }
