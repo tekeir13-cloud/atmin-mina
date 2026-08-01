@@ -5301,6 +5301,7 @@ function renderStockRemanente(){
   // se usa el precio que tenga ahí (es el que tú mantienes). Si no está, se cae a los precios
   // de Parámetros. Se busca por nombre normalizado y también por las dos primeras palabras
   // ("EMULNOR 3000"), para que calce aunque el nombre no sea idéntico al del catálogo.
+  const _remMed=(window._remMedida==='cajas')?'cajas':'soles';
   const _pxParam=(typeof compGetPreciosExp==='function')?(compGetPreciosExp()||{}):{};
   const _norm=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .toUpperCase().replace(/["'”“]/g,'').replace(/[^A-Z0-9]+/g,' ').trim();
@@ -5329,8 +5330,22 @@ function renderStockRemanente(){
   const _lblCaja=(f,q)=>{ const c=_cajas(f,q), u=_sueltas(f,q);
     return f.esMecha?(c+' rollo'+(c!==1?'s':'')+(u?' + '+u+' m':'')):(c+' caja'+(c!==1?'s':'')+(u?' + '+u+' und':'')); };
 
-  statsFilas.forEach(f=>{ f.cjEgr=_cajas(f,f.egr); f.cjSal=_cajas(f,f.sal);
-    f.sEgr=_plata(f,f.egr); f.sSal=_plata(f,f.sal); f.precio=Number(_pxE[f.id])||0; });
+  // Saldo que queda hoy de cada explosivo (acumulado — el stock NO se filtra por ciclo)
+  const _stkHoy=(typeof remStockActual==='function')?remStockActual():{};
+  statsFilas.forEach(f=>{
+    f.cjEgr=_cajas(f,f.egr); f.cjSal=_cajas(f,f.sal);
+    f.sEgr=_plata(f,f.egr); f.sSal=_plata(f,f.sal); f.precio=Number(_pxE[f.id])||0;
+    // Lo que hubo disponible en el ciclo se reparte en lo que SALIÓ y lo que QUEDÓ; y viene
+    // de lo que ya había antes más lo que ENTRÓ. Las dos lecturas suman el mismo total, que es
+    // lo que permite dibujarlas como dos anillos de una misma dona sin engañar a nadie.
+    f.queda=Number(_stkHoy[f.id])||0;
+    f.disp=f.queda+f.sal;
+    f.venia=Math.max(0,f.disp-f.egr);
+    f.sQueda=_plata(f,f.queda); f.sDisp=_plata(f,f.disp); f.sVenia=_plata(f,f.venia);
+    f.cjQueda=_cajas(f,f.queda); f.cjDisp=_cajas(f,f.disp); f.cjVenia=_cajas(f,f.venia);
+  });
+  // Solo se grafica lo que tiene algo que contar
+  const _donas=statsFilas.filter(f=>f.egr>0||f.sal>0||f.queda>0);
 
   const totEgr=statsFilas.reduce((a,f)=>a+f.egr,0), totSal=statsFilas.reduce((a,f)=>a+f.sal,0);
   const totCajasEgr=statsFilas.reduce((a,f)=>a+f.cjEgr,0);
@@ -5422,7 +5437,37 @@ function renderStockRemanente(){
         </div>
       </div>
       ${sinPrecio.length?`<div style="font-size:10px;color:#f59e0b;margin:-6px 0 12px">⚠ Sin precio: ${sinPrecio.join(' · ')}. Dale de alta el producto con su precio en <b>Logística → Productos</b> (o ponlo en Parámetros) para que sume en soles.</div>`:''}
-      <div style="height:280px;margin-bottom:16px"><canvas id="rem-chart"></canvas></div>
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:700;color:var(--text2)">Qué entró, qué salió y qué quedó — por explosivo</div>
+        <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+          <button onclick="remEstMedida('soles')" style="border:none;cursor:pointer;font-size:11px;font-weight:700;padding:5px 12px;background:${_remMed==='soles'?'var(--accent-dim)':'transparent'};color:${_remMed==='soles'?'var(--accent-light)':'var(--text3)'}">S/ Soles</button>
+          <button onclick="remEstMedida('cajas')" style="border:none;cursor:pointer;font-size:11px;font-weight:700;padding:5px 12px;background:${_remMed==='cajas'?'var(--accent-dim)':'transparent'};color:${_remMed==='cajas'?'var(--accent-light)':'var(--text3)'}">Cajas</button>
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--text3)">
+          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#8a8a80;margin-right:5px"></span>Venía de antes</span>
+          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#199e70;margin-right:5px"></span>Entró</span>
+          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#e66767;margin-right:5px"></span>Salió</span>
+          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#3987e5;margin-right:5px"></span>Quedó en stock</span>
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-bottom:12px">Anillo <b>exterior</b>: en qué terminó lo disponible (salió / quedó). Anillo <b>interior</b>: de dónde vino (venía de antes / entró en el ciclo). Los dos anillos suman lo mismo.</div>
+      ${_donas.length?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin-bottom:16px">
+        ${_donas.map((f,i)=>`<div style="background:var(--coal3);border:1px solid var(--border);border-radius:12px;padding:12px 10px 10px">
+          <div style="font-size:11px;font-weight:800;color:var(--text);text-align:center;min-height:28px;line-height:1.25">${f.nombre}</div>
+          <div style="position:relative;height:158px;margin:2px 0 6px"><canvas id="rem-dona-${i}"></canvas>
+            <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;padding:0 6px;text-align:center">
+              <div style="font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Quedó</div>
+              <div style="font-size:${_remMed==='soles'?'13':'16'}px;font-weight:800;color:#3987e5;font-family:'DM Mono',monospace;line-height:1.15;white-space:nowrap">${_remMed==='soles'?_S(f.sQueda):(f.cjQueda+' cj')}</div>
+              <div style="font-size:8px;color:var(--text3);white-space:nowrap">${_remMed==='soles'?(f.cjQueda+' cajas'):_S(f.sQueda)}</div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px;font-size:10px">
+            <div style="display:flex;justify-content:space-between"><span style="color:#199e70">↓ Entró</span><b style="color:var(--text2);font-family:'DM Mono',monospace">${_remMed==='soles'?_S(f.sEgr):(f.cjEgr+' cj')}</b></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:#e66767">↑ Salió</span><b style="color:var(--text2);font-family:'DM Mono',monospace">${_remMed==='soles'?_S(f.sSal):(f.cjSal+' cj')}</b></div>
+            <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:3px"><span style="color:var(--text3)">Disponible</span><b style="color:var(--text2);font-family:'DM Mono',monospace">${_remMed==='soles'?_S(f.sDisp):(f.cjDisp+' cj')}</b></div>
+          </div>
+        </div>`).join('')}
+      </div>`:'<div style="color:var(--text3);font-size:12px;padding:14px 0">Sin movimientos ni stock que graficar en este ciclo.</div>'}
       <div class="table-wrap"><table style="width:100%;font-size:12px;border-collapse:collapse">
         <thead><tr style="color:var(--text3);text-align:left">
           <th style="padding:6px 8px">Explosivo</th>
@@ -5440,30 +5485,57 @@ function renderStockRemanente(){
   `;
   // Gráfico: unidades por explosivo (las cajas van en la tabla y en las tarjetas, porque cada
   // explosivo tiene un tamaño de caja distinto y mezclarlos en un eje sería engañoso).
+  try{ (window._remCharts||[]).forEach(c=>{ try{c.destroy();}catch(e){} }); }catch(e){}
+  window._remCharts=[];
   try{ if(window._remChart){ window._remChart.destroy(); window._remChart=null; } }catch(e){}
-  if(typeof Chart==='undefined' || !statsFilas.length) return;
-  const cv=document.getElementById('rem-chart'); if(!cv) return;
-  // El gráfico va en CAJAS (rollos para la mecha): es la unidad con la que se maneja el
-  // explosivo. El detalle en unidades y en soles va en el tooltip y en la tabla.
-  const etiq=f=>f.nombre+(f.esMecha?' (rollos de '+_uCaja(f)+' m)':' ('+f.upCaja+' und/caja)');
-  try{
-    window._remChart=new Chart(cv.getContext('2d'),{
-      type:'bar',
-      data:{labels:statsFilas.map(etiq),datasets:[
-        {label:'Entró al remanente',data:statsFilas.map(f=>f.cjEgr),backgroundColor:'rgba(34,197,94,0.75)',borderRadius:3},
-        {label:'Salió del remanente',data:statsFilas.map(f=>f.cjSal),backgroundColor:'rgba(248,113,113,0.75)',borderRadius:3}]},
-      options:{responsive:true,maintainAspectRatio:false,
-        plugins:{legend:{labels:{color:'#9aa4b2',boxWidth:12,font:{size:11}}},
-          tooltip:{callbacks:{label:c=>{ const f=statsFilas[c.dataIndex];
-            const esEgr=c.datasetIndex===0;
-            const q=esEgr?f.egr:f.sal, plata=esEgr?f.sEgr:f.sSal;
-            return c.dataset.label+': '+_lblCaja(f,q)+' · '+fmtN(q)+(f.esMecha?' m':' und')+' · '+_S(plata); }}}},
-        scales:{x:{ticks:{color:'#6b7280',font:{size:9},maxRotation:35},grid:{display:false}},
-          y:{beginAtZero:true,title:{display:true,text:'cajas / rollos',color:'#6b7280',font:{size:10}},
-             ticks:{color:'#6b7280',font:{size:10},precision:0},grid:{color:'rgba(255,255,255,0.05)'}}}}
-    });
-  }catch(e){}
+  if(typeof Chart==='undefined' || !_donas.length) return;
+  // ── DONAS POR EXPLOSIVO (small multiples) ──────────────────────────────────────
+  // Una dona por explosivo en vez de un solo gráfico con los 7 tipos: con 7 colores en un
+  // mismo anillo los tonos dejan de distinguirse (comprobado con el validador de paletas),
+  // sobre todo para quien tiene daltonismo. Faceteando, cada dona usa solo 4 colores fijos
+  // con el MISMO significado en todas: gris = venía, verde = entró, rojo = salió, azul = quedó.
+  // Dos anillos concéntricos que suman lo mismo:
+  //   exterior (dataset 0) → en qué terminó : salió + quedó
+  //   interior (dataset 1) → de dónde vino  : venía + entró
+  const C_VENIA='#8a8a80', C_ENTRO='#199e70', C_SALIO='#e66767', C_QUEDA='#3987e5';
+  const _val=(f,q,plata)=>_remMed==='soles'?plata:_cajas(f,q);
+  const _fmtV=(f,q,plata)=>_remMed==='soles'
+    ? (_S(plata)+' · '+_lblCaja(f,q))
+    : (_lblCaja(f,q)+' · '+_S(plata));
+  _donas.forEach((f,i)=>{
+    const cv=document.getElementById('rem-dona-'+i); if(!cv) return;
+    const ext=[_val(f,f.venia,f.sVenia), _val(f,f.egr,f.sEgr)];
+    const inte=[_val(f,f.sal,f.sSal),   _val(f,f.queda,f.sQueda)];
+    if(!ext[0]&&!ext[1]&&!inte[0]&&!inte[1]) return;
+    try{
+      window._remCharts.push(new Chart(cv.getContext('2d'),{
+        type:'doughnut',
+        data:{datasets:[
+          { label:'En qué terminó', data:inte, backgroundColor:[C_SALIO,C_QUEDA],
+            borderColor:'rgba(0,0,0,0)', borderWidth:2, weight:1.1 },
+          { label:'De dónde vino', data:ext, backgroundColor:[C_VENIA,C_ENTRO],
+            borderColor:'rgba(0,0,0,0)', borderWidth:2, weight:0.55 }
+        ]},
+        options:{responsive:true,maintainAspectRatio:false,
+          cutout:'58%', radius:'96%',
+          layout:{padding:2},
+          plugins:{legend:{display:false},
+            tooltip:{callbacks:{
+              title:()=>f.nombre,
+              label:c=>{
+                const dentro=c.datasetIndex===0;
+                const et=dentro?['↑ Salió','◼ Quedó en stock'][c.dataIndex]:['◼ Venía de antes','↓ Entró'][c.dataIndex];
+                const q=dentro?[f.sal,f.queda][c.dataIndex]:[f.venia,f.egr][c.dataIndex];
+                const p=dentro?[f.sSal,f.sQueda][c.dataIndex]:[f.sVenia,f.sEgr][c.dataIndex];
+                return et+': '+_fmtV(f,q,p);
+              }}}}
+        }
+      }));
+    }catch(e){}
+  });
 }
+// Cambia entre soles y cajas en las estadísticas del remanente
+function remEstMedida(m){ window._remMedida=(m==='cajas')?'cajas':'soles'; renderStockRemanente(); }
 // ── Salida de Stock Remanente ──
 function remDisponible(id){
   const stock=(typeof remStockActual==='function')?remStockActual():{};
