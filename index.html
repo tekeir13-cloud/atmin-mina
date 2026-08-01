@@ -5271,19 +5271,69 @@ function renderStockRemanente(){
     id:c.id, nombre:c.nombre, upCaja:c.upCaja, esMecha:c.id==='NEITHER',
     egr:_egr[c.id]||0, sal:_sal[c.id]||0
   }));
+  // ── PRECIO DE CADA EXPLOSIVO ──────────────────────────────────────────────────
+  // MANDA EL MAESTRO DE PRODUCTOS: si el explosivo está dado de alta en Logística → Productos,
+  // se usa el precio que tenga ahí (es el que tú mantienes). Si no está, se cae a los precios
+  // de Parámetros. Se busca por nombre normalizado y también por las dos primeras palabras
+  // ("EMULNOR 3000"), para que calce aunque el nombre no sea idéntico al del catálogo.
+  const _pxParam=(typeof compGetPreciosExp==='function')?(compGetPreciosExp()||{}):{};
+  const _norm=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toUpperCase().replace(/["'”“]/g,'').replace(/[^A-Z0-9]+/g,' ').trim();
+  const _maestro=((state.almacen&&state.almacen.productos)||[]).filter(p=>p&&Number(p.precio)>0);
+  const _precioDe=id=>{
+    const c=(typeof exploGetCat==='function')?exploGetCat(id):null;
+    const nom=_norm(c&&c.nombre);
+    if(nom){
+      let p=_maestro.find(x=>_norm(x.nombre)===nom);
+      if(!p){ const clave=nom.split(' ').slice(0,2).join(' ');
+        if(clave.length>4) p=_maestro.find(x=>_norm(x.nombre).indexOf(clave)===0); }
+      if(p) return {precio:Number(p.precio)||0, de:'Productos', codigo:p.codigo||''};
+    }
+    return {precio:Number(_pxParam[id])||0, de:'Parámetros', codigo:''};
+  };
+  const _pxE={}, _pxDe={}, _pxCod={};
+  ((typeof EXPLO_CATALOGO!=='undefined')?EXPLO_CATALOGO:[]).forEach(c=>{
+    const r=_precioDe(c.id); _pxE[c.id]=r.precio; _pxDe[c.id]=r.de; _pxCod[c.id]=r.codigo;
+  });
+  const _S=n=>'S/ '+(Math.round((Number(n)||0)*100)/100).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  // Cajas de una cantidad: la mecha rápida va en ROLLOS de 150 m, no en cajas de 10.
+  const _uCaja=f=>f.esMecha?150:f.upCaja;
+  const _cajas=(f,q)=>Math.floor((Number(q)||0)/_uCaja(f));
+  const _sueltas=(f,q)=>Math.round(((Number(q)||0)%_uCaja(f))*100)/100;
+  const _plata=(f,q)=>(Number(q)||0)*(Number(_pxE[f.id])||0);
+  const _lblCaja=(f,q)=>{ const c=_cajas(f,q), u=_sueltas(f,q);
+    return f.esMecha?(c+' rollo'+(c!==1?'s':'')+(u?' + '+u+' m':'')):(c+' caja'+(c!==1?'s':'')+(u?' + '+u+' und':'')); };
+
+  statsFilas.forEach(f=>{ f.cjEgr=_cajas(f,f.egr); f.cjSal=_cajas(f,f.sal);
+    f.sEgr=_plata(f,f.egr); f.sSal=_plata(f,f.sal); f.precio=Number(_pxE[f.id])||0; });
+
   const totEgr=statsFilas.reduce((a,f)=>a+f.egr,0), totSal=statsFilas.reduce((a,f)=>a+f.sal,0);
-  const cajasDe=f=>f.esMecha?0:Math.floor(f.egr/f.upCaja);
-  const totCajasEgr=statsFilas.reduce((a,f)=>a+(f.esMecha?0:Math.floor(f.egr/f.upCaja)),0);
-  const totCajasSal=statsFilas.reduce((a,f)=>a+(f.esMecha?0:Math.floor(f.sal/f.upCaja)),0);
+  const totCajasEgr=statsFilas.reduce((a,f)=>a+f.cjEgr,0);
+  const totCajasSal=statsFilas.reduce((a,f)=>a+f.cjSal,0);
+  const totSolesEgr=statsFilas.reduce((a,f)=>a+f.sEgr,0);
+  const totSolesSal=statsFilas.reduce((a,f)=>a+f.sSal,0);
+  const sinPrecio=statsFilas.filter(f=>!f.precio).map(f=>f.nombre);
+
   const statsRows=statsFilas.length?statsFilas.map(f=>`<tr style="border-top:1px solid var(--border)">
-      <td style="padding:7px 8px;font-weight:600">${f.nombre}</td>
-      <td style="padding:7px 8px;text-align:right;color:#22c55e;font-weight:700">${fmtN(f.egr)}</td>
-      <td style="padding:7px 8px;color:var(--text3);font-size:11px">${remLabelCajas(f.id,f.egr)}</td>
-      <td style="padding:7px 8px;text-align:right;color:#f87171;font-weight:700">${fmtN(f.sal)}</td>
-      <td style="padding:7px 8px;color:var(--text3);font-size:11px">${remLabelCajas(f.id,f.sal)}</td>
-      <td style="padding:7px 8px;text-align:right;font-weight:800;color:${(f.egr-f.sal)>=0?'#60a5fa':'#f59e0b'}">${fmtN(f.egr-f.sal)}</td>
-    </tr>`).join('')
-    :`<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--text3)">Todavía no hay egresos reportados ni salidas dadas.</td></tr>`;
+      <td style="padding:7px 8px;font-weight:600">${f.nombre}<br><span style="font-size:10px;color:var(--text3)">${f.esMecha?(_uCaja(f)+' m/rollo'):(f.upCaja+' und/caja')}${f.precio?' · '+_S(f.precio)+' c/u <span style="opacity:.7">('+(_pxDe[f.id]||'')+')</span>':''}</span></td>
+      <td style="padding:7px 8px;text-align:right;color:#22c55e;font-weight:800">${_cajas(f,f.egr)}</td>
+      <td style="padding:7px 8px;color:var(--text3);font-size:11px;white-space:nowrap">${_lblCaja(f,f.egr)}<br>${fmtN(f.egr)} ${f.esMecha?'m':'und'}</td>
+      <td style="padding:7px 8px;text-align:right;color:#22c55e;font-weight:700;font-family:'DM Mono',monospace">${_S(f.sEgr)}</td>
+      <td style="padding:7px 8px;text-align:right;color:#f87171;font-weight:800">${_cajas(f,f.sal)}</td>
+      <td style="padding:7px 8px;color:var(--text3);font-size:11px;white-space:nowrap">${_lblCaja(f,f.sal)}<br>${fmtN(f.sal)} ${f.esMecha?'m':'und'}</td>
+      <td style="padding:7px 8px;text-align:right;color:#f87171;font-weight:700;font-family:'DM Mono',monospace">${_S(f.sSal)}</td>
+      <td style="padding:7px 8px;text-align:right;font-weight:800;color:${(f.sEgr-f.sSal)>=0?'#60a5fa':'#f59e0b'};font-family:'DM Mono',monospace">${_S(f.sEgr-f.sSal)}<br><span style="font-size:10px;color:var(--text3);font-weight:400">${fmtN(f.egr-f.sal)} ${f.esMecha?'m':'und'}</span></td>
+    </tr>`).join('')+`<tr style="border-top:2px solid var(--border);background:var(--coal4)">
+      <td style="padding:8px;font-weight:800">TOTAL</td>
+      <td style="padding:8px;text-align:right;font-weight:800;color:#22c55e">${totCajasEgr}</td>
+      <td style="padding:8px;color:var(--text3);font-size:11px">${fmtN(totEgr)} und</td>
+      <td style="padding:8px;text-align:right;font-weight:800;color:#22c55e;font-family:'DM Mono',monospace">${_S(totSolesEgr)}</td>
+      <td style="padding:8px;text-align:right;font-weight:800;color:#f87171">${totCajasSal}</td>
+      <td style="padding:8px;color:var(--text3);font-size:11px">${fmtN(totSal)} und</td>
+      <td style="padding:8px;text-align:right;font-weight:800;color:#f87171;font-family:'DM Mono',monospace">${_S(totSolesSal)}</td>
+      <td style="padding:8px;text-align:right;font-weight:800;color:var(--gold-light);font-family:'DM Mono',monospace">${_S(totSolesEgr-totSolesSal)}</td>
+    </tr>`
+    :`<tr><td colspan="8" style="padding:16px;text-align:center;color:var(--text3)">Todavía no hay egresos reportados ni salidas dadas.</td></tr>`;
 
   cont.innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
@@ -5314,30 +5364,38 @@ function renderStockRemanente(){
     <div style="background:var(--coal2);border:1px solid var(--border);border-radius:16px;padding:16px;margin-top:18px">
       <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:4px">📊 Estadísticas del remanente</div>
       <div style="font-size:11px;color:var(--text3);margin-bottom:14px">Egreso reportado por el Compresorista (entra al remanente) vs salidas dadas desde aquí. Los egresos previos a la apertura no cuentan: ya están en el saldo inicial.</div>
-      <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));margin-bottom:16px">
+      <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:16px">
         <div class="kpi-card" style="padding:14px 16px">
           <div class="kpi-label" style="font-size:10px">Total egreso reportado</div>
-          <div class="kpi-value" style="font-size:21px;color:#22c55e">${fmtN(totEgr)} und</div>
-          <div style="font-size:10px;color:var(--text3);margin-top:3px">${totCajasEgr} caja${totCajasEgr!==1?'s':''} completas</div>
+          <div class="kpi-value" style="font-size:24px;color:#22c55e">${totCajasEgr} <span style="font-size:13px;font-weight:600">caja${totCajasEgr!==1?'s':''}</span></div>
+          <div style="font-size:15px;font-weight:800;color:#22c55e;font-family:'DM Mono',monospace;margin-top:2px">${_S(totSolesEgr)}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:3px">${fmtN(totEgr)} und en total</div>
         </div>
         <div class="kpi-card" style="padding:14px 16px">
           <div class="kpi-label" style="font-size:10px">Total de salidas</div>
-          <div class="kpi-value" style="font-size:21px;color:#f87171">${fmtN(totSal)} und</div>
-          <div style="font-size:10px;color:var(--text3);margin-top:3px">${totCajasSal} caja${totCajasSal!==1?'s':''} completas</div>
+          <div class="kpi-value" style="font-size:24px;color:#f87171">${totCajasSal} <span style="font-size:13px;font-weight:600">caja${totCajasSal!==1?'s':''}</span></div>
+          <div style="font-size:15px;font-weight:800;color:#f87171;font-family:'DM Mono',monospace;margin-top:2px">${_S(totSolesSal)}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:3px">${fmtN(totSal)} und en total</div>
         </div>
         <div class="kpi-card" style="padding:14px 16px">
-          <div class="kpi-label" style="font-size:10px">Diferencia</div>
-          <div class="kpi-value" style="font-size:21px;color:${(totEgr-totSal)>=0?'#60a5fa':'#f59e0b'}">${fmtN(totEgr-totSal)} und</div>
-          <div style="font-size:10px;color:var(--text3);margin-top:3px">reportado − entregado</div>
+          <div class="kpi-label" style="font-size:10px">Diferencia — queda en remanente</div>
+          <div class="kpi-value" style="font-size:24px;color:${(totCajasEgr-totCajasSal)>=0?'#60a5fa':'#f59e0b'}">${totCajasEgr-totCajasSal} <span style="font-size:13px;font-weight:600">caja${Math.abs(totCajasEgr-totCajasSal)!==1?'s':''}</span></div>
+          <div style="font-size:15px;font-weight:800;color:var(--gold-light);font-family:'DM Mono',monospace;margin-top:2px">${_S(totSolesEgr-totSolesSal)}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:3px">${fmtN(totEgr-totSal)} und · reportado − entregado</div>
         </div>
       </div>
+      ${sinPrecio.length?`<div style="font-size:10px;color:#f59e0b;margin:-6px 0 12px">⚠ Sin precio: ${sinPrecio.join(' · ')}. Dale de alta el producto con su precio en <b>Logística → Productos</b> (o ponlo en Parámetros) para que sume en soles.</div>`:''}
       <div style="height:280px;margin-bottom:16px"><canvas id="rem-chart"></canvas></div>
       <div class="table-wrap"><table style="width:100%;font-size:12px;border-collapse:collapse">
         <thead><tr style="color:var(--text3);text-align:left">
           <th style="padding:6px 8px">Explosivo</th>
-          <th style="padding:6px 8px;text-align:right">Egreso reportado</th><th style="padding:6px 8px">En cajas</th>
-          <th style="padding:6px 8px;text-align:right">Salidas dadas</th><th style="padding:6px 8px">En cajas</th>
-          <th style="padding:6px 8px;text-align:right">Diferencia</th>
+          <th style="padding:6px 8px;text-align:right">Cajas<br><span style="font-weight:400">egreso</span></th>
+          <th style="padding:6px 8px">Detalle</th>
+          <th style="padding:6px 8px;text-align:right">S/ egreso</th>
+          <th style="padding:6px 8px;text-align:right">Cajas<br><span style="font-weight:400">salidas</span></th>
+          <th style="padding:6px 8px">Detalle</th>
+          <th style="padding:6px 8px;text-align:right">S/ salidas</th>
+          <th style="padding:6px 8px;text-align:right">Diferencia S/</th>
         </tr></thead>
         <tbody>${statsRows}</tbody>
       </table></div>
@@ -5348,20 +5406,24 @@ function renderStockRemanente(){
   try{ if(window._remChart){ window._remChart.destroy(); window._remChart=null; } }catch(e){}
   if(typeof Chart==='undefined' || !statsFilas.length) return;
   const cv=document.getElementById('rem-chart'); if(!cv) return;
-  const etiq=f=>f.nombre+(f.esMecha?' (m)':' ('+f.upCaja+'/caja)');
+  // El gráfico va en CAJAS (rollos para la mecha): es la unidad con la que se maneja el
+  // explosivo. El detalle en unidades y en soles va en el tooltip y en la tabla.
+  const etiq=f=>f.nombre+(f.esMecha?' (rollos de '+_uCaja(f)+' m)':' ('+f.upCaja+' und/caja)');
   try{
     window._remChart=new Chart(cv.getContext('2d'),{
       type:'bar',
       data:{labels:statsFilas.map(etiq),datasets:[
-        {label:'Egreso reportado por compresorista',data:statsFilas.map(f=>f.egr),backgroundColor:'rgba(34,197,94,0.75)',borderRadius:3},
-        {label:'Salidas dadas',data:statsFilas.map(f=>f.sal),backgroundColor:'rgba(248,113,113,0.75)',borderRadius:3}]},
+        {label:'Egreso reportado por compresorista',data:statsFilas.map(f=>f.cjEgr),backgroundColor:'rgba(34,197,94,0.75)',borderRadius:3},
+        {label:'Salidas dadas',data:statsFilas.map(f=>f.cjSal),backgroundColor:'rgba(248,113,113,0.75)',borderRadius:3}]},
       options:{responsive:true,maintainAspectRatio:false,
         plugins:{legend:{labels:{color:'#9aa4b2',boxWidth:12,font:{size:11}}},
           tooltip:{callbacks:{label:c=>{ const f=statsFilas[c.dataIndex];
-            return c.dataset.label+': '+fmtN(c.parsed.y)+(f.esMecha?' m':' und')+' · '+remLabelCajas(f.id,c.parsed.y); }}}},
+            const esEgr=c.datasetIndex===0;
+            const q=esEgr?f.egr:f.sal, plata=esEgr?f.sEgr:f.sSal;
+            return c.dataset.label+': '+_lblCaja(f,q)+' · '+fmtN(q)+(f.esMecha?' m':' und')+' · '+_S(plata); }}}},
         scales:{x:{ticks:{color:'#6b7280',font:{size:9},maxRotation:35},grid:{display:false}},
-          y:{beginAtZero:true,title:{display:true,text:'unidades',color:'#6b7280',font:{size:10}},
-             ticks:{color:'#6b7280',font:{size:10}},grid:{color:'rgba(255,255,255,0.05)'}}}}
+          y:{beginAtZero:true,title:{display:true,text:'cajas / rollos',color:'#6b7280',font:{size:10}},
+             ticks:{color:'#6b7280',font:{size:10},precision:0},grid:{color:'rgba(255,255,255,0.05)'}}}}
     });
   }catch(e){}
 }
