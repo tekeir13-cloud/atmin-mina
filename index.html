@@ -5306,20 +5306,31 @@ function renderStockRemanente(){
   const _norm=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .toUpperCase().replace(/["'”“]/g,'').replace(/[^A-Z0-9]+/g,' ').trim();
   const _maestro=((state.almacen&&state.almacen.productos)||[]).filter(p=>p&&Number(p.precio)>0);
+  // El STOCK se guarda en la unidad suelta (unidades; METROS en la mecha). Si el precio del
+  // maestro está por CAJA o por ROLLO hay que bajarlo a esa unidad, si no el importe se dispara.
+  const _esBulto=u=>/^(CAJ|CJA|CJ|BOX|ROLL|RLL|RL|MILL)/i.test(String(u||'').trim());
   const _precioDe=id=>{
     const c=(typeof exploGetCat==='function')?exploGetCat(id):null;
+    const bulto=(c&&c.id==='NEITHER')?((c.mPorRollo)||150):((c&&c.upCaja)||1);
     const nom=_norm(c&&c.nombre);
     if(nom){
       let p=_maestro.find(x=>_norm(x.nombre)===nom);
       if(!p){ const clave=nom.split(' ').slice(0,2).join(' ');
         if(clave.length>4) p=_maestro.find(x=>_norm(x.nombre).indexOf(clave)===0); }
-      if(p) return {precio:Number(p.precio)||0, de:'Productos', codigo:p.codigo||''};
+      if(p){
+        const porBulto=_esBulto(p.unidad);
+        return { precio:(Number(p.precio)||0)/(porBulto?bulto:1), de:'Productos',
+          codigo:p.codigo||'', base:porBulto?(c&&c.id==='NEITHER'?'por rollo':'por caja'):'por unidad',
+          precioOrig:Number(p.precio)||0, unidad:p.unidad||'' };
+      }
     }
-    return {precio:Number(_pxParam[id])||0, de:'Parámetros', codigo:''};
+    return {precio:Number(_pxParam[id])||0, de:'Parámetros', codigo:'', base:'por unidad',
+      precioOrig:Number(_pxParam[id])||0, unidad:''};
   };
-  const _pxE={}, _pxDe={}, _pxCod={};
+  const _pxE={}, _pxDe={}, _pxCod={}, _pxBase={}, _pxOrig={};
   ((typeof EXPLO_CATALOGO!=='undefined')?EXPLO_CATALOGO:[]).forEach(c=>{
     const r=_precioDe(c.id); _pxE[c.id]=r.precio; _pxDe[c.id]=r.de; _pxCod[c.id]=r.codigo;
+    _pxBase[c.id]=r.base; _pxOrig[c.id]=r.precioOrig;
   });
   const _S=n=>'S/ '+(Math.round((Number(n)||0)*100)/100).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2});
   // Cajas de una cantidad: la mecha rápida va en ROLLOS de 150 m, no en cajas de 10.
@@ -5327,6 +5338,8 @@ function renderStockRemanente(){
   const _cajas=(f,q)=>Math.floor((Number(q)||0)/_uCaja(f));
   const _sueltas=(f,q)=>Math.round(((Number(q)||0)%_uCaja(f))*100)/100;
   const _plata=(f,q)=>(Number(q)||0)*(Number(_pxE[f.id])||0);
+  const _uNom=(f,n)=>f.esMecha?('rollo'+(n!==1?'s':'')):('caja'+(n!==1?'s':''));
+  const _uCorta=f=>f.esMecha?'rll':'cj';
   const _lblCaja=(f,q)=>{ const c=_cajas(f,q), u=_sueltas(f,q);
     return f.esMecha?(c+' rollo'+(c!==1?'s':'')+(u?' + '+u+' m':'')):(c+' caja'+(c!==1?'s':'')+(u?' + '+u+' und':'')); };
 
@@ -5355,7 +5368,7 @@ function renderStockRemanente(){
   const sinPrecio=statsFilas.filter(f=>!f.precio).map(f=>f.nombre);
 
   const statsRows=statsFilas.length?statsFilas.map(f=>`<tr style="border-top:1px solid var(--border)">
-      <td style="padding:7px 8px;font-weight:600">${f.nombre}<br><span style="font-size:10px;color:var(--text3)">${f.esMecha?(_uCaja(f)+' m/rollo'):(f.upCaja+' und/caja')}${f.precio?' · '+_S(f.precio)+' c/u <span style="opacity:.7">('+(_pxDe[f.id]||'')+')</span>':''}</span></td>
+      <td style="padding:7px 8px;font-weight:600">${f.nombre}<br><span style="font-size:10px;color:var(--text3)">${f.esMecha?(_uCaja(f)+" m/rollo"):(f.upCaja+" und/caja")}${f.precio?' · '+_S(_pxOrig[f.id])+' '+(_pxBase[f.id]||'')+' <span style="opacity:.7">('+(_pxDe[f.id]||'')+')</span>':''}</span></td>
       <td style="padding:7px 8px;text-align:right;color:#22c55e;font-weight:800">${_cajas(f,f.egr)}</td>
       <td style="padding:7px 8px;color:var(--text3);font-size:11px;white-space:nowrap">${_lblCaja(f,f.egr)}<br>${fmtN(f.egr)} ${f.esMecha?'m':'und'}</td>
       <td style="padding:7px 8px;text-align:right;color:#22c55e;font-weight:700;font-family:'DM Mono',monospace">${_S(f.sEgr)}</td>
@@ -5366,10 +5379,10 @@ function renderStockRemanente(){
     </tr>`).join('')+`<tr style="border-top:2px solid var(--border);background:var(--coal4)">
       <td style="padding:8px;font-weight:800">TOTAL</td>
       <td style="padding:8px;text-align:right;font-weight:800;color:#22c55e">${totCajasEgr}</td>
-      <td style="padding:8px;color:var(--text3);font-size:11px">${fmtN(totEgr)} und</td>
+      <td style="padding:8px;color:var(--text3);font-size:11px">${fmtN(totEgr)} und/m</td>
       <td style="padding:8px;text-align:right;font-weight:800;color:#22c55e;font-family:'DM Mono',monospace">${_S(totSolesEgr)}</td>
       <td style="padding:8px;text-align:right;font-weight:800;color:#f87171">${totCajasSal}</td>
-      <td style="padding:8px;color:var(--text3);font-size:11px">${fmtN(totSal)} und</td>
+      <td style="padding:8px;color:var(--text3);font-size:11px">${fmtN(totSal)} und/m</td>
       <td style="padding:8px;text-align:right;font-weight:800;color:#f87171;font-family:'DM Mono',monospace">${_S(totSolesSal)}</td>
       <td style="padding:8px;text-align:right;font-weight:800;color:var(--gold-light);font-family:'DM Mono',monospace">${_S(totSolesEgr-totSolesSal)}</td>
     </tr>`
@@ -5419,21 +5432,21 @@ function renderStockRemanente(){
       <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:16px">
         <div class="kpi-card" style="padding:14px 16px">
           <div class="kpi-label" style="font-size:10px">Entró al remanente</div>
-          <div class="kpi-value" style="font-size:24px;color:#22c55e">${totCajasEgr} <span style="font-size:13px;font-weight:600">caja${totCajasEgr!==1?'s':''}</span></div>
+          <div class="kpi-value" style="font-size:24px;color:#22c55e">${totCajasEgr} <span style="font-size:13px;font-weight:600">cajas/rollos</span></div>
           <div style="font-size:15px;font-weight:800;color:#22c55e;font-family:'DM Mono',monospace;margin-top:2px">${_S(totSolesEgr)}</div>
-          <div style="font-size:10px;color:var(--text3);margin-top:3px">${fmtN(totEgr)} und en total</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:3px">${fmtN(totEgr)} und/m en total</div>
         </div>
         <div class="kpi-card" style="padding:14px 16px">
           <div class="kpi-label" style="font-size:10px">Salió del remanente</div>
-          <div class="kpi-value" style="font-size:24px;color:#f87171">${totCajasSal} <span style="font-size:13px;font-weight:600">caja${totCajasSal!==1?'s':''}</span></div>
+          <div class="kpi-value" style="font-size:24px;color:#f87171">${totCajasSal} <span style="font-size:13px;font-weight:600">cajas/rollos</span></div>
           <div style="font-size:15px;font-weight:800;color:#f87171;font-family:'DM Mono',monospace;margin-top:2px">${_S(totSolesSal)}</div>
-          <div style="font-size:10px;color:var(--text3);margin-top:3px">${fmtN(totSal)} und en total</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:3px">${fmtN(totSal)} und/m en total</div>
         </div>
         <div class="kpi-card" style="padding:14px 16px">
           <div class="kpi-label" style="font-size:10px">Diferencia del periodo</div>
-          <div class="kpi-value" style="font-size:24px;color:${(totCajasEgr-totCajasSal)>=0?'#60a5fa':'#f59e0b'}">${totCajasEgr-totCajasSal} <span style="font-size:13px;font-weight:600">caja${Math.abs(totCajasEgr-totCajasSal)!==1?'s':''}</span></div>
+          <div class="kpi-value" style="font-size:24px;color:${(totCajasEgr-totCajasSal)>=0?'#60a5fa':'#f59e0b'}">${totCajasEgr-totCajasSal} <span style="font-size:13px;font-weight:600">cajas/rollos</span></div>
           <div style="font-size:15px;font-weight:800;color:var(--gold-light);font-family:'DM Mono',monospace;margin-top:2px">${_S(totSolesEgr-totSolesSal)}</div>
-          <div style="font-size:10px;color:var(--text3);margin-top:3px">${fmtN(totEgr-totSal)} und · entró − salió</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:3px">${fmtN(totEgr-totSal)} und/m · entró − salió</div>
         </div>
       </div>
       ${sinPrecio.length?`<div style="font-size:10px;color:#f59e0b;margin:-6px 0 12px">⚠ Sin precio: ${sinPrecio.join(' · ')}. Dale de alta el producto con su precio en <b>Logística → Productos</b> (o ponlo en Parámetros) para que sume en soles.</div>`:''}
@@ -5457,24 +5470,26 @@ function renderStockRemanente(){
           <div style="position:relative;height:158px;margin:2px 0 6px"><canvas id="rem-dona-${i}"></canvas>
             <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;padding:0 6px;text-align:center">
               <div style="font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Quedó</div>
-              <div style="font-size:${_remMed==='soles'?'13':'16'}px;font-weight:800;color:#3987e5;font-family:'DM Mono',monospace;line-height:1.15;white-space:nowrap">${_remMed==='soles'?_S(f.sQueda):(f.cjQueda+' cj')}</div>
-              <div style="font-size:8px;color:var(--text3);white-space:nowrap">${_remMed==='soles'?(f.cjQueda+' cajas'):_S(f.sQueda)}</div>
+              <div style="font-size:${_remMed==='soles'?'13':'16'}px;font-weight:800;color:#3987e5;font-family:'DM Mono',monospace;line-height:1.15;white-space:nowrap">${_remMed==='soles'?_S(f.sQueda):(f.cjQueda+' '+_uCorta(f))}</div>
+              <div style="font-size:8px;color:var(--text3);white-space:nowrap">${_remMed==='soles'?(f.cjQueda+' '+_uNom(f,f.cjQueda)):_S(f.sQueda)}</div>
             </div>
           </div>
           <div style="display:flex;flex-direction:column;gap:3px;font-size:10px">
-            <div style="display:flex;justify-content:space-between"><span style="color:#199e70">↓ Entró</span><b style="color:var(--text2);font-family:'DM Mono',monospace">${_remMed==='soles'?_S(f.sEgr):(f.cjEgr+' cj')}</b></div>
-            <div style="display:flex;justify-content:space-between"><span style="color:#e66767">↑ Salió</span><b style="color:var(--text2);font-family:'DM Mono',monospace">${_remMed==='soles'?_S(f.sSal):(f.cjSal+' cj')}</b></div>
-            <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:3px"><span style="color:var(--text3)">Disponible</span><b style="color:var(--text2);font-family:'DM Mono',monospace">${_remMed==='soles'?_S(f.sDisp):(f.cjDisp+' cj')}</b></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:#199e70">↓ Entró</span><b style="color:var(--text2);font-family:'DM Mono',monospace">${_remMed==='soles'?_S(f.sEgr):(f.cjEgr+' '+_uCorta(f))}</b></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:#e66767">↑ Salió</span><b style="color:var(--text2);font-family:'DM Mono',monospace">${_remMed==='soles'?_S(f.sSal):(f.cjSal+' '+_uCorta(f))}</b></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:#3987e5">◼ Quedó (stock hoy)</span><b style="color:var(--text2);font-family:'DM Mono',monospace">${_remMed==='soles'?_S(f.sQueda):(f.cjQueda+' '+_uCorta(f))}</b></div>
+            <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:3px" title="Lo que hubo disponible en todo el ciclo = lo que quedó + lo que ya salió. NO es el stock de hoy."><span style="color:var(--text3)">Hubo en el ciclo</span><b style="color:var(--text3);font-family:'DM Mono',monospace">${_remMed==='soles'?_S(f.sDisp):(f.cjDisp+' '+_uCorta(f))}</b></div>
+            <div style="font-size:9px;color:var(--text3);text-align:right;line-height:1.3">${_lblCaja(f,f.queda)} en stock${f.precio?'<br>'+_S(_pxOrig[f.id])+' '+(_pxBase[f.id]||'')+' ('+(_pxDe[f.id]||'')+')':''}</div>
           </div>
         </div>`).join('')}
       </div>`:'<div style="color:var(--text3);font-size:12px;padding:14px 0">Sin movimientos ni stock que graficar en este ciclo.</div>'}
       <div class="table-wrap"><table style="width:100%;font-size:12px;border-collapse:collapse">
         <thead><tr style="color:var(--text3);text-align:left">
           <th style="padding:6px 8px">Explosivo</th>
-          <th style="padding:6px 8px;text-align:right">Cajas<br><span style="font-weight:400">entró</span></th>
+          <th style="padding:6px 8px;text-align:right">Cajas/rollos<br><span style="font-weight:400">entró</span></th>
           <th style="padding:6px 8px">Detalle</th>
           <th style="padding:6px 8px;text-align:right">S/ entró</th>
-          <th style="padding:6px 8px;text-align:right">Cajas<br><span style="font-weight:400">salió</span></th>
+          <th style="padding:6px 8px;text-align:right">Cajas/rollos<br><span style="font-weight:400">salió</span></th>
           <th style="padding:6px 8px">Detalle</th>
           <th style="padding:6px 8px;text-align:right">S/ salió</th>
           <th style="padding:6px 8px;text-align:right">Diferencia S/</th>
