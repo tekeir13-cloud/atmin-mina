@@ -5264,9 +5264,34 @@ function renderStockRemanente(){
   // Se cuentan las MISMAS fuentes que el historial de arriba: los egresos contables que reporta
   // el Compresorista (entradas al remanente) y las salidas que Logística entrega desde aquí.
   // Los egresos previos a la apertura NO cuentan (ya están dentro del saldo inicial).
-  const _egr={}, _sal={};
-  remEgresosContables().forEach(e=>{ _egr[e.codigo]=(_egr[e.codigo]||0)+(Number(e.cant)||0); });
-  (state.remanenteSalidas||[]).forEach(s=>{ _sal[s.producto]=(_sal[s.producto]||0)+(Number(s.cantidad)||0); });
+  // ── PERIODO DE LAS ESTADÍSTICAS (ciclo 26 → 25, como el resto de Logística) ──
+  // OJO: el STOCK de arriba NO se filtra — es acumulado y se arrastra de un ciclo a otro.
+  // Lo que se clasifica por periodo es el MOVIMIENTO: cuánto entró y cuánto salió en el mes.
+  const _remPer=(function(){
+    const set=new Set();
+    const add=f=>{ const d=String(f||'').slice(0,10); if(d.length===10&&typeof periodoDeFecha==='function') set.add(periodoDeFecha(d)); };
+    remEgresosContables().forEach(e=>add(e.fecha));
+    (state.remanenteSalidas||[]).forEach(x=>add(x.fecha));
+    (state.remanenteIngresos||[]).forEach(x=>add(x.fecha));
+    try{ set.add(periodoActual()); }catch(e){}
+    return [...set].filter(Boolean).sort().reverse();
+  })();
+  const _selPer=document.getElementById('rem-est-periodo');
+  let _remCiclo=(_selPer&&_selPer.value!==undefined)?_selPer.value:'';
+  if(_remCiclo===undefined||_remCiclo===null) _remCiclo='';
+  if(!_selPer||!_selPer.options.length){
+    try{ _remCiclo=periodoActual(); }catch(e){ _remCiclo=_remPer[0]||''; }
+  }
+  if(_remCiclo && _remCiclo!=='TODO' && !_remPer.includes(_remCiclo)) _remCiclo=_remPer[0]||'';
+  const _enCiclo=f=>_remCiclo==='TODO'||!_remCiclo||((typeof enVentana==='function')?enVentana(f,_remCiclo):String(f||'').slice(0,7)===_remCiclo);
+  const _vRem=(_remCiclo&&_remCiclo!=='TODO'&&typeof ventanaMes==='function')?ventanaMes(_remCiclo):null;
+
+  const _egr={}, _sal={}, _ingMan={};
+  remEgresosContables().forEach(e=>{ if(_enCiclo(e.fecha)) _egr[e.codigo]=(_egr[e.codigo]||0)+(Number(e.cant)||0); });
+  (state.remanenteIngresos||[]).forEach(i=>{ if(_enCiclo(i.fecha)) _ingMan[i.producto]=(_ingMan[i.producto]||0)+(Number(i.cantidad)||0); });
+  (state.remanenteSalidas||[]).forEach(s=>{ if(_enCiclo(s.fecha)) _sal[s.producto]=(_sal[s.producto]||0)+(Number(s.cantidad)||0); });
+  // El "ingreso al remanente" del periodo = lo que reporta el Compresorista + los ingresos manuales
+  Object.keys(_ingMan).forEach(k=>{ _egr[k]=(_egr[k]||0)+_ingMan[k]; });
   const statsFilas=cat.filter(c=>(_egr[c.id]||0)||(_sal[c.id]||0)).map(c=>({
     id:c.id, nombre:c.nombre, upCaja:c.upCaja, esMecha:c.id==='NEITHER',
     egr:_egr[c.id]||0, sal:_sal[c.id]||0
@@ -5333,7 +5358,7 @@ function renderStockRemanente(){
       <td style="padding:8px;text-align:right;font-weight:800;color:#f87171;font-family:'DM Mono',monospace">${_S(totSolesSal)}</td>
       <td style="padding:8px;text-align:right;font-weight:800;color:var(--gold-light);font-family:'DM Mono',monospace">${_S(totSolesEgr-totSolesSal)}</td>
     </tr>`
-    :`<tr><td colspan="8" style="padding:16px;text-align:center;color:var(--text3)">Todavía no hay egresos reportados ni salidas dadas.</td></tr>`;
+    :`<tr><td colspan="8" style="padding:16px;text-align:center;color:var(--text3)">Sin movimientos de remanente en este ciclo.</td></tr>`;
 
   cont.innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
@@ -5362,26 +5387,38 @@ function renderStockRemanente(){
     </div>
 
     <div style="background:var(--coal2);border:1px solid var(--border);border-radius:16px;padding:16px;margin-top:18px">
-      <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:4px">📊 Estadísticas del remanente</div>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:14px">Egreso reportado por el Compresorista (entra al remanente) vs salidas dadas desde aquí. Los egresos previos a la apertura no cuentan: ya están en el saldo inicial.</div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px">
+        <div style="font-size:13px;font-weight:800;color:var(--text)">📊 Estadísticas del remanente</div>
+        <div style="flex:1"></div>
+        <label style="font-size:10px;color:var(--text3)">Ciclo (26 → 25):</label>
+        <select id="rem-est-periodo" onchange="renderStockRemanente()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 9px;color:var(--text);font-size:12px">
+          ${_remPer.map(p=>`<option value="${p}" ${p===_remCiclo?'selected':''}>${(typeof periodoLabel==='function')?periodoLabel(p):p}</option>`).join('')}
+          <option value="TODO" ${_remCiclo==='TODO'?'selected':''}>— Todo el historial —</option>
+        </select>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:14px">
+        Movimiento ${_remCiclo==='TODO'?'de <b style="color:var(--text2)">todo el historial</b>':('del ciclo <b style="color:var(--text2)">'+(_vRem?(_vRem.ini+' → '+_vRem.fin):_remCiclo)+'</b>')}:
+        lo que <b style="color:#22c55e">entró</b> (egreso reportado por el Compresorista + ingresos manuales) y lo que <b style="color:#f87171">salió</b>.
+        <br>El <b>stock de arriba no se filtra</b>: es acumulado y se arrastra de un ciclo al siguiente.
+      </div>
       <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:16px">
         <div class="kpi-card" style="padding:14px 16px">
-          <div class="kpi-label" style="font-size:10px">Total egreso reportado</div>
+          <div class="kpi-label" style="font-size:10px">Entró al remanente</div>
           <div class="kpi-value" style="font-size:24px;color:#22c55e">${totCajasEgr} <span style="font-size:13px;font-weight:600">caja${totCajasEgr!==1?'s':''}</span></div>
           <div style="font-size:15px;font-weight:800;color:#22c55e;font-family:'DM Mono',monospace;margin-top:2px">${_S(totSolesEgr)}</div>
           <div style="font-size:10px;color:var(--text3);margin-top:3px">${fmtN(totEgr)} und en total</div>
         </div>
         <div class="kpi-card" style="padding:14px 16px">
-          <div class="kpi-label" style="font-size:10px">Total de salidas</div>
+          <div class="kpi-label" style="font-size:10px">Salió del remanente</div>
           <div class="kpi-value" style="font-size:24px;color:#f87171">${totCajasSal} <span style="font-size:13px;font-weight:600">caja${totCajasSal!==1?'s':''}</span></div>
           <div style="font-size:15px;font-weight:800;color:#f87171;font-family:'DM Mono',monospace;margin-top:2px">${_S(totSolesSal)}</div>
           <div style="font-size:10px;color:var(--text3);margin-top:3px">${fmtN(totSal)} und en total</div>
         </div>
         <div class="kpi-card" style="padding:14px 16px">
-          <div class="kpi-label" style="font-size:10px">Diferencia — queda en remanente</div>
+          <div class="kpi-label" style="font-size:10px">Diferencia del periodo</div>
           <div class="kpi-value" style="font-size:24px;color:${(totCajasEgr-totCajasSal)>=0?'#60a5fa':'#f59e0b'}">${totCajasEgr-totCajasSal} <span style="font-size:13px;font-weight:600">caja${Math.abs(totCajasEgr-totCajasSal)!==1?'s':''}</span></div>
           <div style="font-size:15px;font-weight:800;color:var(--gold-light);font-family:'DM Mono',monospace;margin-top:2px">${_S(totSolesEgr-totSolesSal)}</div>
-          <div style="font-size:10px;color:var(--text3);margin-top:3px">${fmtN(totEgr-totSal)} und · reportado − entregado</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:3px">${fmtN(totEgr-totSal)} und · entró − salió</div>
         </div>
       </div>
       ${sinPrecio.length?`<div style="font-size:10px;color:#f59e0b;margin:-6px 0 12px">⚠ Sin precio: ${sinPrecio.join(' · ')}. Dale de alta el producto con su precio en <b>Logística → Productos</b> (o ponlo en Parámetros) para que sume en soles.</div>`:''}
@@ -5389,12 +5426,12 @@ function renderStockRemanente(){
       <div class="table-wrap"><table style="width:100%;font-size:12px;border-collapse:collapse">
         <thead><tr style="color:var(--text3);text-align:left">
           <th style="padding:6px 8px">Explosivo</th>
-          <th style="padding:6px 8px;text-align:right">Cajas<br><span style="font-weight:400">egreso</span></th>
+          <th style="padding:6px 8px;text-align:right">Cajas<br><span style="font-weight:400">entró</span></th>
           <th style="padding:6px 8px">Detalle</th>
-          <th style="padding:6px 8px;text-align:right">S/ egreso</th>
-          <th style="padding:6px 8px;text-align:right">Cajas<br><span style="font-weight:400">salidas</span></th>
+          <th style="padding:6px 8px;text-align:right">S/ entró</th>
+          <th style="padding:6px 8px;text-align:right">Cajas<br><span style="font-weight:400">salió</span></th>
           <th style="padding:6px 8px">Detalle</th>
-          <th style="padding:6px 8px;text-align:right">S/ salidas</th>
+          <th style="padding:6px 8px;text-align:right">S/ salió</th>
           <th style="padding:6px 8px;text-align:right">Diferencia S/</th>
         </tr></thead>
         <tbody>${statsRows}</tbody>
@@ -5413,8 +5450,8 @@ function renderStockRemanente(){
     window._remChart=new Chart(cv.getContext('2d'),{
       type:'bar',
       data:{labels:statsFilas.map(etiq),datasets:[
-        {label:'Egreso reportado por compresorista',data:statsFilas.map(f=>f.cjEgr),backgroundColor:'rgba(34,197,94,0.75)',borderRadius:3},
-        {label:'Salidas dadas',data:statsFilas.map(f=>f.cjSal),backgroundColor:'rgba(248,113,113,0.75)',borderRadius:3}]},
+        {label:'Entró al remanente',data:statsFilas.map(f=>f.cjEgr),backgroundColor:'rgba(34,197,94,0.75)',borderRadius:3},
+        {label:'Salió del remanente',data:statsFilas.map(f=>f.cjSal),backgroundColor:'rgba(248,113,113,0.75)',borderRadius:3}]},
       options:{responsive:true,maintainAspectRatio:false,
         plugins:{legend:{labels:{color:'#9aa4b2',boxWidth:12,font:{size:11}}},
           tooltip:{callbacks:{label:c=>{ const f=statsFilas[c.dataIndex];
