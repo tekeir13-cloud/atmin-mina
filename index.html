@@ -2811,7 +2811,7 @@ select option{background:var(--coal3);}
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
       <div style="font-size:13px;font-weight:700;color:var(--text2)">Tareos archivados por turno</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <select id="hist-mes" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:7px 12px;color:var(--text);font-size:12px" onchange="renderTareas()">
+        <select id="hist-mes" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:7px 12px;color:var(--text);font-size:12px" onchange="this.dataset.tocado='1';renderTareas()">
           <option value="">— Todos los meses —</option>
         </select>
       </div>
@@ -2871,8 +2871,11 @@ select option{background:var(--coal3);}
     <span id="total-personal" style="display:none">0</span>
     <!-- Sección de bajas -->
     <div id="baja-section" style="display:none;margin-top:18px">
-      <div style="font-size:12px;color:#f87171;font-weight:700;margin-bottom:8px;padding:6px 12px;background:rgba(239,68,68,0.1);border-radius:6px;border:1px solid rgba(239,68,68,0.25)">
-        Trabajadores dados de baja — <span id="baja-count">0</span>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;padding:8px 12px;background:rgba(239,68,68,0.1);border-radius:6px;border:1px solid rgba(239,68,68,0.25)">
+        <div style="font-size:12px;color:#f87171;font-weight:700">Trabajadores dados de baja — <span id="baja-count">0</span></div>
+        <span style="font-size:10px;color:var(--text3)">Ya no aparecen en el tareo, la asistencia ni la planilla. Se conservan aquí para que el historial siga mostrando su nombre.</span>
+        <div style="flex:1"></div>
+        <button class="btn btn-outline" style="padding:5px 12px;font-size:11px;border-color:#f87171;color:#f87171" onclick="purgarPersonalBaja()" title="Los borra definitivamente del listado de personal">🗑 Eliminar del listado</button>
       </div>
       <div class="table-wrap">
         <table id="tabla-bajas" style="width:100%;border-collapse:collapse">
@@ -12038,13 +12041,28 @@ function seedTareoDemo(){
 }
 
 function renderTareas(){
+  // EL HISTORIAL ABRE EN EL MES EN CURSO, NO EN "todos los meses".
+  // Los tareos son de MES CALENDARIO: al empezar un mes nuevo su historial arranca vacío y el
+  // mes anterior queda archivado, a un clic en el selector. Antes abría mezclando todos los
+  // meses y parecía que la planilla del mes pasado seguía viva en el mes nuevo.
   const hMes=document.getElementById('hist-mes');
-  const meses=[...new Set(state.tareas.map(t=>t.fecha.slice(0,7)))].sort().reverse();
+  const _mesLbl=m=>{ const [a,b]=String(m).split('-'); const N=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre'];
+    return (N[parseInt(b,10)-1]||b)+' '+a; };
+  const mesHoy=hoy().slice(0,7);
+  const hojasPorMes={};
+  (state.tareas||[]).forEach(t=>{ const m=String(t.fecha||'').slice(0,7); if(m.length!==7) return;
+    (hojasPorMes[m]=hojasPorMes[m]||new Set()).add(t.fecha+'__'+(t.turno||'DIA')); });
+  const meses=[...new Set([...Object.keys(hojasPorMes), mesHoy])].sort().reverse();
   if(hMes){
-    const prev=hMes.value;
-    hMes.innerHTML='<option value="">— Todos los meses —</option>'+meses.map(m=>`<option value="${m}"${m===prev?' selected':''}>${m}</option>`).join('');
+    const prev=hMes.dataset.tocado==='1'?hMes.value:null;   // solo se respeta si el usuario lo cambió
+    hMes.innerHTML=meses.map(m=>{
+      const n=(hojasPorMes[m]||new Set()).size;
+      const arch=(typeof mesTareoArchivado==='function')&&mesTareoArchivado(m);
+      return `<option value="${m}">${_mesLbl(m)}${n?(' · '+n+' hoja'+(n!==1?'s':'')):' · sin tareos'}${arch?' 🔒 archivado':''}</option>`;
+    }).join('')+'<option value="">— Todos los meses —</option>';
+    hMes.value=(prev!==null&&[...hMes.options].some(o=>o.value===prev))?prev:mesHoy;
   }
-  const filtMes=hMes?hMes.value:'';
+  const filtMes=hMes?hMes.value:mesHoy;
   // Agrupar tareas por fecha+turno para formar "hojas de tareo"
   const hojas={};
   state.tareas.forEach(t=>{
@@ -12055,7 +12073,15 @@ function renderTareas(){
   });
   const hojasArr=Object.values(hojas).sort((a,b)=>b.fecha.localeCompare(a.fecha)||(a.turno<b.turno?-1:1));
   const cont=document.getElementById('tareos-archivados');if(!cont)return;
-  if(!hojasArr.length){cont.innerHTML='<div style="text-align:center;color:var(--text3);padding:40px;font-size:13px">Sin tareos registrados</div>';return;}
+  if(!hojasArr.length){
+    const otros=meses.filter(m=>m!==filtMes && (hojasPorMes[m]||new Set()).size);
+    const sug=otros.length?('<div style="font-size:12px;color:var(--text3);margin-top:8px">Archivado: '+
+      otros.slice(0,4).map(m=>'<b style="color:var(--text2)">'+_mesLbl(m)+'</b> ('+(hojasPorMes[m]||new Set()).size+')').join(' · ')+
+      '<br>Elígelo en el selector de arriba para verlo.</div>'):'';
+    cont.innerHTML='<div style="text-align:center;color:var(--text3);padding:34px 20px;font-size:13px">'+
+      (filtMes?('Sin tareos en <b style="color:var(--text2)">'+_mesLbl(filtMes)+'</b> — el mes recién empieza.'):'Sin tareos registrados')+
+      sug+'</div>';
+    return;}
   cont.innerHTML=hojasArr.map((h,hi)=>{
     const total=h.tareas.reduce((s,t)=>{const p=state.personal.find(x=>String(x.id)===String(t.trabajadorId));return s+((t.jornal??p?.jornal??0)*(t.mult||1));},0);
     const key=`${h.fecha}__${h.turno}`;
@@ -12184,6 +12210,25 @@ async function registrarTarea(){
   // legacy — no-op, sistema ahora usa guardarTareo()
 }
 
+// Elimina definitivamente del listado a los trabajadores dados de baja. No toca los tareos ya
+// registrados: esos guardan el nombre y el jornal del día, así que el historial y los costos de
+// meses anteriores no cambian. Solo deja de aparecer gente que ya no trabaja.
+function purgarPersonalBaja(){
+  const bajas=(state.personal||[]).filter(p=>p&&(p.estado==='baja'||p.estado==='inactivo'));
+  if(!bajas.length){ showNotif('No hay personal de baja','warn'); return; }
+  const conTareos=bajas.filter(p=>(state.tareas||[]).some(t=>String(t.trabajadorId)===String(p.id))).length;
+  if(!confirm('¿Eliminar del listado a '+bajas.length+' trabajador'+(bajas.length!==1?'es':'')+' dado'+(bajas.length!==1?'s':'')+' de baja?\n\n'+
+    bajas.slice(0,10).map(p=>'· '+p.nombre).join('\n')+(bajas.length>10?'\n· …y '+(bajas.length-10)+' más':'')+
+    '\n\nLos tareos ya registrados NO se tocan'+(conTareos?' ('+conTareos+' tiene'+(conTareos!==1?'n':'')+' tareos guardados)':'')+': el historial sigue mostrando su nombre y su pago.')) return;
+  const ids=new Set(bajas.map(p=>String(p.id)));
+  state.personal=(state.personal||[]).filter(p=>!ids.has(String(p.id)));
+  try{ localStorage.setItem(PERSONAL_KEY,JSON.stringify(state.personal)); }catch(e){}
+  try{ sbSyncModulo('personal', state.personal); }catch(e){}
+  try{ bajas.forEach(p=>{ if(typeof tombAdd==='function') tombAdd(p.id); }); }catch(e){}
+  renderPersonal();
+  try{ if(typeof renderTareoMensual==='function') renderTareoMensual(); }catch(e){}
+  showNotif('🗑 '+bajas.length+' trabajador'+(bajas.length!==1?'es':'')+' eliminado'+(bajas.length!==1?'s':'')+' del listado');
+}
 function renderPersonal(){
   const activos=state.personal.filter(p=>p.estado!=='baja');
   const bajas=state.personal.filter(p=>p.estado==='baja');
