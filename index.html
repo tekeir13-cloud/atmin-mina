@@ -2971,6 +2971,7 @@ select option{background:var(--coal3);}
     <div id="val-selector" style="margin-bottom:14px;display:none">
       <label style="font-size:12px;color:var(--text3);margin-right:8px">Periodo:</label>
       <select id="val-periodo" onchange="renderValorizacionOp()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:13px"></select>
+      <span id="val-vinculo" style="margin-left:10px;font-size:11px"></span>
     </div>
     <div id="val-anio-selector" style="margin-bottom:14px;display:none">
       <label style="font-size:12px;color:var(--text3);margin-right:8px">Año:</label>
@@ -3106,6 +3107,7 @@ select option{background:var(--coal3);}
     <button class="mod-tab" onclick="modTab('fin','ingmaq',this);renderFinIngresosMaq()">🚧 Ingresos x Máq.</button>
   </div>
   <div id="fin-dashboard" class="mod-pane active" style="display:block"></div>
+  <template id="tpl-fin-mes"></template>
   <div id="fin-informe" class="mod-pane" style="display:none"></div>
   <div id="fin-costocentro" class="mod-pane" style="display:none"></div>
   <div id="fin-ingmaq" class="mod-pane" style="display:none"></div>
@@ -14682,6 +14684,42 @@ function guardarValorizacion(){
   alert(`✓ Reporte guardado correctamente\n\nValorización de ${v.periodo||v.titulo}\nTotal: S/ ${Math.round(v.total||0).toLocaleString('es-PE')}\n\nQuedó vinculada al dashboard de forma permanente. No necesitas volver a subirla.`);
 }
 
+// ── VÍNCULO VALORIZACIÓN → INGRESO DEL MES ────────────────────────────────────
+// El ingreso sale de la valorización, y esta se ata a un mes por el AÑO y el MES que se leen
+// del título del Excel ("VALORIZACIÓN JULIO 2026"). Si el título no los trae, la valorización
+// queda importada pero sin mes, y el ingreso no aparece en ningún lado. Aquí se ve a qué mes
+// está atada y, si hace falta, se le asigna a mano.
+function valPintarVinculo(v){
+  const el=document.getElementById('val-vinculo'); if(!el) return;
+  if(!v){ el.innerHTML=''; return; }
+  const N=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre'];
+  const anioAct=Number(String(hoy()).slice(0,4));
+  const anios=[anioAct-1,anioAct,anioAct+1];
+  const opts=['<option value="">— sin asignar —</option>']
+    .concat(anios.flatMap(a=>N.map((n,i)=>{
+      const val=a+'-'+String(i+1).padStart(2,'0');
+      const sel=(v.anio===a&&v.mesNum===i+1)?' selected':'';
+      return `<option value="${val}"${sel}>${n} ${a}</option>`;
+    }))).join('');
+  const atada=!!(v.mesNum&&v.anio);
+  el.innerHTML=`<span style="color:${atada?'#22d3a5':'#f59e0b'};font-weight:700">${atada?'✓ Ingreso de '+N[v.mesNum-1]+' '+v.anio:'⚠ Sin mes asignado — el ingreso no se está contando'}</span>
+    <label style="color:var(--text3);margin-left:10px">Contar como ingreso de:</label>
+    <select onchange="valAsignarMes('${v.id}',this.value)" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 9px;color:var(--text);font-size:12px;margin-left:5px">${opts}</select>`;
+}
+function valAsignarMes(id,ym){
+  const v=(state.valorizacionesLabor||[]).find(x=>x.id===id); if(!v) return;
+  if(!ym){ v.mesNum=0; v.anio=0; }
+  else{ const [a,m]=ym.split('-').map(Number); v.anio=a; v.mesNum=m;
+    const N=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre'];
+    v.periodo=N[m-1]+' '+a; }
+  valLaborSave();
+  try{ _ejecMes = (v.mesNum&&v.anio) ? (v.anio+'-'+String(v.mesNum).padStart(2,'0')) : null; }catch(e){}
+  try{ _finMesSel = _ejecMes; }catch(e){}
+  renderValorizacionOp(id);
+  try{ renderDashboard(); }catch(e){}
+  try{ if(typeof renderFinDashboard==='function' && document.getElementById('fin-dashboard')) renderFinDashboard(); }catch(e){}
+  showNotif(ym?('✓ Valorización contada como ingreso de '+v.periodo+' · '+fmtS(v.total||0)):'Valorización sin mes asignado','ok');
+}
 function renderValorizacionOp(forceId){
   if(_valView==='anual')return renderValorizacionAnual();
   valLaborLoad();
@@ -14715,6 +14753,7 @@ function renderValorizacionOp(forceId){
   const curId=forceId||(sel&&sel.value)||ordenadas[0].id;
   sel.innerHTML=ordenadas.map(v=>`<option value="${v.id}" ${v.id===curId?'selected':''}>${v.periodo||v.titulo}</option>`).join('');
   const v=lista.find(x=>x.id===curId)||ordenadas[0];
+  try{ valPintarVinculo(v); }catch(e){}
 
   // ── Agregaciones ──
   const rubro={},labor={},avanceFrente={};
@@ -19680,8 +19719,25 @@ function finNombreMes(ym){
   return nombres[parseInt(m)-1]+' '+y;
 }
 
+// Mes que mira Finanzas. Por defecto el mismo que el panel ejecutivo: si el periodo en curso
+// todavía no tiene valorización, se muestra el último mes que sí la tiene, para que el ingreso
+// recién subido se vea sin tener que ir a buscarlo.
+let _finMesSel=null;
+function finMesVista(){
+  if(_finMesSel) return _finMesSel;
+  try{ if(typeof ejecMesActual==='function') return ejecMesActual(); }catch(e){}
+  return finMesActual();
+}
+function finCambiarMesVista(v){ _finMesSel=v||null; try{ renderFinDashboard(); }catch(e){} }
+function finMesesConDatos(){
+  const set=new Set();
+  (state.valorizacionesLabor||[]).forEach(v=>{ if(v.mesNum&&v.anio) set.add(v.anio+'-'+String(v.mesNum).padStart(2,'0')); });
+  try{ set.add(finMesActual()); }catch(e){}
+  try{ set.add(finMesVista()); }catch(e){}
+  return [...set].filter(Boolean).sort().reverse();
+}
 function renderFinDashboard(){
-  const mes=finMesActual();
+  const mes=finMesVista();
   const val=finValorizacionMes(mes);
   const desglose=finDesgloseGastos(mes);
   const costoTot=desglose.reduce((s,c)=>s+c.monto,0);
@@ -19729,6 +19785,13 @@ function renderFinDashboard(){
 
   const el=document.getElementById('fin-dashboard');
   el.innerHTML=`
+    <div class="card" style="margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+      <label style="font-size:11px;color:var(--text3)">Mes:</label>
+      <select onchange="finCambiarMesVista(this.value)" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px">
+        ${finMesesConDatos().map(m=>`<option value="${m}" ${m===mes?'selected':''}>${(typeof finNombreMes==='function')?finNombreMes(m):m}${finValorizacionMes(m).total>0?' · con valorización':''}</option>`).join('')}
+      </select>
+      <span style="font-size:11px;color:var(--text3)">${val.total>0?('Ingreso de '+((typeof finNombreMes==='function')?finNombreMes(mes):mes)+': <b style="color:#22d3a5">'+S(val.total)+'</b>'):'⚠ Este mes aún no tiene valorización cargada.'}</span>
+    </div>
 <div style="padding:16px">
   <div style="display:flex;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap">
     <h3 style="margin:0;color:var(--text)">Dashboard Financiero — ${finNombreMes(mes)}</h3>
