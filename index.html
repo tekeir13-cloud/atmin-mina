@@ -3587,6 +3587,7 @@ select option{background:var(--coal3);}
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
       <button class="btn btn-gold" onclick="cmpAbrirFactura()">+ Registrar Factura</button>
       <button class="btn btn-outline" style="border-color:#22d3a5;color:#22d3a5" onclick="document.getElementById('cmp-foto-input').click()" title="Lee el documento y autorrellena RUC, proveedor, fecha, producto y montos. El archivo no se guarda.">📷 Leer Factura (foto o PDF)</button>
+      <button class="btn btn-outline" style="border-color:#f59e0b;color:#f59e0b" onclick="cmpAbrirRendicion()" title="Gastos sin factura: taxi, movilidad, peaje, encomienda, refrigerio…">🧾 Rendición de gasto</button>
       <input type="file" id="cmp-foto-input" accept="image/*,application/pdf,.pdf" style="display:none" onchange="cmpLeerFoto(this)">
       <span style="font-size:10px;color:var(--text3);max-width:320px;line-height:1.35">Se lee <b>en esta computadora</b>: del texto del PDF, o del código QR si es una foto. El documento no sale de aquí <b>ni se archiva</b> — solo quedan los datos y el Excel.</span>
       <div style="flex:1"></div>
@@ -3633,6 +3634,49 @@ select option{background:var(--coal3);}
 </div>
 
 <!-- ════ MODAL: FACTURA ════ -->
+<!-- ════ MODAL: RENDICIÓN DE GASTO (sin factura) ════ -->
+<div class="modal-overlay" id="modal-cmp-rendicion" onclick="if(event.target===this)cerrarModal('modal-cmp-rendicion')">
+  <div class="modal" style="width:min(560px,96vw);max-height:92vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div class="modal-title" style="margin-bottom:0;color:#f59e0b" id="cmp-rend-titulo">🧾 Rendición de gasto</div>
+      <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-cmp-rendicion')">✕</button>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:14px">Gastos sin factura: taxi, movilidad, peaje, encomienda, refrigerio… Se guardan en la carpeta del mes según su fecha, igual que las facturas.</div>
+    <input type="hidden" id="cmpr-id">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div class="form-group" style="margin:0"><label>Fecha del gasto</label><input type="date" id="cmpr-fecha"></div>
+      <div class="form-group" style="margin:0"><label>Tipo de gasto</label>
+        <select id="cmpr-tipo" style="width:100%">
+          <option>Taxi / movilidad</option><option>Peaje</option><option>Encomienda / envío</option>
+          <option>Refrigerio / alimentación</option><option>Combustible menor</option>
+          <option>Materiales menores</option><option>Trámite / documentos</option><option>Otros</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px"><label>¿En qué se gastó?</label>
+      <input type="text" id="cmpr-detalle" placeholder="Ej: Taxi de Pataz a la mina para traer repuestos"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div class="form-group" style="margin:0"><label>Quién gastó</label><input type="text" id="cmpr-responsable" placeholder="Nombre"></div>
+      <div class="form-group" style="margin:0"><label>Monto (S/)</label>
+        <input type="number" id="cmpr-monto" min="0" step="0.01" placeholder="0.00"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px">
+      <div class="form-group" style="margin:0"><label>N° de comprobante <span style="color:var(--text3);font-weight:400">(opcional)</span></label>
+        <input type="text" id="cmpr-numero" placeholder="Boleta, ticket…"></div>
+      <div class="form-group" style="margin:0"><label>RUC del proveedor <span style="color:var(--text3);font-weight:400">(opcional)</span></label>
+        <input type="text" id="cmpr-ruc" placeholder="11 dígitos"></div>
+    </div>
+    <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:7px;cursor:pointer;margin-bottom:14px">
+      <input type="checkbox" id="cmpr-conigv" onchange="cmpRendPreview()"> El monto ya incluye IGV (18%) — desglosarlo
+    </label>
+    <div id="cmpr-preview" style="font-size:11px;color:var(--text3);background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;margin-bottom:14px"></div>
+    <div class="btn-row">
+      <button class="btn btn-gold" onclick="cmpGuardarRendicion()">✓ Guardar Rendición</button>
+      <button class="btn btn-outline" onclick="cerrarModal('modal-cmp-rendicion')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-cmp-factura" onclick="if(event.target===this)cerrarModal('modal-cmp-factura')">
   <div class="modal" style="width:min(680px,95vw)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
@@ -22046,9 +22090,81 @@ function cmpGuardarFactura(){
   renderComprasFacturas();
   showNotif('✓ Factura registrada: '+proveedor+' · '+cmpMoney(conIgv));
 }
+// ═══════════════════════════════════════════════════════════════════════════
+// RENDICIÓN DE GASTO (gastos sin factura: taxi, peaje, encomienda…)
+// Se guarda en la MISMA lista que las facturas, marcada con tipo:'rendicion'. Así entra sola
+// en la carpeta del mes que le toca por su FECHA, en el informe, en el balance y en el Excel,
+// sin duplicar lógica ni inventar otro almacenamiento que se pueda desincronizar.
+// Por defecto el monto va SIN IGV (un taxi no lo tiene); si el gasto sí lo incluye se marca la
+// casilla y se desglosa igual que en una factura.
+// ═══════════════════════════════════════════════════════════════════════════
+function cmpAbrirRendicion(datos){
+  const g=id=>document.getElementById(id);
+  const d=datos||{};
+  g('cmpr-id').value=d.id||'';
+  g('cmp-rend-titulo').textContent=d.id?'🧾 Editar rendición':'🧾 Rendición de gasto';
+  g('cmpr-fecha').value=d.fecha||hoy();
+  g('cmpr-tipo').value=d.categoria||'Taxi / movilidad';
+  g('cmpr-detalle').value=d.producto||'';
+  g('cmpr-responsable').value=d.proveedor||'';
+  g('cmpr-monto').value=(d.conIgv!=null&&d.conIgv!=='')?d.conIgv:'';
+  g('cmpr-numero').value=d.numero||'';
+  g('cmpr-ruc').value=d.ruc||'';
+  g('cmpr-conigv').checked=!!(Number(d.igv)>0);
+  cmpRendPreview();
+  abrirModal('modal-cmp-rendicion');
+}
+function cmpRendPreview(){
+  const g=id=>document.getElementById(id);
+  const w=g('cmpr-preview'); if(!w) return;
+  const monto=parseFloat(g('cmpr-monto').value)||0;
+  const fecha=g('cmpr-fecha').value||hoy();
+  const carpeta=cmpMesLabel(cmpMesDe(fecha));
+  if(monto<=0){ w.innerHTML='Se guardará en la carpeta <b style="color:var(--text2)">'+carpeta+'</b>, según la fecha del gasto.'; return; }
+  if(g('cmpr-conigv').checked){
+    const sin=Math.round((monto/(1+CMP_IGV))*100)/100, igv=Math.round((monto-sin)*100)/100;
+    w.innerHTML='Base '+cmpMoney(sin)+' + IGV '+cmpMoney(igv)+' = <b style="color:var(--gold-light)">'+cmpMoney(monto)+'</b><br>Carpeta: <b style="color:var(--text2)">'+carpeta+'</b>';
+  }else{
+    w.innerHTML='Sin IGV · total <b style="color:var(--gold-light)">'+cmpMoney(monto)+'</b><br>Carpeta: <b style="color:var(--text2)">'+carpeta+'</b>';
+  }
+}
+function cmpGuardarRendicion(){
+  const g=id=>document.getElementById(id);
+  const fecha=g('cmpr-fecha').value||hoy();
+  const detalle=g('cmpr-detalle').value.trim();
+  const resp=g('cmpr-responsable').value.trim();
+  const monto=parseFloat(g('cmpr-monto').value)||0;
+  if(!detalle){ showNotif('⚠ Escribe en qué se gastó','error'); return; }
+  if(monto<=0){ showNotif('⚠ El monto debe ser mayor a 0','error'); return; }
+  const mes=cmpMesDe(fecha);
+  // Un mes ya cerrado y bloqueado no admite gastos nuevos: su cuadro está congelado.
+  if(typeof cmpBloqueado==='function' && cmpBloqueado(mes)){
+    showNotif('🔒 '+cmpMesLabel(mes)+' ya está cerrado: no admite gastos nuevos','error'); return;
+  }
+  comprasNorm();
+  const conIgv=Math.round(monto*100)/100;
+  const llevaIgv=g('cmpr-conigv').checked;
+  const sinIgv=llevaIgv?Math.round((conIgv/(1+CMP_IGV))*100)/100:conIgv;
+  const igv=llevaIgv?Math.round((conIgv-sinIgv)*100)/100:0;
+  const id=g('cmpr-id').value||('RG'+Date.now()+Math.random().toString(36).slice(2,7));
+  const cat=g('cmpr-tipo').value||'Otros';
+  const reg={ id, _ts:Date.now(), tipo:'rendicion', categoria:cat, fecha,
+    numero:g('cmpr-numero').value.trim(), ruc:g('cmpr-ruc').value.trim().replace(/\D/g,''),
+    proveedor:resp||('Rendición · '+cat), producto:detalle,
+    sinIgv, igv, conIgv, leidoDe:'rendicion', items:[] };
+  const i=state.compras.facturas.findIndex(f=>f.id===id);
+  if(i>=0) state.compras.facturas[i]={...state.compras.facturas[i],...reg}; else state.compras.facturas.push(reg);
+  comprasSave();
+  cerrarModal('modal-cmp-rendicion');
+  // Saltar a la carpeta/mes del gasto para que se vea dónde quedó guardado
+  const sel=document.getElementById('cmp-periodo');
+  if(sel){ if(![...sel.options].some(o=>o.value===mes)) sel.innerHTML+=`<option value="${mes}">${cmpMesLabel(mes)}</option>`; sel.value=mes; }
+  renderComprasFacturas();
+  showNotif('✓ Rendición guardada en '+cmpMesLabel(mes)+' · '+cmpMoney(conIgv));
+}
 function cmpEditarFactura(id){
   const f=comprasNorm().facturas.find(x=>x.id===id); if(!f) return;
-  cmpAbrirFactura(f);
+  if(f.tipo==='rendicion') cmpAbrirRendicion(f); else cmpAbrirFactura(f);
 }
 function cmpEliminarFactura(id){
   const f=comprasNorm().facturas.find(x=>x.id===id); if(!f) return;
@@ -22627,7 +22743,8 @@ function renderComprasFacturas(){
       <div class="kpi-card" style="padding:12px 14px"><div class="kpi-label" style="font-size:10px">Total con IGV</div><div class="kpi-value" style="font-size:20px;color:var(--gold-light)">${cmpMoney(totCon)}</div></div>
       <div class="kpi-card" style="padding:12px 14px"><div class="kpi-label" style="font-size:10px">Total sin IGV</div><div class="kpi-value" style="font-size:20px;color:#60a5fa">${cmpMoney(totSin)}</div></div>
       <div class="kpi-card" style="padding:12px 14px"><div class="kpi-label" style="font-size:10px">IGV</div><div class="kpi-value" style="font-size:20px;color:#a855f7">${cmpMoney(totIgv)}</div></div>
-      <div class="kpi-card" style="padding:12px 14px"><div class="kpi-label" style="font-size:10px">Facturas · Proveedores</div><div class="kpi-value" style="font-size:20px;color:#22d3a5">${fs.length} · ${prov}</div></div>
+      <div class="kpi-card" style="padding:12px 14px"><div class="kpi-label" style="font-size:10px">Facturas · Proveedores</div><div class="kpi-value" style="font-size:20px;color:#22d3a5">${fs.filter(f=>f.tipo!=='rendicion').length} · ${prov}</div></div>
+      <div class="kpi-card" style="padding:12px 14px"><div class="kpi-label" style="font-size:10px">Rendiciones de gasto</div><div class="kpi-value" style="font-size:20px;color:#f59e0b">${cmpMoney(fs.filter(f=>f.tipo==='rendicion').reduce((s2,f)=>s2+(Number(f.conIgv)||0),0))}</div><div style="font-size:10px;color:var(--text3);margin-top:2px">${fs.filter(f=>f.tipo==='rendicion').length} gasto${fs.filter(f=>f.tipo==='rendicion').length!==1?'s':''} sin factura</div></div>
     </div>`;
   const w=document.getElementById('cmp-fact-wrap'); if(!w) return;
   if(!fs.length){ w.innerHTML='<div style="text-align:center;color:var(--text3);padding:28px">Sin facturas en este ciclo. Usa <b>Leer Factura (foto o PDF)</b> o <b>Registrar Factura</b>.</div>'; return; }
@@ -22647,7 +22764,7 @@ function renderComprasFacturas(){
       <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace">${cmpMoney(f.sinIgv)}</td>
       <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;color:#a855f7">${cmpMoney(f.igv)}</td>
       <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;color:var(--gold-light);font-weight:700">${cmpMoney(f.conIgv)}</td>
-      <td style="padding:7px 8px;text-align:center;font-size:11px;color:var(--text3)" title="${f.leidoDe?'Los datos se leyeron automáticamente del documento; el archivo no se guarda':'Registrada a mano'}">${f.leidoDe==='pdf'?'📄 PDF':(f.leidoDe==='foto'?'📷 Foto':'✍ Manual')}</td>
+      <td style="padding:7px 8px;text-align:center;font-size:11px;color:var(--text3)" title="${f.leidoDe?'Los datos se leyeron automáticamente del documento; el archivo no se guarda':'Registrada a mano'}">${f.tipo==='rendicion'?('🧾 Rendición<br><span style="font-size:9px">'+(f.categoria||'')+'</span>'):(f.leidoDe==='pdf'?'📄 PDF':(f.leidoDe==='foto'?'📷 Foto':'✍ Manual'))}</td>
       <td style="padding:7px 8px;white-space:nowrap">
         <button onclick="cmpEditarFactura('${f.id}')" style="background:none;border:none;color:#60a5fa;cursor:pointer;font-size:13px" title="Editar">✏</button>
         <button onclick="cmpEliminarFactura('${f.id}')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:13px" title="Eliminar">🗑</button>
@@ -22795,6 +22912,7 @@ function cmpArchivarCiclos(){
       // Las facturas se archivan SIN el documento: solo los datos que alimentan el Excel.
       facturas:c.facturas.map(f=>({fecha:f.fecha,numero:f.numero,ruc:f.ruc,proveedor:f.proveedor,
         producto:f.producto,sinIgv:f.sinIgv,igv:f.igv,conIgv:f.conIgv,leidoDe:f.leidoDe||'',
+        tipo:f.tipo||'',categoria:f.categoria||'',
         items:Array.isArray(f.items)?f.items:[]}))
     };
     cambios++;
@@ -22852,7 +22970,7 @@ async function cmpExportarArchivo(per){
   const d1=_xCabecera(s1,4,c1);
   fac.forEach(f=>s1.addRow([f.fecha||'',f.numero||'',f.ruc||'',f.proveedor||'',f.producto||'',
     Number(f.sinIgv)||0,Number(f.igv)||0,Number(f.conIgv)||0,
-    f.leidoDe==='pdf'?'PDF':(f.leidoDe==='foto'?'Foto (QR)':'Manual')]));
+    f.tipo==='rendicion'?('Rendición · '+(f.categoria||'')):(f.leidoDe==='pdf'?'PDF':(f.leidoDe==='foto'?'Foto (QR)':'Manual'))]));
   const u1=s1.rowCount;
   if(u1>=d1) _xCuerpo(s1,d1,u1,c1);
   s1.addRow(['','','','','TOTAL DEL MES',Number(a.sinIgv)||0,Number(a.igv)||0,Number(a.conIgv)||0,'']);
@@ -22965,7 +23083,7 @@ function cmpHistorialArchivadoHTML(){
           <td style="padding:5px 7px;font-size:11px;text-align:right;font-family:'DM Mono',monospace">${cmpMoney(f.sinIgv)}</td>
           <td style="padding:5px 7px;font-size:11px;text-align:right;font-family:'DM Mono',monospace;color:#a855f7">${cmpMoney(f.igv)}</td>
           <td style="padding:5px 7px;font-size:11px;text-align:right;font-family:'DM Mono',monospace;color:var(--gold-light);font-weight:700">${cmpMoney(f.conIgv)}</td>
-          <td style="padding:5px 7px;font-size:10px;color:var(--text3)">${f.leidoDe==='pdf'?'📄 PDF':(f.leidoDe==='foto'?'📷 QR':'✍ Manual')}</td>
+          <td style="padding:5px 7px;font-size:10px;color:var(--text3)">${f.tipo==='rendicion'?'🧾 Rendición':(f.leidoDe==='pdf'?'📄 PDF':(f.leidoDe==='foto'?'📷 QR':'✍ Manual'))}</td>
           <td style="padding:5px 7px;text-align:center"><button onclick="cmpEliminarArchivada('${abierta.periodo}',${i})" title="Eliminar esta factura del mes" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:13px">🗑</button></td>
         </tr>`).join('')}
         <tr style="border-top:2px solid var(--border)">
@@ -23010,7 +23128,7 @@ function cmpDetalleCompletoHTML(per,c){
     return `<tr style="background:var(--coal3)">
         <td colspan="6" style="padding:8px;border-top:2px solid var(--border)">
           <span style="font-size:12px;font-weight:800;color:var(--text)">${f.proveedor||'—'}</span>
-          <span style="font-size:10px;color:var(--text3);margin-left:8px">${f.fecha||'—'} · ${f.numero||'sin número'} · RUC ${f.ruc||'—'}</span>
+          <span style="font-size:10px;color:var(--text3);margin-left:8px">${f.fecha||'—'} · ${f.numero||'sin número'} · RUC ${f.ruc||'—'}${f.tipo==='rendicion'?' · 🧾 rendición':''}</span>
           <span style="float:right;font-size:11px;color:var(--gold-light);font-family:'DM Mono',monospace;font-weight:700">${cmpMoney(f.conIgv)} con IGV</span>
         </td></tr>`
       +f.items.map((i,k)=>`<tr style="border-top:1px solid var(--border2)">
@@ -23302,7 +23420,7 @@ async function cmpExportarExcel(){
   const d1=_xCabecera(s1,4,c1);
   fs.forEach(f=>s1.addRow([f.fecha||'',f.numero||'',f.ruc||'',f.proveedor||'',f.producto||'',
     Number(f.sinIgv)||0,Number(f.igv)||0,Number(f.conIgv)||0,
-    f.leidoDe==='pdf'?'PDF':(f.leidoDe==='foto'?'Foto (QR)':'Manual')]));
+    f.tipo==='rendicion'?('Rendición · '+(f.categoria||'')):(f.leidoDe==='pdf'?'PDF':(f.leidoDe==='foto'?'Foto (QR)':'Manual'))]));
   const u1=s1.rowCount;
   if(u1>=d1) _xCuerpo(s1,d1,u1,c1);
   const R2x=n2=>Math.round((Number(n2)||0)*100)/100;
