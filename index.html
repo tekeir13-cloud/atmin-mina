@@ -6187,82 +6187,52 @@ function renderDashboard(){
   renderDashAlertas();
 }
 
-// ── PRUEBA (reversible): Top 5 con títulos "Los Titanes de Temual" ──
-// Poner DASH_TOP5_DEMO=false para volver al ranking real (no toca RRHH).
-const DASH_TOP5_DEMO=true;
-const DASH_TOP5_DEMO_DATA=[
-  {nombre:'ROJAS GORMAS GUILLERMO RUBEN', titulo:'Rompecerros Supremo ⚒️', medalla:'🥇', n:28,
-   frase:'Donde otros ven una montaña, él encuentra el camino. Su esfuerzo convierte los desafíos en grandes resultados.'},
-  {nombre:'RIOS PONCE EDWIN', titulo:'Titán del Socavón ⛏️', medalla:'🥈', n:24,
-   frase:'Su fortaleza, experiencia y disciplina hacen posible el avance de la operación, incluso en las condiciones más exigentes.'},
-  {nombre:'FRANCISCO VILCA VICTOR EDGARDO', titulo:'Rey del Frente 👑', medalla:'🥉', n:21,
-   frase:'Lidera con el ejemplo. Su compromiso, carácter y desempeño elevan el nivel de todo el equipo.'},
-  {nombre:'PRETEL LEON WILBER ANGEL', titulo:'Leyenda del Frente 🌟', medalla:'🏅', n:19,
-   frase:'Su trayectoria y dedicación dejan huella en cada jornada. Es un referente de excelencia para toda la operación.'},
-  {nombre:'LUIS LEONARDO CIRILO', titulo:'Motor del Frente ⚙️', medalla:'⭐', n:17,
-   frase:'Su constancia, energía y compromiso impulsan el avance diario. Cuando él está presente, la operación nunca pierde el ritmo.'},
-];
-function _renderTop5Demo(cont){
-  const max=DASH_TOP5_DEMO_DATA[0].n||1;
-  cont.innerHTML=`<div style="background:linear-gradient(160deg,var(--coal4),rgba(201,168,76,0.06));border:1px solid rgba(201,168,76,0.35);border-radius:18px;padding:22px;margin-bottom:18px">
-    <div style="text-align:center;margin-bottom:16px">
-      <div style="font-size:16px;font-weight:900;color:var(--gold-light);letter-spacing:0.5px">🏆 TOP 5 · LOS TITANES DE TEMUAL</div>
-      <div style="font-size:11px;color:var(--text3);margin-top:2px">Reconocimiento al desempeño del mes</div>
-    </div>
-    ${DASH_TOP5_DEMO_DATA.map(r=>`<div style="background:var(--coal3);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:12px">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
-        <div>
-          <div style="font-size:15px;font-weight:800;color:var(--text)">${r.medalla} ${r.titulo}</div>
-          <div style="font-size:12px;color:var(--gold-light);font-weight:700;margin-top:2px">${r.nombre}</div>
-        </div>
-        <span style="font-size:14px;font-weight:800;color:var(--gold-light);font-family:'DM Mono',monospace;white-space:nowrap">${r.n} tareas</span>
-      </div>
-      <div style="background:rgba(255,255,255,.06);border-radius:99px;height:10px;overflow:hidden;margin:8px 0">
-        <div style="width:${Math.max(6,Math.round((r.n/max)*100))}%;height:100%;background:linear-gradient(90deg,#c9a84c,#e6cd7a);border-radius:99px"></div>
-      </div>
-      <div style="font-size:11.5px;color:var(--text3);font-style:italic;line-height:1.4">“${r.frase}”</div>
-    </div>`).join('')}
-    <div style="font-size:10px;color:var(--text3);text-align:center;margin-top:4px">⚠ Vista de prueba (datos de demostración) — no proviene de RRHH.</div>
-  </div>`;
+// ── LOS TITANES DE TEMUAL ─────────────────────────────────────────────────────
+// Top 5 de quienes hicieron MÁS TAREAS EL MES PASADO, con datos reales del tareo de RR.HH.
+// (mes calendario cerrado, que es como se costea la mano de obra: ver enMesTareo).
+// Sin adornos: puesto, nombre, cargo y el número de tareas. Nada inventado.
+function _mesAnteriorYM(){
+  const d=new Date(hoy()+'T00:00:00');
+  d.setDate(1); d.setMonth(d.getMonth()-1);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
 }
-
-// Ranking Top 5 de trabajadores con más tareas (vinculado a RRHH · tareo).
 function renderDashTopTrabajadores(){
   const cont=document.getElementById('d-top-trabajadores'); if(!cont)return;
-  if(DASH_TOP5_DEMO){ _renderTop5Demo(cont); return; }
-  // Sigue el ciclo elegido en el panel ejecutivo (no siempre el vigente)
-  const mesYM=(typeof ejecMesActual==='function')?ejecMesActual():((typeof finMesActual==='function')?finMesActual():hoy().slice(0,7));
-  // Tareos = mes calendario (ver enMesTareo), no la ventana 26→25 del resto del sistema.
-  const enMes=t=>(typeof enMesTareo==='function')?enMesTareo(t.fecha,mesYM):((t.fecha||'').slice(0,7)===String(mesYM).slice(0,7));
+  const mesYM=_mesAnteriorYM();
+  const enMes=t=>(typeof enMesTareo==='function')?enMesTareo(t.fecha,mesYM):((t.fecha||'').slice(0,7)===mesYM);
+  // Se cuentan las tareas efectivas: no suman los días libres ni las faltas.
   const conteo={};
-  (state.tareas||[]).filter(enMes).forEach(t=>{ const id=t.trabajadorId; if(id==null)return; conteo[id]=(conteo[id]||0)+1; });
+  (state.tareas||[]).filter(enMes).forEach(t=>{
+    if(!t || t.tipo==='libre' || t.tipo==='falta') return;
+    const id=t.trabajadorId; if(id==null) return;
+    conteo[id]=(conteo[id]||0)+(Number(t.mult)||1);
+  });
   const rank=Object.entries(conteo).map(([id,n])=>{
     const p=(state.personal||[]).find(x=>String(x.id)===String(id));
-    return {nombre:p?p.nombre:('#'+id), rol:p?(p.rol||''):'', n};
-  }).sort((a,b)=>b.n-a.n).slice(0,5);
+    return { nombre:p?(p.nombre||'').trim():('#'+id), cargo:p?((p.rol||p.cargo||'').trim()):'', n:Math.round(n*100)/100 };
+  }).sort((a,b)=>b.n-a.n || a.nombre.localeCompare(b.nombre)).slice(0,5);
   const nombreMes=(typeof finNombreMes==='function')?finNombreMes(mesYM):mesYM;
+
+  const cab=`<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="font-size:15px;font-weight:900;color:var(--gold-light);letter-spacing:.4px">🏆 LOS TITANES DE TEMUAL</div>
+      <div style="font-size:11px;color:var(--text3)">Más tareas en ${nombreMes}</div>
+    </div>`;
   if(!rank.length){
-    cont.innerHTML=`<div style="background:var(--coal4);border:1px solid var(--border);border-radius:18px;padding:22px;margin-bottom:18px">
-      <div style="font-size:14px;font-weight:800;color:var(--text);margin-bottom:6px">🏆 Top 5 Trabajadores · ${nombreMes}</div>
-      <div style="font-size:12px;color:var(--text3)">Aún no hay tareas registradas este mes en RRHH.</div></div>`;
+    cont.innerHTML=`<div style="background:var(--coal4);border:1px solid var(--border);border-radius:18px;padding:20px;margin-bottom:18px">
+      ${cab}<div style="font-size:12px;color:var(--text3)">Sin tareos registrados en ${nombreMes}.</div></div>`;
     return;
   }
-  const max=rank[0].n||1;
-  const medal=['🥇','🥈','🥉','4️⃣','5️⃣'];
-  cont.innerHTML=`<div style="background:var(--coal4);border:1px solid var(--border);border-radius:18px;padding:22px;margin-bottom:18px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-      <div style="font-size:14px;font-weight:800;color:var(--text)">🏆 Top 5 Trabajadores con más tareas · ${nombreMes}</div>
-      <button class="btn btn-outline" style="font-size:11px;padding:5px 12px" onclick="navigate('rrhh')">Ver RRHH →</button>
-    </div>
-    ${rank.map((r,i)=>`<div style="margin-bottom:11px">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
-        <span style="font-size:13px;font-weight:700;color:var(--text)">${medal[i]} ${r.nombre}${r.rol?` <span style="font-size:10px;color:var(--text3);font-weight:400">· ${r.rol}</span>`:''}</span>
-        <span style="font-size:13px;font-weight:800;color:var(--gold-light);font-family:'DM Mono',monospace">${r.n} tareas</span>
+  cont.innerHTML=`<div style="background:var(--coal4);border:1px solid var(--border);border-radius:18px;padding:20px;margin-bottom:18px">
+    ${cab}
+    ${rank.map((r,i)=>`<div style="display:flex;align-items:center;gap:12px;padding:9px 0;${i?'border-top:1px solid var(--border)':''}">
+      <div style="width:22px;text-align:center;font-size:13px;font-weight:900;color:${i===0?'var(--gold-light)':'var(--text3)'};font-family:'DM Mono',monospace">${i+1}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700;color:var(--text);line-height:1.25">${r.nombre}</div>
+        ${r.cargo?`<div style="font-size:11px;color:var(--text3);margin-top:1px">${r.cargo}</div>`:''}
       </div>
-      <div style="background:rgba(255,255,255,.06);border-radius:99px;height:12px;overflow:hidden">
-        <div style="width:${Math.max(4,Math.round((r.n/max)*100))}%;height:100%;background:linear-gradient(90deg,#c9a84c,#e6cd7a);border-radius:99px"></div>
-      </div>
+      <div style="font-size:14px;font-weight:800;color:var(--gold-light);font-family:'DM Mono',monospace;white-space:nowrap">${r.n}</div>
     </div>`).join('')}
+    <div style="font-size:10px;color:var(--text3);text-align:right;margin-top:8px">tareas · del tareo de RR.HH.</div>
   </div>`;
 }
 
