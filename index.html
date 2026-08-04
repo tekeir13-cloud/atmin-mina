@@ -17613,8 +17613,18 @@ async function initSistema(){
   poblarSelects();
   if(state.maquinas) poblarSelectMaquinas();
   actualizarBadgeMes();
-  const primero = (usuarioActivo&&usuarioActivo.modulos[0]) || 'dashboard';
-  renderPage(primero);
+  // ABRIR DE VERDAD EL PRIMER MÓDULO DEL USUARIO.
+  // Antes solo se llamaba a renderPage(): eso dibuja el contenido del módulo pero NO cambia de
+  // pantalla, así que la página visible seguía siendo el Dashboard (la que trae .active en el
+  // HTML). Un usuario sin Dashboard —el Compresorista, por ejemplo— entraba correctamente pero
+  // se quedaba mirando un tablero vacío que ni siquiera le corresponde, y parecía que el login
+  // había fallado. navigate() sí cambia la página activa, marca el menú y renderiza.
+  const _mods=(usuarioActivo&&Array.isArray(usuarioActivo.modulos))?usuarioActivo.modulos:[];
+  const primero = _mods[0] || 'dashboard';
+  try{
+    if(typeof navigate==='function' && document.getElementById('page-'+primero)) navigate(primero);
+    else renderPage(primero);
+  }catch(e){ try{ renderPage(primero); }catch(e2){} }
 }
 
 // Chips de módulos para crear usuarios
