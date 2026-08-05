@@ -4127,7 +4127,7 @@ select option{background:var(--coal3);}
     <input type="hidden" id="kit-id">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <div class="form-group" style="margin:0"><label>Fecha</label><input type="date" id="kit-fecha"></div>
-      <div class="form-group" style="margin:0"><label>Máquina / Equipo</label><select id="kit-equipo" style="width:100%" onchange="kitEquipoChange()"><optgroup label="Maquinaria con horómetro"><option>Grupo Electrógeno</option><option>Compresora M135</option><option>Compresora M122</option><option>Scoop WJ-2</option><option>Scoop Epiroc</option><option>Dumper</option></optgroup><optgroup label="Otros equipos"><option>Compresora</option><option>Perforadora Jack Leg</option><option>Perforadora Stopper</option><option>Excavadora</option><option>Cargador Frontal</option><option>Generador Eléctrico</option><option>Bomba de Agua</option><option>Winche</option><option>Camioneta</option><option>Instalaciones eléctricas</option></optgroup></select></div>
+      <div class="form-group" style="margin:0"><label>Máquina / Equipo</label><select id="kit-equipo" style="width:100%" onchange="kitEquipoChange()"><optgroup label="Maquinaria con horómetro"><option>Grupo Electrógeno MP-120</option><option>Grupo Electrógeno MV 2321</option><option>Compresora M135</option><option>Compresora M122</option><option>Scoop WJ-2</option><option>Scoop Epiroc</option><option>Dumper</option></optgroup><optgroup label="Otros equipos"><option>Compresora</option><option>Perforadora Jack Leg</option><option>Perforadora Stopper</option><option>Excavadora</option><option>Cargador Frontal</option><option>Generador Eléctrico</option><option>Bomba de Agua</option><option>Winche</option><option>Camioneta</option><option>Instalaciones eléctricas</option></optgroup></select></div>
     </div>
     <div class="form-group" id="kit-jackleg-wrap" style="margin-bottom:12px;display:none"><label>Código de la Perforadora Jack Leg</label><select id="kit-jackleg" style="width:100%"><option value="">— Seleccionar máquina —</option></select></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
@@ -4454,7 +4454,7 @@ const state={
 };
 const FC={1:'#60a5fa',2:'#6ee7b7'};
 const FL={1:'Rampa',2:'Cortada'};
-const EI={'Compresora':'🔴','Compresora M135':'🔴','Compresora M122':'🔴','Perforadora Jack Leg':'🔩','Perforadora Stopper':'🔩','Generador Eléctrico':'⚡','Grupo Electrógeno':'⚡','Scoop WJ-2':'🚜','Scoop DALI':'🚜','DALI':'🚜','Scoop Epiroc':'🚜','Scoop Monte':'🚜','Dumper':'🚛','Excavadora':'🚜','Cargador Frontal':'🚜','Bomba de Agua':'💧','Winche':'⚙','Camioneta':'🚗','Instalaciones eléctricas':'💡'};
+const EI={'Compresora':'🔴','Compresora M135':'🔴','Compresora M122':'🔴','Perforadora Jack Leg':'🔩','Perforadora Stopper':'🔩','Generador Eléctrico':'⚡','Grupo Electrógeno':'⚡','Grupo Electrógeno MP-120':'⚡','Grupo Electrógeno MV 2321':'⚡','Scoop WJ-2':'🚜','Scoop DALI':'🚜','DALI':'🚜','Scoop Epiroc':'🚜','Scoop Monte':'🚜','Dumper':'🚛','Excavadora':'🚜','Cargador Frontal':'🚜','Bomba de Agua':'💧','Winche':'⚙','Camioneta':'🚗','Instalaciones eléctricas':'💡'};
 // ── Equipos FACTURABLES (única fuente de verdad: dashboard "Ganancia por Equipo" + Finanzas "Ingresos x Máquina") ──
 // Cada máquina por separado. tags = nombre exacto en compresorista (combustible/horómetro). mt = coincidencia por nombre en mantenimiento. op = sueldo operador/mes.
 const EQUIPOS_FACTURABLES=[
@@ -4465,7 +4465,17 @@ const EQUIPOS_FACTURABLES=[
   {label:'Compresora M122', fig:'compresora',col:'#a78bfa',tags:['compresora m122'], mt:['compresora m122'],op:2500,opL:'S/2,500/mes'},
   {label:'Excavadora',      fig:'excavadora',col:'#10b981',tags:['excavadora'],      mt:['excavadora'],     op:5000,opL:'S/5,000/mes'},
   {label:'Cargador Frontal',fig:'cargador',  col:'#ef4444',tags:['cargador frontal','cargador'],mt:['cargador'],op:5000,opL:'S/5,000/mes'},
-  {label:'Grupo Electrógeno',fig:'grupo',    col:'#fbbf24',tags:['grupo electrógeno','grupo electrogeno'],mt:['grupo'],op:2500,opL:'S/2,500/mes'},
+  // DOS GRUPOS ELECTRÓGENOS, cada uno con su código y su propia trazabilidad (combustible,
+  // horómetro, mantenimiento y ganancia por equipo se calculan por separado).
+  // Los registros VIEJOS que dicen solo "Grupo Electrógeno", sin código, se atribuyen al MP-120
+  // para no perder el histórico; si alguno era del MV 2321, se corrige editando ese registro.
+  {label:'Grupo Electrógeno MP-120',fig:'grupo',col:'#fbbf24',
+   tags:['grupo electrógeno mp-120','grupo electrogeno mp-120','mp-120','mp120','grupo electrógeno','grupo electrogeno'],
+   mt:['grupo electrógeno mp-120','grupo electrogeno mp-120','mp-120','mp120','grupo electrógeno','grupo electrogeno'],
+   mtNo:['mv 2321','mv2321'],op:2500,opL:'S/2,500/mes'},
+  {label:'Grupo Electrógeno MV 2321',fig:'grupo',col:'#f59e0b',
+   tags:['grupo electrógeno mv 2321','grupo electrogeno mv 2321','mv 2321','mv2321'],
+   mt:['grupo electrógeno mv 2321','grupo electrogeno mv 2321','mv 2321','mv2321'],op:2500,opL:'S/2,500/mes'},
 ];
 const PT={'dashboard':'Dashboard KPI','logistica':'Módulo Logística','rrhh':'Recursos Humanos','operaciones':'Módulo Operaciones','mantenimiento':'Módulo Mantenimiento','finanzas':'Módulo Finanzas','reporte':'Reporte Mensual','compresorista':'Reporte Compresorista','compras':'Módulo Compras'};
 
@@ -6099,7 +6109,7 @@ function renderDashEjecutivo(){
   const precioPet=compGetPrecioPet();
   const precioGas=compGetPrecioGas();
   const mantMes=(state.mantenimiento||[]).filter(m=>filtroMes(m.fecha,mes));
-  const mantPorEq=tags=>mantMes.filter(m=>m.aprobLog&&m.aprobLog.ok&&tags.some(t=>(m.equipo||'').toLowerCase().includes(t))).reduce((s,m)=>s+(m.costo||0),0);
+  const mantPorEq=(tags,no)=>mantMes.filter(m=>{const e=(m.equipo||'').toLowerCase();if(no&&no.some(t=>e.includes(t)))return false;return m.aprobLog&&m.aprobLog.ok&&tags.some(t=>e.includes(t));}).reduce((s,m)=>s+(m.costo||0),0);
   const ingMes=finIngMaqGet(mes);
 
   const MAQUINAS=EQUIPOS_FACTURABLES;
@@ -6109,7 +6119,7 @@ function renderDashEjecutivo(){
     const galGas=m.tags.reduce((s,t)=>s+(galMaqGas[t]||0),0);
     const ingresos=ingMes[m.label]||0;
     const ingRegistrado=m.label in ingMes;
-    const cMant=mantPorEq(m.mt);
+    const cMant=mantPorEq(m.mt,m.mtNo);
     const cComb=galPet*precioPet+galGas*precioGas;
     const cOp=m.op;
     return {...m,horas,galPet,galGas,ingresos,ingRegistrado,cMant,cComb,cOp,resultado:ingresos-cMant-cComb-cOp};
@@ -18977,7 +18987,7 @@ function _iaEquipos(){
     const precioPet=(typeof compGetPrecioPet==='function')?compGetPrecioPet():0;
     const precioGas=(typeof compGetPrecioGas==='function')?compGetPrecioGas():0;
     const mantMes=(state.mantenimiento||[]).filter(m=>filtroMes(m.fecha,mes));
-    const mantPorEq=tags=>mantMes.filter(m=>m.aprobLog&&m.aprobLog.ok&&tags.some(t=>(m.equipo||'').toLowerCase().includes(t))).reduce((s,m)=>s+(m.costo||0),0);
+    const mantPorEq=(tags,no)=>mantMes.filter(m=>{const e=(m.equipo||'').toLowerCase();if(no&&no.some(t=>e.includes(t)))return false;return m.aprobLog&&m.aprobLog.ok&&tags.some(t=>e.includes(t));}).reduce((s,m)=>s+(m.costo||0),0);
     const ingMes=(typeof finIngMaqGet==='function')?finIngMaqGet(mes):{};
     const MAQUINAS=EQUIPOS_FACTURABLES;
     return MAQUINAS.map(m=>{
@@ -18986,7 +18996,7 @@ function _iaEquipos(){
       const galGas=m.tags.reduce((s,t)=>s+(galMaqGas[t]||0),0);
       const ingresos=ingMes[m.label]||0;
       const ingRegistrado=m.label in ingMes;
-      const cMant=mantPorEq(m.mt);
+      const cMant=mantPorEq(m.mt,m.mtNo);
       const cComb=galPet*precioPet+galGas*precioGas;
       const cOp=m.op;
       return {label:m.label,horas,galPet,galGas,ingresos,ingRegistrado,cMant,cComb,cOp,resultado:ingresos-cMant-cComb-cOp};
@@ -20368,13 +20378,13 @@ function renderFinIngresosMaq(){
   });
   const pPet=compGetPrecioPet(),pGas=compGetPrecioGas();
   const mantMes=(state.mantenimiento||[]).filter(m=>filtroMes(m.fecha,mes));
-  const mantPorEq=tags=>mantMes.filter(m=>m.aprobLog&&m.aprobLog.ok&&tags.some(t=>(m.equipo||'').toLowerCase().includes(t))).reduce((s,m)=>s+(m.costo||0),0);
+  const mantPorEq=(tags,no)=>mantMes.filter(m=>{const e=(m.equipo||'').toLowerCase();if(no&&no.some(t=>e.includes(t)))return false;return m.aprobLog&&m.aprobLog.ok&&tags.some(t=>e.includes(t));}).reduce((s,m)=>s+(m.costo||0),0);
 
   const filas=MAQUINAS_LABELS.map(m=>{
     const galPet=m.tags.reduce((s,t)=>s+(galMaqPet[t]||0),0);
     const galGas=m.tags.reduce((s,t)=>s+(galMaqGas[t]||0),0);
     const cComb=galPet*pPet+galGas*pGas;
-    const cMant=mantPorEq(m.mt);
+    const cMant=mantPorEq(m.mt,m.mtNo);
     const ingReg=ingGuardados[m.label]||0;
     const resultado=ingReg-m.op-cComb-cMant;
     const ok=resultado>=0;
@@ -20700,9 +20710,9 @@ function compCostoReporte(r){
 // Las dos camionetas consumen PETRÓLEO, no gasolina. Los reportes ya guardados conservan lo que
 // se registró en su momento (cada equipo se guarda por nombre dentro de petroleo[]/gasolina[]),
 // así que el cambio aplica de aquí en adelante y no reescribe el histórico.
-const COMP_PETROLEO   = ['Grupo Electrógeno','Generador Meba','Compresora M135','Compresora M122','Scoop WJ-2','Scoop Epiroc','Dumper','Excavadora','Cargador Frontal','Camioneta Blanca','Camioneta Roja BRY-800'];
+const COMP_PETROLEO   = ['Grupo Electrógeno MP-120','Grupo Electrógeno MV 2321','Generador Meba','Compresora M135','Compresora M122','Scoop WJ-2','Scoop Epiroc','Dumper','Excavadora','Cargador Frontal','Camioneta Blanca','Camioneta Roja BRY-800'];
 const COMP_GASOLINA   = ['Cuatrimoto C','Cuatrimoto N','Trompo de Construcción'];
-const COMP_HOROMETROS = ['Grupo Electrógeno','Compresora M135','Compresora M122','Scoop WJ-2','Scoop Epiroc','Dumper','Excavadora','Cargador Frontal'];
+const COMP_HOROMETROS = ['Grupo Electrógeno MP-120','Grupo Electrógeno MV 2321','Compresora M135','Compresora M122','Scoop WJ-2','Scoop Epiroc','Dumper','Excavadora','Cargador Frontal'];
 
 function abrirModalCompresorista() {
   document.getElementById('modal-compresorista').style.display = 'flex';
@@ -21076,7 +21086,7 @@ function switchCompTab(tab, btn) {
 
 // Figuras (íconos) de los equipos del compresorista
 const COMP_FIG = {
-  'Grupo Electrógeno':'⚡','Compresora M135':'🌀','Compresora M122':'🌀',
+  'Grupo Electrógeno':'⚡','Grupo Electrógeno MP-120':'⚡','Grupo Electrógeno MV 2321':'⚡','Compresora M135':'🌀','Compresora M122':'🌀',
   'Scoop WJ-2':'🚜','Scoop Epiroc':'🚜','Dumper':'🚛','Excavadora':'🏗️','Cargador Frontal':'🚜',
   'Camioneta Blanca':'🛻','Camioneta Roja BRY-800':'🛻','Cuatrimoto C':'🏍️','Cuatrimoto N':'🏍️'
 };
