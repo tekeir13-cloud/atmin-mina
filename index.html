@@ -7480,6 +7480,15 @@ function almacenSeedProductos(){
   // todavía sin sincronizar (caché limpiada, equipo nuevo, marca de versión ausente) esas altas
   // desaparecían. Se guardan aquí y se reponen al final.
   const _propios=((state.almacen&&state.almacen.productos)||[]).filter(p=>p&&!/^MP\d+$/.test(String(p.id||'')));
+  // PRECIOS YA CARGADOS: se anotan antes de sembrar y se reponen al final. Esta siembra reemplaza
+  // la lista entera, así que en un equipo con la caché limpia los precios actualizados volvían al
+  // valor de fábrica y esa versión se subía a la nube. Solo se conserva el PRECIO: ni el id, ni el
+  // nombre, ni la unidad, ni el almacén se tocan (el catálogo de fábrica sigue mandando en eso).
+  const _preciosPrevios={};
+  ((state.almacen&&state.almacen.productos)||[]).forEach(p=>{
+    const c=String(p&&p.codigo||'').trim().toUpperCase(); const v=Number(p&&p.precio)||0;
+    if(c && v>0) _preciosPrevios[c]=v;
+  });
   state.almacen.productos=[
     {"id": "MP0001", "codigo": "1", "nombre": "FRENO 7/8 HEXÁGONAL  RNS53F-36A", "unidad": "PZA", "precio": 221.41, "almacen": "Mantenimiento"},
     {"id": "MP0002", "codigo": "2", "nombre": "PERNO SUJETADOR   RNS53F-36TA", "unidad": "PZA", "precio": 149.31, "almacen": "Mantenimiento"},
@@ -7857,6 +7866,14 @@ function almacenSeedProductos(){
     {"id": "MP0374", "codigo": "FIL-038", "nombre": "FILTRO DE AIRE PRIMARIO A5105", "unidad": "PZA", "precio": 0, "almacen": "Mantenimiento"},
     {"id": "MP0375", "codigo": "FIL-039", "nombre": "FILTRO DE AIRE P838813", "unidad": "PZA", "precio": 0, "almacen": "Mantenimiento"},
   ];
+  // Reponer los precios que ya estaban cargados (el de fábrica solo vale si no había ninguno)
+  try{
+    state.almacen.productos.forEach(f=>{
+      const c=String(f&&f.codigo||'').trim().toUpperCase();
+      const v=_preciosPrevios[c];
+      if(v>0) f.precio=v;
+    });
+  }catch(e){}
   // Reponer las altas propias que no estén ya en el catálogo de fábrica (por código o nombre)
   try{
     const cods=new Set(state.almacen.productos.map(p=>String(p.codigo||'').trim().toUpperCase()));
