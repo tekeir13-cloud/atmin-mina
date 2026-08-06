@@ -14746,6 +14746,16 @@ function valParsePeriodo(titulo){
   claves.forEach((m,i)=>{if(up.includes(m))mesNum=i+1;});
   if(!mesNum&&up.includes('SETIEMBRE'))mesNum=9; // variante peruana
   const ym=up.match(/(20\d{2})/);if(ym)anio=parseInt(ym[1],10);
+  // Si el título no trae el nombre del mes, aceptar la forma numérica: 07/2026, 07-2026, 2026-07.
+  // Sin esto la valorización quedaba importada pero sin mes, y su ingreso no aparecía en el dashboard.
+  if(!mesNum){
+    let m=up.match(/\b(0?[1-9]|1[0-2])\s*[\/\-.]\s*(20\d{2})\b/);
+    if(m){ mesNum=parseInt(m[1],10); anio=parseInt(m[2],10); }
+    else{
+      m=up.match(/\b(20\d{2})\s*[\/\-.]\s*(0?[1-9]|1[0-2])\b/);
+      if(m){ anio=parseInt(m[1],10); mesNum=parseInt(m[2],10); }
+    }
+  }
   return {mesNum,anio};
 }
 let _valView='detalle';
@@ -14833,7 +14843,9 @@ async function importarValorizacion(input){
     if(!total)total=subtotal+descuento;
     valLaborLoad();
     const id='VL'+Date.now();
-    const {mesNum,anio}=valParsePeriodo(titulo);
+    // El mes también se busca en el NOMBRE DEL ARCHIVO: muchos reportes traen el mes ahí
+    // ("VALORIZACION JULIO 2026.xlsx") y no dentro de la hoja.
+    const {mesNum,anio}=valParsePeriodo(titulo+' '+((file&&file.name)||''));
     const periodo=(mesNum?VAL_MESES[mesNum-1]+' ':'')+(anio||'')||titulo.replace(/VALORIZACIÓN.*?-/i,'').trim()||titulo;
     // Reemplaza si ya existe el mismo mes/año (o mismo título si no se pudo parsear)
     state.valorizacionesLabor=(state.valorizacionesLabor||[]).filter(v=>
