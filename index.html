@@ -7226,6 +7226,117 @@ function prodBuscar(v){
   if(i){ i.focus(); try{ i.setSelectionRange(i.value.length,i.value.length); }catch(e){} }
 }
 function prodFiltrarAlmacen(v){ window._prodAlm=v; renderProductos(); }
+
+/* ══════════ RECUPERAR PRECIOS ══════════
+   Cada movimiento guarda el precio con el que se registró. Si el maestro pierde un precio,
+   aquí se reconstruye a partir del último precio REAL grabado en los movimientos: ingresos,
+   inventario inicial, salidas y las facturas de Compras. No cambia ningún movimiento, ni el
+   stock, ni el historial: solo repone el precio del maestro en los productos que se marquen. */
+function _prodFechaTs(x){
+  const t=Number(x&&x._ts)||0; if(t) return t;
+  const f=String(x&&x.fecha||''); const d=f?Date.parse(f+'T12:00:00'):NaN;
+  return isNaN(d)?0:d;
+}
+function prodPreciosRecuperables(){
+  const A=(state.almacen||{});
+  const mejor={};   // código → {precio, ts, fuente}
+  const anota=(cod,precio,ts,fuente)=>{
+    const c=String(cod||'').trim().toUpperCase(); const p=Number(precio)||0;
+    if(!c||p<=0) return;
+    if(!mejor[c] || ts>mejor[c].ts) mejor[c]={precio:p, ts:ts||0, fuente:fuente};
+  };
+  (A.ingresos||[]).forEach(x=>anota(x.codigo, x.precio, _prodFechaTs(x), 'Ingreso '+(x.fecha||'')));
+  (A.inventarioInicial||[]).forEach(x=>anota(x.codigo, x.precio, _prodFechaTs(x), 'Inventario inicial'));
+  (A.salidas||[]).forEach(x=>anota(x.codigo, x.precio, _prodFechaTs(x), 'Salida '+(x.fecha||'')));
+  try{
+    ((state.compras&&state.compras.facturas)||[]).forEach(f=>{
+      (f.items||[]).forEach(it=>{
+        const pu=Number(it.precio)||((Number(it.importe)||0)/(Number(it.cantidad)||1));
+        anota(it.codigo, pu, _prodFechaTs(f), 'Factura '+(f.numero||f.fecha||''));
+      });
+    });
+  }catch(e){}
+  const fmtF=ts=>ts?new Date(ts).toISOString().slice(0,10):'—';
+  return ((A.productos)||[]).map(p=>{
+    const c=String(p.codigo||'').trim().toUpperCase(); const m=mejor[c];
+    if(!m) return null;
+    const act=Number(p.precio)||0;
+    if(Math.abs(act-m.precio)<0.005) return null;         // ya está igual
+    return {id:p.id, codigo:p.codigo, nombre:p.nombre, actual:act, propuesto:m.precio,
+            fuente:m.fuente, fechaFuente:fmtF(m.ts), sinPrecio:act<=0};
+  }).filter(Boolean).sort((a,b)=>(b.sinPrecio-a.sinPrecio)||String(a.nombre||'').localeCompare(String(b.nombre||'')));
+}
+function abrirRecuperarPrecios(){
+  const lista=prodPreciosRecuperables();
+  window._prodRescate=lista;
+  const sinP=lista.filter(x=>x.sinPrecio).length;
+  const fila=(x,i)=>`<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:6px 8px"><input type="checkbox" class="prc-chk" data-i="${i}" ${x.sinPrecio?'checked':''}></td>
+      <td style="padding:6px 8px;font-size:11px;color:var(--text3)">${escAttr(String(x.codigo||''))}</td>
+      <td style="padding:6px 8px;font-size:11px;color:var(--text1)">${escAttr(String(x.nombre||''))}</td>
+      <td style="padding:6px 8px;font-size:11px;text-align:right;color:${x.sinPrecio?'#e66767':'var(--text3)'}">${x.actual>0?('S/ '+x.actual.toFixed(2)):'sin precio'}</td>
+      <td style="padding:6px 8px;font-size:11px;text-align:right;color:#22d3a5;font-weight:700">S/ ${x.propuesto.toFixed(2)}</td>
+      <td style="padding:6px 8px;font-size:10px;color:var(--text3)">${escAttr(x.fuente)}<br>${x.fechaFuente}</td>
+    </tr>`;
+  const cuerpo = lista.length
+    ? `<div style="font-size:11px;color:var(--text3);margin-bottom:10px">
+         Hay <b style="color:var(--text1)">${lista.length}</b> productos cuyo precio en el maestro no coincide
+         con el último precio registrado en los movimientos${sinP?` (<b style="color:#e66767">${sinP}</b> están hoy sin precio)`:''}.
+         Vienen marcados los que están en cero. Revisa y marca los demás que quieras reponer.
+         <br>No se toca ningún movimiento, ni el stock, ni el historial: solo el precio del maestro.
+       </div>
+       <div style="display:flex;gap:8px;margin-bottom:8px">
+         <button class="btn btn-outline" style="font-size:11px;padding:4px 10px" onclick="prodRescateMarcar(true)">Marcar todos</button>
+         <button class="btn btn-outline" style="font-size:11px;padding:4px 10px" onclick="prodRescateMarcar(false)">Desmarcar todos</button>
+       </div>
+       <div style="max-height:46vh;overflow:auto;border:1px solid var(--border);border-radius:8px">
+         <table style="width:100%;border-collapse:collapse">
+           <thead><tr style="position:sticky;top:0;background:var(--coal4)">
+             <th style="padding:7px 8px"></th>
+             <th style="padding:7px 8px;font-size:10px;text-align:left;color:var(--text3)">CÓDIGO</th>
+             <th style="padding:7px 8px;font-size:10px;text-align:left;color:var(--text3)">PRODUCTO</th>
+             <th style="padding:7px 8px;font-size:10px;text-align:right;color:var(--text3)">EN EL MAESTRO</th>
+             <th style="padding:7px 8px;font-size:10px;text-align:right;color:var(--text3)">RECUPERADO</th>
+             <th style="padding:7px 8px;font-size:10px;text-align:left;color:var(--text3)">DE DÓNDE SALE</th>
+           </tr></thead>
+           <tbody>${lista.map(fila).join('')}</tbody>
+         </table>
+       </div>`
+    : `<div style="font-size:12px;color:var(--text3);padding:18px 0">
+         No hay precios que reponer: los productos del maestro ya coinciden con el último precio
+         registrado en los movimientos, o no tienen ningún movimiento del que sacarlo.
+       </div>`;
+  const ov=document.createElement('div');
+  ov.className='modal-overlay show'; ov.id='modal-rescate-precios';
+  ov.innerHTML=`<div class="modal" style="width:min(900px,96vw);max-height:92vh;overflow:auto">
+      <div class="modal-title">🛟 Recuperar precios del maestro</div>
+      ${cuerpo}
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-outline" onclick="cerrarRescatePrecios()">Cerrar</button>
+        ${lista.length?`<button class="btn btn-gold" onclick="prodAplicarRescate()">Aplicar a los marcados</button>`:''}
+      </div>
+    </div>`;
+  ov.addEventListener('click',e=>{ if(e.target===ov) cerrarRescatePrecios(); });
+  document.body.appendChild(ov);
+}
+function cerrarRescatePrecios(){ const o=document.getElementById('modal-rescate-precios'); if(o) o.remove(); }
+function prodRescateMarcar(v){ document.querySelectorAll('#modal-rescate-precios .prc-chk').forEach(c=>{ c.checked=!!v; }); }
+function prodAplicarRescate(){
+  const lista=window._prodRescate||[];
+  const sel=[...document.querySelectorAll('#modal-rescate-precios .prc-chk')].filter(c=>c.checked)
+              .map(c=>lista[Number(c.dataset.i)]).filter(Boolean);
+  if(!sel.length){ showNotif('No marcaste ningún producto','warn'); return; }
+  let n=0;
+  sel.forEach(x=>{ const p=(state.almacen.productos||[]).find(q=>q.id===x.id); if(p){ p.precio=x.propuesto; n++; } });
+  if(!n){ showNotif('No se pudo aplicar ningún precio','warn'); return; }
+  state.almacen.productosTs=Date.now();
+  almacenSave();
+  cerrarRescatePrecios();
+  try{ renderProductos(); }catch(e){}
+  try{ renderStockVigente(); }catch(e){}
+  try{ renderInventario(); }catch(e){}
+  showNotif('Se repusieron '+n+' precio'+(n!==1?'s':'')+' en el maestro','ok');
+}
 function renderProductos(){
   const el=document.getElementById('log-productos');
   if(!el)return;
@@ -7279,7 +7390,10 @@ function renderProductos(){
     <!-- HEADER -->
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
       <div style="font-size:16px;font-weight:700;color:var(--text)">📦 Maestro de Productos</div>
-      <button class="btn btn-gold" style="font-size:12px" onclick="abrirModalProducto()">+ Nuevo Producto</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-outline" style="font-size:12px" onclick="abrirRecuperarPrecios()">🛟 Recuperar precios</button>
+        <button class="btn btn-gold" style="font-size:12px" onclick="abrirModalProducto()">+ Nuevo Producto</button>
+      </div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
       <input type="text" id="prod-buscar" placeholder="🔍 Buscar por código, nombre o unidad..." value="${escAttr(window._prodQ||'')}" oninput="prodBuscar(this.value)" style="padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--coal4);color:var(--text1);font-size:12px;width:280px">
