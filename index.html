@@ -14893,16 +14893,24 @@ function valPintarVinculo(v){
   const el=document.getElementById('val-vinculo'); if(!el) return;
   if(!v){ el.innerHTML=''; return; }
   const N=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre'];
-  const anioAct=Number(String(hoy()).slice(0,4));
-  const anios=[anioAct-1,anioAct,anioAct+1];
-  const opts=['<option value="">— sin asignar —</option>']
-    .concat(anios.flatMap(a=>N.map((n,i)=>{
-      const val=a+'-'+String(i+1).padStart(2,'0');
-      const sel=(v.anio===a&&v.mesNum===i+1)?' selected':'';
-      return `<option value="${val}"${sel}>${n} ${a}</option>`;
-    }))).join('');
+  const nom=ym=>{ const [a,m]=String(ym).split('-').map(Number); return N[m-1]+' '+a; };
   const atada=!!(v.mesNum&&v.anio);
-  el.innerHTML=`<span style="color:${atada?'#22d3a5':'#f59e0b'};font-weight:700">${atada?'✓ Ingreso de '+N[v.mesNum-1]+' '+v.anio:'⚠ Sin mes asignado — el ingreso no se está contando'}</span>
+  const mia=atada?(v.anio+'-'+String(v.mesNum).padStart(2,'0')):'';
+  // La lista solo trae los meses que YA tienen valorización subida — no los doce meses de tres
+  // años. Va creciendo sola: cada valorización que se guarda agrega su mes. Si esta todavía no
+  // tiene mes, se ofrecen además el mes en curso y los dos anteriores para poder asignarla.
+  const set=new Set();
+  (state.valorizacionesLabor||[]).forEach(x=>{ if(x.mesNum&&x.anio) set.add(x.anio+'-'+String(x.mesNum).padStart(2,'0')); });
+  if(!atada){
+    const hoyYM=(typeof finMesActual==='function')?finMesActual():String(hoy()).slice(0,7);
+    const [ay,am]=hoyYM.split('-').map(Number);
+    for(let k=0;k<3;k++){ const d=new Date(ay,am-1-k,1); set.add(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')); }
+  }
+  if(mia) set.add(mia);
+  const meses=[...set].sort().reverse();
+  const opts=['<option value="">— sin asignar —</option>']
+    .concat(meses.map(ym=>`<option value="${ym}"${ym===mia?' selected':''}>${nom(ym)}</option>`)).join('');
+  el.innerHTML=`<span style="color:${atada?'#22d3a5':'#f59e0b'};font-weight:700">${atada?'\u2713 Ingreso de '+nom(mia):'\u26a0 Sin mes asignado — el ingreso no se est\u00e1 contando'}</span>
     <label style="color:var(--text3);margin-left:10px">Contar como ingreso de:</label>
     <select onchange="valAsignarMes('${v.id}',this.value)" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 9px;color:var(--text);font-size:12px;margin-left:5px">${opts}</select>`;
 }
