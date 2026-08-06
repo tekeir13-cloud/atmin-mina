@@ -7227,6 +7227,50 @@ function prodBuscar(v){
 }
 function prodFiltrarAlmacen(v){ window._prodAlm=v; renderProductos(); }
 
+/* Lista de precios unitarios de Poderosa (hoja Stock jul-2026 y consolidado jun-2026).
+   Es una LISTA DE PRECIOS, no un catálogo: no da de alta ningún producto ni ningún código.
+   Solo se usa para proponer el precio de los artículos que YA existen en el maestro, y nada
+   se aplica hasta que se confirme en la ventana de Recuperar precios. */
+const PRECIOS_POD_FUENTE='Lista Poderosa jul-2026';
+const PRECIOS_POD=[
+  {c:"1200000022",p:56.36},   // ACEITE AIR TOOL OIL S2 A 100
+  {c:"1500003182",p:341.61},   // ADAPTADOR DE PERNO HELICOIDAL 22MM
+  {c:"1500001454",p:4.92},   // ALCAYATA DE FE CORRUGADO 3/8" X 35 CM
+  {c:"1500001437",p:9.23},   // ALCAYATA DE FE CORRUGADO T-G 5/8"X29 CM
+  {c:"1500001438",p:14.4},   // ALCAYATA DE FE CORRUGADO T-L 3/4"X70CM
+  {c:"1500000031",p:21.83},   // ATACADORES DE MADERA 1" X 2.5 MTR
+  {c:"1300000037",p:227.7},   // BARRA CONICA 4' X 7/8''
+  {c:"1300000036",p:318.02},   // BARRA CONICA 6' X 7/8''
+  {c:"1500003022",p:118.35},   // BARRA DE ALUMINIO PARA ACUÑAR 1" X 10´
+  {c:"1500002745",p:141.9},   // BARRA DE ALUMINIO PARA ACUÑAR 1" X 12
+  {c:"1500002766",p:71.82},   // BARRA DE ALUMINIO PARA ACUÑAR 1" X 4"
+  {c:"1500002765",p:81.8},   // BARRA DE ALUMINIO PARA ACUÑAR 1" X 6´
+  {c:"1500003013",p:99.69},   // BARRA DE ALUMINIO PARA ACUÑAR 1" X 8´
+  {c:"1300000023",p:89.12},   // BROCA DESCARTABLE DE BOTONES 32 MM
+  {c:"1300000026",p:97.92},   // BROCA DESCARTABLE DE BOTONES 36 MM
+  {c:"1500003378",p:1.08},   // CABLE DE ACERO GALVANIZADO 5/32" (6X19)
+  {c:"1500003087",p:1.23},   // CARTUCHO DE CEMENTO 30MM X 305MM
+  {c:"1500003086",p:28.12},   // CEMENTO GRIS ANTISALITRE PORTL. TIPO MS
+  {c:"1700000170",p:1945.13},   // CIMBRA AC (2C) 3 X 3M W6' X 20LB/FT
+  {c:"1700000144",p:2053.37},   // CIMBRA AC (2C) 3.5X3.5 MTR W6" X20 LB/FT
+  {c:"1600000006",p:68.52},   // ESCALERA DE MADERA  3.60 MTRX 11 PELD.
+  {c:"1500000032",p:7.67},   // GUIADORES  DE MADERA 1" X 1.30 MTR
+  {c:"1600000008",p:13.92},   // LISTON  2" X 3" X 10´
+  {c:"1500003424",p:380.69},   // MALLA ELECTROSOLDADA 4"X4"-2.42 X 25 MTR
+  {c:"2100000012",p:22.36},   // MANGA DE VENT. 12" X 10 MTR
+  {c:"2100000018",p:36.37},   // MANGA DE VENT. 30" X 100 MTR 600 GR/M2
+  {c:"2100000014",p:37.28},   // MANGA DE VENT. 30" X 20 MTR
+  {c:"1500002650",p:7.93},   // MANGUERA DE JEBE Y LONA 1" 300 PSI
+  {c:"1500002649",p:4.02},   // MANGUERA DE JEBE Y LONA 1/2"
+  {c:"1500001442",p:24.59},   // PERNO HELICOIDAL 19 MM X 5´(1.52MTR)
+  {c:"1500001443",p:26.85},   // PERNO HELICOIDAL 19 MM X 6´(1.83MTR)
+  {c:"1500001441",p:30.41},   // PERNO HELICOIDAL 19 MM X 7´(2.13MTR)
+  {c:"1500001491",p:156.08},   // PLANCHA ACANALADA T/ONDUL. 2X1100X1700MM
+  {c:"1500003208",p:3.24},   // RESINA 28 MM X 305 MM 0-60 SECOND SET
+  {c:"1500002859",p:1.09},   // SACO METALERO POLIPROPILENO 20" X 30"
+  {c:"1500001431",p:19.62},   // SPLIT SET CON PLATINA 5´ X 39MM
+  {c:"1600000009",p:25.43},   // TABLA ASERRADA  2" X 8" X 10´
+];
 /* ══════════ RECUPERAR PRECIOS ══════════
    Cada movimiento guarda el precio con el que se registró. Si el maestro pierde un precio,
    aquí se reconstruye a partir del último precio REAL grabado en los movimientos: ingresos,
@@ -7246,6 +7290,8 @@ function prodPreciosRecuperables(){
     if(!mejor[c] || ts>mejor[c].ts) mejor[c]={precio:p, ts:ts||0, fuente:fuente};
   };
   (A.ingresos||[]).forEach(x=>anota(x.codigo, x.precio, _prodFechaTs(x), 'Ingreso '+(x.fecha||'')));
+  // La lista de Poderosa es la referencia más reciente: manda sobre los movimientos.
+  try{ PRECIOS_POD.forEach(x=>anota(x.c, x.p, 8.64e15, PRECIOS_POD_FUENTE)); }catch(e){}
   (A.inventarioInicial||[]).forEach(x=>anota(x.codigo, x.precio, _prodFechaTs(x), 'Inventario inicial'));
   (A.salidas||[]).forEach(x=>anota(x.codigo, x.precio, _prodFechaTs(x), 'Salida '+(x.fecha||'')));
   try{
@@ -7262,16 +7308,17 @@ function prodPreciosRecuperables(){
     if(!m) return null;
     const act=Number(p.precio)||0;
     if(Math.abs(act-m.precio)<0.005) return null;         // ya está igual
+    const deLista=(m.fuente===PRECIOS_POD_FUENTE);
     return {id:p.id, codigo:p.codigo, nombre:p.nombre, actual:act, propuesto:m.precio,
-            fuente:m.fuente, fechaFuente:fmtF(m.ts), sinPrecio:act<=0};
-  }).filter(Boolean).sort((a,b)=>(b.sinPrecio-a.sinPrecio)||String(a.nombre||'').localeCompare(String(b.nombre||'')));
+            fuente:m.fuente, fechaFuente:deLista?'':fmtF(m.ts), sinPrecio:act<=0, marcar:(act<=0||deLista)};
+  }).filter(Boolean).sort((a,b)=>(b.marcar-a.marcar)||(b.sinPrecio-a.sinPrecio)||String(a.nombre||'').localeCompare(String(b.nombre||'')));
 }
 function abrirRecuperarPrecios(){
   const lista=prodPreciosRecuperables();
   window._prodRescate=lista;
   const sinP=lista.filter(x=>x.sinPrecio).length;
   const fila=(x,i)=>`<tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:6px 8px"><input type="checkbox" class="prc-chk" data-i="${i}" ${x.sinPrecio?'checked':''}></td>
+      <td style="padding:6px 8px"><input type="checkbox" class="prc-chk" data-i="${i}" ${x.marcar?'checked':''}></td>
       <td style="padding:6px 8px;font-size:11px;color:var(--text3)">${escAttr(String(x.codigo||''))}</td>
       <td style="padding:6px 8px;font-size:11px;color:var(--text1)">${escAttr(String(x.nombre||''))}</td>
       <td style="padding:6px 8px;font-size:11px;text-align:right;color:${x.sinPrecio?'#e66767':'var(--text3)'}">${x.actual>0?('S/ '+x.actual.toFixed(2)):'sin precio'}</td>
