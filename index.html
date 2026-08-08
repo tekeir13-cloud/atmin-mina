@@ -3008,6 +3008,7 @@ select option{background:var(--coal3);}
     <button class="mod-tab" onclick="modTab('op','vsproyectado',this)">👷 Reporte Ing. Residente</button>
     <button class="mod-tab" onclick="modTab('op','valorizaciones',this)">💵 Valorizaciones</button>
     <button class="mod-tab" onclick="modTab('op','solicitudes',this);renderSolicitudesPendientesOp()">🛒 Solicitudes</button>
+    <button class="mod-tab" onclick="modTab('op','herramientas',this)">🧰 Herramientas</button>
   </div>
   <div class="mod-pane active" style="display:block" id="op-tablero">
     <div style="margin-bottom:8px"><div class="section-title" style="margin:0">🎯 Tablero de Operaciones</div><div style="font-size:12px;color:var(--text3);margin-top:4px">Vista consolidada de avance, taladros, personal y explosivos — <span id="tab-mes-label"></span></div></div>
@@ -3068,6 +3069,7 @@ select option{background:var(--coal3);}
     </div>
     <div id="rg-lista"></div>
   </div>
+  <div class="mod-pane" style="display:none" id="op-herramientas"></div>
   <div class="mod-pane" style="display:none" id="op-solicitudes">
     <div class="section-title" style="margin-top:0">🛒 Solicitudes de Compra — Pendientes de aprobación</div>
     <div id="op-sc-pendientes"></div>
@@ -4612,7 +4614,7 @@ const MODULE_PANES = {
   // así que uno ausente se queda visible encima del que acabas de abrir.
   'log': ['almacen','historial','inventario','solicitudcompra','productos','explosivos','stockremanente','subalmacen2820','solicitudmantlog','combustible','estadisticas'],
   'rrhh': ['planilla','tareomes','tareas','personal','costorrhh','servicios','planillaint'],
-  'op': ['tablero','avance','solicitudes','vsproyectado','valorizaciones'],
+  'op': ['tablero','avance','solicitudes','vsproyectado','valorizaciones','herramientas'],
   'mant': ['registro','costosmant'],
   'fin': ['dashboard','informe','costocentro'],
   'cmp': ['facturas','informe','presupuestos','balance']
@@ -5253,6 +5255,7 @@ function renderModPane(mod,pane){
   else if(k==='op-avance'){renderAvance();}
   else if(k==='op-solicitudes')renderSolicitudesPendientesOp();
   else if(k==='op-vsproyectado')renderResidente();
+  else if(k==='op-herramientas')renderHerramientasOp();
   else if(k==='mant-registro')renderMantenimiento();
   else if(k==='mant-costosmant')renderCostosMant();
   else if(k==='fin-dashboard') renderFinDashboard();
@@ -14545,6 +14548,280 @@ function reunionesSave(){try{localStorage.setItem(REU_KEY,JSON.stringify(state.r
 function metasLoad(){try{const d=localStorage.getItem(METAS_KEY);if(d)Object.assign(state.metas,JSON.parse(d)||{});}catch(e){}}
 function metasSave(){try{localStorage.setItem(METAS_KEY,JSON.stringify(state.metas));}catch(e){} try{ sbSyncModulo('metas', state.metas||{}); }catch(e){}}
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   HERRAMIENTAS · CUADERNO DE REPORTE → EXCEL
+   Se toma una foto de la hoja del cuaderno, se lee con OCR EN EL PROPIO EQUIPO (sin API,
+   sin subir la imagen a ningún lado) y cada renglón se vuelca a una tabla con las columnas
+   del cuaderno: fecha, turno, labor, descripción, personal, horas y tareas. La firma no se
+   captura: no es un dato. Cada foto nueva AGREGA sus filas debajo de las anteriores.
+   La letra manuscrita nunca se lee perfecta: por eso TODA la tabla es editable y cada fila
+   trae el renglón original tal como salió del OCR, para poder corregir mirando la foto.
+   ══════════════════════════════════════════════════════════════════════════════ */
+const HERR_KEY='atmin_herr_cuaderno';        // hoja de trabajo (lo que se está armando)
+const HERR_ARCH_KEY='atmin_herr_archivo';    // hojas ya guardadas
+const HERR_COLS=[
+  {k:'fecha',      t:'Fecha',       w:12},
+  {k:'turno',      t:'Turno',       w:10},
+  {k:'labor',      t:'Labor',       w:16},
+  {k:'descripcion',t:'Descripción', w:62},
+  {k:'personal',   t:'Personal',    w:10},
+  {k:'horas',      t:'Horas',       w:9},
+  {k:'tareas',     t:'Tareas',      w:9}
+];
+function herrCargar(){ try{ return JSON.parse(localStorage.getItem(HERR_KEY)||'[]')||[]; }catch(e){ return []; } }
+function herrGuardarTrabajo(a){ try{ localStorage.setItem(HERR_KEY,JSON.stringify(a||[])); }catch(e){} }
+function herrArchivo(){ try{ return JSON.parse(localStorage.getItem(HERR_ARCH_KEY)||'[]')||[]; }catch(e){ return []; } }
+function herrArchivoSet(a){ try{ localStorage.setItem(HERR_ARCH_KEY,JSON.stringify(a||[])); }catch(e){} }
+
+/* ── LECTURA DE UN RENGLÓN ──
+   El cuaderno tiene un orden fijo: fecha, turno, labor, descripción larga y al final tres
+   números (personal, horas, tareas). Se ancla por la FECHA al principio y por los NÚMEROS
+   al final; lo que queda en medio es turno + labor + descripción. */
+const HERR_TURNOS=['DIA','DÍA','NOCHE'];
+function herrParsearLinea(txt){
+  let t=String(txt||'').replace(/\s+/g,' ').trim();
+  if(t.length<8) return null;
+  // Fecha: 30/07/26, 30-07-2026, 30.07.26
+  const mf=t.match(/(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{2,4})/);
+  if(!mf) return null;
+  const dd=String(mf[1]).padStart(2,'0'), mm=String(mf[2]).padStart(2,'0');
+  let aa=String(mf[3]); if(aa.length===2) aa='20'+aa;
+  const fecha=aa+'-'+mm+'-'+dd;
+  let resto=t.slice(mf.index+mf[0].length).trim();
+  // Los tres números del final: personal, horas, tareas (las horas y tareas pueden ser 0.5, 1.6…)
+  const nums=[]; 
+  let m2;
+  const reFin=/([0-9]+(?:[.,][0-9]+)?)\s*$/;
+  for(let i=0;i<3;i++){
+    m2=resto.match(reFin);
+    if(!m2) break;
+    nums.unshift(m2[1].replace(',','.'));
+    resto=resto.slice(0,m2.index).trim();
+  }
+  const [personal,horas,tareas]=[nums[0]||'',nums[1]||'',nums[2]||''];
+  // Turno
+  let turno='';
+  const up=resto.toUpperCase();
+  const ti=HERR_TURNOS.map(x=>({x,i:up.indexOf(x)})).filter(o=>o.i>=0).sort((a,b)=>a.i-b.i)[0];
+  if(ti){ turno=(ti.x==='DÍA'?'DIA':ti.x); resto=(resto.slice(0,ti.i)+' '+resto.slice(ti.i+ti.x.length)).replace(/\s+/g,' ').trim(); }
+  // Labor: la primera palabra o par de palabras antes de que empiece la descripción larga.
+  // En el cuaderno la descripción casi siempre arranca con "SE ..."
+  let labor='', desc=resto;
+  const ms=resto.match(/\bSE\b/i);
+  if(ms && ms.index>0){ labor=resto.slice(0,ms.index).trim(); desc=resto.slice(ms.index).trim(); }
+  else { const p=resto.split(' '); if(p.length>3){ labor=p.shift(); desc=p.join(' '); } }
+  return {fecha,turno,labor:labor.slice(0,40),descripcion:desc,personal,horas,tareas,crudo:t};
+}
+function herrParsearOcr(lineas){
+  const filas=[]; let ultima=null;
+  (lineas||[]).forEach(l=>{
+    const f=herrParsearLinea(l);
+    if(f){ filas.push(f); ultima=f; return; }
+    // Renglón sin fecha: es la continuación de la descripción de la fila anterior
+    const t=String(l||'').replace(/\s+/g,' ').trim();
+    if(ultima && t.length>3 && !/^[\d\s.,\/-]+$/.test(t)){
+      ultima.descripcion=(ultima.descripcion+' '+t).trim();
+      ultima.crudo=(ultima.crudo+' ⏎ '+t);
+    }
+  });
+  return filas;
+}
+
+let _herrOcupado=false;
+async function herrAgregarFoto(input){
+  const file=input&&input.files&&input.files[0]; if(!file) return;
+  if(_herrOcupado){ showNotif('Espera a que termine la foto anterior','warn'); return; }
+  _herrOcupado=true;
+  const est=document.getElementById('herr-estado');
+  const poner=(t,c)=>{ if(est){ est.style.display='block'; est.style.color=c||'var(--text3)'; est.textContent=t; } };
+  try{
+    poner('Leyendo la foto… esto tarda un poco, no cierres la pestaña.');
+    const dataUrl=await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(new Error('no se pudo leer la imagen')); r.readAsDataURL(file); });
+    const lineas=await cmpOcrImagen(dataUrl, p=>poner('Leyendo la foto… '+p+'%'));
+    const filas=herrParsearOcr(lineas);
+    if(!filas.length){
+      poner('No se reconoció ningún renglón con fecha en esta foto. Puedes agregar las filas a mano con "+ Fila vacía".','#f59e0b');
+    }else{
+      const prev=herrCargar();
+      const foto=prev.reduce((m,f)=>Math.max(m,Number(f.foto)||0),0)+1;
+      filas.forEach(f=>{ f.id='H'+Date.now()+Math.random().toString(36).slice(2,6); f.foto=foto; });
+      herrGuardarTrabajo(prev.concat(filas));
+      poner('Foto '+foto+': se agregaron '+filas.length+' fila'+(filas.length!==1?'s':'')+' al final de la tabla. Revísalas contra la foto y corrige lo que haga falta.','#22d3a5');
+    }
+    renderHerramientasOp();
+  }catch(e){
+    poner('No se pudo leer la foto: '+(e&&e.message||e),'#f87171');
+  }finally{
+    _herrOcupado=false; if(input) input.value='';
+  }
+}
+function herrEditar(id,campo,valor){
+  const a=herrCargar(); const f=a.find(x=>x.id===id); if(!f) return;
+  f[campo]=String(valor==null?'':valor);
+  herrGuardarTrabajo(a);
+}
+function herrFilaVacia(){
+  const a=herrCargar();
+  const foto=a.reduce((m,f)=>Math.max(m,Number(f.foto)||0),0)||1;
+  a.push({id:'H'+Date.now()+Math.random().toString(36).slice(2,6),foto,fecha:'',turno:'',labor:'',descripcion:'',personal:'',horas:'',tareas:'',crudo:''});
+  herrGuardarTrabajo(a); renderHerramientasOp();
+}
+function herrBorrarFila(id){
+  herrGuardarTrabajo(herrCargar().filter(f=>f.id!==id)); renderHerramientasOp();
+}
+function herrLimpiar(){
+  if(!herrCargar().length) return;
+  if(!confirm('¿Vaciar la tabla en curso? Lo ya GUARDADO en el archivo no se toca.')) return;
+  herrGuardarTrabajo([]); renderHerramientasOp();
+}
+function herrGuardarHoja(){
+  const filas=herrCargar();
+  if(!filas.length){ showNotif('No hay filas que guardar','warn'); return; }
+  const nom=prompt('Nombre para esta hoja:', 'Cuaderno de reporte '+hoy());
+  if(nom===null) return;
+  const arch=herrArchivo();
+  arch.unshift({id:'HA'+Date.now(), nombre:(nom||'Cuaderno '+hoy()).trim(), fecha:hoy(),
+                guardadoEn:Date.now(), filas:JSON.parse(JSON.stringify(filas))});
+  herrArchivoSet(arch);
+  herrGuardarTrabajo([]);
+  renderHerramientasOp();
+  showNotif('✓ Hoja guardada en el archivo ('+filas.length+' filas). Ya puedes descargarla cuando quieras.','ok');
+}
+function herrEliminarArchivada(id){
+  const a=herrArchivo(); const h=a.find(x=>x.id===id); if(!h) return;
+  if(!confirm('¿Eliminar "'+h.nombre+'" del archivo? ('+h.filas.length+' filas)')) return;
+  herrArchivoSet(a.filter(x=>x.id!==id)); renderHerramientasOp();
+}
+async function herrExcel(id){
+  if(typeof ExcelJS==='undefined'){ showNotif('Librería Excel no disponible','error'); return; }
+  const h=id?herrArchivo().find(x=>x.id===id):{nombre:'Cuaderno de reporte',fecha:hoy(),filas:herrCargar()};
+  if(!h||!h.filas.length){ showNotif('No hay filas para exportar','warn'); return; }
+  const wb=new ExcelJS.Workbook(); wb.creator='MUKICLOUD'; wb.company='TEMUAL'; wb.created=new Date();
+  const ws=wb.addWorksheet('Cuaderno',{views:[{state:'frozen',ySplit:4}]});
+  const cols=HERR_COLS.map(c=>({t:c.t,w:c.w,a:(['personal','horas','tareas'].indexOf(c.k)>=0)?'center':'left'}));
+  _xTitulo(ws,h.nombre,cols.length,'Transcrito del cuaderno de reporte · '+(h.fecha||hoy()));
+  let fila=_xCabecera(ws,4,cols);   // 1 título, 2 subtítulo, 3 en blanco, 4 cabecera
+  const ini=fila;
+  h.filas.forEach(f=>{
+    const r=ws.getRow(fila++);
+    HERR_COLS.forEach((c,i)=>{
+      const v=f[c.k]==null?'':f[c.k];
+      r.getCell(i+1).value=(['personal','horas','tareas'].indexOf(c.k)>=0 && v!=='' && !isNaN(parseFloat(v)))?parseFloat(v):v;
+    });
+  });
+  _xCuerpo(ws,ini,fila-1,cols);
+  // Totales de personal, horas y tareas
+  const rt=ws.getRow(fila);
+  rt.getCell(1).value='TOTAL ('+h.filas.length+' registros)';
+  const suma=k=>h.filas.reduce((s,f)=>s+(parseFloat(f[k])||0),0);
+  rt.getCell(5).value=Math.round(suma('personal')*100)/100;
+  rt.getCell(6).value=Math.round(suma('horas')*100)/100;
+  rt.getCell(7).value=Math.round(suma('tareas')*100)/100;
+  _xTotal(ws,fila,cols);
+  _xRematar(ws,ini-1,fila,cols.length);
+  ws.getColumn(4).alignment={wrapText:true,vertical:'top'};
+  const buf=await wb.xlsx.writeBuffer();
+  const bl=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(bl);
+  a.download=String(h.nombre||'cuaderno').replace(/[^\w\d\- ]+/g,'_')+'.xlsx';
+  a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  showNotif('✓ Excel descargado','ok');
+}
+function renderHerramientasOp(){
+  const el=document.getElementById('op-herramientas'); if(!el) return;
+  const filas=herrCargar(), arch=herrArchivo();
+  const inp=(f,k,extra)=>`<input value="${escAttr(String(f[k]==null?'':f[k]))}" oninput="herrEditar('${f.id}','${k}',this.value)"
+      style="width:100%;box-sizing:border-box;background:transparent;border:1px solid transparent;border-radius:5px;padding:4px 5px;color:var(--text);font-size:11.5px;${extra||''}"
+      onfocus="this.style.borderColor='var(--accent-border)';this.style.background='var(--coal4)'"
+      onblur="this.style.borderColor='transparent';this.style.background='transparent'">`;
+  const cuerpo=filas.map((f,i)=>`<tr style="border-top:1px solid var(--border)">
+      <td style="padding:3px 4px;text-align:center;color:var(--text3);font-size:10px" title="${escAttr(f.crudo||'')}">${i+1}<br><span style="font-size:9px">📷${f.foto||1}</span></td>
+      <td style="padding:3px 4px">${inp(f,'fecha')}</td>
+      <td style="padding:3px 4px">${inp(f,'turno')}</td>
+      <td style="padding:3px 4px">${inp(f,'labor')}</td>
+      <td style="padding:3px 4px">${inp(f,'descripcion')}</td>
+      <td style="padding:3px 4px;width:62px">${inp(f,'personal','text-align:center')}</td>
+      <td style="padding:3px 4px;width:62px">${inp(f,'horas','text-align:center')}</td>
+      <td style="padding:3px 4px;width:62px">${inp(f,'tareas','text-align:center')}</td>
+      <td style="padding:3px 4px;text-align:center"><button class="btn btn-outline" style="padding:2px 7px;font-size:10px;color:#f87171;border-color:#f87171" onclick="herrBorrarFila('${f.id}')">🗑</button></td>
+    </tr>`).join('');
+  const sum=k=>filas.reduce((s,f)=>s+(parseFloat(f[k])||0),0);
+  const fotos=new Set(filas.map(f=>f.foto||1)).size;
+  const archHtml=arch.length?arch.map(h=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:9px;margin-bottom:7px;background:var(--coal4)">
+      <div style="min-width:0">
+        <div style="font-size:12.5px;font-weight:700;color:var(--text)">📁 ${escAttr(h.nombre)}</div>
+        <div style="font-size:10.5px;color:var(--text3)">${h.filas.length} fila${h.filas.length!==1?'s':''} · guardado el ${new Date(h.guardadoEn||Date.now()).toLocaleDateString('es-PE')}</div>
+      </div>
+      <div style="display:flex;gap:6px;white-space:nowrap">
+        <button class="btn btn-outline" style="font-size:11px;padding:5px 11px;color:#22c55e;border-color:#22c55e" onclick="herrExcel('${h.id}')">📊 Descargar Excel</button>
+        <button class="btn btn-outline" style="font-size:11px;padding:5px 11px;color:#f87171;border-color:#f87171" onclick="herrEliminarArchivada('${h.id}')">🗑</button>
+      </div>
+    </div>`).join(''):'<div style="font-size:12px;color:var(--text3);padding:14px 0">Todavía no has guardado ninguna hoja.</div>';
+
+  el.innerHTML=`
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+    <div>
+      <div class="section-title" style="margin:0">🧰 Cuaderno de reporte → Excel</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">
+        Toma la foto de la hoja del cuaderno y el sistema transcribe fecha, turno, labor, descripción,
+        personal, horas y tareas. La firma no se captura. Cada foto agrega sus filas debajo de las anteriores.
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <input type="file" id="herr-foto-input" accept="image/*" capture="environment" style="display:none" onchange="herrAgregarFoto(this)">
+      <button class="btn btn-gold" style="font-size:12px" onclick="document.getElementById('herr-foto-input').click()">📷 Agregar foto</button>
+      <button class="btn btn-outline" style="font-size:12px" onclick="herrFilaVacia()">+ Fila vacía</button>
+    </div>
+  </div>
+  <div id="herr-estado" style="display:none;font-size:11.5px;margin-bottom:10px;padding:8px 11px;border:1px solid var(--border);border-radius:8px;background:var(--coal4)"></div>
+  <div style="font-size:11px;color:var(--text3);margin-bottom:8px">
+    ⚠ La letra a mano no se lee perfecta. Toda la tabla es editable: haz clic en cualquier celda y corrige.
+    Pasa el mouse por el número de fila para ver el renglón tal como lo leyó el sistema.
+  </div>
+  <div class="card" style="padding:10px">
+    ${filas.length?`
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;min-width:900px">
+        <thead><tr style="color:var(--text3);text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px">
+          <th style="padding:5px 4px;width:38px">#</th>
+          <th style="padding:5px 4px;width:100px">Fecha</th>
+          <th style="padding:5px 4px;width:80px">Turno</th>
+          <th style="padding:5px 4px;width:120px">Labor</th>
+          <th style="padding:5px 4px">Descripción</th>
+          <th style="padding:5px 4px;text-align:center">Personal</th>
+          <th style="padding:5px 4px;text-align:center">Horas</th>
+          <th style="padding:5px 4px;text-align:center">Tareas</th>
+          <th style="padding:5px 4px;width:44px"></th>
+        </tr></thead>
+        <tbody id="herr-tbody">${cuerpo}</tbody>
+        <tfoot><tr style="border-top:2px solid var(--border);font-weight:800">
+          <td colspan="5" style="padding:7px 6px;font-size:11.5px;color:var(--text2)">${filas.length} fila${filas.length!==1?'s':''} · ${fotos} foto${fotos!==1?'s':''}</td>
+          <td style="padding:7px 6px;text-align:center;color:var(--text)">${Math.round(sum('personal')*100)/100}</td>
+          <td style="padding:7px 6px;text-align:center;color:var(--text)">${Math.round(sum('horas')*100)/100}</td>
+          <td style="padding:7px 6px;text-align:center;color:var(--text)">${Math.round(sum('tareas')*100)/100}</td>
+          <td></td>
+        </tr></tfoot>
+      </table>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
+      <button class="btn btn-outline" style="font-size:12px;color:#f87171;border-color:#f87171" onclick="herrLimpiar()">Vaciar tabla</button>
+      <button class="btn btn-outline" style="font-size:12px;color:#22c55e;border-color:#22c55e" onclick="herrExcel('')">📊 Descargar Excel</button>
+      <button class="btn btn-gold" style="font-size:12px" onclick="herrGuardarHoja()">💾 Guardar y archivar</button>
+    </div>`
+    :`<div class="empty-state" style="padding:30px 18px">
+        <div style="font-size:30px;margin-bottom:8px">📷</div>
+        <div style="font-size:13px;color:var(--text2);font-weight:600;margin-bottom:5px">Sin filas todavía</div>
+        <div style="font-size:12px;color:var(--text3);max-width:460px;margin:0 auto">
+          Dale a <b>Agregar foto</b> y elige la imagen de la hoja del cuaderno. Puedes sumar varias fotos:
+          las filas de cada una se van agregando debajo de las anteriores.
+        </div>
+      </div>`}
+  </div>
+  <div class="card" style="margin-top:14px">
+    <div class="section-title" style="margin-top:0">📁 Hojas guardadas</div>
+    ${archHtml}
+  </div>`;
+}
 function renderResidente(){
   metasLoad();reunionesLoad();distribLoad();
   const g=id=>document.getElementById(id);
