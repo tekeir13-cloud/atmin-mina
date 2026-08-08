@@ -50,6 +50,61 @@
   --border2:       rgba(245,242,232,0.05);
   --border-accent: rgba(201,168,76,0.25);
 }
+
+/* ══ MODO CLARO ══ Mismos nombres de variables: todo lo que ya usa var(--coal…)/var(--text…)
+   cambia solo. Los colores de los gráficos NO están aquí, siguen siendo los mismos. */
+:root[data-theme="light"] {
+  --coal:  #f6f4ee;
+  --coal2: #ffffff;
+  --coal3: #ffffff;
+  --coal4: #faf8f2;
+  --coal5: #f0ece1;
+
+  --text:  #23211c;
+  --text2: #55503f;
+  --text3: #8a836e;
+
+  --accent:        #9a7c22;
+  --accent-light:  #b8952f;
+  --accent-dim:    rgba(154,124,34,0.10);
+  --accent-glow:   rgba(154,124,34,0.18);
+  --accent-border: rgba(154,124,34,0.35);
+
+  --grad-accent:   linear-gradient(135deg,#c9a84c 0%,#9a7c22 100%);
+  --grad-surface:  linear-gradient(180deg,#ffffff 0%,#faf8f2 100%);
+  --grad-glow:     radial-gradient(ellipse at top,rgba(154,124,34,0.07) 0%,transparent 70%);
+
+  --positive: #0f8f6c;
+  --negative: #c23b3b;
+  --warn:     #b56a12;
+  --neutral:  #55503f;
+  --danger:   #c23b3b;
+  --success:  #0f8f6c;
+  --info:     #9a7c22;
+  --gold:     #9a7c22;
+  --gold-light: #c9a84c;
+
+  --border:        rgba(35,33,28,0.14);
+  --border2:       rgba(35,33,28,0.08);
+  --border-accent: rgba(154,124,34,0.30);
+}
+/* Retoques del modo claro: superficies que estaban pintadas a mano en oscuro */
+:root[data-theme="light"] body{ background:var(--coal); }
+:root[data-theme="light"] .sidebar,
+:root[data-theme="light"] .topbar{ background:#ffffff; }
+:root[data-theme="light"] .card,
+:root[data-theme="light"] .kpi-card,
+:root[data-theme="light"] .modal{ background:#ffffff; border-color:var(--border); }
+:root[data-theme="light"] .login-brand{
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(201,168,76,0.22) 0%, transparent 60%),
+    linear-gradient(145deg,#fffdf6 0%,#f3eddc 100%);
+}
+:root[data-theme="light"] .mk-w1{ color:#23211c; -webkit-text-fill-color:#23211c; }
+:root[data-theme="light"] input,
+:root[data-theme="light"] select,
+:root[data-theme="light"] textarea{ background:#ffffff; color:var(--text); }
+:root[data-theme="light"] table thead tr{ background:var(--coal5); }
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:'DM Sans',sans-serif;background:var(--coal);color:var(--text);min-height:100vh;overflow-x:hidden;}
 
@@ -2368,6 +2423,12 @@ select option{background:var(--coal3);}
   </div>
 </div>
 
+<button id="btn-tema" onclick="toggleTema()" title="Modo claro / oscuro"
+  style="position:fixed;top:12px;right:58px;z-index:9999;width:38px;height:38px;border-radius:10px;
+  background:var(--coal4);border:1px solid var(--border);color:var(--text);cursor:pointer;
+  font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);
+  box-shadow:0 4px 14px rgba(0,0,0,0.25);transition:background .15s,transform .15s">🌙</button>
+
 <button id="btn-fullscreen" onclick="toggleFullscreen()" title="Pantalla completa"
   style="position:fixed;top:12px;right:12px;z-index:9999;width:38px;height:38px;border-radius:10px;
   background:rgba(30,30,40,0.7);border:1px solid rgba(255,255,255,0.12);color:#e5e7eb;cursor:pointer;
@@ -4314,6 +4375,24 @@ select option{background:var(--coal3);}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
+/* ══ TEMA CLARO / OSCURO ══ La preferencia se guarda en este equipo y se aplica desde la
+   pantalla de inicio de sesión, antes de pintar nada, para que no haya parpadeo. */
+const TEMA_KEY='atmin_tema';
+function temaActual(){ try{ return localStorage.getItem(TEMA_KEY)==='light'?'light':'dark'; }catch(e){ return 'dark'; } }
+function aplicarTema(t){
+  const claro = t==='light';
+  document.documentElement.setAttribute('data-theme', claro?'light':'dark');
+  const b=document.getElementById('btn-tema');
+  if(b){ b.textContent = claro?'☀️':'🌙'; b.title = claro?'Cambiar a modo oscuro':'Cambiar a modo claro'; }
+}
+function toggleTema(){
+  const t = temaActual()==='light' ? 'dark' : 'light';
+  try{ localStorage.setItem(TEMA_KEY,t); }catch(e){}
+  aplicarTema(t);
+}
+try{ aplicarTema(temaActual()); }catch(e){}
+try{ document.addEventListener('DOMContentLoaded',()=>{ try{ aplicarTema(temaActual()); }catch(e){} }); }catch(e){}
+
 const SUPABASE_URL='https://ueiermflrxiapeednrov.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlaWVybWZscnhpYXBlZWRucm92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MTM4NDYsImV4cCI6MjA5NTQ4OTg0Nn0.75qDiRT0azEfjR0Boqah4rWy2GFumLfhJayKU6S_6e8';
 let sb;
