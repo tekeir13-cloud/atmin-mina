@@ -4472,10 +4472,10 @@ const EQUIPOS_FACTURABLES=[
   {label:'Grupo Electrógeno MP-120',fig:'grupo',col:'#fbbf24',
    tags:['grupo electrógeno mp-120','grupo electrogeno mp-120','mp-120','mp120','grupo electrógeno','grupo electrogeno'],
    mt:['grupo electrógeno mp-120','grupo electrogeno mp-120','mp-120','mp120','grupo electrógeno','grupo electrogeno'],
-   mtNo:['mv 2321','mv2321'],op:2500,opL:'S/2,500/mes'},
+   mtNo:['mv 2321','mv2321'],op:3000,opL:'S/3,000/mes'},
   {label:'Grupo Electrógeno MV 2321',fig:'grupo',col:'#f59e0b',
    tags:['grupo electrógeno mv 2321','grupo electrogeno mv 2321','mv 2321','mv2321'],
-   mt:['grupo electrógeno mv 2321','grupo electrogeno mv 2321','mv 2321','mv2321'],op:2500,opL:'S/2,500/mes'},
+   mt:['grupo electrógeno mv 2321','grupo electrogeno mv 2321','mv 2321','mv2321'],op:3000,opL:'S/3,000/mes'},
 ];
 const PT={'dashboard':'Dashboard KPI','logistica':'Módulo Logística','rrhh':'Recursos Humanos','operaciones':'Módulo Operaciones','mantenimiento':'Módulo Mantenimiento','finanzas':'Módulo Finanzas','reporte':'Reporte Mensual','compresorista':'Reporte Compresorista','compras':'Módulo Compras'};
 
@@ -6109,7 +6109,11 @@ function renderDashEjecutivo(){
   const precioPet=compGetPrecioPet();
   const precioGas=compGetPrecioGas();
   const mantMes=(state.mantenimiento||[]).filter(m=>filtroMes(m.fecha,mes));
-  const mantPorEq=(tags,no)=>mantMes.filter(m=>{const e=(m.equipo||'').toLowerCase();if(no&&no.some(t=>e.includes(t)))return false;return m.aprobLog&&m.aprobLog.ok&&tags.some(t=>e.includes(t));}).reduce((s,m)=>s+(m.costo||0),0);
+  // Órdenes de mantenimiento del mes atribuidas a un equipo. Solo cuentan las APROBADAS por
+  // Logística (aprobLog.ok), que son exactamente las mismas que finCostoKits lleva al gasto
+  // general: el costo por equipo y el costo operativo salen de la misma fuente, sin duplicar.
+  const mantOrdenesEq=(tags,no)=>mantMes.filter(m=>{const e=(m.equipo||'').toLowerCase();if(no&&no.some(t=>e.includes(t)))return false;return m.aprobLog&&m.aprobLog.ok&&tags.some(t=>e.includes(t));});
+  const mantPorEq=(tags,no)=>mantOrdenesEq(tags,no).reduce((s,m)=>s+(m.costo||0),0);
   const ingMes=finIngMaqGet(mes);
 
   const MAQUINAS=EQUIPOS_FACTURABLES;
@@ -6119,10 +6123,11 @@ function renderDashEjecutivo(){
     const galGas=m.tags.reduce((s,t)=>s+(galMaqGas[t]||0),0);
     const ingresos=ingMes[m.label]||0;
     const ingRegistrado=m.label in ingMes;
-    const cMant=mantPorEq(m.mt,m.mtNo);
+    const ordMant=mantOrdenesEq(m.mt,m.mtNo);
+    const cMant=ordMant.reduce((s,x)=>s+(x.costo||0),0);
     const cComb=galPet*precioPet+galGas*precioGas;
     const cOp=m.op;
-    return {...m,horas,galPet,galGas,ingresos,ingRegistrado,cMant,cComb,cOp,resultado:ingresos-cMant-cComb-cOp};
+    return {...m,horas,galPet,galGas,ingresos,ingRegistrado,ordMant,cMant,cComb,cOp,resultado:ingresos-cMant-cComb-cOp};
   });
   const maxAbs=Math.max(1,...maqData.map(m=>Math.abs(m.resultado)));
   const maqCards=maqData.map(m=>{
@@ -6155,6 +6160,13 @@ function renderDashEjecutivo(){
         ${m.cComb>0?`<div style="background:rgba(239,68,68,.07);border-radius:7px;padding:6px 9px"><div style="color:var(--text3)">🛢 Combustible</div><div style="font-weight:700;color:#ef4444;margin-top:1px">-${Sk(m.cComb)}</div><div style="color:var(--text3);font-size:9px">${m.galPet>0?m.galPet.toFixed(1)+'gal pet':''} ${m.galGas>0?m.galGas.toFixed(1)+'gal gas':''}</div></div>`:''}
         <div style="background:rgba(139,92,246,.07);border-radius:7px;padding:6px 9px"><div style="color:var(--text3)">👷 Operador</div><div style="font-weight:700;color:#8b5cf6;margin-top:1px">-${Sk(m.cOp)}</div><div style="color:var(--text3);font-size:9px">${m.opL}</div></div>
       </div>
+      ${m.ordMant&&m.ordMant.length?`<div style="margin-top:9px;border-top:1px solid var(--border);padding-top:7px">
+        <div style="font-size:9.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">🔧 ${m.ordMant.length} orden${m.ordMant.length!==1?'es':''} de mantenimiento del mes</div>
+        ${m.ordMant.slice(0,4).map(o=>`<div style="display:flex;justify-content:space-between;gap:8px;font-size:10px;color:var(--text3);padding:1px 0">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(o.fecha||'').slice(8,10)}/${(o.fecha||'').slice(5,7)} ${escAttr(String(o.descripcion||o.tipo||o.trabajo||'mantenimiento')).slice(0,42)}</span>
+          <span style="color:#f59e0b;white-space:nowrap">-${Sk(o.costo||0)}</span></div>`).join('')}
+        ${m.ordMant.length>4?`<div style="font-size:9.5px;color:var(--text3);margin-top:2px">y ${m.ordMant.length-4} m\u00e1s \u2014 ver Mantenimiento</div>`:''}
+      </div>`:''}
     </div>`;
   }).join('');
 
