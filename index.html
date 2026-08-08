@@ -5431,7 +5431,11 @@ function renderStockRemanente(){
   (state.remanenteSalidas||[]).forEach(s=>{ if(_enCiclo(s.fecha)) _sal[s.producto]=(_sal[s.producto]||0)+(Number(s.cantidad)||0); });
   // El "ingreso al remanente" del periodo = lo que reporta el Compresorista + los ingresos manuales
   Object.keys(_ingMan).forEach(k=>{ _egr[k]=(_egr[k]||0)+_ingMan[k]; });
-  const statsFilas=cat.filter(c=>(_egr[c.id]||0)||(_sal[c.id]||0)).map(c=>({
+  // Se listan los explosivos con movimiento en el ciclo Y TAMBIÉN los que solo tienen saldo:
+  // si un explosivo no se movió este ciclo pero queda stock (p. ej. EMULNOR 1000), igual debe
+  // verse abajo con su dona y su fila, si no parece que desapareció del remanente.
+  const _stkPrev=(typeof remStockActual==='function')?remStockActual():{};
+  const statsFilas=cat.filter(c=>(_egr[c.id]||0)||(_sal[c.id]||0)||(Number(_stkPrev[c.id])||0)).map(c=>({
     id:c.id, nombre:c.nombre, upCaja:c.upCaja, esMecha:c.id==='NEITHER',
     egr:_egr[c.id]||0, sal:_sal[c.id]||0
   }));
