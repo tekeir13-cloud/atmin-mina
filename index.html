@@ -14584,6 +14584,71 @@ function herrArchivoSet(a){ try{ localStorage.setItem(HERR_ARCH_KEY,JSON.stringi
         de lectura (SusTOO → SUS 100, MoucE → MONTE), y si no se parece a ninguna se deja vacía
         en vez de escribir un garabato,
      5) lo que queda, ya sin barras ni números sueltos, es la DESCRIPCIÓN. */
+/* ── CORRECTOR DE PALABRAS ──
+   El OCR de letra manuscrita se come o cambia letras: "kreatiz0" por "realizó", "Fitztrado"
+   por "Filtrado", "conca" por "cancha". Se corrige contra dos fuentes:
+     1) el VOCABULARIO del cuaderno (las palabras que de verdad se usan en estos reportes), y
+     2) las palabras que la PROPIA FOTO leyó bien en otros renglones — si en una línea salió
+        "perforación" completa, esa palabra sirve para arreglar el "perforacián" de otra.
+   Solo se cambia cuando el parecido es alto; si no hay una candidata clara, se deja lo leído
+   tal cual, porque inventar una palabra es peor que dejar una mal escrita. */
+const HERR_VOCAB=('se instalo instalacion señalizacion seguridad labor labores para comunicacion '+
+'charcas del nivel niveles realizo realizado traslado corte madera sostenimiento cuadro cuadros '+
+'frente frentes perforacion perforado aperturado desatado desate desatada '+
+'limpieza limpiado purga purgado bombeo bombear agua aguas punto puntos interseccion anclaje '+
+'anclajes descarga descargar tuberia tuberias gravedad rocas roca banco bancos cancha canchas '+
+'entubado entubar trasladado trastado retiro retirado recuperado recuperar carga cargado '+
+'acarreo echadero galeria galerias crucero cruce rampa manto mantoso multi monte bravo house '+
+'traccion voladura taladro taladros malla mallas cimbra cimbras perno pernos shotcrete '+
+'ventilacion manga mangas compresora scoop dumper excavadora winche bomba equipo equipos '+
+'personal personas horas tareas turno dia noche desde hasta hacia por con sin entre entro salio '+
+'metros metro pulgadas presencia falla fallas mantenimiento electrico electricos cable cables '+
+'tablero reparado reparacion cambio cambiado colocado colocacion instalado armado armar '+
+'soporte soportes puerta puertas marco marcos guardado nueva nuevo pendiente terminado '+
+'ejecutado ejecucion apoyo trabajo trabajos servicio ingreso salida material materiales '+
+'combustible petroleo bocamina interior mina superficie almacen taller zona area sector '+
+'presion nivelacion nivelado relleno rellenado ampliacion ampliado avance avanzado').split(' ');
+function _herrSinT(t){ return String(t||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase(); }
+// Diccionario vivo: vocabulario fijo + las palabras que la foto leyó bien
+function herrDiccionario(lineas){
+  const d=new Map();
+  const meter=w=>{ const k=_herrSinT(w); if(k.length>=3 && !d.has(k)) d.set(k,w); };
+  HERR_VOCAB.forEach(meter);
+  (lineas||[]).forEach(l=>String(l||'').split(/[^A-Za-zÁÉÍÓÚÑáéíóúñ]+/).forEach(w=>{
+    // Solo se toman como buenas las palabras de la foto que YA están en el vocabulario:
+    // si no, se aprenderían los propios errores del OCR.
+    if(w.length>=4 && HERR_VOCAB.indexOf(_herrSinT(w))>=0) meter(w);
+  }));
+  return d;
+}
+// Respeta cómo estaba escrita la palabra original (Mayúscula inicial o TODO EN MAYÚSCULAS)
+function _herrCalcar(orig,nueva){
+  if(/^[A-ZÁÉÍÓÚÑ]+$/.test(orig)) return nueva.toUpperCase();
+  if(/^[A-ZÁÉÍÓÚÑ]/.test(orig)) return nueva.charAt(0).toUpperCase()+nueva.slice(1);
+  return nueva;
+}
+function herrCorregirTexto(txt, dicc){
+  if(!dicc||!dicc.size) return txt;
+  return String(txt||'').replace(/[A-Za-zÁÉÍÓÚÑÜáéíóúñü0-9]{3,}/g, pal=>{
+    if(/\d/.test(pal)) return pal;                       // lleva cifras: no es palabra
+    const k=_herrSinT(pal);
+    if(dicc.has(k)) return pal;                          // ya está bien escrita
+    // Prudente a propósito: solo se corrige lo que está claramente roto. Una sola letra de
+    // diferencia (dos en palabras largas), misma inicial y largo casi igual. Si hay más de una
+    // candidata igual de cerca, no se toca: sería adivinar.
+    const lim = k.length<=7?1:2;
+    let mejor=null, empate=false;
+    dicc.forEach((orig,clave)=>{
+      if(Math.abs(clave.length-k.length)>1) return;
+      if(clave[0]!==k[0]) return;
+      const d=_herrDist(k,clave);
+      if(d>lim) return;
+      if(!mejor||d<mejor.d){ mejor={d,orig}; empate=false; }
+      else if(d===mejor.d && orig!==mejor.orig){ empate=true; }
+    });
+    return (mejor&&!empate)?_herrCalcar(pal,mejor.orig):pal;
+  });
+}
 const HERR_LABORES=['CRUCE','SUS 100','MANTOSO','MANTO','MULTI','RAMPA','BOCAMINA','GALERIA','CHIMENEA',
   'BY PASS','VENTANA','ECHADERO','SUBNIVEL','TAJO','NIVEL','MONTE','MONTE BRAVO','HOUSE',
   'TRACCION','PERFORACION','SOSTENIMIENTO','BREA','CORTINA','VETA'];
@@ -14723,9 +14788,15 @@ function herrParsearLinea(txt){
 }
 function herrParsearOcr(lineas){
   const filas=[]; let ultima=null;
-  (lineas||[]).forEach(l=>{
+  // Diccionario armado con el vocabulario del cuaderno MÁS las palabras que esta misma foto
+  // leyó bien: así una palabra que salió completa en un renglón arregla la de otro.
+  const dicc=herrDiccionario(lineas);
+  (lineas||[]).forEach((original)=>{
+    const l=herrCorregirTexto(original,dicc);
     const f=herrParsearLinea(l);
-    if(f){ filas.push(f); ultima=f; return; }
+    // En "crudo" se guarda SIEMPRE lo que leyó el OCR sin corregir: es la referencia para
+    // comparar contra la foto cuando algo no cuadra.
+    if(f){ f.crudo=String(original||'').trim(); filas.push(f); ultima=f; return; }
     // Renglón sin fecha: es continuación de la descripción de la fila anterior.
     // Si trae números y a la fila anterior le faltaban, se le completan.
     const t=herrLimpiar1(l);
