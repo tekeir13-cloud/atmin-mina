@@ -2828,7 +2828,7 @@ select option{background:var(--coal3);}
         <span style="font-weight:900;font-size:12px;color:#000;font-family:Arial,sans-serif">ADMINISTRADOR:</span>
         <span style="font-weight:700;font-size:12px;color:#000;font-family:Arial,sans-serif" id="tareo-hoja-admin">—</span>
       </div>
-      <div style="overflow-x:auto">
+      <div style="overflow:auto;max-height:70vh;border-radius:8px">
         <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px">
           <thead>
             <tr style="background:#1a1a1a">
@@ -14573,60 +14573,179 @@ function herrGuardarTrabajo(a){ try{ localStorage.setItem(HERR_KEY,JSON.stringif
 function herrArchivo(){ try{ return JSON.parse(localStorage.getItem(HERR_ARCH_KEY)||'[]')||[]; }catch(e){ return []; } }
 function herrArchivoSet(a){ try{ localStorage.setItem(HERR_ARCH_KEY,JSON.stringify(a||[])); }catch(e){} }
 
-/* ── LECTURA DE UN RENGLÓN ──
-   El cuaderno tiene un orden fijo: fecha, turno, labor, descripción larga y al final tres
-   números (personal, horas, tareas). Se ancla por la FECHA al principio y por los NÚMEROS
-   al final; lo que queda en medio es turno + labor + descripción. */
-const HERR_TURNOS=['DIA','DÍA','NOCHE'];
+/* ── LECTURA DE UN RENGLÓN DEL CUADERNO ──
+   El OCR de una hoja cuadriculada devuelve las rayas de la tabla como barras (|, ¦, l, I) y
+   mete los números en cualquier parte del renglón, no siempre al final. Por eso:
+     1) se limpia el renglón de barras y basura,
+     2) se saca la FECHA (ancla firme) y el TURNO,
+     3) se busca el ÚLTIMO grupo de 2 o 3 números sueltos: ese es personal / horas / tareas,
+        aunque después venga más texto,
+     4) la LABOR se reconoce contra la lista de labores reales de la mina, tolerando errores
+        de lectura (SusTOO → SUS 100, MoucE → MONTE), y si no se parece a ninguna se deja vacía
+        en vez de escribir un garabato,
+     5) lo que queda, ya sin barras ni números sueltos, es la DESCRIPCIÓN. */
+const HERR_LABORES=['CRUCE','SUS 100','MANTO','MULTI','RAMPA','BOCAMINA','GALERIA','CHIMENEA',
+  'BY PASS','VENTANA','ECHADERO','SUBNIVEL','TAJO','NIVEL','MONTE','MONTE BRAVO','HOUSE',
+  'TRACCION','PERFORACION','SOSTENIMIENTO','BREA','CORTINA','VETA'];
+function _herrNorm(t){
+  return String(t||'').normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .toUpperCase().replace(/[^A-Z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
+}
+// Distancia de edición corta: sirve para aceptar "SUSTOO" como "SUS 100" sin aceptar cualquier cosa.
+// El OCR confunde letras con cifras (O con 0, I con 1, S con 5…). Antes de comparar se llevan
+// las dos palabras a una misma forma, si no "SusTOO" nunca calzaría con "SUS 100".
+function _herrCanon(t){
+  return _herrNorm(t).replace(/ /g,'')
+    .replace(/[OQ]/g,'0').replace(/[IL]/g,'1').replace(/S/g,'5').replace(/B/g,'8').replace(/Z/g,'2');
+}
+function _herrDist(a,b){
+  a=_herrCanon(a); b=_herrCanon(b);
+  if(!a||!b) return 99;
+  const m=a.length,n=b.length; let prev=Array.from({length:n+1},(_,j)=>j);
+  for(let i=1;i<=m;i++){ const cur=[i];
+    for(let j=1;j<=n;j++) cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
+    prev=cur; }
+  return prev[n];
+}
+function _herrLabor(txt){
+  const t=_herrNorm(txt); if(!t) return {labor:'',resto:txt};
+  const pal=t.split(' ');
+  let mejor=null;
+  // Se prueba primero con UNA palabra y se va ampliando: si no, "CRUCE Se" acabaría
+  // calzando con "CRUCE" y se comería el "Se" con el que arranca la descripción.
+  for(let n=1; n<=Math.min(3,pal.length); n++){
+    const cand=pal.slice(0,n).join(' ');
+    if(cand.length<3) continue;
+    HERR_LABORES.forEach(L=>{
+      const largo=L.replace(/ /g,'').length;
+      const d=_herrDist(cand,L), lim=largo<=4?1:(largo<=6?2:3);
+      if(d<=lim && (!mejor||d<mejor.d)) mejor={L,d,n};
+    });
+    if(mejor) break;
+  }
+  if(!mejor){
+    // No calza con ninguna labor conocida: se toma lo que hay ANTES de que arranque la
+    // descripción ("Se ...") como labor tal cual se leyó, en vez de dejarlo dentro del texto.
+    const p=String(txt).trim().split(/\s+/);
+    const iSe=p.findIndex(w=>/^SE$/i.test(w));
+    if(iSe>0 && iSe<=3) return {labor:p.slice(0,iSe).join(' ').slice(0,28), resto:p.slice(iSe).join(' ')};
+    return {labor:'',resto:txt};
+  }
+  // Quitar del texto original las palabras que se consumieron
+  const orig=String(txt).trim().split(/\s+/).slice(mejor.n).join(' ');
+  return {labor:mejor.L, resto:orig};
+}
+// Limpia el renglón: barras de la cuadrícula, símbolos sueltos y espacios repetidos.
+function herrLimpiar1(t){
+  return String(t||'')
+    .replace(/[|¦│┃╎]/g,' ')                       // rayas verticales de la tabla
+    .replace(/\s[lI1]\s/g,' ')                      // una "l" o "I" suelta suele ser una raya
+    .replace(/[«»“”„‟]/g,'"')
+    .replace(/\s+/g,' ').trim();
+}
+// Deja la descripción presentable: sin restos de símbolos, sin números sueltos al final,
+// primera letra en mayúscula y el resto tal como se escribió.
+function herrLimpiarDesc(t){
+  let d=herrLimpiar1(t)
+    .replace(/^[^A-Za-zÁÉÍÓÚÑáéíóúñ0-9]+/,'')      // basura al principio
+    .replace(/[^A-Za-zÁÉÍÓÚÑáéíóúñ0-9).%"]+$/,'')  // basura al final
+    .replace(/\s+([,.;:])/g,'$1')
+    .replace(/\s{2,}/g,' ')
+    .trim();
+  if(d) d=d.charAt(0).toUpperCase()+d.slice(1);
+  return d;
+}
+const HERR_TURNOS=[{re:/\bD\s*[ÍI:.]?\s*A\b/i,v:'DIA'},{re:/\bNOCHE\b/i,v:'NOCHE'},{re:/\bNOOHE\b/i,v:'NOCHE'}];
 function herrParsearLinea(txt){
-  let t=String(txt||'').replace(/\s+/g,' ').trim();
+  let t=herrLimpiar1(txt);
   if(t.length<8) return null;
-  // Fecha: 30/07/26, 30-07-2026, 30.07.26
   const mf=t.match(/(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{2,4})/);
   if(!mf) return null;
   const dd=String(mf[1]).padStart(2,'0'), mm=String(mf[2]).padStart(2,'0');
   let aa=String(mf[3]); if(aa.length===2) aa='20'+aa;
   const fecha=aa+'-'+mm+'-'+dd;
-  let resto=t.slice(mf.index+mf[0].length).trim();
-  // Los tres números del final: personal, horas, tareas (las horas y tareas pueden ser 0.5, 1.6…)
-  const nums=[]; 
-  let m2;
-  const reFin=/([0-9]+(?:[.,][0-9]+)?)\s*$/;
-  for(let i=0;i<3;i++){
-    m2=resto.match(reFin);
-    if(!m2) break;
-    nums.unshift(m2[1].replace(',','.'));
-    resto=resto.slice(0,m2.index).trim();
-  }
-  const [personal,horas,tareas]=[nums[0]||'',nums[1]||'',nums[2]||''];
-  // Turno
+  let resto=(t.slice(0,mf.index)+' '+t.slice(mf.index+mf[0].length)).replace(/\s+/g,' ').trim();
+
+  // TURNO
   let turno='';
-  const up=resto.toUpperCase();
-  const ti=HERR_TURNOS.map(x=>({x,i:up.indexOf(x)})).filter(o=>o.i>=0).sort((a,b)=>a.i-b.i)[0];
-  if(ti){ turno=(ti.x==='DÍA'?'DIA':ti.x); resto=(resto.slice(0,ti.i)+' '+resto.slice(ti.i+ti.x.length)).replace(/\s+/g,' ').trim(); }
-  // Labor: la primera palabra o par de palabras antes de que empiece la descripción larga.
-  // En el cuaderno la descripción casi siempre arranca con "SE ..."
-  let labor='', desc=resto;
-  const ms=resto.match(/\bSE\b/i);
-  if(ms && ms.index>0){ labor=resto.slice(0,ms.index).trim(); desc=resto.slice(ms.index).trim(); }
-  else { const p=resto.split(' '); if(p.length>3){ labor=p.shift(); desc=p.join(' '); } }
-  return {fecha,turno,labor:labor.slice(0,40),descripcion:desc,personal,horas,tareas,crudo:t};
+  for(const T of HERR_TURNOS){
+    const m=resto.match(T.re);
+    if(m){ turno=T.v; resto=(resto.slice(0,m.index)+' '+resto.slice(m.index+m[0].length)).replace(/\s+/g,' ').trim(); break; }
+  }
+  // NÚMEROS: el último grupo de 2 o 3 cifras sueltas del renglón (personal, horas, tareas).
+  // Se recorre todo el renglón, no solo el final, porque el OCR suele dejar texto después.
+  // NÚMEROS: no vale quedarse con el último grupo del renglón — la descripción está llena de
+  // cifras ("punto 11 al 075", "8:00 pm"). Se puntúa cada grupo candidato por lo que sería
+  // razonable en esas tres columnas: personal es un entero chico (y casi siempre viene escrito
+  // "02"), horas va de 0.5 a 24, y tareas suele llevar decimal. Gana el de mejor puntaje.
+  let personal='',horas='',tareas='';
+  const reGrupo=/(?:^|\s)(\d{1,3})\s+(\d{1,3}(?:[.,]\d{1,2})?)(?:\s+(\d{1,3}(?:[.,]\d{1,2})?))?(?=\s|$)/g;
+  const nEs=x=>parseFloat(String(x).replace(',','.'));
+  let g,mejorG=null,pos=0;
+  while((g=reGrupo.exec(resto))!==null){
+    pos++;
+    const crudos=[g[1],g[2],g[3]].filter(x=>x!=null);
+    const v=crudos.map(nEs);
+    let p=0;
+    if(v[0]>=1&&v[0]<=30&&Number.isInteger(v[0])) p+=3; else p-=3;
+    if(/^0\d$/.test(g[1])) p+=3;                       // "02", "04": así se escribe el personal
+    if(v[1]>0&&v[1]<=24) p+=2; else p-=2;
+    if(crudos.length===3){ p+=2; if(v[2]>0&&v[2]<=20) p+=2; else p-=2;
+                           if(/[.,]/.test(g[3])) p+=2; }
+    if(/[.,]/.test(g[2])) p+=1;
+    p+=pos*0.1;                                        // a igualdad, el de más a la derecha
+    if(!mejorG||p>mejorG.p) mejorG={p,ini:g.index+(g[0].length-g[0].trimStart().length),
+                                    fin:reGrupo.lastIndex, crudos};
+  }
+  if(mejorG && mejorG.p>0){
+    const n=mejorG.crudos.map(x=>String(x).replace(',','.'));
+    if(n.length===3){ personal=n[0]; horas=n[1]; tareas=n[2]; }
+    else { personal=n[0]; horas=n[1]; }
+    resto=(resto.slice(0,mejorG.ini)+' '+resto.slice(mejorG.fin)).replace(/\s+/g,' ').trim();
+  }
+  // LABOR contra la lista real; si no se parece a ninguna, se deja vacía
+  const L=_herrLabor(resto);
+  const descripcion=herrLimpiarDesc(L.resto);
+  return {fecha,turno,labor:L.labor,descripcion,
+          personal:personal.replace(/^0+(?=\d)/,''), horas, tareas, crudo:String(txt||'').trim()};
 }
 function herrParsearOcr(lineas){
   const filas=[]; let ultima=null;
   (lineas||[]).forEach(l=>{
     const f=herrParsearLinea(l);
     if(f){ filas.push(f); ultima=f; return; }
-    // Renglón sin fecha: es la continuación de la descripción de la fila anterior
-    const t=String(l||'').replace(/\s+/g,' ').trim();
-    if(ultima && t.length>3 && !/^[\d\s.,\/-]+$/.test(t)){
-      ultima.descripcion=(ultima.descripcion+' '+t).trim();
-      ultima.crudo=(ultima.crudo+' ⏎ '+t);
+    // Renglón sin fecha: es continuación de la descripción de la fila anterior.
+    // Si trae números y a la fila anterior le faltaban, se le completan.
+    const t=herrLimpiar1(l);
+    if(!ultima || t.length<3) return;
+    if(/^[\d\s.,\/-]+$/.test(t)){
+      const n=t.split(/\s+/).filter(x=>/^\d/.test(x)).map(x=>x.replace(',','.'));
+      if(!ultima.personal && n[0]) ultima.personal=n[0].replace(/^0+(?=\d)/,'');
+      if(!ultima.horas && n[1]) ultima.horas=n[1];
+      if(!ultima.tareas && n[2]) ultima.tareas=n[2];
+      return;
     }
+    ultima.descripcion=herrLimpiarDesc(ultima.descripcion+' '+t);
+    ultima.crudo=(ultima.crudo+' ⏎ '+t);
   });
   return filas;
 }
-
+// OCR de la hoja del cuaderno. Se usa el modo "bloque uniforme de texto" y se conservan los
+// espacios entre palabras: con la tabla cuadriculada da renglones mucho más limpios que el
+// modo automático, que intenta detectar columnas y parte las frases.
+async function herrOcrImagen(dataUrl, aviso){
+  const T=await cmpCargarLib(CMP_LIB_TESS,'Tesseract');
+  let img=dataUrl; try{ img=await cmpPrepararOcr(dataUrl); }catch(e){}
+  const r=await T.recognize(img,'spa',{
+    workerPath:CMP_TESS_WORKER, corePath:CMP_TESS_CORE,
+    logger:m=>{ if(aviso&&m&&m.status==='recognizing text'){ aviso(Math.round((m.progress||0)*100)); } }
+  },{ tessedit_pageseg_mode:'6', preserve_interword_spaces:'1' });
+  const d=(r&&r.data)||{};
+  const lineas=Array.isArray(d.lines)&&d.lines.length
+    ? d.lines.map(l=>String(l.text||''))
+    : String(d.text||'').split('\n');
+  return lineas.map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean);
+}
 let _herrOcupado=false;
 async function herrAgregarFoto(input){
   const file=input&&input.files&&input.files[0]; if(!file) return;
@@ -14637,7 +14756,7 @@ async function herrAgregarFoto(input){
   try{
     poner('Leyendo la foto… esto tarda un poco, no cierres la pestaña.');
     const dataUrl=await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(new Error('no se pudo leer la imagen')); r.readAsDataURL(file); });
-    const lineas=await cmpOcrImagen(dataUrl, p=>poner('Leyendo la foto… '+p+'%'));
+    const lineas=await herrOcrImagen(dataUrl, p=>poner('Leyendo la foto… '+p+'%'));
     const filas=herrParsearOcr(lineas);
     if(!filas.length){
       poner('No se reconoció ningún renglón con fecha en esta foto. Puedes agregar las filas a mano con "+ Fila vacía".','#f59e0b');
@@ -14730,23 +14849,27 @@ async function herrExcel(id){
 function renderHerramientasOp(){
   const el=document.getElementById('op-herramientas'); if(!el) return;
   const filas=herrCargar(), arch=herrArchivo();
+  // Celdas tipo hoja de cálculo: cuadrícula completa, sin bordes propios del input.
+  const CEL='padding:0;border:1px solid var(--border);vertical-align:top';
   const inp=(f,k,extra)=>`<input value="${escAttr(String(f[k]==null?'':f[k]))}" oninput="herrEditar('${f.id}','${k}',this.value)"
-      style="width:100%;box-sizing:border-box;background:transparent;border:1px solid transparent;border-radius:5px;padding:4px 5px;color:var(--text);font-size:11.5px;${extra||''}"
-      onfocus="this.style.borderColor='var(--accent-border)';this.style.background='var(--coal4)'"
-      onblur="this.style.borderColor='transparent';this.style.background='transparent'">`;
-  const cuerpo=filas.map((f,i)=>`<tr style="border-top:1px solid var(--border)">
-      <td style="padding:3px 4px;text-align:center;color:var(--text3);font-size:10px" title="${escAttr(f.crudo||'')}">${i+1}<br><span style="font-size:9px">📷${f.foto||1}</span></td>
-      <td style="padding:3px 4px">${inp(f,'fecha')}</td>
-      <td style="padding:3px 4px">${inp(f,'turno')}</td>
-      <td style="padding:3px 4px">${inp(f,'labor')}</td>
-      <td style="padding:3px 4px">${inp(f,'descripcion')}</td>
-      <td style="padding:3px 4px;width:62px">${inp(f,'personal','text-align:center')}</td>
-      <td style="padding:3px 4px;width:62px">${inp(f,'horas','text-align:center')}</td>
-      <td style="padding:3px 4px;width:62px">${inp(f,'tareas','text-align:center')}</td>
-      <td style="padding:3px 4px;text-align:center"><button class="btn btn-outline" style="padding:2px 7px;font-size:10px;color:#f87171;border-color:#f87171" onclick="herrBorrarFila('${f.id}')">🗑</button></td>
+      style="width:100%;box-sizing:border-box;background:transparent;border:none;outline:none;padding:5px 7px;color:var(--text);font-size:11.5px;${extra||''}"
+      onfocus="this.style.background='var(--accent-dim)';this.style.boxShadow='inset 0 0 0 2px var(--accent)'"
+      onblur="this.style.background='transparent';this.style.boxShadow='none'">`;
+  const MONO="font-family:'DM Mono',monospace;text-align:center";
+  const cuerpo=filas.map((f,i)=>`<tr style="background:${i%2?'var(--coal4)':'transparent'}">
+      <td style="${CEL};text-align:center;color:var(--text3);font-size:10px;background:var(--coal5);padding:4px 3px;white-space:nowrap" title="Leído de la foto:&#10;${escAttr(f.crudo||'')}">${i+1} <span style="font-size:9px;opacity:.75">📷${f.foto||1}</span></td>
+      <td style="${CEL}">${inp(f,'fecha',MONO)}</td>
+      <td style="${CEL}">${inp(f,'turno','text-align:center')}</td>
+      <td style="${CEL}">${inp(f,'labor')}</td>
+      <td style="${CEL}">${inp(f,'descripcion')}</td>
+      <td style="${CEL};width:66px">${inp(f,'personal',MONO)}</td>
+      <td style="${CEL};width:66px">${inp(f,'horas',MONO)}</td>
+      <td style="${CEL};width:66px">${inp(f,'tareas',MONO)}</td>
+      <td style="${CEL};text-align:center;padding:2px"><button class="btn btn-outline" style="padding:2px 7px;font-size:10px;color:#f87171;border-color:#f87171" onclick="herrBorrarFila('${f.id}')">🗑</button></td>
     </tr>`).join('');
   const sum=k=>filas.reduce((s,f)=>s+(parseFloat(f[k])||0),0);
   const fotos=new Set(filas.map(f=>f.foto||1)).size;
+  const sinNum=filas.filter(f=>!f.personal&&!f.horas&&!f.tareas).length;
   const archHtml=arch.length?arch.map(h=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:9px;margin-bottom:7px;background:var(--coal4)">
       <div style="min-width:0">
         <div style="font-size:12.5px;font-weight:700;color:var(--text)">📁 ${escAttr(h.nombre)}</div>
@@ -14781,25 +14904,25 @@ function renderHerramientasOp(){
   <div class="card" style="padding:10px">
     ${filas.length?`
     <div style="overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;min-width:900px">
-        <thead><tr style="color:var(--text3);text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px">
-          <th style="padding:5px 4px;width:38px">#</th>
-          <th style="padding:5px 4px;width:100px">Fecha</th>
-          <th style="padding:5px 4px;width:80px">Turno</th>
-          <th style="padding:5px 4px;width:120px">Labor</th>
-          <th style="padding:5px 4px">Descripción</th>
-          <th style="padding:5px 4px;text-align:center">Personal</th>
-          <th style="padding:5px 4px;text-align:center">Horas</th>
-          <th style="padding:5px 4px;text-align:center">Tareas</th>
-          <th style="padding:5px 4px;width:44px"></th>
+      <table style="width:100%;border-collapse:collapse;min-width:960px;border:1px solid var(--border)">
+        <thead><tr style="position:sticky;top:0;z-index:2;background:var(--accent-dim);color:var(--accent-light);text-align:left;font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px">
+          <th style="padding:7px 5px;width:46px;border:1px solid var(--border);text-align:center">#</th>
+          <th style="padding:7px 7px;width:104px;border:1px solid var(--border)">Fecha</th>
+          <th style="padding:7px 7px;width:82px;border:1px solid var(--border);text-align:center">Turno</th>
+          <th style="padding:7px 7px;width:130px;border:1px solid var(--border)">Labor</th>
+          <th style="padding:7px 7px;border:1px solid var(--border)">Descripción</th>
+          <th style="padding:7px 5px;text-align:center;border:1px solid var(--border)">Personal</th>
+          <th style="padding:7px 5px;text-align:center;border:1px solid var(--border)">Horas</th>
+          <th style="padding:7px 5px;text-align:center;border:1px solid var(--border)">Tareas</th>
+          <th style="padding:7px 5px;width:46px;border:1px solid var(--border)"></th>
         </tr></thead>
         <tbody id="herr-tbody">${cuerpo}</tbody>
-        <tfoot><tr style="border-top:2px solid var(--border);font-weight:800">
-          <td colspan="5" style="padding:7px 6px;font-size:11.5px;color:var(--text2)">${filas.length} fila${filas.length!==1?'s':''} · ${fotos} foto${fotos!==1?'s':''}</td>
-          <td style="padding:7px 6px;text-align:center;color:var(--text)">${Math.round(sum('personal')*100)/100}</td>
-          <td style="padding:7px 6px;text-align:center;color:var(--text)">${Math.round(sum('horas')*100)/100}</td>
-          <td style="padding:7px 6px;text-align:center;color:var(--text)">${Math.round(sum('tareas')*100)/100}</td>
-          <td></td>
+        <tfoot><tr style="font-weight:800;background:var(--coal5)">
+          <td colspan="5" style="padding:8px 7px;font-size:11.5px;color:var(--text2);border:1px solid var(--border)">TOTAL · ${filas.length} fila${filas.length!==1?'s':''} · ${fotos} foto${fotos!==1?'s':''}${sinNum?` · <span style="color:#f59e0b">${sinNum} sin personal/horas/tareas</span>`:''}</td>
+          <td style="padding:8px 5px;text-align:center;color:var(--text);border:1px solid var(--border);font-family:'DM Mono',monospace">${Math.round(sum('personal')*100)/100}</td>
+          <td style="padding:8px 5px;text-align:center;color:var(--text);border:1px solid var(--border);font-family:'DM Mono',monospace">${Math.round(sum('horas')*100)/100}</td>
+          <td style="padding:8px 5px;text-align:center;color:var(--text);border:1px solid var(--border);font-family:'DM Mono',monospace">${Math.round(sum('tareas')*100)/100}</td>
+          <td style="border:1px solid var(--border)"></td>
         </tr></tfoot>
       </table>
     </div>
