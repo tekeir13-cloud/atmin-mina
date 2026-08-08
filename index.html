@@ -14584,7 +14584,7 @@ function herrArchivoSet(a){ try{ localStorage.setItem(HERR_ARCH_KEY,JSON.stringi
         de lectura (SusTOO → SUS 100, MoucE → MONTE), y si no se parece a ninguna se deja vacía
         en vez de escribir un garabato,
      5) lo que queda, ya sin barras ni números sueltos, es la DESCRIPCIÓN. */
-const HERR_LABORES=['CRUCE','SUS 100','MANTO','MULTI','RAMPA','BOCAMINA','GALERIA','CHIMENEA',
+const HERR_LABORES=['CRUCE','SUS 100','MANTOSO','MANTO','MULTI','RAMPA','BOCAMINA','GALERIA','CHIMENEA',
   'BY PASS','VENTANA','ECHADERO','SUBNIVEL','TAJO','NIVEL','MONTE','MONTE BRAVO','HOUSE',
   'TRACCION','PERFORACION','SOSTENIMIENTO','BREA','CORTINA','VETA'];
 function _herrNorm(t){
@@ -14678,11 +14678,23 @@ function herrParsearLinea(txt){
   // cifras ("punto 11 al 075", "8:00 pm"). Se puntúa cada grupo candidato por lo que sería
   // razonable en esas tres columnas: personal es un entero chico (y casi siempre viene escrito
   // "02"), horas va de 0.5 a 24, y tareas suele llevar decimal. Gana el de mejor puntaje.
+  // El OCR escribe cifras como letras: "o2" por 02, "l0" por 10, "S" por 5. Si no se corrige,
+  // el grupo "02 o2 0.2" se parte y la fila se queda sin personal, horas ni tareas — que es
+  // justo lo que pasaba. Se sustituye letra por letra, así el texto no cambia de largo y los
+  // recortes siguen cayendo donde deben.
+  const _digit={o:'0',O:'0',Q:'0',D:'0',l:'1',I:'1',i:'1',L:'1',S:'5',s:'5',B:'8',Z:'2',z:'2',G:'6',g:'9'};
+  const restoNum=resto.replace(/[^\s]+/g, tok=>{
+    if(tok.length>6) return tok;
+    // "ol" o "oS" de dos letras, sin ninguna cifra, casi siempre es un 01 o un 05 mal leído
+    if(!/\d/.test(tok)) return /^[oOlISB]{2}$/.test(tok) ? tok.replace(/[oOlISB]/g,ch=>_digit[ch]||ch) : tok;
+    if(!/^[0-9oOQDlIiLSsBZzGg.,:]+$/.test(tok)) return tok;
+    return tok.replace(/[oOQDlIiLSsBZzGg]/g, ch=>_digit[ch]||ch);
+  });
   let personal='',horas='',tareas='';
   const reGrupo=/(?:^|\s)(\d{1,3})\s+(\d{1,3}(?:[.,]\d{1,2})?)(?:\s+(\d{1,3}(?:[.,]\d{1,2})?))?(?=\s|$)/g;
   const nEs=x=>parseFloat(String(x).replace(',','.'));
   let g,mejorG=null,pos=0;
-  while((g=reGrupo.exec(resto))!==null){
+  while((g=reGrupo.exec(restoNum))!==null){
     pos++;
     const crudos=[g[1],g[2],g[3]].filter(x=>x!=null);
     const v=crudos.map(nEs);
