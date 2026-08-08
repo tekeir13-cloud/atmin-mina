@@ -14831,7 +14831,19 @@ function herrParsearOcr(lineas){
   // Diccionario armado con el vocabulario del cuaderno MÁS las palabras que esta misma foto
   // leyó bien: así una palabra que salió completa en un renglón arregla la de otro.
   const dicc=herrDiccionario(lineas);
-  (lineas||[]).forEach((original)=>{
+  // Si el OCR devuelve varios registros pegados en un mismo renglón (pasa cuando lee la hoja
+  // como un bloque), se parte por cada FECHA: cada fecha empieza un registro nuevo.
+  const RE_FECHA=/\d{1,2}\s*[\/\-.]\s*\d{1,2}\s*[\/\-.]\s*\d{2,4}/g;
+  const sueltas=[];
+  (lineas||[]).forEach(l=>{
+    const txt=String(l||'');
+    const pos=[]; let m; RE_FECHA.lastIndex=0;
+    while((m=RE_FECHA.exec(txt))!==null) pos.push(m.index);
+    if(pos.length<2){ sueltas.push(txt); return; }
+    if(pos[0]>0) sueltas.push(txt.slice(0,pos[0]));
+    pos.forEach((p,i)=>sueltas.push(txt.slice(p, i+1<pos.length?pos[i+1]:txt.length)));
+  });
+  sueltas.forEach((original)=>{
     const l=herrCorregirTexto(original,dicc);
     const f=herrParsearLinea(l);
     // En "crudo" se guarda SIEMPRE lo que leyó el OCR sin corregir: es la referencia para
@@ -14859,11 +14871,26 @@ function herrParsearOcr(lineas){
 async function herrOcrImagen(dataUrl, aviso){
   const T=await cmpCargarLib(CMP_LIB_TESS,'Tesseract');
   let img=dataUrl; try{ img=await cmpPrepararOcr(dataUrl); }catch(e){}
-  const r=await T.recognize(img,'spa',{
-    workerPath:CMP_TESS_WORKER, corePath:CMP_TESS_CORE,
-    logger:m=>{ if(aviso&&m&&m.status==='recognizing text'){ aviso(Math.round((m.progress||0)*100)); } }
-  },{ tessedit_pageseg_mode:'6', preserve_interword_spaces:'1' });
-  const d=(r&&r.data)||{};
+  const log=m=>{ if(aviso&&m&&m.status==='recognizing text'){ aviso(Math.round((m.progress||0)*100)); } };
+  let d=null;
+  // Con worker propio se pueden fijar los parámetros del OCR (bloque uniforme de texto y
+  // espacios conservados), que en una hoja cuadriculada da renglones más completos.
+  // OJO: los parámetros NO se pueden pasar como cuarto argumento de recognize() — ese hueco
+  // es para elegir qué salidas devuelve, y al usarlo mal se pierden las líneas.
+  try{
+    if(T&&typeof T.createWorker==='function'){
+      const w=await T.createWorker('spa',1,{workerPath:CMP_TESS_WORKER,corePath:CMP_TESS_CORE,logger:log});
+      try{
+        await w.setParameters({tessedit_pageseg_mode:'6', preserve_interword_spaces:'1'});
+        const r=await w.recognize(img);
+        d=(r&&r.data)||null;
+      } finally { try{ await w.terminate(); }catch(e){} }
+    }
+  }catch(e){ d=null; }
+  if(!d||(!d.text&&!(d.lines&&d.lines.length))){
+    const r=await T.recognize(img,'spa',{workerPath:CMP_TESS_WORKER,corePath:CMP_TESS_CORE,logger:log});
+    d=(r&&r.data)||{};
+  }
   const lineas=Array.isArray(d.lines)&&d.lines.length
     ? d.lines.map(l=>String(l.text||''))
     : String(d.text||'').split('\n');
