@@ -13264,17 +13264,39 @@ const SERV_TIPOS=[
 ];
 function servCargar(){try{return JSON.parse(localStorage.getItem(SERV_KEY)||'[]');}catch{return[];}}
 function servGuardar(arr){localStorage.setItem(SERV_KEY,JSON.stringify(arr)); try{ const light=(arr||[]).map(r=>{const{foto,fotoImpreso,...rest}=r;return rest;}); sbSyncModulo('servicios_terceros', light); }catch(e){}}
-function finCostoServicios(ym){
-  return servCargar().filter(r=>_finEnPre(r.fecha,ym)).reduce((s,r)=>s+(parseFloat(r.monto)||0),0);
+// EXCEPCIÓN AL CICLO 26→25: los servicios de terceros se declaran y se pagan por MES
+// CALENDARIO. Una liquidación con fecha 28 de julio es gasto de JULIO (1–31 jul), aunque el
+// periodo operativo 2026-08 ya haya arrancado el 26 de julio. Misma regla que el tareo.
+function servEnMes(fecha, ym){
+  if(!ym) return true;
+  if(String(ym).length>7) return String(fecha||'').startsWith(ym);
+  return (typeof enMesTareo==='function') ? enMesTareo(fecha, ym) : String(fecha||'').slice(0,7)===ym;
 }
+function finCostoServicios(ym){
+  return servCargar().filter(r=>servEnMes(r.fecha,ym)).reduce((s,r)=>s+(parseFloat(r.monto)||0),0);
+}
+// Meses que tienen liquidaciones registradas, del más reciente al más antiguo
+function servMesesConDatos(){
+  const set=new Set(servCargar().map(r=>String(r.fecha||'').slice(0,7)).filter(x=>x.length===7));
+  set.add(String(hoy()).slice(0,7));
+  return [...set].sort().reverse();
+}
+let _servMes=null;
+function servMesVista(){ return _servMes || String(hoy()).slice(0,7); }
+function servCambiarMes(v){ _servMes=v||null; renderServiciosTerceros(); }
 function renderServiciosTerceros(){
   const el=document.getElementById('rrhh-servicios');
   if(!el) return;
-  const registros=servCargar();
+  const todos=servCargar();
+  const mesSel=servMesVista();
   const tipoOpts=SERV_TIPOS.map(t=>`<option value="${t.id}">${t.label}</option>`).join('');
-  const totalMes=finCostoServicios(hoy().slice(0,7));
-  const rows=registros.slice().reverse().map((r,ri)=>{
-    const idx=registros.length-1-ri;
+  const totalMes=finCostoServicios(mesSel);
+  // La tabla muestra el mes elegido; los índices apuntan siempre al arreglo completo.
+  const registros=todos.map((r,i)=>({r,i})).filter(x=>servEnMes(x.r.fecha,mesSel));
+  const NM=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre'];
+  const nomMes=ym=>{const[a,m]=String(ym).split('-').map(Number);return NM[m-1]+' '+a;};
+  const mesOpts=servMesesConDatos().map(ym=>`<option value="${ym}"${ym===mesSel?' selected':''}>${nomMes(ym)}</option>`).join('');
+  const rows=registros.slice().reverse().map(({r,i:idx})=>{
     const t=SERV_TIPOS.find(x=>x.id===r.tipo)||{label:r.tipo};
     const foto=r.foto?`<a href="${r.foto}" target="_blank" style="color:#c9a84c;font-size:11px">📷 Vale</a>`:'<span style="color:var(--text3);font-size:11px">—</span>';
     const fotoImp=r.fotoImpreso?`<a href="${r.fotoImpreso}" target="_blank" style="color:#22d3a5;font-size:11px">📸 Impreso</a>`:`<label style="cursor:pointer;font-size:11px;color:#60a5fa">📸 Subir<input type="file" accept="image/*" style="display:none" onchange="servFotoImpreso(${idx},this)"></label>`;
@@ -13343,10 +13365,14 @@ function renderServiciosTerceros(){
   </div>
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-      <div class="section-title" style="margin:0">📋 Historial de Liquidaciones</div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div class="section-title" style="margin:0">📋 Historial de Liquidaciones</div>
+        <select onchange="servCambiarMes(this.value)" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px">${mesOpts}</select>
+        <span style="font-size:11px;color:var(--text3)">gasto de ${nomMes(mesSel)}: <b style="color:#22d3a5">S/ ${totalMes.toLocaleString('es-PE',{minimumFractionDigits:2})}</b> · va al dashboard de ese mes</span>
+      </div>
       <button class="btn btn-outline" style="font-size:12px;padding:6px 14px;color:#60a5fa;border-color:#60a5fa" onclick="servReporteMensual()">📊 Reporte Mensual</button>
     </div>
-    ${registros.length===0?'<div style="text-align:center;color:var(--text3);padding:24px">No hay liquidaciones registradas</div>':`
+    ${registros.length===0?'<div style="text-align:center;color:var(--text3);padding:24px">Sin liquidaciones en '+nomMes(mesSel)+'</div>':`
     <div style="overflow-x:auto">
     <table style="width:100%;border-collapse:collapse">
       <thead><tr style="background:var(--bg3)">
