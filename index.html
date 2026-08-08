@@ -14750,15 +14750,34 @@ const VAL_EQUIPOS=[
   {label:'Perforadora Jack Leg', pat:['JACK LEG','JACKLEG']},
   {label:'Perforadora Stopper',  pat:['STOPPER']},
   {label:'Desatador Mecánico',   pat:['DESATADOR','SCALER']},
-  {label:'Grupo Electrógeno',    pat:['GRUPO ELECTROGENO','GRUPO ELECTRÓGENO','GENERADOR']},
-  {label:'Scoop',                pat:['SCOOP','SCOOPTRAM']},
-  {label:'Compresora',           pat:['COMPRESORA']},
+  {label:'Grupo Electrógeno',    pat:['GRUPO ELECTROGENO','GRUPO ELECTRÓGENO','GENERADOR'],gen:1},
+  {label:'Scoop',                pat:['SCOOP','SCOOPTRAM'],gen:1},
+  {label:'Compresora',           pat:['COMPRESORA'],gen:1},
 ];
-function valEquipoDe(r){
-  const txt=[r&&r.sact,r&&r.starea,r&&r.actividad,r&&r.obs].map(x=>String(x||'')).join(' ')
+function _valTxtFila(r){
+  return [r&&r.sact,r&&r.starea,r&&r.actividad,r&&r.obs].map(x=>String(x||'')).join(' ')
     .toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+// Cómo aparece nombrado el equipo en la valorización: se usa la sub-tarea, que es donde viene
+// el código de la máquina. Sirve para distinguir dos compresoras o dos grupos que el Excel
+// nombra distinto pero que caerían en la misma familia.
+function _valComoAparece(r){
+  const t=String((r&&r.starea)||(r&&r.sact)||'').trim();
+  return t.replace(/\s+/g,' ');
+}
+function valEquipoDe(r){
+  const txt=_valTxtFila(r);
   const eq=VAL_EQUIPOS.find(e=>e.pat.some(p=>txt.includes(p.normalize('NFD').replace(/[\u0300-\u036f]/g,''))));
-  return eq?eq.label:null;
+  if(!eq) return null;
+  // Con código (M135, WJ-2, MV 2321…) va a su propia unidad. Sin código, cada texto distinto
+  // se mantiene como fila aparte: nunca se suman dos máquinas diferentes en un solo renglón.
+  if(!eq.gen) return {clave:eq.label, label:eq.label, familia:eq.label, conCodigo:true};
+  const crudo=_valComoAparece(r)||eq.label;
+  // Si el texto del Excel ya empieza nombrando la familia ("COMPRESORA 750 CFM"), se usa tal cual;
+  // si no, se antepone la familia para que se entienda de qué máquina se habla.
+  const sinT=x=>x.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const label=sinT(crudo).startsWith(sinT(eq.label))?crudo:(eq.label+' · '+crudo);
+  return {clave:eq.label+'|'+crudo.toUpperCase(), label, familia:eq.label, conCodigo:false};
 }
 // Devuelve [{equipo, importe, partidas, cantidad}] ordenado de mayor a menor, más el resto.
 function valIngresoPorEquipo(v){
@@ -14767,9 +14786,11 @@ function valIngresoPorEquipo(v){
     const e=valEquipoDe(r);
     const imp=Number(r.importe)||0, cant=Number(r.cant)||0;
     if(!e){ sin.importe+=imp; sin.partidas++; sin.cantidad+=cant; return; }
-    const a=acc[e]||(acc[e]={equipo:e,importe:0,partidas:0,cantidad:0,unidades:{}});
+    const a=acc[e.clave]||(acc[e.clave]={equipo:e.label,familia:e.familia,conCodigo:e.conCodigo,
+                                         importe:0,partidas:0,cantidad:0,unidades:{},textos:[]});
     a.importe+=imp; a.partidas++; a.cantidad+=cant;
     const u=String(r.und||'').trim().toUpperCase(); if(u) a.unidades[u]=(a.unidades[u]||0)+cant;
+    const c=_valComoAparece(r); if(c && a.textos.indexOf(c)<0 && a.textos.length<4) a.textos.push(c);
   });
   const lista=Object.values(acc).sort((a,b)=>b.importe-a.importe);
   return {lista, sinEquipo:sin, total:lista.reduce((s,x)=>s+x.importe,0)};
@@ -15110,18 +15131,20 @@ function renderValorizacionOp(forceId){
     <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">
       <thead><tr style="color:var(--text3);text-align:left;border-bottom:1px solid var(--border)">
         <th style="padding:6px 8px">Equipo</th><th style="padding:6px 8px;text-align:right">Partidas</th>
+        <th style="padding:6px 8px">Cómo aparece en la valorización</th>
         <th style="padding:6px 8px">Ejecutado</th><th style="padding:6px 8px;text-align:right">Ingreso</th>
         <th style="padding:6px 8px;text-align:right">% del total</th></tr></thead>
       <tbody>${eqIng.lista.map(x=>`<tr style="border-bottom:1px solid var(--border)">
-        <td style="padding:6px 8px;color:var(--text1)">${escAttr(x.equipo)}</td>
+        <td style="padding:6px 8px;color:var(--text1)">${escAttr(x.equipo)}${x.conCodigo?'':' <span style="color:#f59e0b;font-size:10px">sin código</span>'}</td>
         <td style="padding:6px 8px;text-align:right;color:var(--text3)">${x.partidas}</td>
+        <td style="padding:6px 8px;color:var(--text3);font-size:10px;max-width:250px;white-space:normal">${escAttr((x.textos||[]).join(' · '))||'—'}</td>
         <td style="padding:6px 8px;color:var(--text3)">${uni(x)||'—'}</td>
         <td style="padding:6px 8px;text-align:right;color:#22d3a5;font-weight:700">${fmtS(x.importe)}</td>
         <td style="padding:6px 8px;text-align:right;color:var(--text3)">${v.subtotal>0?(x.importe/v.subtotal*100).toFixed(1):'0.0'}%</td></tr>`).join('')}
         ${eqIng.sinEquipo.importe>0?`<tr style="border-top:1px solid var(--border)">
         <td style="padding:6px 8px;color:var(--text3)">Partidas sin equipo identificado</td>
         <td style="padding:6px 8px;text-align:right;color:var(--text3)">${eqIng.sinEquipo.partidas}</td>
-        <td style="padding:6px 8px"></td>
+        <td style="padding:6px 8px"></td><td style="padding:6px 8px"></td>
         <td style="padding:6px 8px;text-align:right;color:var(--text3)">${fmtS(eqIng.sinEquipo.importe)}</td>
         <td style="padding:6px 8px;text-align:right;color:var(--text3)">${v.subtotal>0?(eqIng.sinEquipo.importe/v.subtotal*100).toFixed(1):'0.0'}%</td></tr>`:''}
       </tbody></table></div>`
