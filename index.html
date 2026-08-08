@@ -14593,7 +14593,7 @@ function herrArchivoSet(a){ try{ localStorage.setItem(HERR_ARCH_KEY,JSON.stringi
    Solo se cambia cuando el parecido es alto; si no hay una candidata clara, se deja lo leído
    tal cual, porque inventar una palabra es peor que dejar una mal escrita. */
 const HERR_VOCAB=('se instalo instalacion señalizacion seguridad labor labores para comunicacion '+
-'charcas del nivel niveles realizo realizado traslado corte madera sostenimiento cuadro cuadros '+
+'charcos charco del nivel niveles realizo realizado traslado corte madera sostenimiento cuadro cuadros '+
 'frente frentes perforacion perforado aperturado desatado desate desatada '+
 'limpieza limpiado purga purgado bombeo bombear agua aguas punto puntos interseccion anclaje '+
 'anclajes descarga descargar tuberia tuberias gravedad rocas roca banco bancos cancha canchas '+
@@ -14779,6 +14779,46 @@ function herrParsearLinea(txt){
     if(n.length===3){ personal=n[0]; horas=n[1]; tareas=n[2]; }
     else { personal=n[0]; horas=n[1]; }
     resto=(resto.slice(0,mejorG.ini)+' '+resto.slice(mejorG.fin)).replace(/\s+/g,' ').trim();
+  }
+  // SEGUNDA PASADA: si las tres columnas siguen incompletas, es porque el OCR metió palabras
+  // ENTRE los números ("02 oy pee 0.4"), y entonces no forman un grupo pegado. Aquí se juntan
+  // las cifras sueltas del renglón aunque estén separadas, descartando las que claramente son
+  // parte de la frase: puntos, niveles, metros y horas del reloj.
+  if(!personal || !horas || !tareas){
+    // OJO: hay que rehacer la copia con las cifras corregidas sobre el texto QUE QUEDA,
+    // porque la primera pasada ya recortó un trozo y las posiciones se habrían corrido.
+    const restoNum2=resto.replace(/[^\s]+/g, tok=>{
+      if(tok.length>6) return tok;
+      if(!/\d/.test(tok)) return /^[oOlISB]{2}$/.test(tok) ? tok.replace(/[oOlISB]/g,ch=>_digit[ch]||ch) : tok;
+      if(!/^[0-9oOQDlIiLSsBZzGg.,:]+$/.test(tok)) return tok;
+      return tok.replace(/[oOQDlIiLSsBZzGg]/g, ch=>_digit[ch]||ch);
+    });
+    const tk=[]; const reTok=/[^\s]+/g; let t,antes='';
+    while((t=reTok.exec(restoNum2))!==null){
+      const pal=t[0];
+      const numero=/^\d{1,3}([.,]\d{1,2})?$/.test(pal);
+      if(numero){
+        const sigue=(restoNum2.slice(reTok.lastIndex).trim().split(/\s+/)[0]||'');
+        const esRuido = /^(punto|puntos|nivel|niveles|nv|p|pto|hito|km|pm|am)$/i.test(antes)
+                     || /^(metros?|mts?|m|pm|am|cm)$/i.test(sigue)
+                     || /^0\d\d+$/.test(pal);                 // 075, 2730: son códigos, no columnas
+        if(!esRuido) tk.push({v:pal, ini:t.index, fin:reTok.lastIndex});
+      }
+      if(!/[:.]/.test(pal)) antes=pal;
+    }
+    const val=x=>parseFloat(String(x).replace(',','.'));
+    const plaus=tk.filter(x=>{ const v=val(x.v); return v>0 && v<=30; });
+    if(plaus.length>=3 && (!personal||!horas||!tareas)){
+      const u=plaus.slice(-3);
+      personal=personal||u[0].v; horas=horas||u[1].v; tareas=tareas||u[2].v;
+      [...u].reverse().forEach(x=>{ resto=(resto.slice(0,x.ini)+' '+resto.slice(x.fin)); });
+      resto=resto.replace(/\s+/g,' ').trim();
+    }else if(plaus.length===2 && (!personal||!horas)){
+      const u=plaus.slice(-2);
+      personal=personal||u[0].v; horas=horas||u[1].v;
+      [...u].reverse().forEach(x=>{ resto=(resto.slice(0,x.ini)+' '+resto.slice(x.fin)); });
+      resto=resto.replace(/\s+/g,' ').trim();
+    }
   }
   // LABOR contra la lista real; si no se parece a ninguna, se deja vacía
   const L=_herrLabor(resto);
