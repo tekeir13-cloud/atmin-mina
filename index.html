@@ -14588,7 +14588,7 @@ function metasSave(){try{localStorage.setItem(METAS_KEY,JSON.stringify(state.met
 // Versión del lector: se muestra en pantalla para poder comparar entre equipos. Si dos
 // dispositivos dan resultados distintos con la misma foto, casi siempre es que uno tiene
 // la página vieja en caché.
-const HERR_VERSION='v20';
+const HERR_VERSION='v21';
 const HERR_KEY='atmin_herr_cuaderno';        // hoja de trabajo (lo que se está armando)
 const HERR_ARCH_KEY='atmin_herr_archivo';    // hojas ya guardadas
 const HERR_COLS=[
@@ -15390,17 +15390,50 @@ async function herrOcrImagen(dataUrl, aviso){
    Si no hay señal, si falta la clave, o si el modelo devuelve algo que no se entiende, se
    sigue con el lector local de siempre. Nunca te quedas sin leer.                            */
 const HERR_IA_MODEL='claude-sonnet-5';
-const HERR_IA_LADO=1600;      // suficiente para leer la letra sin que la subida pese
-// La foto se manda TAL COMO SALIÓ (solo achicada y, si hace falta, girada). Al modelo se le da
-// la foto en color: el blanco y negro duro que necesita Tesseract le borra trazos de lápiz.
-async function _herrFotoParaIA(dataUrl, cuarto){
+const HERR_IA_LADO=1560;      // el modelo achica cualquier imagen a ~1568 px de lado mayor
+const HERR_IA_TIRAS=3;        // en cuántas franjas se parte la hoja
+const HERR_IA_SOLAPE=0.05;    // se solapan un poco para no cortar un renglón por la mitad
+/* La hoja ENTERA, achicada a 1560 px, deja cada renglón manuscrito en unos 50 píxeles de alto:
+   demasiado poco para leer la letra, y por eso el modelo devolvía solo un par de filas.
+   La solución es no mandar una foto, sino VARIAS: la hoja completa (para que entienda cómo está
+   armada la tabla) y además la hoja partida en franjas horizontales, cada una a resolución
+   completa. Así cada renglón le llega tres veces más grande y se puede leer de verdad.
+   Se manda en color: el blanco y negro duro que necesita Tesseract borra trazos de lápiz. */
+async function _herrFotosParaIA(dataUrl, cuarto){
   const img=await herrCargarImagen(dataUrl);
-  const L=_herrLienzo(img, cuarto||0, HERR_IA_LADO);
-  return L.cv.toDataURL('image/jpeg',0.85).split(',')[1];
+  // Lienzo de trabajo grande y ya girado; de aquí se recortan las franjas sin perder detalle.
+  const L=_herrLienzo(img, cuarto||0, 2600);
+  const fotos=[];
+  const meter=cv=>fotos.push(cv.toDataURL('image/jpeg',0.85).split(',')[1]);
+  // 1) la hoja completa
+  const full=document.createElement('canvas');
+  const escF=Math.min(1, HERR_IA_LADO/Math.max(L.w,L.h));
+  full.width=Math.round(L.w*escF); full.height=Math.round(L.h*escF);
+  full.getContext('2d').drawImage(L.cv,0,0,full.width,full.height);
+  meter(full);
+  // 2) las franjas, cada una tan grande como el modelo puede aprovechar
+  const n=HERR_IA_TIRAS, alto=L.h/n, extra=L.h*HERR_IA_SOLAPE;
+  for(let i=0;i<n;i++){
+    const y0=Math.max(0, Math.round(i*alto - (i>0?extra:0)));
+    const y1=Math.min(L.h, Math.round((i+1)*alto + (i<n-1?extra:0)));
+    const hh=y1-y0; if(hh<20) continue;
+    const esc=Math.min(2, HERR_IA_LADO/Math.max(L.w,hh));
+    const cv=document.createElement('canvas');
+    cv.width=Math.round(L.w*esc); cv.height=Math.round(hh*esc);
+    const cx=cv.getContext('2d');
+    cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality='high';
+    cx.drawImage(L.cv, 0,y0,L.w,hh, 0,0,cv.width,cv.height);
+    meter(cv);
+  }
+  return fotos;
 }
-function _herrIaInstruccion(){
-  return 'Esta es la foto de una hoja de un CUADERNO DE REPORTE de una mina, escrita a mano. '+
-  'Transcribe la tabla renglón por renglón.\n\n'+
+function _herrIaInstruccion(nTiras){
+  return 'Estas son fotos de UNA MISMA hoja de un CUADERNO DE REPORTE de una mina, escrita a mano.\n'+
+  'La PRIMERA imagen es la hoja completa, para que veas cómo está armada la tabla.\n'+
+  'Las '+nTiras+' imágenes siguientes son ESA MISMA hoja partida en franjas horizontales, de arriba '+
+  'hacia abajo y ampliadas, para que puedas leer la letra. Las franjas se solapan un poco: un '+
+  'renglón puede aparecer al final de una y al principio de la siguiente.\n\n'+
+  'Transcribe la tabla renglón por renglón usando las franjas ampliadas.\n\n'+
   'Columnas de la hoja: fecha, turno, labor, descripción del trabajo, personal, horas y tareas. '+
   'La columna de FIRMA no se transcribe.\n\n'+
   'Devuelve ÚNICAMENTE un arreglo JSON, sin explicaciones ni texto alrededor. Un objeto por '+
@@ -15418,39 +15451,57 @@ function _herrIaInstruccion(){
   '- Si una celda está vacía o de plano no logras leerla, deja "" — NO INVENTES NADA. '+
   'Es preferible una celda vacía que un dato equivocado.\n'+
   '- No incluyas la fila de encabezados ni las de totales.\n'+
-  '- Si la foto no es una hoja de cuaderno con una tabla, devuelve [].';
+  '- IMPORTANTE: transcribe TODOS los renglones escritos de la hoja, del primero al último. '+
+  'No resumas, no pongas solo unos cuantos de ejemplo, no te detengas a la mitad. Una hoja suele '+
+  'traer entre 5 y 25 renglones: si devuelves menos de los que hay, el trabajo queda inservible.\n'+
+  '- Cada renglón UNA SOLA VEZ, aunque lo veas repetido en dos franjas por el solape.\n'+
+  '- Si las fotos no son una hoja de cuaderno con una tabla, devuelve [].';
 }
 // Saca el arreglo JSON de la respuesta, aunque venga envuelto en explicaciones o en ```json
 function _herrIaJson(txt){
   let s=String(txt||'').trim();
   s=s.replace(/^```(?:json)?/i,'').replace(/```$/,'').trim();
-  const a=s.indexOf('['), b=s.lastIndexOf(']');
-  if(a<0||b<a) return null;
-  try{ const v=JSON.parse(s.slice(a,b+1)); return Array.isArray(v)?v:null; }catch(e){ return null; }
+  const a=s.indexOf('['); if(a<0) return null;
+  const b=s.lastIndexOf(']');
+  if(b>a){ try{ const v=JSON.parse(s.slice(a,b+1)); if(Array.isArray(v)) return v; }catch(e){} }
+  // Si la respuesta se cortó a mitad de camino (hoja muy larga), no se tira todo a la basura:
+  // se recortan las filas completas que sí llegaron y se cierra el arreglo a mano.
+  const c=s.lastIndexOf('}');
+  if(c>a){ try{ const v=JSON.parse(s.slice(a,c+1)+']'); if(Array.isArray(v)) return v; }catch(e){} }
+  return null;
 }
 /* Devuelve {filas:[...]} si el modelo pudo leer la hoja, o {motivo:'…'} explicando por qué no.
    Nunca lanza: el que llama decide si cae al lector local. */
 async function herrLeerConIA(dataUrl, aviso, cuarto){
   if(!navigator.onLine) return {motivo:'no hay conexión'};
-  let b64;
-  try{ b64=await _herrFotoParaIA(dataUrl, cuarto); }
+  let fotos;
+  try{ fotos=await _herrFotosParaIA(dataUrl, cuarto); }
   catch(e){ return {motivo:'no se pudo preparar la foto'}; }
-  if(aviso) aviso('Leyendo la letra de la hoja…');
+  if(!fotos||!fotos.length) return {motivo:'no se pudo preparar la foto'};
+  if(aviso) aviso('Leyendo la letra de la hoja… (se manda la hoja completa y en '+(fotos.length-1)+' franjas ampliadas)');
+  // Leer una hoja entera tarda: se le da hasta 90 s antes de darla por perdida, en vez de
+  // quedarse colgado para siempre si la señal de la mina se corta a mitad de camino.
+  const ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
+  const reloj=ctrl?setTimeout(()=>{ try{ ctrl.abort(); }catch(e){} },90000):null;
   let r;
   try{
     r=await fetch('/api/chat',{
-      method:'POST', headers:{'Content-Type':'application/json'},
+      method:'POST', headers:{'Content-Type':'application/json'}, signal:ctrl?ctrl.signal:undefined,
       body:JSON.stringify({
-        model:HERR_IA_MODEL, max_tokens:4000,
+        model:HERR_IA_MODEL, max_tokens:8000,
         system:'Transcribes cuadernos de reporte de mina escritos a mano. Devuelves solo JSON válido, '+
-               'sin comentarios. Nunca inventas datos: lo que no se lee va vacío.',
-        messages:[{role:'user',content:[
-          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
-          {type:'text',text:_herrIaInstruccion()}
-        ]}]
+               'sin comentarios. Transcribes SIEMPRE la hoja completa, todos sus renglones. '+
+               'Nunca inventas datos: lo que no se lee va vacío.',
+        messages:[{role:'user',content:
+          fotos.map(b=>({type:'image',source:{type:'base64',media_type:'image/jpeg',data:b}}))
+               .concat([{type:'text',text:_herrIaInstruccion(fotos.length-1)}])
+        }]
       })
     });
-  }catch(e){ return {motivo:'no se pudo conectar con el servidor'}; }
+  }catch(e){
+    return {motivo:(e&&e.name==='AbortError')?'la lectura tardó demasiado (¿señal débil?)':'no se pudo conectar con el servidor'};
+  }finally{ if(reloj) clearTimeout(reloj); }
+  if(r.status===504||r.status===408) return {motivo:'el servidor cortó la lectura por tiempo'};
   if(!r.ok) return {motivo:'el servidor respondió '+r.status};
   let d; try{ d=await r.json(); }catch(e){ return {motivo:'respuesta ilegible del servidor'}; }
   if(d&&d.error==='sin_api_key') return {motivo:'falta configurar la clave ANTHROPIC_API_KEY en el servidor'};
@@ -15468,7 +15519,13 @@ async function herrLeerConIA(dataUrl, aviso, cuarto){
     crudo:'(leído por el lector de escritura a mano)'
   // Una fila totalmente vacía no aporta: se descarta para no ensuciar la tabla.
   })).filter(f=>f.fecha||f.labor||f.descripcion||f.personal||f.horas||f.tareas);
-  if(!filas.length) return {motivo:'no se reconoció ninguna fila en la foto'};
+  // Las franjas se solapan, así que un renglón puede venir dos veces: se quita el repetido
+  // SOLO si viene pegado al anterior y es idéntico. Dos renglones iguales separados en la hoja
+  // son trabajo repetido de verdad y no se tocan.
+  const clave=f=>_herrSinT(f.fecha+'|'+f.labor+'|'+f.descripcion+'|'+f.personal+'|'+f.horas+'|'+f.tareas);
+  const limpias=filas.filter((f,i)=> i===0 || clave(f)!==clave(filas[i-1]));
+  if(!limpias.length) return {motivo:'no se reconoció ninguna fila en la foto'};
+  filas.length=0; Array.prototype.push.apply(filas, limpias);
   // Si los renglones del cuaderno se ven y son tantos como filas leyó el modelo, se le engancha
   // a cada fila el RECORTE de su renglón (la lupa 🔍), para poder corregir mirando al lado.
   try{

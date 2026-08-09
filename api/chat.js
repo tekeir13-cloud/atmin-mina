@@ -18,7 +18,9 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    const mt = Math.min(Math.max(parseInt(max_tokens, 10) || 400, 1), 4000);
+    // El lector del cuaderno necesita mas espacio que un chat: una hoja completa son
+    // muchas filas de JSON. Con el tope viejo (4000) las hojas largas se cortaban a la mitad.
+    const mt = Math.min(Math.max(parseInt(max_tokens, 10) || 400, 1), 8000);
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
