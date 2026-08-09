@@ -14588,7 +14588,7 @@ function metasSave(){try{localStorage.setItem(METAS_KEY,JSON.stringify(state.met
 // Versión del lector: se muestra en pantalla para poder comparar entre equipos. Si dos
 // dispositivos dan resultados distintos con la misma foto, casi siempre es que uno tiene
 // la página vieja en caché.
-const HERR_VERSION='v28';
+const HERR_VERSION='v29';
 const HERR_KEY='atmin_herr_cuaderno';        // hoja de trabajo (lo que se está armando)
 const HERR_ARCH_KEY='atmin_herr_archivo';    // hojas ya guardadas
 const HERR_COLS=[
@@ -14633,234 +14633,482 @@ function _herrLienzo(img, cuarto, objetivo){
   cx.restore();
   return {cv,cx,w,h};
 }
+/* ── GEOMETRÍA DE LA HOJA (todo dentro del equipo, sin enviar nada) ──
+   Antes de leer nada hay que saber DÓNDE está cada dato. Estas funciones acondicionan la foto
+   (luz pareja, enderezado, contraste) y encuentran las rayas del cuadriculado: las horizontales
+   dan los RENGLONES y las verticales las COLUMNAS. Con eso la hoja queda partida en celdas, y
+   cada celda se lee sabiendo de antemano qué le toca contener — que es lo que hace posible
+   leerla sin ayuda de fuera. */
+function _herrGris(cx,w,h){
+  const d=cx.getImageData(0,0,w,h), p=d.data, g=new Float32Array(w*h);
+  for(let i=0,j=0;i<p.length;i+=4,j++) g[j]=0.299*p[i]+0.587*p[i+1]+0.114*p[i+2];
+  return {img:d,g:g};
+}
+// Promedio por ventana con imagen integral: permite umbral local sin que cueste una eternidad.
+function _herrIntegral(g,w,h){
+  const S=new Float64Array((w+1)*(h+1));
+  for(let y=0;y<h;y++){ let fila=0;
+    for(let x=0;x<w;x++){ fila+=g[y*w+x]; S[(y+1)*(w+1)+(x+1)]=S[y*(w+1)+(x+1)]+fila; } }
+  return S;
+}
+function _herrMediaLocal(S,w,h,x,y,r){
+  const x0=Math.max(0,x-r), y0=Math.max(0,y-r), x1=Math.min(w-1,x+r), y1=Math.min(h-1,y+r);
+  const A=S[y0*(w+1)+x0], B=S[y0*(w+1)+(x1+1)], C=S[(y1+1)*(w+1)+x0], D=S[(y1+1)*(w+1)+(x1+1)];
+  return (D-B-C+A)/((x1-x0+1)*(y1-y0+1));
+}
+// Cuánto "se notan" los renglones a un ángulo dado: si están derechos, las filas oscuras y las
+// filas de papel en blanco se alternan con fuerza y la varianza del perfil es máxima.
+function _herrPuntajeAngulo(g,w,h,ang){
+  const s=Math.sin(ang), c=Math.cos(ang), cx=w/2, cy=h/2;
+  const perfil=new Float64Array(h);
+  const paso=Math.max(1,Math.floor(w/300));
+  for(let y=0;y<h;y+=2){
+    let suma=0,n=0;
+    for(let x=0;x<w;x+=paso){
+      const yr=Math.round((x-cx)*s+(y-cy)*c+cy);
+      if(yr<0||yr>=h) continue;
+      suma+=g[yr*w+x]; n++;
+    }
+    if(n) perfil[y]=suma/n;
+  }
+  let m=0,k=0; for(let y=0;y<h;y+=2){ m+=perfil[y]; k++; }
+  m/=(k||1);
+  let v=0; for(let y=0;y<h;y+=2){ const d=perfil[y]-m; v+=d*d; }
+  return v;
+}
+// Dibuja la foto girada 0, 90, 180 o 270 grados en un lienzo del tamaño de trabajo pedido.
+async function herrMejorarImagen(dataUrl, cuarto){
+  const img=await herrCargarImagen(dataUrl);
+  // 1) Tamaño de trabajo, ya con el giro de la hoja aplicado
+  const L=_herrLienzo(img, cuarto||0, 2400);
+  let cv=L.cv, cx=L.cx, w=L.w, h=L.h;
+  let {img:datos,g}=_herrGris(cx,w,h);
+  // 2) Emparejar la luz: fondo = media de una ventana grande; se divide el gris por ese fondo
+  const S1=_herrIntegral(g,w,h);
+  const rFondo=Math.max(12,Math.round(Math.min(w,h)/18));
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    const f=_herrMediaLocal(S1,w,h,x,y,rFondo)||1;
+    let v=(g[y*w+x]/f)*205;                       // 205: deja el papel casi blanco sin quemar la tinta
+    g[y*w+x]=v<0?0:(v>255?255:v);
+  }
+  // 3) Enderezar
+  let mejor={ang:0,p:_herrPuntajeAngulo(g,w,h,0)};
+  for(let grados=-6; grados<=6; grados+=1){
+    if(!grados) continue;
+    const p=_herrPuntajeAngulo(g,w,h,grados*Math.PI/180);
+    if(p>mejor.p) mejor={ang:grados,p};
+  }
+  const p2=datos.data;
+  for(let i=0,j=0;i<p2.length;i+=4,j++){ p2[i]=p2[i+1]=p2[i+2]=g[j]; p2[i+3]=255; }
+  cx.putImageData(datos,0,0);
+  if(mejor.ang){
+    const cv2=document.createElement('canvas'); cv2.width=w; cv2.height=h;
+    const c2=cv2.getContext('2d',{willReadFrequently:true});
+    c2.fillStyle='#fff'; c2.fillRect(0,0,w,h);
+    c2.translate(w/2,h/2); c2.rotate(-mejor.ang*Math.PI/180); c2.translate(-w/2,-h/2);
+    c2.drawImage(cv,0,0);
+    cv=cv2; cx=c2;
+    const r=_herrGris(cx,w,h); datos=r.img; g=r.g;
+  }
+  // 4) Umbral local (método de Bradley): negro si el punto está bastante por debajo de su vecindad
+  const S2=_herrIntegral(g,w,h);
+  const rUmb=Math.max(8,Math.round(Math.min(w,h)/90));
+  const T=0.86;                                    // 14% por debajo de la media local
+  const p3=datos.data;
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    const m=_herrMediaLocal(S2,w,h,x,y,rUmb);
+    const v=(g[y*w+x] < m*T) ? 0 : 255;
+    const i=(y*w+x)*4; p3[i]=p3[i+1]=p3[i+2]=v; p3[i+3]=255;
+  }
+  cx.putImageData(datos,0,0);
+  return {url:cv.toDataURL('image/png'), angulo:mejor.ang, cuarto:cuarto||0, lienzo:cv};
+}
+
+/* ── ORIENTACIÓN DE LA HOJA ──
+   Muchas fotos del cuaderno salen de costado o al revés: el celular se gira para que entre la
+   hoja completa. Si se lee así, no sale nada. Aquí se decide cómo está puesta la hoja:
+     · Primero el EJE: se mide qué tan marcados quedan los renglones en horizontal y en
+       vertical. Los renglones de texto hacen que las filas de la imagen se alternen claro y
+       oscuro; el eje correcto tiene mucha más variación.
+     · Después el SENTIDO (derecha o al revés): eso no se puede saber por la forma, así que se
+       hace una lectura RÁPIDA en miniatura de las dos posibilidades y gana la que reconoce
+       más fechas y más letras. */
+function herrColumnas(cv){
+  const w=cv.width, h=cv.height;
+  const cx=cv.getContext('2d',{willReadFrequently:true});
+  const p=cx.getImageData(0,0,w,h).data;
+  const tinta=new Float32Array(w);
+  for(let x=0;x<w;x++){
+    let n=0; for(let y=0;y<h;y+=2){ if(p[(y*w+x)*4]<128) n++; }
+    tinta[x]=n/(h/2);
+  }
+  const esRaya=x=>tinta[x]>0.45;
+  const rayas=[];
+  for(let x=0;x<w;x++){
+    if(!esRaya(x)) continue;
+    let x2=x; while(x2+1<w && esRaya(x2+1)) x2++;
+    rayas.push(Math.round((x+x2)/2)); x=x2;
+  }
+  // Se quitan rayas pegadas (la misma línea leída dos veces)
+  const cortes=[]; const min=Math.max(12,Math.round(w*0.015));
+  rayas.forEach(r=>{ if(!cortes.length || r-cortes[cortes.length-1]>min) cortes.push(r); });
+  return cortes;
+}
+// Reparte las columnas detectadas entre los campos del cuaderno. La firma se ignora.
+function herrMapaColumnas(cortes,w){
+  const anchos=[]; for(let i=0;i+1<cortes.length;i++) anchos.push({i, x0:cortes[i], x1:cortes[i+1], an:cortes[i+1]-cortes[i]});
+  if(anchos.length<6) return null;
+  // La descripción es, con mucho, la columna más ancha: sirve de ancla para ubicar el resto.
+  let desc=anchos[0]; anchos.forEach(a=>{ if(a.an>desc.an) desc=a; });
+  const iD=anchos.indexOf(desc);
+  if(iD<3 || anchos.length-iD<4) return null;         // no calza con el formato del cuaderno
+  return {
+    fecha:anchos[iD-3], turno:anchos[iD-2], labor:anchos[iD-1], descripcion:desc,
+    personal:anchos[iD+1], horas:anchos[iD+2], tareas:anchos[iD+3]
+  };
+}
+function _herrRecorte(cv,x0,x1,y0,y1){
+  const m=4;
+  x0=Math.max(0,x0+m); x1=Math.min(cv.width,x1-m); y0=Math.max(0,y0); y1=Math.min(cv.height,y1);
+  const an=Math.max(1,x1-x0), al=Math.max(1,y1-y0);
+  // Se amplía la celda: los recortes chicos se leen mucho mejor agrandados
+  const esc=Math.min(3, Math.max(1, 420/Math.max(an,al)));
+  const c=document.createElement('canvas'); c.width=Math.round(an*esc); c.height=Math.round(al*esc);
+  const g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,c.width,c.height);
+  g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
+  g.drawImage(cv, x0,y0,an,al, 0,0,c.width,c.height);
+  return c;
+}
+const HERR_CELDAS=[
+  {k:'fecha',      psm:'7', lista:'0123456789./-'},
+  {k:'turno',      psm:'7', lista:'ABCDEFGHIJKLMNOPQRSTUVWXYZÁÉÍÓÚÑ'},
+  {k:'labor',      psm:'7', lista:'ABCDEFGHIJKLMNOPQRSTUVWXYZÁÉÍÓÚÑ0123456789 -'},
+  {k:'descripcion',psm:'6', lista:''},
+  {k:'personal',   psm:'7', lista:'0123456789'},
+  {k:'horas',      psm:'7', lista:'0123456789.,:'},
+  {k:'tareas',     psm:'7', lista:'0123456789.,'}
+];
+// Lee una hoja celda por celda. Devuelve filas ya armadas, no texto suelto.
+// Recorte liviano del renglón, para poder ver la letra dentro del sistema al corregir.
+function herrBandas(cv){
+  const w=cv.width, h=cv.height;
+  const cx=cv.getContext('2d',{willReadFrequently:true});
+  const p=cx.getImageData(0,0,w,h).data;
+  const tinta=new Float32Array(h);
+  for(let y=0;y<h;y++){
+    let n=0; for(let x=0;x<w;x+=2){ if(p[(y*w+x)*4]<128) n++; }
+    tinta[y]=n/(w/2);
+  }
+  // Rayas: filas con mucha tinta de lado a lado
+  const esRaya=y=>tinta[y]>0.45;
+  const rayas=[];
+  for(let y=0;y<h;y++){
+    if(!esRaya(y)) continue;
+    let y2=y; while(y2+1<h && esRaya(y2+1)) y2++;
+    rayas.push([y,y2]); y=y2;
+  }
+  const bandas=[];
+  const minAlto=Math.max(14, Math.round(h*0.012));
+  const corte=(a,b)=>{
+    if(b-a<minAlto) return;
+    let hayTexto=false;
+    for(let y=a;y<b;y++){ if(tinta[y]>0.02 && tinta[y]<0.45){ hayTexto=true; break; } }
+    if(!hayTexto) return;
+    const m=Math.round(minAlto*0.25);
+    const y0=Math.max(0,a-m), y1=Math.min(h,b+m);
+    const c=document.createElement('canvas'); c.width=w; c.height=y1-y0;
+    const g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,c.width,c.height);
+    g.drawImage(cv, 0,y0,w,y1-y0, 0,0,w,y1-y0);
+    c.y0=y0; c.y1=y1;
+    bandas.push(c);
+  };
+  if(rayas.length>=3){
+    for(let i=0;i+1<rayas.length;i++) corte(rayas[i][1]+1, rayas[i+1][0]-1);
+  }
+  return bandas;
+}
+
 function _herrSinT(t){ return String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }
+/* ── CORRECCIÓN DE LO LEÍDO ──
+   Ningún lector devuelve la letra a mano perfecta: se come letras, cambia unas por otras y
+   confunde cifras con letras. Estas dos piezas rescatan buena parte de eso sin inventar nada:
+     · el CORRECTOR de palabras, contra el vocabulario real de estos reportes y contra las
+       palabras que la propia hoja leyó bien en otros renglones;
+     · el reconocedor de LABOR, que compara contra la lista real de la mina tolerando errores
+       ("SusTOO" → SUS 100) y deja la celda vacía si no se parece a ninguna, en vez de escribir
+       un garabato. */
+const HERR_VOCAB=('se instalo instalacion señalizacion seguridad labor labores para comunicacion '+
+'chimenea chimeneas del nivel niveles realizo realizado traslado corte madera sostenimiento cuadro cuadros '+
+'frente frentes perforacion perforado aperturado desatado desate desatada '+
+'limpieza limpiado purga purgado bombeo bombear agua aguas punto puntos interseccion anclaje '+
+'anclajes descarga descargar tuberia tuberias gravedad rocas roca banco bancos cancha canchas '+
+'entubado entubar trasladado trastado retiro retirado recuperado recuperar carga cargado '+
+'acarreo echadero galeria galerias crucero cruce rampa manto mantoso multi monte bravo house '+
+'traccion voladura taladro taladros malla mallas cimbra cimbras perno pernos shotcrete '+
+'ventilacion manga mangas polvorin polvorines compresora scoop dumper excavadora winche bomba equipo equipos '+
+'personal personas horas tareas turno dia noche desde hasta hacia por con sin entre entro salio '+
+'metros metro pulgadas presencia falla fallas mantenimiento electrico electricos cable cables '+
+'tablero reparado reparacion cambio cambiado colocado colocacion instalado armado armar '+
+'soporte soportes puerta puertas marco marcos guardado nueva nuevo pendiente terminado '+
+'ejecutado ejecucion apoyo trabajo trabajos servicio ingreso salida material materiales '+
+'combustible petroleo bocamina interior mina superficie almacen taller zona area sector '+
+'presion nivelacion nivelado relleno rellenado ampliacion ampliado avance avanzado').split(' ');
+// Diccionario vivo: vocabulario fijo + las palabras que la foto leyó bien
+function herrDiccionario(lineas){
+  const d=new Map();
+  const meter=w=>{ const k=_herrSinT(w); if(k.length>=3 && !d.has(k)) d.set(k,w); };
+  HERR_VOCAB.forEach(meter);
+  (lineas||[]).forEach(l=>String(l||'').split(/[^A-Za-zÁÉÍÓÚÑáéíóúñ]+/).forEach(w=>{
+    // Solo se toman como buenas las palabras de la foto que YA están en el vocabulario:
+    // si no, se aprenderían los propios errores del OCR.
+    if(w.length>=4 && HERR_VOCAB.indexOf(_herrSinT(w))>=0) meter(w);
+  }));
+  return d;
+}
+// Respeta cómo estaba escrita la palabra original (Mayúscula inicial o TODO EN MAYÚSCULAS)
+function _herrCalcar(orig,nueva){
+  if(/^[A-ZÁÉÍÓÚÑ]+$/.test(orig)) return nueva.toUpperCase();
+  if(/^[A-ZÁÉÍÓÚÑ]/.test(orig)) return nueva.charAt(0).toUpperCase()+nueva.slice(1);
+  return nueva;
+}
+function herrCorregirTexto(txt, dicc){
+  if(!dicc||!dicc.size) return txt;
+  return String(txt||'').replace(/[A-Za-zÁÉÍÓÚÑÜáéíóúñü0-9]{3,}/g, pal=>{
+    if(/\d/.test(pal)) return pal;                       // lleva cifras: no es palabra
+    const k=_herrSinT(pal);
+    if(dicc.has(k)) return pal;                          // ya está bien escrita
+    // Prudente a propósito: solo se corrige lo que está claramente roto. Una sola letra de
+    // diferencia (dos en palabras largas), misma inicial y largo casi igual. Si hay más de una
+    // candidata igual de cerca, no se toca: sería adivinar.
+    const lim = k.length<=7?1:2;
+    let mejor=null, empate=false;
+    dicc.forEach((orig,clave)=>{
+      if(Math.abs(clave.length-k.length)>1) return;
+      if(clave[0]!==k[0]) return;
+      const d=_herrDist(k,clave);
+      if(d>lim) return;
+      if(!mejor||d<mejor.d){ mejor={d,orig}; empate=false; }
+      else if(d===mejor.d && orig!==mejor.orig){ empate=true; }
+    });
+    return (mejor&&!empate)?_herrCalcar(pal,mejor.orig):pal;
+  });
+}
+function _herrNorm(t){
+  return String(t||'').normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .toUpperCase().replace(/[^A-Z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
+}
+// Distancia de edición corta: sirve para aceptar "SUSTOO" como "SUS 100" sin aceptar cualquier cosa.
+// El OCR confunde letras con cifras (O con 0, I con 1, S con 5…). Antes de comparar se llevan
+// las dos palabras a una misma forma, si no "SusTOO" nunca calzaría con "SUS 100".
+function _herrCanon(t){
+  return _herrNorm(t).replace(/ /g,'')
+    .replace(/[OQ]/g,'0').replace(/[IL]/g,'1').replace(/S/g,'5').replace(/B/g,'8').replace(/Z/g,'2');
+}
+function _herrDist(a,b){
+  a=_herrCanon(a); b=_herrCanon(b);
+  if(!a||!b) return 99;
+  const m=a.length,n=b.length; let prev=Array.from({length:n+1},(_,j)=>j);
+  for(let i=1;i<=m;i++){ const cur=[i];
+    for(let j=1;j<=n;j++) cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
+    prev=cur; }
+  return prev[n];
+}
+function _herrLabor(txt){
+  const t=_herrNorm(txt); if(!t) return {labor:'',resto:txt};
+  const pal=t.split(' ');
+  let mejor=null;
+  // Se prueba primero con UNA palabra y se va ampliando: si no, "CRUCE Se" acabaría
+  // calzando con "CRUCE" y se comería el "Se" con el que arranca la descripción.
+  for(let n=1; n<=Math.min(3,pal.length); n++){
+    const cand=pal.slice(0,n).join(' ');
+    if(cand.length<3) continue;
+    HERR_LABORES.forEach(L=>{
+      const largo=L.replace(/ /g,'').length;
+      const d=_herrDist(cand,L), lim=largo<=4?1:(largo<=6?2:3);
+      if(d<=lim && (!mejor||d<mejor.d)) mejor={L,d,n};
+    });
+    if(mejor) break;
+  }
+  if(!mejor){
+    // No calza con ninguna labor conocida: se toma lo que hay ANTES de que arranque la
+    // descripción ("Se ...") como labor tal cual se leyó, en vez de dejarlo dentro del texto.
+    const p=String(txt).trim().split(/\s+/);
+    const iSe=p.findIndex(w=>/^SE$/i.test(w));
+    if(iSe>0 && iSe<=3) return {labor:p.slice(0,iSe).join(' ').slice(0,28), resto:p.slice(iSe).join(' ')};
+    return {labor:'',resto:txt};
+  }
+  // Quitar del texto original las palabras que se consumieron
+  const orig=String(txt).trim().split(/\s+/).slice(mejor.n).join(' ');
+  return {labor:mejor.L, resto:orig};
+}
+// Limpia el renglón: barras de la cuadrícula, símbolos sueltos y espacios repetidos.
+function herrLimpiar1(t){
+  return String(t||'')
+    .replace(/[|¦│┃╎]/g,' ')                       // rayas verticales de la tabla
+    .replace(/\s[lI1]\s/g,' ')                      // una "l" o "I" suelta suele ser una raya
+    .replace(/[«»“”„‟]/g,'"')
+    .replace(/\s+/g,' ').trim();
+}
+// Deja la descripción presentable: sin restos de símbolos, sin números sueltos al final,
+// primera letra en mayúscula y el resto tal como se escribió.
+function herrLimpiarDesc(t){
+  let d=herrLimpiar1(t)
+    .replace(/^[^A-Za-zÁÉÍÓÚÑáéíóúñ0-9]+/,'')      // basura al principio
+    .replace(/[^A-Za-zÁÉÍÓÚÑáéíóúñ0-9).%"]+$/,'')  // basura al final
+    .replace(/\s+([,.;:])/g,'$1')
+    .replace(/\s{2,}/g,' ')
+    .trim();
+  if(d) d=d.charAt(0).toUpperCase()+d.slice(1);
+  return d;
+}
+
 // Labores reales de la mina: se le pasan al modelo para que "SusTOO" caiga en SUS 100.
 const HERR_LABORES=['CRUCE','SUS 100','MANTOSO','MANTO','POLVORIN','NV 3190','NV 2820','NV 2730','MULTI','RAMPA','BOCAMINA','GALERIA','CHIMENEA',
   'BY PASS','VENTANA','ECHADERO','SUBNIVEL','TAJO','NIVEL','MONTE','MONTE BRAVO','HOUSE',
   'TRACCION','PERFORACION','SOSTENIMIENTO','BREA','CORTINA','VETA'];
-/* ══ LECTURA DE LA HOJA CON UN MODELO DE ESCRITURA A MANO ══
-   El lector local (Tesseract) fue hecho para texto IMPRESO. La letra de un cuaderno es otra
-   cosa: por más que se le mejore la foto, no la lee. Un modelo de visión sí la lee, que es lo
-   que hacen las aplicaciones de transcripción de apuntes.
-   Aquí la foto se manda al servidor de la propia aplicación (api/chat.js), que es el único
-   que conoce la clave — la clave NUNCA viaja al celular ni queda en la página.
-   Si no hay señal, si falta la clave, o si el modelo devuelve algo que no se entiende, se
-   sigue con el lector local de siempre. Nunca te quedas sin leer.                            */
-const HERR_IA_MODEL='claude-sonnet-5';
-const HERR_IA_LADO=1560;      // el modelo achica cualquier imagen a ~1568 px de lado mayor
-const HERR_IA_TIRAS=3;        // en cuántas franjas se parte la hoja
-const HERR_IA_SOLAPE=0.12;    // solape amplio: cada renglón sale entero en alguna franja
-/* ── POR QUÉ SE PARTE LA HOJA ──
-   El modelo achica cualquier imagen a ~1568 px de lado mayor. Mandándole la hoja entera, cada
-   renglón manuscrito le quedaba en unos 50 píxeles de alto: ilegible, y por eso devolvía dos
-   filas y se rendía.
-   La hoja se parte en franjas horizontales ampliadas, y CADA FRANJA VA EN SU PROPIA PETICIÓN,
-   todas al mismo tiempo. Eso arregla las dos cosas de golpe:
-     · cada renglón le llega cuatro veces más grande, así que lo lee de verdad;
-     · cada petición tiene poquitas filas que transcribir, así que ninguna se queda a medias;
-     · y como van en paralelo, esperas lo que tarda la más lenta, no la suma de todas.
-   Se manda en color: el blanco y negro duro que necesita Tesseract borra trazos de lápiz. */
-async function _herrTirasParaIA(dataUrl, cuarto){
-  const img=await herrCargarImagen(dataUrl);
-  // Lienzo de trabajo grande y ya girado; de aquí se recortan las franjas sin perder detalle.
-  const L=_herrLienzo(img, cuarto||0, 2600);
-  // La HOJA COMPLETA acompaña a cada franja. Sin ella, el lector recibía una banda horizontal
-  // suelta, no entendía que era parte de una tabla de cuaderno y devolvía vacío.
-  const full=document.createElement('canvas');
-  const escF=Math.min(1, HERR_IA_LADO/Math.max(L.w,L.h));
-  full.width=Math.round(L.w*escF); full.height=Math.round(L.h*escF);
-  full.getContext('2d').drawImage(L.cv,0,0,full.width,full.height);
-  const hoja=full.toDataURL('image/jpeg',0.85).split(',')[1];
-  const tiras=[];
-  const n=HERR_IA_TIRAS, alto=L.h/n, extra=L.h*HERR_IA_SOLAPE;
-  for(let i=0;i<n;i++){
-    const y0=Math.max(0, Math.round(i*alto - (i>0?extra:0)));
-    const y1=Math.min(L.h, Math.round((i+1)*alto + (i<n-1?extra:0)));
-    const hh=y1-y0; if(hh<20) continue;
-    // Se amplía hasta el tamaño que el modelo sí aprovecha (nunca más de 2×: pasado eso
-    // solo se agranda el borrón, no se gana nitidez).
-    const esc=Math.min(2, HERR_IA_LADO/Math.max(L.w,hh));
-    const cv=document.createElement('canvas');
-    cv.width=Math.round(L.w*esc); cv.height=Math.round(hh*esc);
-    const cx=cv.getContext('2d');
-    cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality='high';
-    cx.drawImage(L.cv, 0,y0,L.w,hh, 0,0,cv.width,cv.height);
-    tiras.push(cv.toDataURL('image/jpeg',0.85).split(',')[1]);
-  }
-  return {hoja, tiras};
-}
-function _herrIaInstruccion(i, n){
-  return 'Te doy DOS imágenes de la MISMA hoja de un CUADERNO DE REPORTE de una mina, escrita a mano.\n'+
-  '1) La hoja completa, para que veas cómo está armada la tabla.\n'+
-  '2) La franja '+(i+1)+' de '+n+' de esa hoja (contando de arriba hacia abajo), ampliada para que '+
-  'puedas leer la letra.\n\n'+
-  'Transcribe los renglones de la tabla que aparecen en la SEGUNDA imagen (la franja ampliada), '+
-  'de arriba hacia abajo.\n\n'+
-  'Columnas de la hoja, de izquierda a derecha: fecha, turno, labor, descripción del trabajo, '+
-  'personal, horas y tareas. La última columna es la FIRMA y NO se transcribe.\n\n'+
-  'Devuelve ÚNICAMENTE un arreglo JSON, sin explicaciones ni texto alrededor. Un objeto por '+
-  'renglón, en el mismo orden que en la hoja, con exactamente estas claves:\n'+
-  '[{"fecha":"","turno":"","labor":"","descripcion":"","personal":"","horas":"","tareas":""}]\n\n'+
-  'Reglas:\n'+
-  '- Transcribe TODOS los renglones que tengan algo escrito. Ante la duda, INCLÚYELO: una fila de '+
-  'más se borra con un clic, una que falta hay que escribirla a mano.\n'+
-  '- Si un renglón queda cortado por el borde de la franja, transcríbelo igual con lo que se vea. '+
-  'Que se repita no es problema: las repeticiones se quitan después.\n'+
-  '- Aunque la letra sea difícil, haz tu mejor lectura. NO devuelvas una lista vacía porque la '+
-  'letra cueste: una transcripción imperfecta sirve, una lista vacía no sirve de nada.\n'+
-  '- fecha en formato AAAA-MM-DD. Si en la hoja solo está el día y el mes, usa el año '+new Date().getFullYear()+'. '+
-  'Si un renglón no repite la fecha porque va debajo de otro con la misma, repítela tú.\n'+
-  '- turno: DIA o NOCHE (D o N en la hoja).\n'+
-  '- labor: tal como está escrita. Suelen ser de esta lista: '+HERR_LABORES.join(', ')+'. '+
-  'Si lo escrito se parece claramente a una de ellas, usa la de la lista; si no, pon lo que dice la hoja.\n'+
-  '- descripcion: el texto del trabajo, transcrito completo y en español correcto.\n'+
-  '- personal, horas y tareas: solo el número, sin unidades.\n'+
-  '- Si una celda concreta está vacía o no logras leerla, deja "" en ESA celda y sigue con el resto '+
-  'del renglón. No descartes el renglón entero por una celda.\n'+
-  '- No incluyas la fila de encabezados ni las de totales.\n'+
-  '- Devuelve [] solo si en la franja no hay absolutamente ningún renglón escrito.';
-}
-// Saca el arreglo JSON de la respuesta, aunque venga envuelto en explicaciones o en ```json
-function _herrIaJson(txt){
-  let s=String(txt||'').trim();
-  s=s.replace(/^```(?:json)?/i,'').replace(/```$/,'').trim();
-  // A veces devuelve el arreglo envuelto: {"filas":[...]}. Se busca igual el arreglo de dentro.
-  const a=s.indexOf('['); if(a<0) return null;
-  const b=s.lastIndexOf(']');
-  if(b>a){ try{ const v=JSON.parse(s.slice(a,b+1)); if(Array.isArray(v)) return v; }catch(e){} }
-  // Si la respuesta se cortó a mitad de camino (hoja muy larga), no se tira todo a la basura:
-  // se recortan las filas completas que sí llegaron y se cierra el arreglo a mano.
-  const c=s.lastIndexOf('}');
-  if(c>a){ try{ const v=JSON.parse(s.slice(a,c+1)+']'); if(Array.isArray(v)) return v; }catch(e){} }
-  return null;
-}
-// Convierte la respuesta de UNA franja en filas ya limpias. Devuelve {filas} o {motivo}.
-function _herrIaFilas(txt){
-  const t=String(txt||'').trim();
-  if(/^Error( API)?:/.test(t)) return {motivo:t};
-  const crudo=_herrIaJson(txt);
-  // Sin diagnóstico esto era un callejón sin salida: "no captura datos" y nadie sabía por qué.
-  // Se guarda un trozo de lo que respondió el lector para poder verlo en pantalla.
-  if(!crudo) return {motivo:'el lector no devolvió una tabla', respuesta:t.slice(0,300)};
-  const lim=v=>String(v==null?'':v).replace(/\s+/g,' ').trim();
-  const num=v=>{ const n=lim(v).replace(',','.'); return /^\d+(\.\d+)?$/.test(n)?n:''; };
-  return {filas: crudo.map(o=>({
-    fecha:lim(o&&o.fecha), turno:lim(o&&o.turno).toUpperCase(), labor:lim(o&&o.labor),
-    descripcion:lim(o&&o.descripcion),
-    personal:num(o&&o.personal), horas:num(o&&o.horas), tareas:num(o&&o.tareas),
-    crudo:'(leído por el lector de escritura a mano)'
-  // Una fila totalmente vacía no aporta: se descarta para no ensuciar la tabla.
-  })).filter(f=>f.fecha||f.labor||f.descripcion||f.personal||f.horas||f.tareas),
-  respuesta:t.slice(0,300)};
-}
-// Pide UNA franja. Nunca lanza: devuelve {filas} o {motivo}.
-async function _herrPedirTira(hoja, b64, i, n){
-  const ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
-  const reloj=ctrl?setTimeout(()=>{ try{ ctrl.abort(); }catch(e){} },75000):null;
-  let r;
-  try{
-    r=await fetch('/api/chat',{
-      method:'POST', headers:{'Content-Type':'application/json'}, signal:ctrl?ctrl.signal:undefined,
-      body:JSON.stringify({
-        model:HERR_IA_MODEL, max_tokens:4000,
-        system:'Transcribes cuadernos de reporte de mina escritos a mano. Devuelves solo JSON válido, '+
-               'sin comentarios. Transcribes todos los renglones del recorte que te dan. '+
-               'Nunca inventas datos: lo que no se lee va vacío.',
-        messages:[{role:'user',content:[
-          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:hoja}},
-          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
-          {type:'text',text:_herrIaInstruccion(i,n)}
-        ]}]
-      })
+/* ══ LECTOR LOCAL — TODO DENTRO DEL EQUIPO, SIN NINGUNA API ══
+   Foto → se endereza y se le empareja la luz → se detectan renglones y columnas → cada celda
+   se lee por separado → la tabla → Excel. No sale nada del equipo y no hay clave ni costo.
+
+   Dos lectores, cada uno en lo suyo:
+     · La LETRA la lee un modelo de escritura a mano que corre en el navegador. Se descarga una
+       vez (~130 MB), queda guardado y a partir de ahí funciona sin señal — dentro de la mina
+       también. Está entrenado en inglés, así que en castellano se equivoca: por eso lo leído
+       pasa después por el corrector de vocabulario y por la lista de labores.
+     · Las CIFRAS (fecha, personal, horas, tareas) las lee Tesseract, que con dígitos sueltos
+       acierta bien y es mucho más rápido. A cada celda se le dice qué caracteres puede contener,
+       lo que quita de golpe casi todos los errores.
+   La tabla es editable: lo que salga mal se corrige a mano y el Excel sale igual.            */
+const HERR_LIB_TRF='https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2';
+const HERR_MODELO='Xenova/trocr-small-handwritten';   // el más liviano de escritura a mano
+let _herrLector=null, _herrLectorPromesa=null;
+// Se carga una sola vez por sesión. La primera vez baja el modelo; después sale de la caché.
+function herrCargarLector(aviso){
+  if(_herrLector) return Promise.resolve(_herrLector);
+  if(_herrLectorPromesa) return _herrLectorPromesa;
+  _herrLectorPromesa=(async ()=>{
+    const trf=await import(HERR_LIB_TRF);
+    try{ trf.env.allowLocalModels=false; }catch(e){}
+    const lector=await trf.pipeline('image-to-text', HERR_MODELO, {
+      progress_callback:p=>{
+        if(aviso && p && p.status==='progress' && p.progress!=null){
+          aviso('Descargando el lector de escritura… '+Math.round(p.progress)+'% (solo la primera vez)');
+        }
+      }
     });
-  }catch(e){
-    return {motivo:(e&&e.name==='AbortError')?'tardó demasiado (¿señal débil?)':'no se pudo conectar con el servidor'};
-  }finally{ if(reloj) clearTimeout(reloj); }
-  if(r.status===504||r.status===408) return {motivo:'el servidor cortó la lectura por tiempo', pasajero:true};
-  if(!r.ok) return {motivo:'el servidor respondió '+r.status, pasajero:(r.status>=500)};
-  let d; try{ d=await r.json(); }catch(e){ return {motivo:'respuesta ilegible del servidor'}; }
-  if(d&&d.error==='sin_api_key') return {motivo:'falta configurar la clave ANTHROPIC_API_KEY en el servidor'};
-  if(d&&d.error==='api') return _herrErrorApi(d);
-  const txt=(d&&Array.isArray(d.content))
-    ? d.content.filter(c=>c&&c.type==='text').map(c=>c.text||'').join('\n') : '';
-  return _herrIaFilas(txt);
+    _herrLector=lector; return lector;
+  })();
+  _herrLectorPromesa.catch(()=>{ _herrLectorPromesa=null; });
+  return _herrLectorPromesa;
 }
-/* ── QUÉ SIGNIFICA CADA ERROR DE LA API, EN CRISTIANO ──
-   Un "Error API: 429" no le dice nada a nadie. Cada caso tiene una causa y una solución
-   distintas, y solo algunos tienen sentido reintentar. */
-function _herrErrorApi(d){
-  const st=Number(d.status)||0, tipo=String(d.tipo||''), det=String(d.detalle||'');
-  const esp=Number(d.reintentarEn)||0;
-  if(st===429) return {motivo:'demasiadas lecturas a la vez (la cuenta de Anthropic tiene un límite por minuto)',
-                       pasajero:true, esperar:esp};
-  if(st>=500) return {motivo:'el servidor de Anthropic está saturado', pasajero:true, esperar:esp};
-  if(st===401) return {motivo:'la clave ANTHROPIC_API_KEY no es válida (cópiala de nuevo en Vercel)'};
-  if(st===403) return {motivo:'la clave no tiene permiso para este modelo'};
-  if(st===404) return {motivo:'la cuenta no tiene acceso al modelo '+HERR_IA_MODEL};
-  if(st===413) return {motivo:'la foto pesa demasiado para mandarla'};
-  if(/credit balance is too low/i.test(det))
-    return {motivo:'la cuenta de Anthropic se quedó sin saldo — recárgalo en console.anthropic.com → Billing'};
-  return {motivo:'Anthropic rechazó la petición ('+st+(tipo?' · '+tipo:'')+')', respuesta:det};
+// Amplía una celda antes de leerla: el modelo trabaja mejor con la letra grande y con aire
+// alrededor. Sin margen, las letras que tocan el borde se pierden.
+function _herrCeldaAmpliada(cv, x0, x1, y0, y1){
+  const m=6, w=Math.max(1,x1-x0), h=Math.max(1,y1-y0);
+  const esc=Math.min(4, Math.max(1, 64/h));           // altura de letra cómoda para el modelo
+  const c=document.createElement('canvas');
+  c.width=Math.round(w*esc)+m*2; c.height=Math.round(h*esc)+m*2;
+  const cx=c.getContext('2d');
+  cx.fillStyle='#fff'; cx.fillRect(0,0,c.width,c.height);
+  cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality='high';
+  cx.drawImage(cv, x0,y0,w,h, m,m, c.width-m*2, c.height-m*2);
+  return c;
 }
-/* Devuelve {filas:[...]} si el modelo pudo leer la hoja, o {motivo:'…'} explicando por qué no.
-   Nunca lanza: el que llama decide si cae al lector local. */
-async function herrLeerConIA(dataUrl, aviso, cuarto){
-  if(!navigator.onLine) return {motivo:'no hay conexión'};
-  let hoja, tiras;
-  try{ const t=await _herrTirasParaIA(dataUrl, cuarto); hoja=t.hoja; tiras=t.tiras; }
+/* Lee la hoja entera, celda por celda. Nunca lanza: devuelve {filas} o {motivo}. */
+async function herrLeerLocal(dataUrl, cuarto, aviso){
+  let mej;
+  try{ if(aviso) aviso('Preparando la hoja (luz pareja, enderezado y contraste)…');
+       mej=await herrMejorarImagen(dataUrl, cuarto||0); }
   catch(e){ return {motivo:'no se pudo preparar la foto'}; }
-  if(!tiras||!tiras.length) return {motivo:'no se pudo preparar la foto'};
-  // Las franjas van EN PARALELO, pero de dos en dos: una cuenta nueva de Anthropic tiene un
-  // límite bajo de peticiones por minuto, y disparar cuatro de golpe lo revienta (error 429).
-  // De dos en dos sigue siendo mucho más rápido que una por una y no choca con el límite.
-  let listas=0;
-  // El aviso lleva el detalle (cuántas partes van, y si la que terminó trajo filas o falló):
-  // sin eso, en pantalla solo se ve "cargando" y no hay forma de saber si está leyendo o colgado.
-  const estado=tiras.map(()=>'…');
-  const avisar=()=>{ if(aviso) aviso('Leyendo la letra de la hoja…', {listas, total:tiras.length, estado:estado.slice()}); };
-  avisar();
-  // Reintenta lo que falla por saturación o por el límite por minuto: son fallos pasajeros,
-  // y rendirse a la primera tira a la basura una franja que se habría leído sola.
-  const conReintentos=async (b,i)=>{
-    let x=null;
-    for(let intento=0; intento<3; intento++){
-      x=await _herrPedirTira(hoja,b,i,tiras.length);
-      if(!x||!x.pasajero) break;
-      const espera=(x.esperar||0)*1000 || (1500*Math.pow(2,intento));   // 1.5s, 3s, 6s
-      estado[i]='reintentando…';
-      avisar();
-      await new Promise(res=>setTimeout(res, espera));
+  const cv=mej&&mej.lienzo;
+  if(!cv) return {motivo:'no se pudo preparar la foto'};
+
+  const bandas=herrBandas(cv);
+  if(!bandas.length) return {motivo:'no se reconocieron los renglones de la hoja — asegúrate de que se vea la cuadrícula completa, de frente y sin sombras'};
+  const cortes=herrColumnas(cv);
+  // Devuelve un tramo x0..x1 POR NOMBRE de columna ({fecha, turno, labor, …}), o null si las
+  // rayas verticales no calzan con el formato del cuaderno.
+  const mapa=herrMapaColumnas(cortes, cv.width);
+  if(!mapa) return {motivo:'no se reconocieron las columnas de la hoja — hace falta que se vean las rayas verticales de la cuadrícula, de frente y completas'};
+
+  // Los dos lectores, cada uno en lo suyo. Si el de escritura no carga (primera vez sin
+  // señal), se sigue con las cifras: media hoja con fechas y números sirve más que nada.
+  let lector=null, motivoLector='';
+  try{ lector=await herrCargarLector(aviso); }
+  catch(e){ motivoLector='no se pudo descargar el lector de escritura (hace falta señal la primera vez)'; }
+  let T=null;
+  try{ T=await cmpCargarLib(CMP_LIB_TESS,'Tesseract'); }catch(e){}
+  let w=null;
+  if(T&&T.createWorker){
+    try{ w=await T.createWorker('spa',1,{workerPath:CMP_TESS_WORKER,corePath:CMP_TESS_CORE}); }catch(e){}
+  }
+
+  const filas=[], crudas=[];
+  try{
+    for(let i=0;i<bandas.length;i++){
+      if(aviso) aviso('Leyendo renglón '+(i+1)+' de '+bandas.length+'…');
+      const b=bandas[i], fila={};
+      for(let c=0;c<HERR_CELDAS.length;c++){
+        const col=HERR_CELDAS[c], tramo=mapa[col.k];
+        if(!tramo){ fila[col.k]=''; continue; }
+        const celda=_herrCeldaAmpliada(cv, tramo.x0, tramo.x1, b.y0, b.y1);
+        const esNumero=(col.lista && !/[A-Z]/.test(col.lista));
+        let txt='';
+        try{
+          if(esNumero && w){
+            // Cifras: Tesseract, limitado a los caracteres que esa columna puede contener.
+            await w.setParameters({tessedit_pageseg_mode:col.psm, tessedit_char_whitelist:col.lista});
+            const r=await w.recognize(celda.toDataURL('image/png'));
+            txt=String(((r&&r.data)||{}).text||'');
+          }else if(lector){
+            // Letra: el modelo de escritura a mano.
+            const out=await lector(celda.toDataURL('image/png'));
+            txt=String((Array.isArray(out)?(out[0]||{}):(out||{})).generated_text||'');
+          }
+        }catch(e){}
+        fila[col.k]=String(txt).replace(/\s+/g,' ').trim();
+      }
+      crudas.push(fila);
     }
-    listas++;
-    estado[i]=(x&&x.filas)?((x.filas.length||0)+' filas'):'sin leer';
-    avisar();
-    return x;
-  };
-  const res=[];
-  for(let i=0;i<tiras.length;i+=2){
-    const lote=await Promise.all(tiras.slice(i,i+2).map((b,j)=>conReintentos(b,i+j)));
-    Array.prototype.push.apply(res,lote);
-  }
-  // Se juntan de arriba hacia abajo. Si una franja falló, se conserva lo de las demás en vez de
-  // perder la hoja entera: es preferible media hoja transcrita que ninguna.
-  const filas=[]; const fallos=[]; const muestras=[];
-  res.forEach((x,i)=>{
-    if(x&&x.filas&&x.filas.length) Array.prototype.push.apply(filas,x.filas);
-    else if(x&&x.motivo) fallos.push('parte '+(i+1)+': '+x.motivo);
-    if(x&&x.respuesta&&(!x.filas||!x.filas.length)) muestras.push('Parte '+(i+1)+' → '+x.respuesta);
+  } finally { if(w) try{ await w.terminate(); }catch(e){} }
+
+  // Corrección: la LABOR contra la lista real de la mina, y la DESCRIPCIÓN contra el
+  // vocabulario del cuaderno más las palabras que la propia hoja leyó bien.
+  const dicc=herrDiccionario(crudas.map(f=>f.descripcion||''));
+  const num=v=>{ const n=String(v||'').replace(',','.').replace(/[^\d.]/g,''); return /^\d+(\.\d+)?$/.test(n)?n:''; };
+  crudas.forEach(f=>{
+    // _herrLabor devuelve {labor, resto}: lo que no era labor suele ser el principio de la
+    // descripción, así que se le pega delante en vez de tirarlo.
+    const rl=(typeof _herrLabor==='function')?_herrLabor(f.labor||''):{labor:String(f.labor||'').toUpperCase(),resto:''};
+    const labor=(rl&&rl.labor)||'';
+    const crudoDesc=[((rl&&rl.resto)||''), (f.descripcion||'')].filter(Boolean).join(' ');
+    const desc=(typeof herrCorregirTexto==='function')
+      ? herrCorregirTexto(herrLimpiarDesc(crudoDesc), dicc)
+      : crudoDesc;
+    const turno=/N/i.test(f.turno||'')?'NOCHE':(/D/i.test(f.turno||'')?'DIA':'');
+    const fila={ fecha:_herrFechaNormal(f.fecha), turno, labor, descripcion:desc,
+                 personal:num(f.personal), horas:num(f.horas), tareas:num(f.tareas),
+                 crudo:'(leído en este equipo)' };
+    if(fila.fecha||fila.labor||fila.descripcion||fila.personal||fila.horas||fila.tareas) filas.push(fila);
   });
-  if(!filas.length){
-    return { motivo: fallos.length?fallos[0]:'el lector no encontró ningún renglón en la hoja',
-             respuestas: muestras };
-  }
-  // Las franjas se solapan, así que un renglón puede venir dos veces: se quita el repetido
-  // SOLO si viene pegado al anterior y es idéntico. Dos renglones iguales separados en la hoja
-  // son trabajo repetido de verdad y no se tocan.
-  const clave=f=>_herrSinT(f.fecha+'|'+f.labor+'|'+f.descripcion+'|'+f.personal+'|'+f.horas+'|'+f.tareas);
-  const limpias=filas.filter((f,i)=> i===0 || clave(f)!==clave(filas[i-1]));
-  filas.length=0; Array.prototype.push.apply(filas, limpias);
-  if(fallos.length) filas._fallos=fallos;
+  // Si un renglón no repite la fecha, se hereda del anterior: el cuaderno va en orden.
+  let ult='';
+  filas.forEach(f=>{ if(f.fecha) ult=f.fecha; else if(ult){ f.fecha=ult; f.fechaHeredada=true; } });
+
+  if(!filas.length) return {motivo: motivoLector || 'no se reconoció nada dentro de las celdas'};
+  if(motivoLector) filas._fallos=[motivoLector+': solo se leyeron las cifras'];
   return {filas};
+}
+// "01/08" o "1-8-26" → 2026-08-01. Si no se entiende, se deja vacío en vez de inventar.
+function _herrFechaNormal(t){
+  const m=/(\d{1,2})\s*[\/.\-]\s*(\d{1,2})(?:\s*[\/.\-]\s*(\d{2,4}))?/.exec(String(t||''));
+  if(!m) return '';
+  const d=+m[1], mes=+m[2];
+  if(d<1||d>31||mes<1||mes>12) return '';
+  let a=m[3]?+m[3]:new Date().getFullYear();
+  if(a<100) a+=2000;
+  const p=n=>String(n).padStart(2,'0');
+  return a+'-'+p(mes)+'-'+p(d);
 }
 let _herrOcupado=false;
 /* ── QUE SE VEA QUE ESTÁ TRABAJANDO ──
@@ -14909,75 +15157,6 @@ function herrRelojPara(id){ if(id) try{ clearInterval(id); }catch(e){} }
    no dice si falta señal, si el servidor está caído o si el lector miró la hoja y no vio nada.
    Aquí se muestra el motivo y, si el lector contestó algo, SU RESPUESTA TAL CUAL, para poder
    copiarla y saber qué pasó de verdad. */
-/* ── PRUEBA DEL LECTOR ──
-   Cuando "no lee" pueden estar fallando cosas muy distintas: la clave, el servidor, la señal,
-   o el lector que mira la hoja y no reconoce la letra. Desde fuera se ven todas iguales.
-   Este botón manda una hoja de prueba IMPRESA (imposible de no leer) por el mismo camino que
-   una foto real y dice exactamente dónde se rompe. Cuesta céntimos y tarda unos segundos. */
-async function herrProbarLector(){
-  if(_herrOcupado){ showNotif('Espera a que termine la lectura en curso','warn'); return; }
-  _herrOcupado=true; window._appOcupada=true;
-  const poner=herrEstado(); const reloj=herrRelojArranca();
-  const est=document.getElementById('herr-estado');
-  try{
-    poner('Probando el lector con una hoja de prueba…');
-    // Hoja de prueba: dos renglones en letra de imprenta, con las columnas del cuaderno.
-    const cv=document.createElement('canvas'); cv.width=1200; cv.height=420;
-    const cx=cv.getContext('2d');
-    cx.fillStyle='#ffffff'; cx.fillRect(0,0,1200,420);
-    cx.strokeStyle='#334155'; cx.lineWidth=2;
-    [20,140,400,900,1000,1100].forEach(x=>{ cx.beginPath(); cx.moveTo(x,20); cx.lineTo(x,400); cx.stroke(); });
-    [20,150,275,400].forEach(y=>{ cx.beginPath(); cx.moveTo(20,y); cx.lineTo(1180,y); cx.stroke(); });
-    cx.fillStyle='#0f172a'; cx.font='bold 26px sans-serif';
-    cx.fillText('FECHA',30,55); cx.fillText('T',150,55); cx.fillText('LABOR',410,55);
-    cx.fillText('DESCRIPCION',600,55); cx.fillText('P',910,55); cx.fillText('H',1010,55); cx.fillText('T',1110,55);
-    cx.font='26px sans-serif';
-    cx.fillText('01/08',30,215); cx.fillText('D',150,215); cx.fillText('RAMPA',410,215);
-    cx.fillText('Desate de rocas',600,215); cx.fillText('4',910,215); cx.fillText('8',1010,215); cx.fillText('1',1110,215);
-    cx.fillText('02/08',30,340); cx.fillText('N',150,340); cx.fillText('CRUCE',410,340);
-    cx.fillText('Limpieza con scoop',600,340); cx.fillText('3',910,340); cx.fillText('7',1010,340); cx.fillText('2',1110,340);
-    const b64=cv.toDataURL('image/jpeg',0.92).split(',')[1];
-
-    const t0=Date.now();
-    const r=await _herrPedirTira(b64, b64, 0, 1);
-    const seg=Math.round((Date.now()-t0)/1000);
-    herrRelojPara(reloj);
-    const filas=(r&&r.filas)||[];
-    const crudo=(r&&r.respuesta)||'';
-    let color='#f87171', titulo='', detalle='';
-    if(r&&r.motivo){
-      titulo='❌ No se pudo llegar al lector.';
-      detalle='Motivo: '+r.motivo+'.<br>Esto NO tiene que ver con tu foto: falla la conexión, la clave o el servidor.';
-      if(/ANTHROPIC_API_KEY/.test(r.motivo)) detalle+='<br><b>Falta la clave en Vercel</b>, o se guardó sin volver a desplegar.';
-    }else if(filas.length>=2){
-      color='#22d3a5';
-      titulo='✅ El lector funciona.';
-      detalle='Leyó las '+filas.length+' filas de la hoja de prueba en '+seg+' s, con sus columnas: '+
-              escAttr(filas.map(f=>[f.fecha,f.turno,f.labor,f.descripcion,f.personal,f.horas,f.tareas].filter(Boolean).join(' / ')).join(' | '))+'.<br>'+
-              '<b>Si tu hoja no se lee, el problema está en la foto o en la letra, no en la conexión.</b> '+
-              'Prueba con la hoja plana, de frente, llenando toda la pantalla y con buena luz.';
-    }else{
-      color='#f59e0b';
-      titulo='⚠ El lector contesta, pero no reconoció ni la hoja de prueba.';
-      detalle='Llegó respuesta en '+seg+' s, así que la conexión y la clave están bien. '+
-              'El problema está en el reconocimiento.';
-    }
-    if(est){
-      est.style.display='block'; est.style.color=color;
-      est.innerHTML='<b>'+titulo+'</b><br>'+detalle+
-        (crudo?'<div style="margin-top:8px"><button class="btn btn-outline" style="font-size:11px;padding:3px 10px" '+
-          'onclick="var d=document.getElementById(\'herr-diag2\');d.style.display=d.style.display===\'none\'?\'block\':\'none\'">'+
-          'Ver la respuesta cruda</button><pre id="herr-diag2" style="display:none;white-space:pre-wrap;word-break:break-word;'+
-          'font-size:10.5px;background:var(--coal5);border:1px solid var(--border);border-radius:6px;padding:8px;margin-top:6px;'+
-          'max-height:180px;overflow:auto;color:var(--text2)">'+escAttr(crudo)+'</pre></div>':'');
-      try{ est.scrollIntoView({block:'nearest'}); }catch(e){}
-    }
-  }catch(e){
-    poner('La prueba falló: '+(e&&e.message||e),'#f87171');
-  }finally{
-    herrRelojPara(reloj); _herrOcupado=false; window._appOcupada=false;
-  }
-}
 function herrSinDatos(r, consejo){
   const est=document.getElementById('herr-estado'); if(!est) return;
   const resp=(r&&r.respuestas)||[];
@@ -14999,10 +15178,9 @@ function herrSinDatos(r, consejo){
    que devuelve entra en la tabla. Si no se puede leer, se dice POR QUÉ y no se inventa nada.
    Cada foto agrega sus filas debajo de las anteriores; la tabla es editable de punta a punta. */
 async function herrLeerFoto(dataUrl, cuarto, poner){
-  const ia=await herrLeerConIA(dataUrl, poner, cuarto);
-  if(ia&&ia.filas&&ia.filas.length) return {filas:ia.filas, aviso:(ia.filas._fallos||[]).join(' · ')};
-  return {filas:[], motivo:(ia&&ia.motivo)||'no se reconoció ninguna fila',
-          respuestas:(ia&&ia.respuestas)||[]};
+  const r=await herrLeerLocal(dataUrl, cuarto, t=>poner(t));
+  if(r&&r.filas&&r.filas.length) return {filas:r.filas, aviso:(r.filas._fallos||[]).join(' · ')};
+  return {filas:[], motivo:(r&&r.motivo)||'no se reconoció ninguna fila', respuestas:[]};
 }
 function herrMeterFilas(filas){
   const prev=herrCargar();
@@ -15197,8 +15375,8 @@ function renderHerramientasOp(){
         personal, horas y tareas. La firma no se captura. Cada foto agrega sus filas debajo de las anteriores.
       </div>
       <div style="font-size:10.5px;color:var(--text3);margin-top:5px">
-        ℹ Para leer la letra a mano, <b>la foto se envía al servidor de la aplicación</b> mientras dura la lectura;
-        no se archiva en ningún lado. <b>Necesita conexión</b>: sin señal no se puede leer, y te lo dirá.
+        ℹ Todo se lee <b>dentro de este equipo</b>: la foto no sale de aquí y no hay ninguna clave ni costo.
+        La primera vez se descarga el lector de escritura (~130 MB); después funciona <b>sin señal</b>.
       </div>
       <div style="font-size:10px;color:var(--text3);margin-top:5px">
         Lector <b style="color:var(--accent-light)">${HERR_VERSION}</b> · si en otro equipo lee peor, ahí está corriendo una versión vieja:
@@ -15210,7 +15388,6 @@ function renderHerramientasOp(){
       <button class="btn btn-gold" style="font-size:12px" onclick="document.getElementById('herr-foto-input').click()">📷 Agregar foto</button>
       <button class="btn btn-outline" style="font-size:12px" onclick="herrGirarYReleer()" title="Si la hoja salió de costado o al revés">↻ Girar hoja y releer</button>
       <button class="btn btn-outline" style="font-size:12px" onclick="herrVerFoto()">🔍 Ver la foto</button>
-      <button class="btn btn-outline" style="font-size:12px" onclick="herrProbarLector()" title="Manda una hoja de prueba y dice si el lector responde">🩺 Probar el lector</button>
       <button class="btn btn-outline" style="font-size:12px" onclick="herrFilaVacia()">+ Fila vacía</button>
     </div>
   </div>
