@@ -14551,17 +14551,24 @@ function metasSave(){try{localStorage.setItem(METAS_KEY,JSON.stringify(state.met
 
 /* ══════════════════════════════════════════════════════════════════════════════
    HERRAMIENTAS · CUADERNO DE REPORTE → EXCEL
-   Se toma una foto de la hoja del cuaderno, se lee con OCR EN EL PROPIO EQUIPO (sin API,
-   sin subir la imagen a ningún lado) y cada renglón se vuelca a una tabla con las columnas
-   del cuaderno: fecha, turno, labor, descripción, personal, horas y tareas. La firma no se
-   captura: no es un dato. Cada foto nueva AGREGA sus filas debajo de las anteriores.
+   Se toma una foto de la hoja del cuaderno y cada renglón se vuelca a una tabla con las
+   columnas del cuaderno: fecha, turno, labor, descripción, personal, horas y tareas. La firma
+   no se captura: no es un dato. Cada foto nueva AGREGA sus filas debajo de las anteriores.
+
+   La hoja se lee por DOS caminos, en este orden:
+     1) el LECTOR DE ESCRITURA A MANO (un modelo de visión, por el servidor de la aplicación).
+        Es el que de verdad lee la letra del cuaderno. Necesita conexión.
+     2) si ese no está disponible, el LECTOR DE ESTE EQUIPO (Tesseract, sin salir del celular).
+        Fue hecho para texto impreso, así que con letra a mano acierta poco: es un respaldo
+        para no quedarse sin nada, no el modo normal de trabajo.
+
    La letra manuscrita nunca se lee perfecta: por eso TODA la tabla es editable y cada fila
-   trae el renglón original tal como salió del OCR, para poder corregir mirando la foto.
+   trae, cuando se puede, el recorte de su renglón, para corregir mirando la foto.
    ══════════════════════════════════════════════════════════════════════════════ */
 // Versión del lector: se muestra en pantalla para poder comparar entre equipos. Si dos
 // dispositivos dan resultados distintos con la misma foto, casi siempre es que uno tiene
 // la página vieja en caché.
-const HERR_VERSION='v18';
+const HERR_VERSION='v19';
 const HERR_KEY='atmin_herr_cuaderno';        // hoja de trabajo (lo que se está armando)
 const HERR_ARCH_KEY='atmin_herr_archivo';    // hojas ya guardadas
 const HERR_COLS=[
@@ -15354,6 +15361,105 @@ async function herrOcrImagen(dataUrl, aviso){
   }
   return mejor.ls;
 }
+/* ══ LECTURA DE LA HOJA CON UN MODELO DE ESCRITURA A MANO ══
+   El lector local (Tesseract) fue hecho para texto IMPRESO. La letra de un cuaderno es otra
+   cosa: por más que se le mejore la foto, no la lee. Un modelo de visión sí la lee, que es lo
+   que hacen las aplicaciones de transcripción de apuntes.
+   Aquí la foto se manda al servidor de la propia aplicación (api/chat.js), que es el único
+   que conoce la clave — la clave NUNCA viaja al celular ni queda en la página.
+   Si no hay señal, si falta la clave, o si el modelo devuelve algo que no se entiende, se
+   sigue con el lector local de siempre. Nunca te quedas sin leer.                            */
+const HERR_IA_MODEL='claude-sonnet-5';
+const HERR_IA_LADO=1600;      // suficiente para leer la letra sin que la subida pese
+// La foto se manda TAL COMO SALIÓ (solo achicada y, si hace falta, girada). Al modelo se le da
+// la foto en color: el blanco y negro duro que necesita Tesseract le borra trazos de lápiz.
+async function _herrFotoParaIA(dataUrl, cuarto){
+  const img=await herrCargarImagen(dataUrl);
+  const L=_herrLienzo(img, cuarto||0, HERR_IA_LADO);
+  return L.cv.toDataURL('image/jpeg',0.85).split(',')[1];
+}
+function _herrIaInstruccion(){
+  return 'Esta es la foto de una hoja de un CUADERNO DE REPORTE de una mina, escrita a mano. '+
+  'Transcribe la tabla renglón por renglón.\n\n'+
+  'Columnas de la hoja: fecha, turno, labor, descripción del trabajo, personal, horas y tareas. '+
+  'La columna de FIRMA no se transcribe.\n\n'+
+  'Devuelve ÚNICAMENTE un arreglo JSON, sin explicaciones ni texto alrededor. Un objeto por '+
+  'renglón escrito, en el mismo orden que en la hoja, con exactamente estas claves:\n'+
+  '[{"fecha":"","turno":"","labor":"","descripcion":"","personal":"","horas":"","tareas":""}]\n\n'+
+  'Reglas:\n'+
+  '- fecha en formato AAAA-MM-DD. Si en la hoja solo está el día y el mes, usa el año '+new Date().getFullYear()+'. '+
+  'Si un renglón no repite la fecha porque va debajo de otro con la misma, repítela tú.\n'+
+  '- turno: DIA o NOCHE (D o N en la hoja).\n'+
+  '- labor: tal como está escrita. Suelen ser de esta lista: '+HERR_LABORES.join(', ')+'. '+
+  'Si lo escrito se parece claramente a una de ellas, usa la de la lista; si no se parece a ninguna, '+
+  'pon lo que dice la hoja.\n'+
+  '- descripcion: el texto del trabajo, transcrito completo y en español correcto.\n'+
+  '- personal, horas y tareas: solo el número, sin unidades.\n'+
+  '- Si una celda está vacía o de plano no logras leerla, deja "" — NO INVENTES NADA. '+
+  'Es preferible una celda vacía que un dato equivocado.\n'+
+  '- No incluyas la fila de encabezados ni las de totales.\n'+
+  '- Si la foto no es una hoja de cuaderno con una tabla, devuelve [].';
+}
+// Saca el arreglo JSON de la respuesta, aunque venga envuelto en explicaciones o en ```json
+function _herrIaJson(txt){
+  let s=String(txt||'').trim();
+  s=s.replace(/^```(?:json)?/i,'').replace(/```$/,'').trim();
+  const a=s.indexOf('['), b=s.lastIndexOf(']');
+  if(a<0||b<a) return null;
+  try{ const v=JSON.parse(s.slice(a,b+1)); return Array.isArray(v)?v:null; }catch(e){ return null; }
+}
+/* Devuelve {filas:[...]} si el modelo pudo leer la hoja, o {motivo:'…'} explicando por qué no.
+   Nunca lanza: el que llama decide si cae al lector local. */
+async function herrLeerConIA(dataUrl, aviso, cuarto){
+  if(!navigator.onLine) return {motivo:'no hay conexión'};
+  let b64;
+  try{ b64=await _herrFotoParaIA(dataUrl, cuarto); }
+  catch(e){ return {motivo:'no se pudo preparar la foto'}; }
+  if(aviso) aviso('Leyendo la letra de la hoja…');
+  let r;
+  try{
+    r=await fetch('/api/chat',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:HERR_IA_MODEL, max_tokens:4000,
+        system:'Transcribes cuadernos de reporte de mina escritos a mano. Devuelves solo JSON válido, '+
+               'sin comentarios. Nunca inventas datos: lo que no se lee va vacío.',
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
+          {type:'text',text:_herrIaInstruccion()}
+        ]}]
+      })
+    });
+  }catch(e){ return {motivo:'no se pudo conectar con el servidor'}; }
+  if(!r.ok) return {motivo:'el servidor respondió '+r.status};
+  let d; try{ d=await r.json(); }catch(e){ return {motivo:'respuesta ilegible del servidor'}; }
+  if(d&&d.error==='sin_api_key') return {motivo:'falta configurar la clave ANTHROPIC_API_KEY en el servidor'};
+  const txt=(d&&Array.isArray(d.content))
+    ? d.content.filter(c=>c&&c.type==='text').map(c=>c.text||'').join('\n') : '';
+  if(/^Error( API)?:/.test(txt.trim())) return {motivo:txt.trim()};
+  const crudo=_herrIaJson(txt);
+  if(!crudo) return {motivo:'el modelo no devolvió una tabla'};
+  const lim=v=>String(v==null?'':v).replace(/\s+/g,' ').trim();
+  const num=v=>{ const n=lim(v).replace(',','.'); return /^\d+(\.\d+)?$/.test(n)?n:''; };
+  const filas=crudo.map(o=>({
+    fecha:lim(o&&o.fecha), turno:lim(o&&o.turno).toUpperCase(), labor:lim(o&&o.labor),
+    descripcion:lim(o&&o.descripcion),
+    personal:num(o&&o.personal), horas:num(o&&o.horas), tareas:num(o&&o.tareas),
+    crudo:'(leído por el lector de escritura a mano)'
+  // Una fila totalmente vacía no aporta: se descarta para no ensuciar la tabla.
+  })).filter(f=>f.fecha||f.labor||f.descripcion||f.personal||f.horas||f.tareas);
+  if(!filas.length) return {motivo:'no se reconoció ninguna fila en la foto'};
+  // Si los renglones del cuaderno se ven y son tantos como filas leyó el modelo, se le engancha
+  // a cada fila el RECORTE de su renglón (la lupa 🔍), para poder corregir mirando al lado.
+  try{
+    const mej=await herrMejorarImagen(dataUrl, cuarto||0);
+    const bandas=(mej&&mej.lienzo&&typeof herrBandas==='function')?herrBandas(mej.lienzo):[];
+    if(bandas.length===filas.length){
+      filas.forEach((f,i)=>{ try{ f.tira=_herrTira(mej.lienzo,bandas[i].y0,bandas[i].y1); }catch(e){} });
+    }
+  }catch(e){}
+  return {filas};
+}
 let _herrOcupado=false;
 async function herrAgregarFoto(input){
   const file=input&&input.files&&input.files[0]; if(!file) return;
@@ -15365,22 +15471,32 @@ async function herrAgregarFoto(input){
     poner('Mejorando la foto (luz pareja, enderezado y contraste)…');
     const dataUrl=await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(new Error('no se pudo leer la imagen')); r.readAsDataURL(file); });
     window._herrUltimaFoto=dataUrl;
-    let giroAvisado=null, notaGiro='';
-    const leido=await herrOcrImagen(dataUrl, (p,giro,nota)=>{
-      if(giro!=null && giroAvisado===null){ giroAvisado=giro; }
-      if(nota) notaGiro=nota;
-      poner((p?('Leyendo la foto… '+p+'%'):'Preparando la foto…')
-        +(notaGiro?' · '+notaGiro:'')
-        +(giroAvisado?' · se enderezó '+Math.abs(giroAvisado)+'°':''));
-    });
-    // El lector devuelve filas ya armadas cuando pudo trabajar por celdas; si no, renglones.
-    const filas=(leido&&leido.filas)?leido.filas:herrParsearOcr(leido||[]);
-    const soloRecortes=!!(leido&&leido.soloRecortes);
+    // 1º el lector de escritura a mano (el que de verdad lee la letra del cuaderno).
+    let filas=[], soloRecortes=false, viaIA=false, motivoIA='';
+    const ia=await herrLeerConIA(dataUrl, poner, window._herrGiroManual);
+    if(ia&&ia.filas){ filas=ia.filas; viaIA=true; }
+    else{
+      // 2º respaldo: el lector local de siempre. Sin conexión o sin clave, esto sigue andando.
+      motivoIA=(ia&&ia.motivo)||'no disponible';
+      poner('El lector de escritura a mano no está disponible ('+motivoIA+'). Probando con el lector de este equipo…','#f59e0b');
+      let giroAvisado=null, notaGiro='';
+      const leido=await herrOcrImagen(dataUrl, (p,giro,nota)=>{
+        if(giro!=null && giroAvisado===null){ giroAvisado=giro; }
+        if(nota) notaGiro=nota;
+        poner((p?('Leyendo la foto… '+p+'%'):'Preparando la foto…')
+          +(notaGiro?' · '+notaGiro:'')
+          +(giroAvisado?' · se enderezó '+Math.abs(giroAvisado)+'°':''));
+      });
+      // El lector devuelve filas ya armadas cuando pudo trabajar por celdas; si no, renglones.
+      filas=(leido&&leido.filas)?leido.filas:herrParsearOcr(leido||[]);
+      soloRecortes=!!(leido&&leido.soloRecortes);
+    }
     if(!filas.length){
       poner('No se pudo leer esta foto: lo que devolvió el lector no eran palabras ni números reconocibles, '+
             'así que no metí nada a la tabla para no ensuciarla. '+
             'Prueba con la hoja bien plana, de frente, con buena luz y llenando toda la pantalla — '+
-            'o escanéala con CamScanner y sube ese archivo. También puedes cargar las filas con "+ Fila vacía".','#f59e0b');
+            'o escanéala con CamScanner y sube ese archivo. También puedes cargar las filas con "+ Fila vacía".'+
+            (motivoIA?' · El lector de escritura a mano no se pudo usar: '+motivoIA+'.':''),'#f59e0b');
     }else{
       const prev=herrCargar();
       const foto=prev.reduce((m,f)=>Math.max(m,Number(f.foto)||0),0)+1;
@@ -15390,8 +15506,11 @@ async function herrAgregarFoto(input){
         ? ('No pude leer la letra de esta foto, pero sí reconocí '+filas.length+' renglones del cuaderno: '
            +'te dejé las filas vacías con el RECORTE de cada renglón al lado (abre la lupa 🔍). '
            +'Escribes mirando ahí, sin salir del sistema.')
-        : ('Foto '+foto+': se agregaron '+filas.length+' fila'+(filas.length!==1?'s':'')+' al final de la tabla. Revísalas contra la foto y corrige lo que haga falta.'),
-        soloRecortes?'#f59e0b':'#22d3a5');
+        : ('Foto '+foto+': se agregaron '+filas.length+' fila'+(filas.length!==1?'s':'')+' al final de la tabla'
+           +(viaIA?' — leídas con el lector de escritura a mano'
+                  :' — leídas con el lector de este equipo'+(motivoIA?' ('+motivoIA+')':''))
+           +'. Revísalas contra la foto y corrige lo que haga falta.'),
+        soloRecortes?'#f59e0b':(viaIA?'#22d3a5':'#f59e0b'));
     }
     renderHerramientasOp();
   }catch(e){
@@ -15416,8 +15535,14 @@ async function herrGirarYReleer(){
   const poner=(t,c)=>{ if(est){ est.style.display='block'; est.style.color=c||'var(--text3)'; est.textContent=t; } };
   try{
     poner('Girando la hoja '+window._herrGiroManual+'° y leyendo de nuevo…');
-    const leido=await herrOcrImagen(foto,(p,g,nota)=>poner('Leyendo girada '+window._herrGiroManual+'°… '+(p||0)+'%'+(nota?' · '+nota:'')));
-    const filas=(leido&&leido.filas)?leido.filas:herrParsearOcr(leido||[]);
+    // Igual que al agregar la foto: primero el lector de escritura a mano, y si no, el local.
+    let filas=[];
+    const ia=await herrLeerConIA(foto, poner, window._herrGiroManual);
+    if(ia&&ia.filas) filas=ia.filas;
+    else{
+      const leido=await herrOcrImagen(foto,(p,g,nota)=>poner('Leyendo girada '+window._herrGiroManual+'°… '+(p||0)+'%'+(nota?' · '+nota:'')));
+      filas=(leido&&leido.filas)?leido.filas:herrParsearOcr(leido||[]);
+    }
     if(!filas.length){ poner('Girada '+window._herrGiroManual+'° tampoco salió. Prueba girar otra vez.','#f59e0b'); }
     else{
       const prev=herrCargar();
@@ -15557,6 +15682,10 @@ function renderHerramientasOp(){
       <div style="font-size:12px;color:var(--text3);margin-top:4px">
         Toma la foto de la hoja del cuaderno y el sistema transcribe fecha, turno, labor, descripción,
         personal, horas y tareas. La firma no se captura. Cada foto agrega sus filas debajo de las anteriores.
+      </div>
+      <div style="font-size:10.5px;color:var(--text3);margin-top:5px">
+        ℹ Para leer la letra a mano, <b>la foto se envía al servidor de la aplicación</b> mientras dura la lectura;
+        no se archiva en ningún lado. Sin conexión se usa el lector del propio equipo, que lee bastante peor.
       </div>
       <div style="font-size:10px;color:var(--text3);margin-top:5px">
         Lector <b style="color:var(--accent-light)">${HERR_VERSION}</b> · si en otro equipo lee peor, ahí está corriendo una versión vieja:
