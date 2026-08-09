@@ -14588,7 +14588,7 @@ function metasSave(){try{localStorage.setItem(METAS_KEY,JSON.stringify(state.met
 // Versión del lector: se muestra en pantalla para poder comparar entre equipos. Si dos
 // dispositivos dan resultados distintos con la misma foto, casi siempre es que uno tiene
 // la página vieja en caché.
-const HERR_VERSION='v24';
+const HERR_VERSION='v25';
 const HERR_KEY='atmin_herr_cuaderno';        // hoja de trabajo (lo que se está armando)
 const HERR_ARCH_KEY='atmin_herr_archivo';    // hojas ya guardadas
 const HERR_COLS=[
@@ -14715,6 +14715,7 @@ function _herrIaInstruccion(i, n){
 function _herrIaJson(txt){
   let s=String(txt||'').trim();
   s=s.replace(/^```(?:json)?/i,'').replace(/```$/,'').trim();
+  // A veces devuelve el arreglo envuelto: {"filas":[...]}. Se busca igual el arreglo de dentro.
   const a=s.indexOf('['); if(a<0) return null;
   const b=s.lastIndexOf(']');
   if(b>a){ try{ const v=JSON.parse(s.slice(a,b+1)); if(Array.isArray(v)) return v; }catch(e){} }
@@ -14726,9 +14727,12 @@ function _herrIaJson(txt){
 }
 // Convierte la respuesta de UNA franja en filas ya limpias. Devuelve {filas} o {motivo}.
 function _herrIaFilas(txt){
-  if(/^Error( API)?:/.test(String(txt||'').trim())) return {motivo:String(txt).trim()};
+  const t=String(txt||'').trim();
+  if(/^Error( API)?:/.test(t)) return {motivo:t};
   const crudo=_herrIaJson(txt);
-  if(!crudo) return {motivo:'el modelo no devolvió una tabla'};
+  // Sin diagnóstico esto era un callejón sin salida: "no captura datos" y nadie sabía por qué.
+  // Se guarda un trozo de lo que respondió el lector para poder verlo en pantalla.
+  if(!crudo) return {motivo:'el lector no devolvió una tabla', respuesta:t.slice(0,300)};
   const lim=v=>String(v==null?'':v).replace(/\s+/g,' ').trim();
   const num=v=>{ const n=lim(v).replace(',','.'); return /^\d+(\.\d+)?$/.test(n)?n:''; };
   return {filas: crudo.map(o=>({
@@ -14737,7 +14741,8 @@ function _herrIaFilas(txt){
     personal:num(o&&o.personal), horas:num(o&&o.horas), tareas:num(o&&o.tareas),
     crudo:'(leído por el lector de escritura a mano)'
   // Una fila totalmente vacía no aporta: se descarta para no ensuciar la tabla.
-  })).filter(f=>f.fecha||f.labor||f.descripcion||f.personal||f.horas||f.tareas)};
+  })).filter(f=>f.fecha||f.labor||f.descripcion||f.personal||f.horas||f.tareas),
+  respuesta:t.slice(0,300)};
 }
 // Pide UNA franja. Nunca lanza: devuelve {filas} o {motivo}.
 async function _herrPedirTira(b64, i, n){
@@ -14793,12 +14798,16 @@ async function herrLeerConIA(dataUrl, aviso, cuarto){
   ));
   // Se juntan de arriba hacia abajo. Si una franja falló, se conserva lo de las demás en vez de
   // perder la hoja entera: es preferible media hoja transcrita que ninguna.
-  const filas=[]; const fallos=[];
+  const filas=[]; const fallos=[]; const muestras=[];
   res.forEach((x,i)=>{
-    if(x&&x.filas) Array.prototype.push.apply(filas,x.filas);
+    if(x&&x.filas&&x.filas.length) Array.prototype.push.apply(filas,x.filas);
     else if(x&&x.motivo) fallos.push('parte '+(i+1)+': '+x.motivo);
+    if(x&&x.respuesta&&(!x.filas||!x.filas.length)) muestras.push('Parte '+(i+1)+' → '+x.respuesta);
   });
-  if(!filas.length) return {motivo: fallos.length?fallos[0]:'no se reconoció ninguna fila en la foto'};
+  if(!filas.length){
+    return { motivo: fallos.length?fallos[0]:'el lector no encontró ningún renglón en la hoja',
+             respuestas: muestras };
+  }
   // Las franjas se solapan, así que un renglón puede venir dos veces: se quita el repetido
   // SOLO si viene pegado al anterior y es idéntico. Dos renglones iguales separados en la hoja
   // son trabajo repetido de verdad y no se tocan.
@@ -14851,6 +14860,26 @@ function herrRelojArranca(){
   },1000);
 }
 function herrRelojPara(id){ if(id) try{ clearInterval(id); }catch(e){} }
+/* Cuando no entra ni una fila, lo peor que se puede hacer es un "no se pudo leer" a secas:
+   no dice si falta señal, si el servidor está caído o si el lector miró la hoja y no vio nada.
+   Aquí se muestra el motivo y, si el lector contestó algo, SU RESPUESTA TAL CUAL, para poder
+   copiarla y saber qué pasó de verdad. */
+function herrSinDatos(r, consejo){
+  const est=document.getElementById('herr-estado'); if(!est) return;
+  const resp=(r&&r.respuestas)||[];
+  est.style.display='block'; est.style.color='#f59e0b';
+  est.innerHTML='<b>No entró ninguna fila a la tabla.</b> Motivo: '+escAttr(r.motivo||'desconocido')+'.<br>'+
+    '<span style="color:var(--text3)">'+escAttr(consejo||'')+' No metí nada para no ensuciar la tabla.</span>'+
+    (resp.length
+      ? '<div style="margin-top:8px"><button class="btn btn-outline" style="font-size:11px;padding:3px 10px" '+
+        'onclick="var d=document.getElementById(\'herr-diag\');d.style.display=d.style.display===\'none\'?\'block\':\'none\'">'+
+        'Ver qué contestó el lector</button>'+
+        '<pre id="herr-diag" style="display:none;white-space:pre-wrap;word-break:break-word;font-size:10.5px;'+
+        'background:var(--coal5);border:1px solid var(--border);border-radius:6px;padding:8px;margin-top:6px;'+
+        'max-height:180px;overflow:auto;color:var(--text2)">'+escAttr(resp.join('\n\n'))+'</pre></div>'
+      : '');
+  try{ est.scrollIntoView({block:'nearest'}); }catch(e){}
+}
 /* ── TOMAR UNA FOTO Y VOLCARLA A LA TABLA ──
    Un solo camino, sin respaldos que confundan: la foto va al lector de escritura a mano y lo
    que devuelve entra en la tabla. Si no se puede leer, se dice POR QUÉ y no se inventa nada.
@@ -14858,7 +14887,8 @@ function herrRelojPara(id){ if(id) try{ clearInterval(id); }catch(e){} }
 async function herrLeerFoto(dataUrl, cuarto, poner){
   const ia=await herrLeerConIA(dataUrl, poner, cuarto);
   if(ia&&ia.filas&&ia.filas.length) return {filas:ia.filas, aviso:(ia.filas._fallos||[]).join(' · ')};
-  return {filas:[], motivo:(ia&&ia.motivo)||'no se reconoció ninguna fila'};
+  return {filas:[], motivo:(ia&&ia.motivo)||'no se reconoció ninguna fila',
+          respuestas:(ia&&ia.respuestas)||[]};
 }
 function herrMeterFilas(filas){
   const prev=herrCargar();
@@ -14882,9 +14912,8 @@ async function herrAgregarFoto(input){
     const r=await herrLeerFoto(dataUrl, 0, poner);
     herrRelojPara(reloj);
     if(!r.filas.length){
-      poner('No se pudo leer esta foto: '+r.motivo+'. No metí nada a la tabla para no ensuciarla. '+
-            'Prueba con la hoja plana, de frente, con buena luz y llenando toda la pantalla. '+
-            'Si la hoja salió de costado, usa "Girar hoja y releer".','#f59e0b');
+      herrSinDatos(r, 'Prueba con la hoja plana, de frente, con buena luz y llenando toda la pantalla. '+
+                      'Si la hoja salió de costado, usa "Girar hoja y releer".');
     }else{
       const foto=herrMeterFilas(r.filas);
       poner('Foto '+foto+': '+r.filas.length+' fila'+(r.filas.length!==1?'s':'')+' al final de la tabla. '+
@@ -14918,7 +14947,7 @@ async function herrGirarYReleer(){
     const r=await herrLeerFoto(foto, giro, poner);
     herrRelojPara(reloj);
     if(!r.filas.length){
-      poner('Girada '+giro+'° tampoco salió ('+r.motivo+'). Prueba girar otra vez.','#f59e0b');
+      herrSinDatos(r, 'Girada '+giro+'° tampoco salió. Prueba girar otra vez.');
     }else{
       herrMeterFilas(r.filas);
       poner('Girada '+giro+'°: '+r.filas.length+' fila'+(r.filas.length!==1?'s':'')+'. Si sigue mal, gírala otra vez.','#22d3a5');
