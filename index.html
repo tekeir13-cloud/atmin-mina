@@ -22062,7 +22062,7 @@ const FIN_ING_MAQ_KEY='atmin_fin_ing_maq';
 // Migración de nombres de equipos: los ingresos por máquina se guardan POR NOMBRE (label).
 // Al renombrar equipos, esto mueve los montos guardados del nombre viejo al nuevo
 // para que el dashboard "Ganancia por Equipo", NIA e Ingresos x Máq. no pierdan el vínculo.
-const _FIM_RENAMES={'Scoop DALI':'Scoop WJ-2','Scoop Monte':'Scoop Epiroc','Camioneta Roja':'Camioneta Roja BRY-800'};
+const _FIM_RENAMES={'Scoop DALI':'Scoop WJ-2','Scoop Monte':'Scoop Epiroc','Camioneta Roja':'Camioneta Roja BRY-800','Camioneta Blanca':'Camioneta Blanca THB-858'};
 function _fimMigrarNombres(all){
   let cambio=false;
   Object.keys(all||{}).forEach(mes=>{
@@ -22149,11 +22149,23 @@ function compCostoReporte(r){
   const cAce = (r.aceros||[]).reduce((s,a)=>s+((a.rampa||0)+(a.galeria||0))*(pAce[a.codigo]||0),0);
   return {cExp, cPet, cGas, cAce, total:cExp+cPet+cGas+cAce};
 }
+// Renombrados de equipos del compresorista. Los reportes guardan el equipo por NOMBRE y las
+// gráficas agrupan por ese mismo nombre, así que sin esta tabla la MISMA camioneta aparecería
+// como dos barras separadas (la vieja y la nueva). Se normaliza al leer: no se reescribe ningún
+// reporte guardado, solo se agrupan al mostrarlos.
+//
+// Las cuatrimotos 'C' y 'N' NO se mapean a propósito. Pasaron de dos a tres (Roja, Verde y
+// Camuflado) y no hay forma de saber cuál era cuál, así que el consumo viejo se queda con su
+// nombre original en vez de atribuírselo a la cuatrimoto equivocada. Si se confirma la
+// equivalencia, se agregan aquí dos líneas y el histórico se agrupa solo.
+const COMP_EQUIPO_RENOM = {'Camioneta Blanca':'Camioneta Blanca THB-858'};
+function compEquipoNorm(eq){ return COMP_EQUIPO_RENOM[eq] || eq; }
+
 // Las dos camionetas consumen PETRÓLEO, no gasolina. Los reportes ya guardados conservan lo que
 // se registró en su momento (cada equipo se guarda por nombre dentro de petroleo[]/gasolina[]),
 // así que el cambio aplica de aquí en adelante y no reescribe el histórico.
-const COMP_PETROLEO   = ['Grupo Electrógeno MP-120','Grupo Electrógeno MV 2321','Generador Meba','Compresora M135','Compresora M122','Scoop WJ-2','Scoop Epiroc','Dumper','Excavadora','Cargador Frontal','Camioneta Blanca','Camioneta Roja BRY-800'];
-const COMP_GASOLINA   = ['Cuatrimoto C','Cuatrimoto N','Trompo de Construcción'];
+const COMP_PETROLEO   = ['Grupo Electrógeno MP-120','Grupo Electrógeno MV 2321','Generador Meba','Compresora M135','Compresora M122','Scoop WJ-2','Scoop Epiroc','Dumper','Excavadora','Cargador Frontal','Camioneta Blanca THB-858','Camioneta Roja BRY-800'];
+const COMP_GASOLINA   = ['Cuatrimoto Roja','Cuatrimoto Verde','Cuatrimoto Camuflado','Trompo de Construcción'];
 const COMP_HOROMETROS = ['Grupo Electrógeno MP-120','Grupo Electrógeno MV 2321','Compresora M135','Compresora M122','Scoop WJ-2','Scoop Epiroc','Dumper','Excavadora','Cargador Frontal'];
 
 function abrirModalCompresorista() {
@@ -22530,7 +22542,10 @@ function switchCompTab(tab, btn) {
 const COMP_FIG = {
   'Grupo Electrógeno':'⚡','Grupo Electrógeno MP-120':'⚡','Grupo Electrógeno MV 2321':'⚡','Compresora M135':'🌀','Compresora M122':'🌀',
   'Scoop WJ-2':'🚜','Scoop Epiroc':'🚜','Dumper':'🚛','Excavadora':'🏗️','Cargador Frontal':'🚜',
-  'Camioneta Blanca':'🛻','Camioneta Roja BRY-800':'🛻','Cuatrimoto C':'🏍️','Cuatrimoto N':'🏍️'
+  'Camioneta Blanca THB-858':'🛻','Camioneta Roja BRY-800':'🛻',
+  'Cuatrimoto Roja':'🔴','Cuatrimoto Verde':'🟢','Cuatrimoto Camuflado':'🟤','Trompo de Construcción':'🛞',
+  // Nombres antiguos: siguen apareciendo en reportes ya guardados.
+  'Camioneta Blanca':'🛻','Cuatrimoto C':'🏍️','Cuatrimoto N':'🏍️'
 };
 function compFig(eq){ return COMP_FIG[eq]||'⚙️'; }
 
@@ -22613,8 +22628,8 @@ function renderCompHistorial(){
   // ── Consumo por equipos: combustible (gln + S/) ──
   const combEq={}; // equipo -> {pet, gas}
   repMes.forEach(r=>{
-    (r.petroleo||[]).forEach(p=>{ if(p.gln){ combEq[p.equipo]=combEq[p.equipo]||{pet:0,gas:0}; combEq[p.equipo].pet+=Number(p.gln)||0; } });
-    (r.gasolina||[]).forEach(p=>{ if(p.gln){ combEq[p.equipo]=combEq[p.equipo]||{pet:0,gas:0}; combEq[p.equipo].gas+=Number(p.gln)||0; } });
+    (r.petroleo||[]).forEach(p=>{ if(p.gln){ const e=compEquipoNorm(p.equipo); combEq[e]=combEq[e]||{pet:0,gas:0}; combEq[e].pet+=Number(p.gln)||0; } });
+    (r.gasolina||[]).forEach(p=>{ if(p.gln){ const e=compEquipoNorm(p.equipo); combEq[e]=combEq[e]||{pet:0,gas:0}; combEq[e].gas+=Number(p.gln)||0; } });
   });
   const eqList=Object.keys(combEq).sort((a,b)=>((combEq[b].pet+combEq[b].gas)-(combEq[a].pet+combEq[a].gas)));
   const maxGln=Math.max(1,...eqList.map(e=>combEq[e].pet+combEq[e].gas));
@@ -22636,7 +22651,7 @@ function renderCompHistorial(){
 
   // ── Horómetros acumulados por equipo ──
   const horoEq={};
-  repMes.forEach(r=>(r.horometros||[]).forEach(h=>{ if(h.HT){ horoEq[h.equipo]=(horoEq[h.equipo]||0)+(Number(h.HT)||0); } }));
+  repMes.forEach(r=>(r.horometros||[]).forEach(h=>{ if(h.HT){ const e=compEquipoNorm(h.equipo); horoEq[e]=(horoEq[e]||0)+(Number(h.HT)||0); } }));
   const horoList=Object.keys(horoEq).sort((a,b)=>horoEq[b]-horoEq[a]);
   const maxHoro=Math.max(1,...horoList.map(e=>horoEq[e]));
   const horoCard=horoList.length?`<div class="card">
