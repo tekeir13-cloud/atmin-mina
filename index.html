@@ -14561,7 +14561,7 @@ function metasSave(){try{localStorage.setItem(METAS_KEY,JSON.stringify(state.met
 // Versión del lector: se muestra en pantalla para poder comparar entre equipos. Si dos
 // dispositivos dan resultados distintos con la misma foto, casi siempre es que uno tiene
 // la página vieja en caché.
-const HERR_VERSION='v17';
+const HERR_VERSION='v18';
 const HERR_KEY='atmin_herr_cuaderno';        // hoja de trabajo (lo que se está armando)
 const HERR_ARCH_KEY='atmin_herr_archivo';    // hojas ya guardadas
 const HERR_COLS=[
@@ -15267,7 +15267,10 @@ async function herrOcrImagen(dataUrl, aviso){
   // Si algo fallara, se sigue con la preparación simple: nunca se queda sin leer.
   let img=dataUrl, giro=0, cuarto=0, lienzo=null;
   try{
-    cuarto=await herrDetectarGiro(dataUrl, T, c=>{ if(aviso) aviso(0,null,'probando la hoja girada '+c+'°'); });
+    // Si tú fijaste el giro a mano, manda el tuyo: nada de adivinar.
+    cuarto=(window._herrGiroManual!=null)
+      ? window._herrGiroManual
+      : await herrDetectarGiro(dataUrl, T, c=>{ if(aviso) aviso(0,null,'probando la hoja girada '+c+'°'); });
     const mej=await herrMejorarImagen(dataUrl, cuarto); img=mej.url; giro=mej.angulo||0; lienzo=mej.lienzo||null;
   }
   catch(e){ try{ img=await cmpPrepararOcr(dataUrl); }catch(e2){} }
@@ -15361,6 +15364,7 @@ async function herrAgregarFoto(input){
   try{
     poner('Mejorando la foto (luz pareja, enderezado y contraste)…');
     const dataUrl=await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(new Error('no se pudo leer la imagen')); r.readAsDataURL(file); });
+    window._herrUltimaFoto=dataUrl;
     let giroAvisado=null, notaGiro='';
     const leido=await herrOcrImagen(dataUrl, (p,giro,nota)=>{
       if(giro!=null && giroAvisado===null){ giroAvisado=giro; }
@@ -15395,6 +15399,36 @@ async function herrAgregarFoto(input){
   }finally{
     _herrOcupado=false; if(input) input.value='';
   }
+}
+/* Si la hoja salió de costado o al revés, se gira a mano y se vuelve a leer la MISMA foto.
+   Es más rápido y seguro que dejar que el sistema adivine la orientación. */
+async function herrGirarYReleer(){
+  const foto=window._herrUltimaFoto;
+  if(!foto){ showNotif('Primero agrega una foto','warn'); return; }
+  if(_herrOcupado){ showNotif('Espera a que termine la lectura anterior','warn'); return; }
+  const base=(window._herrGiroManual!=null)?window._herrGiroManual:0;
+  window._herrGiroManual=(base+90)%360;
+  // Se quitan las filas que trajo la lectura anterior de ESTA foto y se lee de nuevo
+  const fotoN=herrCargar().reduce((m,f)=>Math.max(m,Number(f.foto)||0),0);
+  herrGuardarTrabajo(herrCargar().filter(f=>Number(f.foto)!==fotoN));
+  _herrOcupado=true;
+  const est=document.getElementById('herr-estado');
+  const poner=(t,c)=>{ if(est){ est.style.display='block'; est.style.color=c||'var(--text3)'; est.textContent=t; } };
+  try{
+    poner('Girando la hoja '+window._herrGiroManual+'° y leyendo de nuevo…');
+    const leido=await herrOcrImagen(foto,(p,g,nota)=>poner('Leyendo girada '+window._herrGiroManual+'°… '+(p||0)+'%'+(nota?' · '+nota:'')));
+    const filas=(leido&&leido.filas)?leido.filas:herrParsearOcr(leido||[]);
+    if(!filas.length){ poner('Girada '+window._herrGiroManual+'° tampoco salió. Prueba girar otra vez.','#f59e0b'); }
+    else{
+      const prev=herrCargar();
+      const n=prev.reduce((m,f)=>Math.max(m,Number(f.foto)||0),0)+1;
+      filas.forEach(f=>{ f.id='H'+Date.now()+Math.random().toString(36).slice(2,6); f.foto=n; });
+      herrGuardarTrabajo(prev.concat(filas));
+      poner('Girada '+window._herrGiroManual+'°: '+filas.length+' fila'+(filas.length!==1?'s':'')+'. Si sigue mal, gírala otra vez.','#22d3a5');
+    }
+    renderHerramientasOp();
+  }catch(e){ poner('No se pudo releer: '+(e&&e.message||e),'#f87171'); }
+  finally{ _herrOcupado=false; }
 }
 function herrEditar(id,campo,valor){
   const a=herrCargar(); const f=a.find(x=>x.id===id); if(!f) return;
@@ -15497,9 +15531,9 @@ function renderHerramientasOp(){
       <td style="${CEL};width:66px">${inp(f,'horas',MONO)}</td>
       <td style="${CEL};width:66px">${inp(f,'tareas',MONO)}</td>
       <td style="${CEL};text-align:center;padding:2px"><button class="btn btn-outline" style="padding:2px 7px;font-size:10px;color:#f87171;border-color:#f87171" onclick="herrBorrarFila('${f.id}')">🗑</button></td>
-    </tr>${f.tira?`<tr id="herr-tira-${f.id}" style="display:none"><td colspan="9" style="padding:6px 8px;background:var(--coal5);border:1px solid var(--border)">
-      <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Renglón tal como está en el cuaderno — transcribe mirando aquí, sin salir del sistema:</div>
-      <img src="${f.tira}" style="max-width:100%;border-radius:5px;border:1px solid var(--border);background:#fff">
+    </tr>${f.tira?`<tr id="herr-tira-${f.id}" style="display:none"><td colspan="9" style="padding:5px 7px;background:var(--coal5);border:1px solid var(--border)">
+      <div style="font-size:9.5px;color:var(--text3);margin-bottom:3px">🔍 Renglón ${i+1} del cuaderno</div>
+      <img src="${f.tira}" style="max-width:100%;max-height:110px;object-fit:contain;border-radius:4px;border:1px solid var(--border);background:#fff">
     </td></tr>`:''}`).join('');
   const sum=k=>filas.reduce((s,f)=>s+(parseFloat(f[k])||0),0);
   const fotos=new Set(filas.map(f=>f.foto||1)).size;
@@ -15532,6 +15566,7 @@ function renderHerramientasOp(){
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <input type="file" id="herr-foto-input" accept="image/*" capture="environment" style="display:none" onchange="herrAgregarFoto(this)">
       <button class="btn btn-gold" style="font-size:12px" onclick="document.getElementById('herr-foto-input').click()">📷 Agregar foto</button>
+      <button class="btn btn-outline" style="font-size:12px" onclick="herrGirarYReleer()" title="Si la hoja salió de costado o al revés">↻ Girar hoja y releer</button>
       <button class="btn btn-outline" style="font-size:12px" onclick="herrVerTodasLasTiras()">🔍 Ver renglones</button>
       <button class="btn btn-outline" style="font-size:12px" onclick="herrFilaVacia()">+ Fila vacía</button>
     </div>
@@ -15548,17 +15583,24 @@ function renderHerramientasOp(){
     ${filas.length?`
     <div style="overflow:auto;max-height:70vh;border:1px solid var(--border);border-radius:8px;-webkit-overflow-scrolling:touch">
       <table style="width:100%;border-collapse:collapse;min-width:960px">
-        <thead><tr style="position:sticky;top:0;z-index:2;background:var(--accent-dim);color:var(--accent-light);text-align:left;font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px">
-          <th style="padding:7px 5px;width:46px;border:1px solid var(--border);text-align:center">#</th>
-          <th style="padding:7px 7px;width:104px;border:1px solid var(--border)">Fecha</th>
-          <th style="padding:7px 7px;width:82px;border:1px solid var(--border);text-align:center">Turno</th>
-          <th style="padding:7px 7px;width:130px;border:1px solid var(--border)">Labor</th>
-          <th style="padding:7px 7px;border:1px solid var(--border)">Descripción</th>
-          <th style="padding:7px 5px;text-align:center;border:1px solid var(--border)">Personal</th>
-          <th style="padding:7px 5px;text-align:center;border:1px solid var(--border)">Horas</th>
-          <th style="padding:7px 5px;text-align:center;border:1px solid var(--border)">Tareas</th>
-          <th style="padding:7px 5px;width:46px;border:1px solid var(--border)"></th>
-        </tr></thead>
+        <thead>
+          <tr style="position:sticky;top:0;z-index:3;background:#217346;color:#fff;font-size:10px;font-weight:700;text-align:center">
+            <th style="padding:3px;border:1px solid #1a5c38;width:46px"></th>
+            ${['A','B','C','D','E','F','G'].map(L=>`<th style="padding:3px;border:1px solid #1a5c38">${L}</th>`).join('')}
+            <th style="padding:3px;border:1px solid #1a5c38;width:46px"></th>
+          </tr>
+          <tr style="position:sticky;top:20px;z-index:2;background:var(--coal5);color:var(--text2);text-align:left;font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px">
+            <th style="padding:7px 5px;width:46px;border:1px solid var(--border);text-align:center">#</th>
+            <th style="padding:7px 7px;width:104px;border:1px solid var(--border)">Fecha</th>
+            <th style="padding:7px 7px;width:82px;border:1px solid var(--border);text-align:center">Turno</th>
+            <th style="padding:7px 7px;width:130px;border:1px solid var(--border)">Labor</th>
+            <th style="padding:7px 7px;border:1px solid var(--border)">Descripción</th>
+            <th style="padding:7px 5px;text-align:center;border:1px solid var(--border)">Personal</th>
+            <th style="padding:7px 5px;text-align:center;border:1px solid var(--border)">Horas</th>
+            <th style="padding:7px 5px;text-align:center;border:1px solid var(--border)">Tareas</th>
+            <th style="padding:7px 5px;width:46px;border:1px solid var(--border)"></th>
+          </tr>
+        </thead>
         <tbody id="herr-tbody">${cuerpo}</tbody>
         <tfoot><tr style="font-weight:800;background:var(--coal5)">
           <td colspan="5" style="padding:8px 7px;font-size:11.5px;color:var(--text2);border:1px solid var(--border)">TOTAL · ${filas.length} fila${filas.length!==1?'s':''} · ${fotos} foto${fotos!==1?'s':''}${sinNum?` · <span style="color:#f59e0b">${sinNum} sin personal/horas/tareas</span>`:''}${heredadas?` · <span style="color:#f59e0b">${heredadas} con la fecha copiada de la fila anterior ⚠</span>`:''}</td>
