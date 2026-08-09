@@ -14588,7 +14588,7 @@ function metasSave(){try{localStorage.setItem(METAS_KEY,JSON.stringify(state.met
 // Versión del lector: se muestra en pantalla para poder comparar entre equipos. Si dos
 // dispositivos dan resultados distintos con la misma foto, casi siempre es que uno tiene
 // la página vieja en caché.
-const HERR_VERSION='v26';
+const HERR_VERSION='v27';
 const HERR_KEY='atmin_herr_cuaderno';        // hoja de trabajo (lo que se está armando)
 const HERR_ARCH_KEY='atmin_herr_archivo';    // hojas ya guardadas
 const HERR_COLS=[
@@ -14648,8 +14648,8 @@ const HERR_LABORES=['CRUCE','SUS 100','MANTOSO','MANTO','POLVORIN','NV 3190','NV
    sigue con el lector local de siempre. Nunca te quedas sin leer.                            */
 const HERR_IA_MODEL='claude-sonnet-5';
 const HERR_IA_LADO=1560;      // el modelo achica cualquier imagen a ~1568 px de lado mayor
-const HERR_IA_TIRAS=4;        // en cuántas franjas se parte la hoja
-const HERR_IA_SOLAPE=0.06;    // se solapan un poco para no cortar un renglón por la mitad
+const HERR_IA_TIRAS=3;        // en cuántas franjas se parte la hoja
+const HERR_IA_SOLAPE=0.12;    // solape amplio: cada renglón sale entero en alguna franja
 /* ── POR QUÉ SE PARTE LA HOJA ──
    El modelo achica cualquier imagen a ~1568 px de lado mayor. Mandándole la hoja entera, cada
    renglón manuscrito le quedaba en unos 50 píxeles de alto: ilegible, y por eso devolvía dos
@@ -14664,6 +14664,13 @@ async function _herrTirasParaIA(dataUrl, cuarto){
   const img=await herrCargarImagen(dataUrl);
   // Lienzo de trabajo grande y ya girado; de aquí se recortan las franjas sin perder detalle.
   const L=_herrLienzo(img, cuarto||0, 2600);
+  // La HOJA COMPLETA acompaña a cada franja. Sin ella, el lector recibía una banda horizontal
+  // suelta, no entendía que era parte de una tabla de cuaderno y devolvía vacío.
+  const full=document.createElement('canvas');
+  const escF=Math.min(1, HERR_IA_LADO/Math.max(L.w,L.h));
+  full.width=Math.round(L.w*escF); full.height=Math.round(L.h*escF);
+  full.getContext('2d').drawImage(L.cv,0,0,full.width,full.height);
+  const hoja=full.toDataURL('image/jpeg',0.85).split(',')[1];
   const tiras=[];
   const n=HERR_IA_TIRAS, alto=L.h/n, extra=L.h*HERR_IA_SOLAPE;
   for(let i=0;i<n;i++){
@@ -14680,36 +14687,38 @@ async function _herrTirasParaIA(dataUrl, cuarto){
     cx.drawImage(L.cv, 0,y0,L.w,hh, 0,0,cv.width,cv.height);
     tiras.push(cv.toDataURL('image/jpeg',0.85).split(',')[1]);
   }
-  return tiras;
+  return {hoja, tiras};
 }
 function _herrIaInstruccion(i, n){
-  return 'Esta imagen es un RECORTE de una hoja de CUADERNO DE REPORTE de una mina, escrita a mano: '+
-  'la franja '+(i+1)+' de '+n+', contando de arriba hacia abajo. Está ampliada para que puedas leer la letra.\n\n'+
-  'Transcribe TODOS los renglones escritos que se vean en ESTA franja, de arriba hacia abajo.\n\n'+
+  return 'Te doy DOS imágenes de la MISMA hoja de un CUADERNO DE REPORTE de una mina, escrita a mano.\n'+
+  '1) La hoja completa, para que veas cómo está armada la tabla.\n'+
+  '2) La franja '+(i+1)+' de '+n+' de esa hoja (contando de arriba hacia abajo), ampliada para que '+
+  'puedas leer la letra.\n\n'+
+  'Transcribe los renglones de la tabla que aparecen en la SEGUNDA imagen (la franja ampliada), '+
+  'de arriba hacia abajo.\n\n'+
   'Columnas de la hoja, de izquierda a derecha: fecha, turno, labor, descripción del trabajo, '+
   'personal, horas y tareas. La última columna es la FIRMA y NO se transcribe.\n\n'+
   'Devuelve ÚNICAMENTE un arreglo JSON, sin explicaciones ni texto alrededor. Un objeto por '+
-  'renglón escrito, en el mismo orden que en la hoja, con exactamente estas claves:\n'+
+  'renglón, en el mismo orden que en la hoja, con exactamente estas claves:\n'+
   '[{"fecha":"","turno":"","labor":"","descripcion":"","personal":"","horas":"","tareas":""}]\n\n'+
   'Reglas:\n'+
+  '- Transcribe TODOS los renglones que tengan algo escrito. Ante la duda, INCLÚYELO: una fila de '+
+  'más se borra con un clic, una que falta hay que escribirla a mano.\n'+
+  '- Si un renglón queda cortado por el borde de la franja, transcríbelo igual con lo que se vea. '+
+  'Que se repita no es problema: las repeticiones se quitan después.\n'+
+  '- Aunque la letra sea difícil, haz tu mejor lectura. NO devuelvas una lista vacía porque la '+
+  'letra cueste: una transcripción imperfecta sirve, una lista vacía no sirve de nada.\n'+
   '- fecha en formato AAAA-MM-DD. Si en la hoja solo está el día y el mes, usa el año '+new Date().getFullYear()+'. '+
   'Si un renglón no repite la fecha porque va debajo de otro con la misma, repítela tú.\n'+
   '- turno: DIA o NOCHE (D o N en la hoja).\n'+
   '- labor: tal como está escrita. Suelen ser de esta lista: '+HERR_LABORES.join(', ')+'. '+
-  'Si lo escrito se parece claramente a una de ellas, usa la de la lista; si no se parece a ninguna, '+
-  'pon lo que dice la hoja.\n'+
+  'Si lo escrito se parece claramente a una de ellas, usa la de la lista; si no, pon lo que dice la hoja.\n'+
   '- descripcion: el texto del trabajo, transcrito completo y en español correcto.\n'+
   '- personal, horas y tareas: solo el número, sin unidades.\n'+
-  '- Si una celda está vacía o de plano no logras leerla, deja "" — NO INVENTES NADA. '+
-  'Es preferible una celda vacía que un dato equivocado.\n'+
+  '- Si una celda concreta está vacía o no logras leerla, deja "" en ESA celda y sigue con el resto '+
+  'del renglón. No descartes el renglón entero por una celda.\n'+
   '- No incluyas la fila de encabezados ni las de totales.\n'+
-  '- IMPORTANTE: transcribe TODOS los renglones escritos que veas en esta franja, sin saltarte '+
-  'ninguno y sin detenerte a la mitad. No resumas ni des unos cuantos de ejemplo: si devuelves '+
-  'menos renglones de los que hay, el trabajo queda inservible.\n'+
-  '- Un renglón cortado por el borde de la franja, del que no puedas leer el texto completo, '+
-  'déjalo fuera: aparece entero en la franja vecina.\n'+
-  '- Si en esta franja no hay ningún renglón escrito (está en blanco, o solo se ve el encabezado), '+
-  'devuelve [].';
+  '- Devuelve [] solo si en la franja no hay absolutamente ningún renglón escrito.';
 }
 // Saca el arreglo JSON de la respuesta, aunque venga envuelto en explicaciones o en ```json
 function _herrIaJson(txt){
@@ -14745,7 +14754,7 @@ function _herrIaFilas(txt){
   respuesta:t.slice(0,300)};
 }
 // Pide UNA franja. Nunca lanza: devuelve {filas} o {motivo}.
-async function _herrPedirTira(b64, i, n){
+async function _herrPedirTira(hoja, b64, i, n){
   const ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
   const reloj=ctrl?setTimeout(()=>{ try{ ctrl.abort(); }catch(e){} },75000):null;
   let r;
@@ -14758,6 +14767,7 @@ async function _herrPedirTira(b64, i, n){
                'sin comentarios. Transcribes todos los renglones del recorte que te dan. '+
                'Nunca inventas datos: lo que no se lee va vacío.',
         messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:hoja}},
           {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
           {type:'text',text:_herrIaInstruccion(i,n)}
         ]}]
@@ -14778,8 +14788,8 @@ async function _herrPedirTira(b64, i, n){
    Nunca lanza: el que llama decide si cae al lector local. */
 async function herrLeerConIA(dataUrl, aviso, cuarto){
   if(!navigator.onLine) return {motivo:'no hay conexión'};
-  let tiras;
-  try{ tiras=await _herrTirasParaIA(dataUrl, cuarto); }
+  let hoja, tiras;
+  try{ const t=await _herrTirasParaIA(dataUrl, cuarto); hoja=t.hoja; tiras=t.tiras; }
   catch(e){ return {motivo:'no se pudo preparar la foto'}; }
   if(!tiras||!tiras.length) return {motivo:'no se pudo preparar la foto'};
   // TODAS LAS FRANJAS A LA VEZ. Esperas lo que tarda la más lenta, no la suma de las cuatro.
@@ -14790,7 +14800,7 @@ async function herrLeerConIA(dataUrl, aviso, cuarto){
   const avisar=()=>{ if(aviso) aviso('Leyendo la letra de la hoja…', {listas, total:tiras.length, estado:estado.slice()}); };
   avisar();
   const res=await Promise.all(tiras.map((b,i)=>
-    _herrPedirTira(b,i,tiras.length).then(x=>{
+    _herrPedirTira(hoja,b,i,tiras.length).then(x=>{
       listas++;
       estado[i]=(x&&x.filas)?((x.filas.length||0)+' filas'):'sin leer';
       avisar(); return x;
@@ -14894,7 +14904,7 @@ async function herrProbarLector(){
     const b64=cv.toDataURL('image/jpeg',0.92).split(',')[1];
 
     const t0=Date.now();
-    const r=await _herrPedirTira(b64, 0, 1);
+    const r=await _herrPedirTira(b64, b64, 0, 1);
     const seg=Math.round((Date.now()-t0)/1000);
     herrRelojPara(reloj);
     const filas=(r&&r.filas)||[];
