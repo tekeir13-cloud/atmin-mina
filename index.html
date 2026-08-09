@@ -14588,7 +14588,7 @@ function metasSave(){try{localStorage.setItem(METAS_KEY,JSON.stringify(state.met
 // Versión del lector: se muestra en pantalla para poder comparar entre equipos. Si dos
 // dispositivos dan resultados distintos con la misma foto, casi siempre es que uno tiene
 // la página vieja en caché.
-const HERR_VERSION='v27';
+const HERR_VERSION='v28';
 const HERR_KEY='atmin_herr_cuaderno';        // hoja de trabajo (lo que se está armando)
 const HERR_ARCH_KEY='atmin_herr_archivo';    // hojas ya guardadas
 const HERR_COLS=[
@@ -14776,13 +14776,31 @@ async function _herrPedirTira(hoja, b64, i, n){
   }catch(e){
     return {motivo:(e&&e.name==='AbortError')?'tardó demasiado (¿señal débil?)':'no se pudo conectar con el servidor'};
   }finally{ if(reloj) clearTimeout(reloj); }
-  if(r.status===504||r.status===408) return {motivo:'el servidor cortó la lectura por tiempo'};
-  if(!r.ok) return {motivo:'el servidor respondió '+r.status};
+  if(r.status===504||r.status===408) return {motivo:'el servidor cortó la lectura por tiempo', pasajero:true};
+  if(!r.ok) return {motivo:'el servidor respondió '+r.status, pasajero:(r.status>=500)};
   let d; try{ d=await r.json(); }catch(e){ return {motivo:'respuesta ilegible del servidor'}; }
   if(d&&d.error==='sin_api_key') return {motivo:'falta configurar la clave ANTHROPIC_API_KEY en el servidor'};
+  if(d&&d.error==='api') return _herrErrorApi(d);
   const txt=(d&&Array.isArray(d.content))
     ? d.content.filter(c=>c&&c.type==='text').map(c=>c.text||'').join('\n') : '';
   return _herrIaFilas(txt);
+}
+/* ── QUÉ SIGNIFICA CADA ERROR DE LA API, EN CRISTIANO ──
+   Un "Error API: 429" no le dice nada a nadie. Cada caso tiene una causa y una solución
+   distintas, y solo algunos tienen sentido reintentar. */
+function _herrErrorApi(d){
+  const st=Number(d.status)||0, tipo=String(d.tipo||''), det=String(d.detalle||'');
+  const esp=Number(d.reintentarEn)||0;
+  if(st===429) return {motivo:'demasiadas lecturas a la vez (la cuenta de Anthropic tiene un límite por minuto)',
+                       pasajero:true, esperar:esp};
+  if(st>=500) return {motivo:'el servidor de Anthropic está saturado', pasajero:true, esperar:esp};
+  if(st===401) return {motivo:'la clave ANTHROPIC_API_KEY no es válida (cópiala de nuevo en Vercel)'};
+  if(st===403) return {motivo:'la clave no tiene permiso para este modelo'};
+  if(st===404) return {motivo:'la cuenta no tiene acceso al modelo '+HERR_IA_MODEL};
+  if(st===413) return {motivo:'la foto pesa demasiado para mandarla'};
+  if(/credit balance is too low/i.test(det))
+    return {motivo:'la cuenta de Anthropic se quedó sin saldo — recárgalo en console.anthropic.com → Billing'};
+  return {motivo:'Anthropic rechazó la petición ('+st+(tipo?' · '+tipo:'')+')', respuesta:det};
 }
 /* Devuelve {filas:[...]} si el modelo pudo leer la hoja, o {motivo:'…'} explicando por qué no.
    Nunca lanza: el que llama decide si cae al lector local. */
@@ -14792,20 +14810,37 @@ async function herrLeerConIA(dataUrl, aviso, cuarto){
   try{ const t=await _herrTirasParaIA(dataUrl, cuarto); hoja=t.hoja; tiras=t.tiras; }
   catch(e){ return {motivo:'no se pudo preparar la foto'}; }
   if(!tiras||!tiras.length) return {motivo:'no se pudo preparar la foto'};
-  // TODAS LAS FRANJAS A LA VEZ. Esperas lo que tarda la más lenta, no la suma de las cuatro.
+  // Las franjas van EN PARALELO, pero de dos en dos: una cuenta nueva de Anthropic tiene un
+  // límite bajo de peticiones por minuto, y disparar cuatro de golpe lo revienta (error 429).
+  // De dos en dos sigue siendo mucho más rápido que una por una y no choca con el límite.
   let listas=0;
   // El aviso lleva el detalle (cuántas partes van, y si la que terminó trajo filas o falló):
   // sin eso, en pantalla solo se ve "cargando" y no hay forma de saber si está leyendo o colgado.
   const estado=tiras.map(()=>'…');
   const avisar=()=>{ if(aviso) aviso('Leyendo la letra de la hoja…', {listas, total:tiras.length, estado:estado.slice()}); };
   avisar();
-  const res=await Promise.all(tiras.map((b,i)=>
-    _herrPedirTira(hoja,b,i,tiras.length).then(x=>{
-      listas++;
-      estado[i]=(x&&x.filas)?((x.filas.length||0)+' filas'):'sin leer';
-      avisar(); return x;
-    })
-  ));
+  // Reintenta lo que falla por saturación o por el límite por minuto: son fallos pasajeros,
+  // y rendirse a la primera tira a la basura una franja que se habría leído sola.
+  const conReintentos=async (b,i)=>{
+    let x=null;
+    for(let intento=0; intento<3; intento++){
+      x=await _herrPedirTira(hoja,b,i,tiras.length);
+      if(!x||!x.pasajero) break;
+      const espera=(x.esperar||0)*1000 || (1500*Math.pow(2,intento));   // 1.5s, 3s, 6s
+      estado[i]='reintentando…';
+      avisar();
+      await new Promise(res=>setTimeout(res, espera));
+    }
+    listas++;
+    estado[i]=(x&&x.filas)?((x.filas.length||0)+' filas'):'sin leer';
+    avisar();
+    return x;
+  };
+  const res=[];
+  for(let i=0;i<tiras.length;i+=2){
+    const lote=await Promise.all(tiras.slice(i,i+2).map((b,j)=>conReintentos(b,i+j)));
+    Array.prototype.push.apply(res,lote);
+  }
   // Se juntan de arriba hacia abajo. Si una franja falló, se conserva lo de las demás en vez de
   // perder la hoja entera: es preferible media hoja transcrita que ninguna.
   const filas=[]; const fallos=[]; const muestras=[];

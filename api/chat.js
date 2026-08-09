@@ -40,8 +40,20 @@ module.exports = async function handler(req, res) {
     if (!response.ok) {
       const errText = await response.text();
       console.error('Claude error:', response.status, errText);
-      return res.status(200).json({ 
-        content: [{ type: 'text', text: 'Error API: ' + response.status + ' - ' + errText }] 
+      // Antes esto se devolvia como un texto suelto ("Error API: 429 - {...}") que el que
+      // llamaba no podia interpretar: no sabia si reintentar, si faltaba saldo o si la clave
+      // estaba mal. Ahora va estructurado, con el tipo de error de Anthropic y el segundero
+      // de reintento, para poder decidir y para poder explicarlo en cristiano en pantalla.
+      let tipo = '';
+      try { tipo = (JSON.parse(errText).error || {}).type || ''; } catch (e) {}
+      return res.status(200).json({
+        error: 'api',
+        status: response.status,
+        tipo,
+        detalle: String(errText).slice(0, 500),
+        // Cuanto esperar antes de reintentar, si el servidor lo indica.
+        reintentarEn: Number(response.headers.get('retry-after')) || 0,
+        content: [{ type: 'text', text: 'Error API: ' + response.status + ' - ' + errText }],
       });
     }
 
