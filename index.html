@@ -14588,7 +14588,7 @@ function metasSave(){try{localStorage.setItem(METAS_KEY,JSON.stringify(state.met
 // Versión del lector: se muestra en pantalla para poder comparar entre equipos. Si dos
 // dispositivos dan resultados distintos con la misma foto, casi siempre es que uno tiene
 // la página vieja en caché.
-const HERR_VERSION='v23';
+const HERR_VERSION='v24';
 const HERR_KEY='atmin_herr_cuaderno';        // hoja de trabajo (lo que se está armando)
 const HERR_ARCH_KEY='atmin_herr_archivo';    // hojas ya guardadas
 const HERR_COLS=[
@@ -14779,10 +14779,17 @@ async function herrLeerConIA(dataUrl, aviso, cuarto){
   if(!tiras||!tiras.length) return {motivo:'no se pudo preparar la foto'};
   // TODAS LAS FRANJAS A LA VEZ. Esperas lo que tarda la más lenta, no la suma de las cuatro.
   let listas=0;
-  const avisar=()=>{ if(aviso) aviso('Leyendo la letra de la hoja… '+listas+' de '+tiras.length+' partes listas'); };
+  // El aviso lleva el detalle (cuántas partes van, y si la que terminó trajo filas o falló):
+  // sin eso, en pantalla solo se ve "cargando" y no hay forma de saber si está leyendo o colgado.
+  const estado=tiras.map(()=>'…');
+  const avisar=()=>{ if(aviso) aviso('Leyendo la letra de la hoja…', {listas, total:tiras.length, estado:estado.slice()}); };
   avisar();
   const res=await Promise.all(tiras.map((b,i)=>
-    _herrPedirTira(b,i,tiras.length).then(x=>{ listas++; avisar(); return x; })
+    _herrPedirTira(b,i,tiras.length).then(x=>{
+      listas++;
+      estado[i]=(x&&x.filas)?((x.filas.length||0)+' filas'):'sin leer';
+      avisar(); return x;
+    })
   ));
   // Se juntan de arriba hacia abajo. Si una franja falló, se conserva lo de las demás en vez de
   // perder la hoja entera: es preferible media hoja transcrita que ninguna.
@@ -14802,6 +14809,48 @@ async function herrLeerConIA(dataUrl, aviso, cuarto){
   return {filas};
 }
 let _herrOcupado=false;
+/* ── QUE SE VEA QUE ESTÁ TRABAJANDO ──
+   Leer una hoja tarda, y una pantalla quieta no distingue "trabajando" de "colgado". Este panel
+   muestra en qué parte va, cuántas filas trajo cada una y un reloj corriendo. Si el reloj avanza,
+   está leyendo; si se queda clavado, algo pasó. Además se desplaza solo hasta el aviso, porque en
+   el celular, al volver de la cámara, suele quedar fuera de la pantalla. */
+function herrEstado(){
+  const est=document.getElementById('herr-estado');
+  return function(texto, info, color){
+    if(!est) return;
+    est.style.display='block';
+    est.style.color=color||'var(--text3)';
+    if(info && info.total){
+      const seg=window._herrSeg||0;
+      const barra=(info.estado||[]).map((e,i)=>{
+        const ok=e!=='…', mal=(e==='sin leer');
+        const col=mal?'#f87171':(ok?'#22d3a5':'var(--text3)');
+        return '<span style="color:'+col+'">'+(mal?'✕':(ok?'✓':'○'))+' Parte '+(i+1)+
+               '<span style="opacity:.7;font-size:10px"> '+(ok?e:'leyendo…')+'</span></span>';
+      }).join(' &nbsp;·&nbsp; ');
+      est.innerHTML='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+        '<b style="color:var(--accent-light)">🔍 '+texto+'</b>'+
+        '<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--text3)">'+seg+' s</span></div>'+
+        '<div style="margin-top:5px;font-size:11px">'+barra+'</div>'+
+        '<div style="margin-top:5px;font-size:10.5px;color:var(--text3)">'+info.listas+' de '+info.total+
+        ' partes listas · las cuatro se leen a la vez, no de una en una.</div>';
+    }else{
+      est.textContent=texto;
+    }
+    try{ est.scrollIntoView({block:'nearest'}); }catch(e){}
+  };
+}
+// Reloj: solo sirve para que se note que sigue vivo.
+function herrRelojArranca(){
+  window._herrSeg=0;
+  return setInterval(()=>{
+    window._herrSeg=(window._herrSeg||0)+1;
+    const est=document.getElementById('herr-estado');
+    const s=est&&est.querySelector('span[style*="DM Mono"]');
+    if(s) s.textContent=window._herrSeg+' s';
+  },1000);
+}
+function herrRelojPara(id){ if(id) try{ clearInterval(id); }catch(e){} }
 /* ── TOMAR UNA FOTO Y VOLCARLA A LA TABLA ──
    Un solo camino, sin respaldos que confundan: la foto va al lector de escritura a mano y lo
    que devuelve entra en la tabla. Si no se puede leer, se dice POR QUÉ y no se inventa nada.
@@ -14822,8 +14871,8 @@ async function herrAgregarFoto(input){
   const file=input&&input.files&&input.files[0]; if(!file) return;
   if(_herrOcupado){ showNotif('Espera a que termine la foto anterior','warn'); return; }
   _herrOcupado=true; window._appOcupada=true;
-  const est=document.getElementById('herr-estado');
-  const poner=(t,c)=>{ if(est){ est.style.display='block'; est.style.color=c||'var(--text3)'; est.textContent=t; } };
+  const poner=herrEstado();
+  const reloj=herrRelojArranca();
   try{
     poner('Preparando la foto…');
     const dataUrl=await new Promise((res,rej)=>{ const r=new FileReader();
@@ -14831,6 +14880,7 @@ async function herrAgregarFoto(input){
     window._herrUltimaFoto=dataUrl;
     window._herrGiroManual=0;               // foto nueva: se empieza sin giro
     const r=await herrLeerFoto(dataUrl, 0, poner);
+    herrRelojPara(reloj);
     if(!r.filas.length){
       poner('No se pudo leer esta foto: '+r.motivo+'. No metí nada a la tabla para no ensuciarla. '+
             'Prueba con la hoja plana, de frente, con buena luz y llenando toda la pantalla. '+
@@ -14845,6 +14895,7 @@ async function herrAgregarFoto(input){
   }catch(e){
     poner('No se pudo leer la foto: '+(e&&e.message||e),'#f87171');
   }finally{
+    herrRelojPara(reloj);
     _herrOcupado=false; window._appOcupada=false; if(input) input.value='';
   }
 }
@@ -14860,11 +14911,12 @@ async function herrGirarYReleer(){
   const ultima=herrCargar().reduce((m,f)=>Math.max(m,Number(f.foto)||0),0);
   herrGuardarTrabajo(herrCargar().filter(f=>Number(f.foto)!==ultima));
   _herrOcupado=true; window._appOcupada=true;
-  const est=document.getElementById('herr-estado');
-  const poner=(t,c)=>{ if(est){ est.style.display='block'; est.style.color=c||'var(--text3)'; est.textContent=t; } };
+  const poner=herrEstado();
+  const reloj=herrRelojArranca();
   try{
     poner('Girando la hoja '+giro+'° y leyendo de nuevo…');
     const r=await herrLeerFoto(foto, giro, poner);
+    herrRelojPara(reloj);
     if(!r.filas.length){
       poner('Girada '+giro+'° tampoco salió ('+r.motivo+'). Prueba girar otra vez.','#f59e0b');
     }else{
@@ -14873,7 +14925,7 @@ async function herrGirarYReleer(){
     }
     renderHerramientasOp();
   }catch(e){ poner('No se pudo releer: '+(e&&e.message||e),'#f87171'); }
-  finally{ _herrOcupado=false; window._appOcupada=false; }
+  finally{ herrRelojPara(reloj); _herrOcupado=false; window._appOcupada=false; }
 }
 // Ver la foto de la hoja al lado de la tabla, para corregir sin cambiar de aplicación.
 function herrVerFoto(){
