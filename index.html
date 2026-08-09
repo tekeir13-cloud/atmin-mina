@@ -14561,7 +14561,7 @@ function metasSave(){try{localStorage.setItem(METAS_KEY,JSON.stringify(state.met
 // Versión del lector: se muestra en pantalla para poder comparar entre equipos. Si dos
 // dispositivos dan resultados distintos con la misma foto, casi siempre es que uno tiene
 // la página vieja en caché.
-const HERR_VERSION='v12';
+const HERR_VERSION='v13';
 const HERR_KEY='atmin_herr_cuaderno';        // hoja de trabajo (lo que se está armando)
 const HERR_ARCH_KEY='atmin_herr_archivo';    // hojas ya guardadas
 const HERR_COLS=[
@@ -14831,6 +14831,20 @@ function herrParsearLinea(txt){
   return {fecha,turno,labor:L.labor,descripcion,
           personal:personal.replace(/^0+(?=\d)/,''), horas, tareas, crudo:String(txt||'').trim()};
 }
+// ¿Esta fila se puede creer? Con letra a mano el lector a veces devuelve un amasijo de letras.
+// Meterlo en la tabla es peor que no meter nada: ensucia el Excel y hay que borrarlo a mano.
+function herrFilaCreible(f){
+  if(!f) return false;
+  const d=String(f.descripcion||'');
+  const tieneFecha=!!f.fecha;
+  const tieneNum=!!(f.personal||f.horas||f.tareas);
+  // Proporción de palabras que parecen palabras de verdad (vocales y largo razonable)
+  const pal=d.split(/\s+/).filter(x=>x.length>2);
+  const buenas=pal.filter(x=>/[aeiouáéíóú]/i.test(x) && /^[A-Za-zÁÉÍÓÚÑáéíóúñ.,;:()/%-]+$/.test(x) && x.length<=16).length;
+  const razon=pal.length?buenas/pal.length:0;
+  if(pal.length>=8 && razon<0.45) return false;        // amasijo de letras
+  return tieneFecha || tieneNum || (f.turno && razon>=0.5 && pal.length>=3);
+}
 function herrParsearOcr(lineas){
   const filas=[]; let ultima=null;
   // Diccionario armado con el vocabulario del cuaderno MÁS las palabras que esta misma foto
@@ -14864,9 +14878,14 @@ function herrParsearOcr(lineas){
     // OCR no lograba leer las fechas.
     const abreTurno=/\b(D\s*[ÍI:.]?\s*A|NOCHE|NOOHE)\b/i.test(t) && t.length>16;
     if(abreTurno && (!ultima || !/\b(D\s*[ÍI:.]?\s*A|NOCHE)\b/i.test(String(ultima.crudo||'').slice(0,40)) || filas.length)){
-      const f2=herrParsearLinea((ultima?ultima.fecha.slice(8,10)+'/'+ultima.fecha.slice(5,7)+'/'+ultima.fecha.slice(0,4)+' ':'01/01/2000 ')+t);
-      if(f2){ f2.crudo=String(original||'').trim(); f2.fechaHeredada=!ultima?false:true;
-              filas.push(f2); ultima=f2; return; }
+      const fBase = ultima ? (ultima.fecha.slice(8,10)+'/'+ultima.fecha.slice(5,7)+'/'+ultima.fecha.slice(0,4)+' ') : '31/12/1999 ';
+      const f2=herrParsearLinea(fBase+t);
+      if(f2){
+        // Sin fecha previa no se inventa ninguna: la celda queda vacía para que se complete a mano.
+        if(!ultima){ f2.fecha=''; } else { f2.fechaHeredada=true; }
+        f2.crudo=String(original||'').trim();
+        filas.push(f2); ultima=f2; return;
+      }
     }
     if(!ultima) return;
     if(/^[\d\s.,\/-]+$/.test(t)){
@@ -15247,7 +15266,7 @@ async function herrOcrImagen(dataUrl, aviso){
           if(bandas0.length>=3){
             const crudas=await herrLeerPorCeldas(w, lienzo, bandas0.map(b=>({y0:b.y0,y1:b.y1})), aviso);
             if(crudas && crudas.length){
-              const filas=herrArmarDesdeCeldas(crudas);
+              const filas=herrArmarDesdeCeldas(crudas).filter(herrFilaCreible);
               if(filas.length>=2){ try{ await w.terminate(); }catch(e){} return {filas}; }
             }
           }
@@ -15308,7 +15327,10 @@ async function herrAgregarFoto(input){
     // El lector devuelve filas ya armadas cuando pudo trabajar por celdas; si no, renglones.
     const filas=(leido&&leido.filas)?leido.filas:herrParsearOcr(leido||[]);
     if(!filas.length){
-      poner('No se reconoció ningún renglón con fecha en esta foto. Puedes agregar las filas a mano con "+ Fila vacía".','#f59e0b');
+      poner('No se pudo leer esta foto: lo que devolvió el lector no eran palabras ni números reconocibles, '+
+            'así que no metí nada a la tabla para no ensuciarla. '+
+            'Prueba con la hoja bien plana, de frente, con buena luz y llenando toda la pantalla — '+
+            'o escanéala con CamScanner y sube ese archivo. También puedes cargar las filas con "+ Fila vacía".','#f59e0b');
     }else{
       const prev=herrCargar();
       const foto=prev.reduce((m,f)=>Math.max(m,Number(f.foto)||0),0)+1;
