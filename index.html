@@ -14561,7 +14561,7 @@ function metasSave(){try{localStorage.setItem(METAS_KEY,JSON.stringify(state.met
 // Versión del lector: se muestra en pantalla para poder comparar entre equipos. Si dos
 // dispositivos dan resultados distintos con la misma foto, casi siempre es que uno tiene
 // la página vieja en caché.
-const HERR_VERSION='v8';
+const HERR_VERSION='v9';
 const HERR_KEY='atmin_herr_cuaderno';        // hoja de trabajo (lo que se está armando)
 const HERR_ARCH_KEY='atmin_herr_archivo';    // hojas ya guardadas
 const HERR_COLS=[
@@ -14605,7 +14605,7 @@ const HERR_VOCAB=('se instalo instalacion señalizacion seguridad labor labores 
 'entubado entubar trasladado trastado retiro retirado recuperado recuperar carga cargado '+
 'acarreo echadero galeria galerias crucero cruce rampa manto mantoso multi monte bravo house '+
 'traccion voladura taladro taladros malla mallas cimbra cimbras perno pernos shotcrete '+
-'ventilacion manga mangas compresora scoop dumper excavadora winche bomba equipo equipos '+
+'ventilacion manga mangas polvorin polvorines compresora scoop dumper excavadora winche bomba equipo equipos '+
 'personal personas horas tareas turno dia noche desde hasta hacia por con sin entre entro salio '+
 'metros metro pulgadas presencia falla fallas mantenimiento electrico electricos cable cables '+
 'tablero reparado reparacion cambio cambiado colocado colocacion instalado armado armar '+
@@ -14654,7 +14654,7 @@ function herrCorregirTexto(txt, dicc){
     return (mejor&&!empate)?_herrCalcar(pal,mejor.orig):pal;
   });
 }
-const HERR_LABORES=['CRUCE','SUS 100','MANTOSO','MANTO','MULTI','RAMPA','BOCAMINA','GALERIA','CHIMENEA',
+const HERR_LABORES=['CRUCE','SUS 100','SUSTOO','MANTOSO','MANTO','POLVORIN','NV 3190','NV 2820','NV 2730','MULTI','RAMPA','BOCAMINA','GALERIA','CHIMENEA',
   'BY PASS','VENTANA','ECHADERO','SUBNIVEL','TAJO','NIVEL','MONTE','MONTE BRAVO','HOUSE',
   'TRACCION','PERFORACION','SOSTENIMIENTO','BREA','CORTINA','VETA'];
 function _herrNorm(t){
@@ -14922,17 +14922,32 @@ function _herrPuntajeAngulo(g,w,h,ang){
   let v=0; for(let y=0;y<h;y+=2){ const d=perfil[y]-m; v+=d*d; }
   return v;
 }
-async function herrMejorarImagen(dataUrl){
-  const img=await new Promise((res,rej)=>{ const i=new Image();
-    i.onload=()=>res(i); i.onerror=()=>rej(new Error('imagen inválida')); i.src=dataUrl; });
-  // 1) Tamaño de trabajo
-  const lado=Math.max(img.width,img.height)||1;
-  let esc=2400/lado; if(esc>3) esc=3; if(esc<1) esc=1;
-  let w=Math.round(img.width*esc), h=Math.round(img.height*esc);
-  let cv=document.createElement('canvas'); cv.width=w; cv.height=h;
-  let cx=cv.getContext('2d',{willReadFrequently:true});
+// Dibuja la foto girada 0, 90, 180 o 270 grados en un lienzo del tamaño de trabajo pedido.
+function _herrLienzo(img, cuarto, objetivo){
+  const vertical = (cuarto===90||cuarto===270);
+  const anchoO = vertical? img.height : img.width;
+  const altoO  = vertical? img.width  : img.height;
+  const lado=Math.max(anchoO,altoO)||1;
+  let esc=objetivo/lado; if(esc>3) esc=3; if(esc<0.15) esc=0.15;
+  const w=Math.round(anchoO*esc), h=Math.round(altoO*esc);
+  const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+  const cx=cv.getContext('2d',{willReadFrequently:true});
   cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality='high';
-  cx.drawImage(img,0,0,w,h);
+  cx.save(); cx.translate(w/2,h/2); cx.rotate(cuarto*Math.PI/180);
+  cx.drawImage(img, -Math.round(img.width*esc)/2, -Math.round(img.height*esc)/2,
+                     Math.round(img.width*esc), Math.round(img.height*esc));
+  cx.restore();
+  return {cv,cx,w,h};
+}
+async function herrCargarImagen(dataUrl){
+  return await new Promise((res,rej)=>{ const i=new Image();
+    i.onload=()=>res(i); i.onerror=()=>rej(new Error('imagen inválida')); i.src=dataUrl; });
+}
+async function herrMejorarImagen(dataUrl, cuarto){
+  const img=await herrCargarImagen(dataUrl);
+  // 1) Tamaño de trabajo, ya con el giro de la hoja aplicado
+  const L=_herrLienzo(img, cuarto||0, 2400);
+  let cv=L.cv, cx=L.cx, w=L.w, h=L.h;
   let {img:datos,g}=_herrGris(cx,w,h);
   // 2) Emparejar la luz: fondo = media de una ventana grande; se divide el gris por ese fondo
   const S1=_herrIntegral(g,w,h);
@@ -14972,15 +14987,59 @@ async function herrMejorarImagen(dataUrl){
     const i=(y*w+x)*4; p3[i]=p3[i+1]=p3[i+2]=v; p3[i+3]=255;
   }
   cx.putImageData(datos,0,0);
-  return {url:cv.toDataURL('image/png'), angulo:mejor.ang};
+  return {url:cv.toDataURL('image/png'), angulo:mejor.ang, cuarto:cuarto||0};
+}
+
+/* ── ORIENTACIÓN DE LA HOJA ──
+   Muchas fotos del cuaderno salen de costado o al revés: el celular se gira para que entre la
+   hoja completa. Si se lee así, no sale nada. Aquí se decide cómo está puesta la hoja:
+     · Primero el EJE: se mide qué tan marcados quedan los renglones en horizontal y en
+       vertical. Los renglones de texto hacen que las filas de la imagen se alternen claro y
+       oscuro; el eje correcto tiene mucha más variación.
+     · Después el SENTIDO (derecha o al revés): eso no se puede saber por la forma, así que se
+       hace una lectura RÁPIDA en miniatura de las dos posibilidades y gana la que reconoce
+       más fechas y más letras. */
+function _herrVarianzaEje(g,w,h){ return _herrPuntajeAngulo(g,w,h,0); }
+async function herrDetectarGiro(dataUrl, T, avisar){
+  const img=await herrCargarImagen(dataUrl);
+  // 1) EJE, con una miniatura: es solo geometría, no hace falta resolución
+  const medir=cuarto=>{
+    const L=_herrLienzo(img,cuarto,700);
+    const {g}=_herrGris(L.cx,L.w,L.h);
+    return _herrVarianzaEje(g,L.w,L.h);
+  };
+  const v0=medir(0), v90=medir(90);
+  const candidatos = (v90>v0*1.10) ? [90,270] : [0,180];
+  // 2) SENTIDO, con una lectura rápida en miniatura
+  let mejor={cuarto:candidatos[0],p:-1};
+  for(const c of candidatos){
+    if(avisar) avisar(c);
+    let texto='';
+    try{
+      const L=_herrLienzo(img,c,1000);
+      const r=await T.recognize(L.cv.toDataURL('image/png'),'spa',
+        {workerPath:CMP_TESS_WORKER,corePath:CMP_TESS_CORE});
+      texto=String((r&&r.data&&r.data.text)||'');
+    }catch(e){ texto=''; }
+    const fechas=(texto.match(/\d{1,2}\s*[\/\-.]\s*\d{1,2}\s*[\/\-.]\s*\d{2,4}/g)||[]).length;
+    const letras=(texto.match(/[A-Za-zÁÉÍÓÚÑáéíóúñ]/g)||[]).length;
+    const palabras=(texto.match(/\b(se|de|el|la|los|las|del|con|por|para|en|y)\b/gi)||[]).length;
+    const p=fechas*40+palabras*6+letras;
+    if(p>mejor.p) mejor={cuarto:c,p};
+  }
+  return mejor.cuarto;
 }
 async function herrOcrImagen(dataUrl, aviso){
   const T=await cmpCargarLib(CMP_LIB_TESS,'Tesseract');
-  // Primero se acondiciona la foto; si algo fallara, se sigue con la preparación simple.
-  let img=dataUrl, giro=0;
-  try{ const mej=await herrMejorarImagen(dataUrl); img=mej.url; giro=mej.angulo||0; }
+  // Primero se ve cómo está puesta la hoja y después se acondiciona la foto.
+  // Si algo fallara, se sigue con la preparación simple: nunca se queda sin leer.
+  let img=dataUrl, giro=0, cuarto=0;
+  try{
+    cuarto=await herrDetectarGiro(dataUrl, T, c=>{ if(aviso) aviso(0,null,'probando la hoja girada '+c+'°'); });
+    const mej=await herrMejorarImagen(dataUrl, cuarto); img=mej.url; giro=mej.angulo||0;
+  }
   catch(e){ try{ img=await cmpPrepararOcr(dataUrl); }catch(e2){} }
-  if(aviso) aviso(0, giro);
+  if(aviso) aviso(0, giro, cuarto?('la hoja estaba girada '+cuarto+'°'):'');
   const log=m=>{ if(aviso&&m&&m.status==='recognizing text'){ aviso(Math.round((m.progress||0)*100)); } };
   let d=null;
   // Con worker propio se pueden fijar los parámetros del OCR (bloque uniforme de texto y
@@ -15016,10 +15075,13 @@ async function herrAgregarFoto(input){
   try{
     poner('Mejorando la foto (luz pareja, enderezado y contraste)…');
     const dataUrl=await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(new Error('no se pudo leer la imagen')); r.readAsDataURL(file); });
-    let giroAvisado=null;
-    const lineas=await herrOcrImagen(dataUrl, (p,giro)=>{
+    let giroAvisado=null, notaGiro='';
+    const lineas=await herrOcrImagen(dataUrl, (p,giro,nota)=>{
       if(giro!=null && giroAvisado===null){ giroAvisado=giro; }
-      poner('Leyendo la foto… '+p+'%'+(giroAvisado?' · se enderezó '+Math.abs(giroAvisado)+'°':''));
+      if(nota) notaGiro=nota;
+      poner((p?('Leyendo la foto… '+p+'%'):'Preparando la foto…')
+        +(notaGiro?' · '+notaGiro:'')
+        +(giroAvisado?' · se enderezó '+Math.abs(giroAvisado)+'°':''));
     });
     const filas=herrParsearOcr(lineas);
     if(!filas.length){
