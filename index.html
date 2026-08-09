@@ -5331,7 +5331,8 @@ function nv2820Stock(){
 
 // Figuras (emoji) por explosivo del catálogo
 const EXPLO_FIG={M1000:'🧨',M3000:'🧨',M5000:'🧨',CARMEX18:'🧵',CARMEX240:'🧵',FAMECORTE:'🪢',NEITHER:'🌀'};
-function exploFig(id){return EXPLO_FIG[id]||'🧨';}
+// Los 16 FANEL 3 comparten icono: son variantes del mismo detonador.
+function exploFig(id){ if(/^FANEL3_/.test(String(id||''))) return '⏱'; return EXPLO_FIG[id]||'🧨'; }
 // Stock de explosivos en almacén (ingresos − salidas de state.almacen.explosivos), en unidades
 function exploStockTotal(){
   const cat=(typeof EXPLO_CATALOGO!=='undefined')?EXPLO_CATALOGO:[];
@@ -5728,7 +5729,8 @@ function abrirRemSalida(){
   const g=id=>document.getElementById(id);
   const cat=(typeof EXPLO_CATALOGO!=='undefined')?EXPLO_CATALOGO:[];
   const sel=g('rem-producto');
-  if(sel) sel.innerHTML='<option value="">— Seleccionar —</option>'+cat.filter(c=>remDisponible(c.id)>0).map(c=>`<option value="${c.id}">${c.nombre} — ${remLabelCajas(c.id,remDisponible(c.id))}</option>`).join('');
+  if(sel) sel.innerHTML='<option value="">— Seleccionar —</option>'+
+    cat.filter(c=>exploVaARemanente(c.id) && remDisponible(c.id)>0).map(c=>`<option value="${c.id}">${c.nombre} — ${remLabelCajas(c.id,remDisponible(c.id))}</option>`).join('');
   // Solicitante = Supervisores de Materiales
   const sup=(typeof remSupervisores==='function')?remSupervisores():[];
   const selS=g('rem-solicitante');
@@ -5796,7 +5798,9 @@ function abrirRemIngreso(){
   const g=id=>document.getElementById(id);
   const cat=(typeof EXPLO_CATALOGO!=='undefined')?EXPLO_CATALOGO:[];
   const sel=g('remi-producto');
-  if(sel) sel.innerHTML='<option value="">— Seleccionar —</option>'+cat.map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
+  // Remanente se queda como está: los explosivos marcados con remanente:false no entran aquí.
+  if(sel) sel.innerHTML='<option value="">— Seleccionar —</option>'+
+    cat.filter(c=>exploVaARemanente(c.id)).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
   g('remi-origen').value='';
   g('remi-fecha').value=hoy();
   g('remi-cantidad').value='';
@@ -10147,6 +10151,25 @@ const SC_UMBRAL_URGENTE=5;
 const SC_UMBRAL_BAJO=15;
 
 // ── EXPLOSIVOS NV3190 ──
+/* ══ DETONADOR NO ELECTRICO FANEL 3 — 16 TIPOS ══
+   Un mismo producto en 16 variantes, cada una con su precio. Se definen UNA vez aquí y de este
+   bloque salen solos: el catálogo del polvorín NV3190, los selectores de ingreso y salida, el
+   reporte del Compresorista, el reporte del Jefe de Guardia y el Excel.
+
+   Dos reglas que los distinguen del resto del explosivo:
+     · `remanente:false` — el Stock Remanente NO los recibe. Queda tal como está.
+     · El gasto se cuenta SOLO cuando salen de Logística, igual que siempre. Lo que reportan el
+       Compresorista y el Jefe de Guardia es trazabilidad, no gasto.
+
+   Los precios son los de la lista de compra. Para corregir nombres, precios o las unidades por
+   caja, se edita solo esto. */
+const FANEL3_UPCAJA=100;                 // unidades por caja
+const FANEL3_PRECIOS=[4.73,4.76,4.76,4.85,4.83,4.85,4.86,4.95,5.01,4.99,4.98,4.97,4.96,4.91,4.82,4.81];
+const FANEL3_CATALOGO=FANEL3_PRECIOS.map((precio,i)=>({
+  id:'FANEL3_'+(i+1),
+  nombre:'DETONADOR NO ELECTRICO FANEL 3 N° '+(i+1),
+  upCaja:FANEL3_UPCAJA, unidad:'und', precio, remanente:false
+}));
 const EXPLO_CATALOGO=[
   {id:'M1000',nombre:'EMULNOR 1000 1" X 7"',upCaja:264,unidad:'und'},
   {id:'M3000',nombre:'EMULNOR 3000 1" X 8"',upCaja:228,unidad:'und'},
@@ -10155,7 +10178,10 @@ const EXPLO_CATALOGO=[
   {id:'CARMEX240',nombre:'CARMEX 2.40" MTRS',upCaja:300,unidad:'und'},
   {id:'FAMECORTE',nombre:'FAME CORTE',upCaja:144,unidad:'und'},
   {id:'NEITHER',nombre:'MECHA RAPIDA DE IGNISION',upCaja:10,unidad:'rollo',mPorRollo:150},
+  ...FANEL3_CATALOGO,
 ];
+// ¿Este explosivo entra al Stock Remanente? Los FANEL 3 no: remanente se queda como estaba.
+function exploVaARemanente(id){ const c=exploGetCat(id); return !c || c.remanente!==false; }
 function exploGetCat(id){return EXPLO_CATALOGO.find(c=>c.id===id)||null;}
 // Apertura de inventario del polvorín NV3190: fija el stock exacto con 0 movimientos.
 // Se aplica UNA sola vez (control por versión). Para volver a resetear, sube EXPLO_APERTURA_V.
@@ -10277,7 +10303,10 @@ function remEgresosPrevios(dias){
 // Las salidas ANTERIORES a la fecha de apertura no restan: ya están dentro del conteo físico
 // (mismo criterio que los egresos del compresorista).
 function remStockActual(){
-  const map={}; (typeof EXPLO_CATALOGO!=='undefined'?EXPLO_CATALOGO:[]).forEach(c=>{ map[c.id]=0; });
+  // Solo los explosivos que SÍ van a remanente: los FANEL 3 no entran aquí ni siquiera en cero,
+  // para que ninguna vista ni ningún Excel los pueda mostrar por descuido.
+  const map={}; (typeof EXPLO_CATALOGO!=='undefined'?EXPLO_CATALOGO:[])
+    .filter(c=>exploVaARemanente(c.id)).forEach(c=>{ map[c.id]=0; });
   const ap=(state.almacen&&state.almacen.remApertura)||{};
   const apFecha=(state.almacen&&state.almacen.remAperturaFecha)||'';
   Object.entries(ap).forEach(([id,q])=>{ map[id]=(map[id]||0)+(Number(q)||0); });
@@ -10653,6 +10682,15 @@ function renderExploCart(pfx){
 }
 function abrirModalExploIngreso(){
   const g=id=>document.getElementById(id);
+  // El desplegable se arma del catálogo, no de opciones fijas en el HTML: así un producto
+  // nuevo aparece solo, sin que haya que acordarse de tocar el modal.
+  const selI=g('exi-producto');
+  if(selI) selI.innerHTML='<option value="">— Seleccionar —</option>'+
+    EXPLO_CATALOGO.map(c=>{
+      const det=(c.id==='NEITHER')?' (Cajas = rollos de '+(c.mPorRollo||150)+' m · Unidades = metros)'
+                                  :' ('+c.upCaja+'/caja)';
+      return '<option value="'+c.id+'">'+escAttr(c.nombre+det)+'</option>';
+    }).join('');
   g('exi-fecha').value=hoy();g('exi-vale').value='';g('exi-producto').value='';
   g('exi-cajas').value='';g('exi-unidades').value='';g('exi-total').textContent='';
   exploCartI=[]; renderExploCart('exi');
@@ -22005,9 +22043,16 @@ function compCargarLocal() {
 compCargarLocal();
 
 // Códigos alineados con EXPLO_CATALOGO para cruce correcto de stock
-const COMP_EXPLOSIVOS = ['M1000','M3000','M5000','CARMEX18','CARMEX240','FAMECORTE','NEITHER'];
-const COMP_EXPLO_LABEL = {'M1000':'EMULNOR 1000 1" X 7"','M3000':'EMULNOR 3000 1" X 8"','M5000':'EMULNOR 5000 1" X 8"','CARMEX18':'CARMEX 1.8" MTRS','CARMEX240':'CARMEX 2.40" MTRS','FAMECORTE':'FAME CORTE','NEITHER':'MECHA RAPIDA DE IGNISION'};
-const COMP_PRECIOS_EXP_DEFAULT = {'M1000':1.36,'M3000':1.54,'M5000':2.34,'CARMEX18':3.81,'CARMEX240':4.10,'FAMECORTE':4.00,'NEITHER':2.00};
+// Los 16 FANEL 3 se agregan desde FANEL3_CATALOGO, no a mano: el Compresorista los reporta
+// para trazabilidad (el gasto se sigue contando solo cuando salen de Logística).
+const COMP_EXPLOSIVOS = ['M1000','M3000','M5000','CARMEX18','CARMEX240','FAMECORTE','NEITHER']
+  .concat(FANEL3_CATALOGO.map(c=>c.id));
+const COMP_EXPLO_LABEL = Object.assign(
+  {'M1000':'EMULNOR 1000 1" X 7"','M3000':'EMULNOR 3000 1" X 8"','M5000':'EMULNOR 5000 1" X 8"','CARMEX18':'CARMEX 1.8" MTRS','CARMEX240':'CARMEX 2.40" MTRS','FAMECORTE':'FAME CORTE','NEITHER':'MECHA RAPIDA DE IGNISION'},
+  Object.fromEntries(FANEL3_CATALOGO.map(c=>[c.id,c.nombre])));
+const COMP_PRECIOS_EXP_DEFAULT = Object.assign(
+  {'M1000':1.36,'M3000':1.54,'M5000':2.34,'CARMEX18':3.81,'CARMEX240':4.10,'FAMECORTE':4.00,'NEITHER':2.00},
+  Object.fromEntries(FANEL3_CATALOGO.map(c=>[c.id,c.precio])));
 const COMP_ACEROS = ['BARRA CONICA 4\' X 7/8"','BARRA CONICA 6\' X 7/8"','BARRA CONICA 8\' X 7/8"','BROCA DESCARTABLE DE BOTONES 36 MM','BROCA DESCARTABLE DE BOTONES 32 MM','BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'','BARRA DE ALUMINIO PARA ACUÑAR 1" X 10\'','BARRA DE ALUMINIO PARA ACUÑAR 1" X 12'];
 const COMP_PRECIOS_ACEROS_DEFAULT = {'BARRA CONICA 4\' X 7/8"':249.17,'BARRA CONICA 6\' X 7/8"':330.29,'BARRA CONICA 8\' X 7/8"':411.41,'BROCA DESCARTABLE DE BOTONES 36 MM':76.88,'BROCA DESCARTABLE DE BOTONES 32 MM':74.91,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'':102.6,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 10\'':118.35,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 12':141.9};
 
