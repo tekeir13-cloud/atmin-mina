@@ -14561,7 +14561,7 @@ function metasSave(){try{localStorage.setItem(METAS_KEY,JSON.stringify(state.met
 // Versión del lector: se muestra en pantalla para poder comparar entre equipos. Si dos
 // dispositivos dan resultados distintos con la misma foto, casi siempre es que uno tiene
 // la página vieja en caché.
-const HERR_VERSION='v9';
+const HERR_VERSION='v10';
 const HERR_KEY='atmin_herr_cuaderno';        // hoja de trabajo (lo que se está armando)
 const HERR_ARCH_KEY='atmin_herr_archivo';    // hojas ya guardadas
 const HERR_COLS=[
@@ -14857,7 +14857,18 @@ function herrParsearOcr(lineas){
     // Renglón sin fecha: es continuación de la descripción de la fila anterior.
     // Si trae números y a la fila anterior le faltaban, se le completan.
     const t=herrLimpiar1(l);
-    if(!ultima || t.length<3) return;
+    if(t.length<3) return;
+    // Renglón sin fecha legible pero que empieza un registro nuevo (trae DIA o NOCHE y algo
+    // más): se abre igual, heredando la fecha del anterior. Si no, toda la hoja terminaba
+    // apilada dentro de la descripción de la primera fila — que es lo que pasaba cuando el
+    // OCR no lograba leer las fechas.
+    const abreTurno=/\b(D\s*[ÍI:.]?\s*A|NOCHE|NOOHE)\b/i.test(t) && t.length>16;
+    if(abreTurno && (!ultima || !/\b(D\s*[ÍI:.]?\s*A|NOCHE)\b/i.test(String(ultima.crudo||'').slice(0,40)) || filas.length)){
+      const f2=herrParsearLinea((ultima?ultima.fecha.slice(8,10)+'/'+ultima.fecha.slice(5,7)+'/'+ultima.fecha.slice(0,4)+' ':'01/01/2000 ')+t);
+      if(f2){ f2.crudo=String(original||'').trim(); f2.fechaHeredada=!ultima?false:true;
+              filas.push(f2); ultima=f2; return; }
+    }
+    if(!ultima) return;
     if(/^[\d\s.,\/-]+$/.test(t)){
       const n=t.split(/\s+/).filter(x=>/^\d/.test(x)).map(x=>x.replace(',','.'));
       if(!ultima.personal && n[0]) ultima.personal=n[0].replace(/^0+(?=\d)/,'');
@@ -15041,29 +15052,41 @@ async function herrOcrImagen(dataUrl, aviso){
   catch(e){ try{ img=await cmpPrepararOcr(dataUrl); }catch(e2){} }
   if(aviso) aviso(0, giro, cuarto?('la hoja estaba girada '+cuarto+'°'):'');
   const log=m=>{ if(aviso&&m&&m.status==='recognizing text'){ aviso(Math.round((m.progress||0)*100)); } };
-  let d=null;
-  // Con worker propio se pueden fijar los parámetros del OCR (bloque uniforme de texto y
-  // espacios conservados), que en una hoja cuadriculada da renglones más completos.
-  // OJO: los parámetros NO se pueden pasar como cuarto argumento de recognize() — ese hueco
-  // es para elegir qué salidas devuelve, y al usarlo mal se pierden las líneas.
+  const sacarLineas=d=>{
+    const l=(Array.isArray(d&&d.lines)&&d.lines.length)
+      ? d.lines.map(x=>String(x.text||''))
+      : String((d&&d.text)||'').split('\n');
+    return l.map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean);
+  };
+  // Cuántos registros rescata una lectura: es lo que decide qué modo fue el bueno.
+  const puntaje=ls=>{ try{ return herrParsearOcr(ls).length; }catch(e){ return 0; } };
+  // La misma hoja se lee distinto según cómo se le diga al lector que está compuesta la página:
+  //  6 = un bloque parejo de texto, 4 = una columna con renglones de distinto tamaño,
+  //  11 = texto disperso. En un cuaderno con cuadrícula no siempre gana el mismo, así que se
+  //  prueban en orden y se corta apenas uno rescata suficientes registros.
+  const MODOS=['6','4','11'];
+  let mejor={ls:[],p:-1};
   try{
     if(T&&typeof T.createWorker==='function'){
       const w=await T.createWorker('spa',1,{workerPath:CMP_TESS_WORKER,corePath:CMP_TESS_CORE,logger:log});
       try{
-        await w.setParameters({tessedit_pageseg_mode:'6', preserve_interword_spaces:'1'});
-        const r=await w.recognize(img);
-        d=(r&&r.data)||null;
+        for(let i=0;i<MODOS.length;i++){
+          if(aviso) aviso(0,null,'lectura '+(i+1)+' de '+MODOS.length);
+          await w.setParameters({tessedit_pageseg_mode:MODOS[i], preserve_interword_spaces:'1'});
+          const r=await w.recognize(img);
+          const ls=sacarLineas(r&&r.data), p=puntaje(ls);
+          if(p>mejor.p) mejor={ls,p};
+          if(mejor.p>=3) break;               // ya rescató la hoja: no hace falta insistir
+        }
       } finally { try{ await w.terminate(); }catch(e){} }
     }
-  }catch(e){ d=null; }
-  if(!d||(!d.text&&!(d.lines&&d.lines.length))){
+  }catch(e){}
+  if(mejor.p<1){
     const r=await T.recognize(img,'spa',{workerPath:CMP_TESS_WORKER,corePath:CMP_TESS_CORE,logger:log});
-    d=(r&&r.data)||{};
+    const ls=sacarLineas(r&&r.data);
+    if(puntaje(ls)>mejor.p||!mejor.ls.length) mejor={ls,p:puntaje(ls)};
   }
-  const lineas=Array.isArray(d.lines)&&d.lines.length
-    ? d.lines.map(l=>String(l.text||''))
-    : String(d.text||'').split('\n');
-  return lineas.map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean);
+  return mejor.ls;
 }
 let _herrOcupado=false;
 async function herrAgregarFoto(input){
@@ -15184,7 +15207,7 @@ function renderHerramientasOp(){
   const MONO="font-family:'DM Mono',monospace;text-align:center";
   const cuerpo=filas.map((f,i)=>`<tr style="background:${i%2?'var(--coal4)':'transparent'}">
       <td style="${CEL};text-align:center;color:var(--text3);font-size:10px;background:var(--coal5);padding:4px 3px;white-space:nowrap" title="Leído de la foto:&#10;${escAttr(f.crudo||'')}">${i+1} <span style="font-size:9px;opacity:.75">📷${f.foto||1}</span></td>
-      <td style="${CEL}">${inp(f,'fecha',MONO)}</td>
+      <td style="${CEL};position:relative">${inp(f,'fecha',MONO)}${f.fechaHeredada?'<span title="El OCR no pudo leer la fecha de este renglón: se copió la de la fila anterior. Revísala." style="position:absolute;top:1px;right:3px;font-size:9px;color:#f59e0b">⚠</span>':''}</td>
       <td style="${CEL}">${inp(f,'turno','text-align:center')}</td>
       <td style="${CEL}">${inp(f,'labor')}</td>
       <td style="${CEL}">${inp(f,'descripcion')}</td>
@@ -15196,6 +15219,7 @@ function renderHerramientasOp(){
   const sum=k=>filas.reduce((s,f)=>s+(parseFloat(f[k])||0),0);
   const fotos=new Set(filas.map(f=>f.foto||1)).size;
   const sinNum=filas.filter(f=>!f.personal&&!f.horas&&!f.tareas).length;
+  const heredadas=filas.filter(f=>f.fechaHeredada).length;
   const archHtml=arch.length?arch.map(h=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:9px;margin-bottom:7px;background:var(--coal4)">
       <div style="min-width:0">
         <div style="font-size:12.5px;font-weight:700;color:var(--text)">📁 ${escAttr(h.nombre)}</div>
@@ -15249,7 +15273,7 @@ function renderHerramientasOp(){
         </tr></thead>
         <tbody id="herr-tbody">${cuerpo}</tbody>
         <tfoot><tr style="font-weight:800;background:var(--coal5)">
-          <td colspan="5" style="padding:8px 7px;font-size:11.5px;color:var(--text2);border:1px solid var(--border)">TOTAL · ${filas.length} fila${filas.length!==1?'s':''} · ${fotos} foto${fotos!==1?'s':''}${sinNum?` · <span style="color:#f59e0b">${sinNum} sin personal/horas/tareas</span>`:''}</td>
+          <td colspan="5" style="padding:8px 7px;font-size:11.5px;color:var(--text2);border:1px solid var(--border)">TOTAL · ${filas.length} fila${filas.length!==1?'s':''} · ${fotos} foto${fotos!==1?'s':''}${sinNum?` · <span style="color:#f59e0b">${sinNum} sin personal/horas/tareas</span>`:''}${heredadas?` · <span style="color:#f59e0b">${heredadas} con la fecha copiada de la fila anterior ⚠</span>`:''}</td>
           <td style="padding:8px 5px;text-align:center;color:var(--text);border:1px solid var(--border);font-family:'DM Mono',monospace">${Math.round(sum('personal')*100)/100}</td>
           <td style="padding:8px 5px;text-align:center;color:var(--text);border:1px solid var(--border);font-family:'DM Mono',monospace">${Math.round(sum('horas')*100)/100}</td>
           <td style="padding:8px 5px;text-align:center;color:var(--text);border:1px solid var(--border);font-family:'DM Mono',monospace">${Math.round(sum('tareas')*100)/100}</td>
