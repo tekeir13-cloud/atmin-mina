@@ -14561,7 +14561,7 @@ function metasSave(){try{localStorage.setItem(METAS_KEY,JSON.stringify(state.met
 // Versión del lector: se muestra en pantalla para poder comparar entre equipos. Si dos
 // dispositivos dan resultados distintos con la misma foto, casi siempre es que uno tiene
 // la página vieja en caché.
-const HERR_VERSION='v11';
+const HERR_VERSION='v12';
 const HERR_KEY='atmin_herr_cuaderno';        // hoja de trabajo (lo que se está armando)
 const HERR_ARCH_KEY='atmin_herr_archivo';    // hojas ya guardadas
 const HERR_COLS=[
@@ -15053,6 +15053,126 @@ async function herrDetectarGiro(dataUrl, T, avisar){
    lector la hoja entera se le da UN RENGLÓN A LA VEZ, acierta mucho más: deja de mezclar la
    descripción de una fila con los números de la de abajo. Aquí se buscan esas rayas —filas de
    la imagen casi enteras de tinta— y se recorta la franja que hay entre cada par. */
+/* ── LECTURA POR CELDAS ──
+   El cuaderno no es un texto corrido: es una TABLA. Si se detectan también las rayas
+   VERTICALES, cada registro se puede partir en sus celdas y leer cada una por separado,
+   diciéndole al lector qué esperar en cada columna: en la fecha solo dígitos y puntos, en
+   personal/horas/tareas solo números, en labor solo mayúsculas. Restringir así lo que puede
+   salir es lo que más sube el acierto con letra a mano, porque el lector deja de proponer
+   palabras imposibles. La columna de la firma se descarta: no es un dato. */
+function herrColumnas(cv){
+  const w=cv.width, h=cv.height;
+  const cx=cv.getContext('2d',{willReadFrequently:true});
+  const p=cx.getImageData(0,0,w,h).data;
+  const tinta=new Float32Array(w);
+  for(let x=0;x<w;x++){
+    let n=0; for(let y=0;y<h;y+=2){ if(p[(y*w+x)*4]<128) n++; }
+    tinta[x]=n/(h/2);
+  }
+  const esRaya=x=>tinta[x]>0.45;
+  const rayas=[];
+  for(let x=0;x<w;x++){
+    if(!esRaya(x)) continue;
+    let x2=x; while(x2+1<w && esRaya(x2+1)) x2++;
+    rayas.push(Math.round((x+x2)/2)); x=x2;
+  }
+  // Se quitan rayas pegadas (la misma línea leída dos veces)
+  const cortes=[]; const min=Math.max(12,Math.round(w*0.015));
+  rayas.forEach(r=>{ if(!cortes.length || r-cortes[cortes.length-1]>min) cortes.push(r); });
+  return cortes;
+}
+// Reparte las columnas detectadas entre los campos del cuaderno. La firma se ignora.
+function herrMapaColumnas(cortes,w){
+  const anchos=[]; for(let i=0;i+1<cortes.length;i++) anchos.push({i, x0:cortes[i], x1:cortes[i+1], an:cortes[i+1]-cortes[i]});
+  if(anchos.length<6) return null;
+  // La descripción es, con mucho, la columna más ancha: sirve de ancla para ubicar el resto.
+  let desc=anchos[0]; anchos.forEach(a=>{ if(a.an>desc.an) desc=a; });
+  const iD=anchos.indexOf(desc);
+  if(iD<3 || anchos.length-iD<4) return null;         // no calza con el formato del cuaderno
+  return {
+    fecha:anchos[iD-3], turno:anchos[iD-2], labor:anchos[iD-1], descripcion:desc,
+    personal:anchos[iD+1], horas:anchos[iD+2], tareas:anchos[iD+3]
+  };
+}
+function _herrRecorte(cv,x0,x1,y0,y1){
+  const m=4;
+  x0=Math.max(0,x0+m); x1=Math.min(cv.width,x1-m); y0=Math.max(0,y0); y1=Math.min(cv.height,y1);
+  const an=Math.max(1,x1-x0), al=Math.max(1,y1-y0);
+  // Se amplía la celda: los recortes chicos se leen mucho mejor agrandados
+  const esc=Math.min(3, Math.max(1, 420/Math.max(an,al)));
+  const c=document.createElement('canvas'); c.width=Math.round(an*esc); c.height=Math.round(al*esc);
+  const g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,c.width,c.height);
+  g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
+  g.drawImage(cv, x0,y0,an,al, 0,0,c.width,c.height);
+  return c;
+}
+const HERR_CELDAS=[
+  {k:'fecha',      psm:'7', lista:'0123456789./-'},
+  {k:'turno',      psm:'7', lista:'ABCDEFGHIJKLMNOPQRSTUVWXYZÁÉÍÓÚÑ'},
+  {k:'labor',      psm:'7', lista:'ABCDEFGHIJKLMNOPQRSTUVWXYZÁÉÍÓÚÑ0123456789 -'},
+  {k:'descripcion',psm:'6', lista:''},
+  {k:'personal',   psm:'7', lista:'0123456789'},
+  {k:'horas',      psm:'7', lista:'0123456789.,:'},
+  {k:'tareas',     psm:'7', lista:'0123456789.,'}
+];
+// Lee una hoja celda por celda. Devuelve filas ya armadas, no texto suelto.
+async function herrLeerPorCeldas(w, cv, bandas, aviso){
+  const cortes=herrColumnas(cv);
+  const mapa=herrMapaColumnas(cortes,cv.width);
+  if(!mapa) return null;
+  const filas=[]; const total=bandas.length*HERR_CELDAS.length; let hecho=0;
+  for(let b=0;b<bandas.length;b++){
+    const banda=bandas[b];
+    const fila={};
+    for(const col of HERR_CELDAS){
+      const zona=mapa[col.k];
+      const cel=_herrRecorte(cv, zona.x0, zona.x1, banda.y0, banda.y1);
+      const url=cel.toDataURL('image/png');
+      const leerCon=async psm=>{
+        await w.setParameters({tessedit_pageseg_mode:psm, preserve_interword_spaces:'1',
+                               tessedit_char_whitelist:col.lista});
+        const r=await w.recognize(url);
+        return String(((r&&r.data)||{}).text||'').replace(/\s+/g,' ').trim();
+      };
+      try{
+        let t=await leerCon(col.psm);
+        // Una celda chica con un solo número a veces vuelve vacía en modo "renglón". Se
+        // reintenta como bloque y como carácter suelto antes de darla por perdida.
+        if(!t && col.psm==='7'){ t=await leerCon('6'); if(!t) t=await leerCon('10'); }
+        fila[col.k]=t;
+      }catch(e){ fila[col.k]=''; }
+      hecho++; if(aviso) aviso(Math.round(hecho/total*100),null,'celda '+hecho+' de '+total);
+    }
+    filas.push(fila);
+  }
+  try{ await w.setParameters({tessedit_char_whitelist:''}); }catch(e){}
+  return filas;
+}
+// Convierte lo leído en cada celda al formato final (fecha real, turno, números limpios).
+function herrArmarDesdeCeldas(crudas){
+  const dicc=herrDiccionario(crudas.map(c=>c.descripcion||''));
+  const salida=[];
+  (crudas||[]).forEach(c=>{
+    const fTxt=String(c.fecha||'').replace(/[^\d./-]/g,'');
+    const mf=fTxt.match(/(\d{1,2})\s*[./-]\s*(\d{1,2})\s*[./-]\s*(\d{2,4})/);
+    let fecha='';
+    if(mf){ let aa=mf[3]; if(aa.length===2) aa='20'+aa;
+            fecha=aa+'-'+String(mf[2]).padStart(2,'0')+'-'+String(mf[1]).padStart(2,'0'); }
+    const up=String(c.turno||'').toUpperCase();
+    const turno=/NOCH|NOOH/.test(up)?'NOCHE':(/D\s*[ÍI:.]?\s*A/.test(up)?'DIA':'');
+    const L=_herrLabor(String(c.labor||'').trim());
+    const num=t=>{ const m=String(t||'').replace(',','.').match(/\d{1,3}(\.\d{1,2})?/); return m?m[0]:''; };
+    const desc=herrLimpiarDesc(herrCorregirTexto(String(c.descripcion||''),dicc));
+    if(!fecha && !desc && !num(c.personal)) return;              // renglón en blanco del cuaderno
+    salida.push({fecha, turno, labor:L.labor||String(c.labor||'').trim().slice(0,28),
+                 descripcion:desc, personal:num(c.personal), horas:num(c.horas), tareas:num(c.tareas),
+                 crudo:[c.fecha,c.turno,c.labor,c.descripcion,c.personal,c.horas,c.tareas].filter(Boolean).join(' | ')});
+  });
+  // Si una fecha no se pudo leer, se hereda de la fila anterior (el cuaderno va en orden)
+  let ult='';
+  salida.forEach(f=>{ if(f.fecha) ult=f.fecha; else if(ult){ f.fecha=ult; f.fechaHeredada=true; } });
+  return salida;
+}
 function herrBandas(cv){
   const w=cv.width, h=cv.height;
   const cx=cv.getContext('2d',{willReadFrequently:true});
@@ -15082,6 +15202,7 @@ function herrBandas(cv){
     const c=document.createElement('canvas'); c.width=w; c.height=y1-y0;
     const g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,c.width,c.height);
     g.drawImage(cv, 0,y0,w,y1-y0, 0,0,w,y1-y0);
+    c.y0=y0; c.y1=y1;
     bandas.push(c);
   };
   if(rayas.length>=3){
@@ -15119,7 +15240,19 @@ async function herrOcrImagen(dataUrl, aviso){
     if(T&&typeof T.createWorker==='function'){
       const w=await T.createWorker('spa',1,{workerPath:CMP_TESS_WORKER,corePath:CMP_TESS_CORE,logger:log});
       try{
-        // 1º: renglón por renglón siguiendo las rayas del cuaderno. Es lo que mejor resultado da.
+        // 1º: si la hoja tiene cuadrícula, se lee CELDA POR CELDA. Es lo que mejor funciona:
+        // cada columna se lee sabiendo qué puede contener.
+        try{
+          const bandas0=(lienzo&&typeof herrBandas==='function')?herrBandas(lienzo):[];
+          if(bandas0.length>=3){
+            const crudas=await herrLeerPorCeldas(w, lienzo, bandas0.map(b=>({y0:b.y0,y1:b.y1})), aviso);
+            if(crudas && crudas.length){
+              const filas=herrArmarDesdeCeldas(crudas);
+              if(filas.length>=2){ try{ await w.terminate(); }catch(e){} return {filas}; }
+            }
+          }
+        }catch(e){}
+        // 2º: renglón por renglón siguiendo las rayas (sin separar columnas)
         try{
           const bandas=(lienzo&&typeof herrBandas==='function')?herrBandas(lienzo):[];
           if(bandas.length>=3){
@@ -15165,14 +15298,15 @@ async function herrAgregarFoto(input){
     poner('Mejorando la foto (luz pareja, enderezado y contraste)…');
     const dataUrl=await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(new Error('no se pudo leer la imagen')); r.readAsDataURL(file); });
     let giroAvisado=null, notaGiro='';
-    const lineas=await herrOcrImagen(dataUrl, (p,giro,nota)=>{
+    const leido=await herrOcrImagen(dataUrl, (p,giro,nota)=>{
       if(giro!=null && giroAvisado===null){ giroAvisado=giro; }
       if(nota) notaGiro=nota;
       poner((p?('Leyendo la foto… '+p+'%'):'Preparando la foto…')
         +(notaGiro?' · '+notaGiro:'')
         +(giroAvisado?' · se enderezó '+Math.abs(giroAvisado)+'°':''));
     });
-    const filas=herrParsearOcr(lineas);
+    // El lector devuelve filas ya armadas cuando pudo trabajar por celdas; si no, renglones.
+    const filas=(leido&&leido.filas)?leido.filas:herrParsearOcr(leido||[]);
     if(!filas.length){
       poner('No se reconoció ningún renglón con fecha en esta foto. Puedes agregar las filas a mano con "+ Fila vacía".','#f59e0b');
     }else{
