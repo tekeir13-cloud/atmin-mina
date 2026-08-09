@@ -14561,7 +14561,7 @@ function metasSave(){try{localStorage.setItem(METAS_KEY,JSON.stringify(state.met
 // Versión del lector: se muestra en pantalla para poder comparar entre equipos. Si dos
 // dispositivos dan resultados distintos con la misma foto, casi siempre es que uno tiene
 // la página vieja en caché.
-const HERR_VERSION='v15';
+const HERR_VERSION='v16';
 const HERR_KEY='atmin_herr_cuaderno';        // hoja de trabajo (lo que se está armando)
 const HERR_ARCH_KEY='atmin_herr_archivo';    // hojas ya guardadas
 const HERR_COLS=[
@@ -15217,10 +15217,25 @@ function herrArmarDesdeCeldas(crudas){
     const turno=/NOCH|NOOH/.test(up)?'NOCHE':(/D\s*[ÍI:.]?\s*A/.test(up)?'DIA':'');
     const L=_herrLabor(String(c.labor||'').trim());
     const num=t=>{ const m=String(t||'').replace(',','.').match(/\d{1,3}(\.\d{1,2})?/); return m?m[0]:''; };
-    const desc=herrLimpiarDesc(herrCorregirTexto(String(c.descripcion||''),dicc));
-    if(!fecha && !desc && !num(c.personal)) return;              // renglón en blanco del cuaderno
-    salida.push({fecha, turno, labor:L.labor||String(c.labor||'').trim().slice(0,28),
-                 descripcion:desc, personal:num(c.personal), horas:num(c.horas), tareas:num(c.tareas),
+    let desc=herrLimpiarDesc(herrCorregirTexto(String(c.descripcion||''),dicc));
+    // Si la descripción salió en un amasijo, se deja VACÍA pero la fila se conserva: la fila
+    // existe de verdad en el cuaderno y trae su recorte al lado para escribirla en dos segundos.
+    const pal=desc.split(/\s+/).filter(x=>x.length>2);
+    if(pal.length>=4){
+      const conocidas=pal.filter(x=>dicc.has(_herrSinT(x))).length;
+      const comunes=(desc.match(/\b(se|de|la|el|los|las|del|con|por|para|en|y|a|al|un|una)\b/gi)||[]).length;
+      if(conocidas<2 && comunes<2) desc='';
+    }
+    // Mismo criterio para las demás celdas: si lo leído no tiene sentido, se deja en blanco
+    // en vez de escribir un garabato que después hay que borrar.
+    let labor=L.labor||String(c.labor||'').trim();
+    if(!L.labor && !/^[A-ZÁÉÍÓÚÑ0-9][A-ZÁÉÍÓÚÑ0-9 .\-]{2,17}$/i.test(labor.replace(/\s+/g,' '))) labor='';
+    const enRango=(v,max)=>{ const n=parseFloat(v); return (v!=='' && !isNaN(n) && n>0 && n<=max) ? v : ''; };
+    const personal=enRango(num(c.personal),30), horas=enRango(num(c.horas),24), tareas=enRango(num(c.tareas),20);
+    const hayAlgo = fecha||turno||desc||personal||horas||tareas||c._tira;
+    if(!hayAlgo) return;                                         // renglón en blanco del cuaderno
+    salida.push({fecha, turno, labor:labor.slice(0,28),
+                 descripcion:desc, personal, horas, tareas,
                  tira:c._tira||'',
                  crudo:[c.fecha,c.turno,c.labor,c.descripcion,c.personal,c.horas,c.tareas].filter(Boolean).join(' | ')});
   });
@@ -15303,8 +15318,7 @@ async function herrOcrImagen(dataUrl, aviso){
           if(bandas0.length>=3){
             const crudas=await herrLeerPorCeldas(w, lienzo, bandas0.map(b=>({y0:b.y0,y1:b.y1})), aviso);
             if(crudas && crudas.length){
-              const dicc2=herrDiccionario(crudas.map(c=>c.descripcion||''));
-              const filas=herrArmarDesdeCeldas(crudas).filter(f=>herrFilaCreible(f,dicc2));
+              const filas=herrArmarDesdeCeldas(crudas);
               if(filas.length>=2){ try{ await w.terminate(); }catch(e){} return {filas}; }
             }
           }
@@ -15342,6 +15356,19 @@ async function herrOcrImagen(dataUrl, aviso){
     const ls=sacarLineas(r&&r.data);
     if(puntaje(ls)>mejor.p||!mejor.ls.length) mejor={ls,p:puntaje(ls)};
   }
+  // ÚLTIMO RECURSO: la letra no se pudo leer, pero los renglones del cuaderno sí se ven.
+  // En vez de dejarte con las manos vacías, se arma la hoja fila por fila con el recorte de
+  // cada renglón: solo queda escribir mirando al lado, sin buscar nada en la foto.
+  if(mejor.p<1 && lienzo && typeof herrBandas==='function'){
+    try{
+      const bandas=herrBandas(lienzo);
+      if(bandas.length>=2){
+        return {filas: bandas.map(b=>({fecha:'',turno:'',labor:'',descripcion:'',
+                 personal:'',horas:'',tareas:'', tira:_herrTira(lienzo,b.y0,b.y1), crudo:'(no se pudo leer la letra)'})),
+                soloRecortes:true};
+      }
+    }catch(e){}
+  }
   return mejor.ls;
 }
 let _herrOcupado=false;
@@ -15364,6 +15391,7 @@ async function herrAgregarFoto(input){
     });
     // El lector devuelve filas ya armadas cuando pudo trabajar por celdas; si no, renglones.
     const filas=(leido&&leido.filas)?leido.filas:herrParsearOcr(leido||[]);
+    const soloRecortes=!!(leido&&leido.soloRecortes);
     if(!filas.length){
       poner('No se pudo leer esta foto: lo que devolvió el lector no eran palabras ni números reconocibles, '+
             'así que no metí nada a la tabla para no ensuciarla. '+
@@ -15374,7 +15402,12 @@ async function herrAgregarFoto(input){
       const foto=prev.reduce((m,f)=>Math.max(m,Number(f.foto)||0),0)+1;
       filas.forEach(f=>{ f.id='H'+Date.now()+Math.random().toString(36).slice(2,6); f.foto=foto; });
       herrGuardarTrabajo(prev.concat(filas));
-      poner('Foto '+foto+': se agregaron '+filas.length+' fila'+(filas.length!==1?'s':'')+' al final de la tabla. Revísalas contra la foto y corrige lo que haga falta.','#22d3a5');
+      poner(soloRecortes
+        ? ('No pude leer la letra de esta foto, pero sí reconocí '+filas.length+' renglones del cuaderno: '
+           +'te dejé las filas vacías con el RECORTE de cada renglón al lado (abre la lupa 🔍). '
+           +'Escribes mirando ahí, sin salir del sistema.')
+        : ('Foto '+foto+': se agregaron '+filas.length+' fila'+(filas.length!==1?'s':'')+' al final de la tabla. Revísalas contra la foto y corrige lo que haga falta.'),
+        soloRecortes?'#f59e0b':'#22d3a5');
     }
     renderHerramientasOp();
   }catch(e){
