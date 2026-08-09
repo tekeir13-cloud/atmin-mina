@@ -14588,7 +14588,7 @@ function metasSave(){try{localStorage.setItem(METAS_KEY,JSON.stringify(state.met
 // Versión del lector: se muestra en pantalla para poder comparar entre equipos. Si dos
 // dispositivos dan resultados distintos con la misma foto, casi siempre es que uno tiene
 // la página vieja en caché.
-const HERR_VERSION='v25';
+const HERR_VERSION='v26';
 const HERR_KEY='atmin_herr_cuaderno';        // hoja de trabajo (lo que se está armando)
 const HERR_ARCH_KEY='atmin_herr_archivo';    // hojas ya guardadas
 const HERR_COLS=[
@@ -14864,6 +14864,75 @@ function herrRelojPara(id){ if(id) try{ clearInterval(id); }catch(e){} }
    no dice si falta señal, si el servidor está caído o si el lector miró la hoja y no vio nada.
    Aquí se muestra el motivo y, si el lector contestó algo, SU RESPUESTA TAL CUAL, para poder
    copiarla y saber qué pasó de verdad. */
+/* ── PRUEBA DEL LECTOR ──
+   Cuando "no lee" pueden estar fallando cosas muy distintas: la clave, el servidor, la señal,
+   o el lector que mira la hoja y no reconoce la letra. Desde fuera se ven todas iguales.
+   Este botón manda una hoja de prueba IMPRESA (imposible de no leer) por el mismo camino que
+   una foto real y dice exactamente dónde se rompe. Cuesta céntimos y tarda unos segundos. */
+async function herrProbarLector(){
+  if(_herrOcupado){ showNotif('Espera a que termine la lectura en curso','warn'); return; }
+  _herrOcupado=true; window._appOcupada=true;
+  const poner=herrEstado(); const reloj=herrRelojArranca();
+  const est=document.getElementById('herr-estado');
+  try{
+    poner('Probando el lector con una hoja de prueba…');
+    // Hoja de prueba: dos renglones en letra de imprenta, con las columnas del cuaderno.
+    const cv=document.createElement('canvas'); cv.width=1200; cv.height=420;
+    const cx=cv.getContext('2d');
+    cx.fillStyle='#ffffff'; cx.fillRect(0,0,1200,420);
+    cx.strokeStyle='#334155'; cx.lineWidth=2;
+    [20,140,400,900,1000,1100].forEach(x=>{ cx.beginPath(); cx.moveTo(x,20); cx.lineTo(x,400); cx.stroke(); });
+    [20,150,275,400].forEach(y=>{ cx.beginPath(); cx.moveTo(20,y); cx.lineTo(1180,y); cx.stroke(); });
+    cx.fillStyle='#0f172a'; cx.font='bold 26px sans-serif';
+    cx.fillText('FECHA',30,55); cx.fillText('T',150,55); cx.fillText('LABOR',410,55);
+    cx.fillText('DESCRIPCION',600,55); cx.fillText('P',910,55); cx.fillText('H',1010,55); cx.fillText('T',1110,55);
+    cx.font='26px sans-serif';
+    cx.fillText('01/08',30,215); cx.fillText('D',150,215); cx.fillText('RAMPA',410,215);
+    cx.fillText('Desate de rocas',600,215); cx.fillText('4',910,215); cx.fillText('8',1010,215); cx.fillText('1',1110,215);
+    cx.fillText('02/08',30,340); cx.fillText('N',150,340); cx.fillText('CRUCE',410,340);
+    cx.fillText('Limpieza con scoop',600,340); cx.fillText('3',910,340); cx.fillText('7',1010,340); cx.fillText('2',1110,340);
+    const b64=cv.toDataURL('image/jpeg',0.92).split(',')[1];
+
+    const t0=Date.now();
+    const r=await _herrPedirTira(b64, 0, 1);
+    const seg=Math.round((Date.now()-t0)/1000);
+    herrRelojPara(reloj);
+    const filas=(r&&r.filas)||[];
+    const crudo=(r&&r.respuesta)||'';
+    let color='#f87171', titulo='', detalle='';
+    if(r&&r.motivo){
+      titulo='❌ No se pudo llegar al lector.';
+      detalle='Motivo: '+r.motivo+'.<br>Esto NO tiene que ver con tu foto: falla la conexión, la clave o el servidor.';
+      if(/ANTHROPIC_API_KEY/.test(r.motivo)) detalle+='<br><b>Falta la clave en Vercel</b>, o se guardó sin volver a desplegar.';
+    }else if(filas.length>=2){
+      color='#22d3a5';
+      titulo='✅ El lector funciona.';
+      detalle='Leyó las '+filas.length+' filas de la hoja de prueba en '+seg+' s, con sus columnas: '+
+              escAttr(filas.map(f=>[f.fecha,f.turno,f.labor,f.descripcion,f.personal,f.horas,f.tareas].filter(Boolean).join(' / ')).join(' | '))+'.<br>'+
+              '<b>Si tu hoja no se lee, el problema está en la foto o en la letra, no en la conexión.</b> '+
+              'Prueba con la hoja plana, de frente, llenando toda la pantalla y con buena luz.';
+    }else{
+      color='#f59e0b';
+      titulo='⚠ El lector contesta, pero no reconoció ni la hoja de prueba.';
+      detalle='Llegó respuesta en '+seg+' s, así que la conexión y la clave están bien. '+
+              'El problema está en el reconocimiento.';
+    }
+    if(est){
+      est.style.display='block'; est.style.color=color;
+      est.innerHTML='<b>'+titulo+'</b><br>'+detalle+
+        (crudo?'<div style="margin-top:8px"><button class="btn btn-outline" style="font-size:11px;padding:3px 10px" '+
+          'onclick="var d=document.getElementById(\'herr-diag2\');d.style.display=d.style.display===\'none\'?\'block\':\'none\'">'+
+          'Ver la respuesta cruda</button><pre id="herr-diag2" style="display:none;white-space:pre-wrap;word-break:break-word;'+
+          'font-size:10.5px;background:var(--coal5);border:1px solid var(--border);border-radius:6px;padding:8px;margin-top:6px;'+
+          'max-height:180px;overflow:auto;color:var(--text2)">'+escAttr(crudo)+'</pre></div>':'');
+      try{ est.scrollIntoView({block:'nearest'}); }catch(e){}
+    }
+  }catch(e){
+    poner('La prueba falló: '+(e&&e.message||e),'#f87171');
+  }finally{
+    herrRelojPara(reloj); _herrOcupado=false; window._appOcupada=false;
+  }
+}
 function herrSinDatos(r, consejo){
   const est=document.getElementById('herr-estado'); if(!est) return;
   const resp=(r&&r.respuestas)||[];
@@ -15096,6 +15165,7 @@ function renderHerramientasOp(){
       <button class="btn btn-gold" style="font-size:12px" onclick="document.getElementById('herr-foto-input').click()">📷 Agregar foto</button>
       <button class="btn btn-outline" style="font-size:12px" onclick="herrGirarYReleer()" title="Si la hoja salió de costado o al revés">↻ Girar hoja y releer</button>
       <button class="btn btn-outline" style="font-size:12px" onclick="herrVerFoto()">🔍 Ver la foto</button>
+      <button class="btn btn-outline" style="font-size:12px" onclick="herrProbarLector()" title="Manda una hoja de prueba y dice si el lector responde">🩺 Probar el lector</button>
       <button class="btn btn-outline" style="font-size:12px" onclick="herrFilaVacia()">+ Fila vacía</button>
     </div>
   </div>
