@@ -4192,7 +4192,7 @@ select option{background:var(--coal3);}
     <input type="hidden" id="kit-id">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <div class="form-group" style="margin:0"><label>Fecha</label><input type="date" id="kit-fecha"></div>
-      <div class="form-group" style="margin:0"><label>Máquina / Equipo</label><select id="kit-equipo" style="width:100%" onchange="kitEquipoChange()"><optgroup label="Maquinaria con horómetro"><option>Grupo Electrógeno MP-120</option><option>Grupo Electrógeno MV 2321</option><option>Compresora M135</option><option>Compresora M122</option><option>Scoop WJ-2</option><option>Scoop Epiroc</option><option>Dumper</option></optgroup><optgroup label="Otros equipos"><option>Compresora</option><option>Perforadora Jack Leg</option><option>Perforadora Stopper</option><option>Excavadora</option><option>Cargador Frontal</option><option>Generador Eléctrico</option><option>Bomba de Agua</option><option>Winche</option><option>Camioneta</option><option>Instalaciones eléctricas</option></optgroup></select></div>
+      <div class="form-group" style="margin:0"><label>Máquina / Equipo</label><select id="kit-equipo" style="width:100%" onchange="kitEquipoChange()"><optgroup label="Maquinaria con horómetro"><option>Grupo Electrógeno MP-120</option><option>Grupo Electrógeno MV 2321</option><option>Compresora M135</option><option>Compresora M122</option><option>Scoop WJ-2</option><option>Scoop WJ 1H</option><option>Scoop Epiroc</option><option>Dumper</option></optgroup><optgroup label="Otros equipos"><option>Compresora</option><option>Perforadora Jack Leg</option><option>Perforadora Stopper</option><option>Excavadora</option><option>Cargador Frontal</option><option>Generador Eléctrico</option><option>Bomba de Agua</option><option>Winche</option><option>Camioneta</option><option>Instalaciones eléctricas</option></optgroup></select></div>
     </div>
     <div class="form-group" id="kit-jackleg-wrap" style="margin-bottom:12px;display:none"><label>Código de la Perforadora Jack Leg</label><select id="kit-jackleg" style="width:100%"><option value="">— Seleccionar máquina —</option></select></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
@@ -4537,7 +4537,7 @@ const state={
 };
 const FC={1:'#60a5fa',2:'#6ee7b7'};
 const FL={1:'Rampa',2:'Cortada'};
-const EI={'Compresora':'🔴','Compresora M135':'🔴','Compresora M122':'🔴','Perforadora Jack Leg':'🔩','Perforadora Stopper':'🔩','Generador Eléctrico':'⚡','Grupo Electrógeno':'⚡','Grupo Electrógeno MP-120':'⚡','Grupo Electrógeno MV 2321':'⚡','Scoop WJ-2':'🚜','Scoop DALI':'🚜','DALI':'🚜','Scoop Epiroc':'🚜','Scoop Monte':'🚜','Dumper':'🚛','Excavadora':'🚜','Cargador Frontal':'🚜','Bomba de Agua':'💧','Winche':'⚙','Camioneta':'🚗','Instalaciones eléctricas':'💡'};
+const EI={'Compresora':'🔴','Compresora M135':'🔴','Compresora M122':'🔴','Perforadora Jack Leg':'🔩','Perforadora Stopper':'🔩','Generador Eléctrico':'⚡','Grupo Electrógeno':'⚡','Grupo Electrógeno MP-120':'⚡','Grupo Electrógeno MV 2321':'⚡','Scoop WJ-2':'🚜','Scoop WJ 1H':'🚜','Scoop DALI':'🚜','DALI':'🚜','Scoop Epiroc':'🚜','Scoop Monte':'🚜','Dumper':'🚛','Excavadora':'🚜','Cargador Frontal':'🚜','Bomba de Agua':'💧','Winche':'⚙','Camioneta':'🚗','Instalaciones eléctricas':'💡'};
 // ── Equipos FACTURABLES (única fuente de verdad: dashboard "Ganancia por Equipo" + Finanzas "Ingresos x Máquina") ──
 // Cada máquina por separado. tags = nombre exacto en compresorista (combustible/horómetro). mt = coincidencia por nombre en mantenimiento. op = sueldo operador/mes.
 const EQUIPOS_FACTURABLES=[
@@ -17212,11 +17212,25 @@ function kitSalidaDePieza(p,kitId,equipo,solicitante,idx){
     unidad:p.unidad||'UND', precio:p.costo||0,
     cantidad:p.cant, importe:p.cant*(p.costo||0) };
 }
+/* ── STOCK DEL KIT, CALCULADO UNA SOLA VEZ ──
+   Recorrer el almacén entero (calcStock) es caro. Antes se hacía en CADA fila de pieza que
+   agregabas y en CADA letra que escribías en su buscador: con cuatro o cinco piezas el modal
+   se quedaba pegado y parecía que el botón de guardar no respondía.
+   Ahora el almacén se lee una vez al abrir el modal y todas las filas usan esa misma lectura.
+   El stock no cambia mientras llenas el formulario, y la aprobación del despacho sí vuelve a
+   consultarlo en vivo, que es donde de verdad importa. */
+let _kitStkCache=null;
+function kitStockRefrescar(){ _kitStkCache=null; }
+function kitStock(){
+  if(_kitStkCache) return _kitStkCache;
+  let base=(typeof calcStock==='function')?calcStock():[];
+  if(typeof filtrarPorMaestro==='function') base=filtrarPorMaestro(base);
+  return (_kitStkCache=base||[]);
+}
 function kitRepOptions(sel,saved,q){
   // TODO el material con stock: Insumos y Mantenimiento. Misma fuente y mismo filtro de maestro
   // que la vista de Stock, para que el selector y el almacén coincidan pieza por pieza.
-  let base=(typeof calcStock==='function')?calcStock():[];
-  if(typeof filtrarPorMaestro==='function') base=filtrarPorMaestro(base);
+  const base=kitStock();
   q=String(q!==undefined?q:'').trim().toLowerCase();
   const prods=base
     .filter(p=>p.stock>0)
@@ -17247,9 +17261,7 @@ function kitRepOptions(sel,saved,q){
 // en cero, dónde mirar. Evita quedarse con un desplegable vacío sin saber por qué.
 function kitStockAviso(){
   const el=document.getElementById('kit-stock-aviso'); if(!el) return;
-  let base=(typeof calcStock==='function')?calcStock():[];
-  if(typeof filtrarPorMaestro==='function') base=filtrarPorMaestro(base);
-  const conStock=base.filter(p=>p.stock>0);
+  const conStock=kitStock().filter(p=>p.stock>0);
   const nM=conStock.filter(p=>p.almacen==='Mantenimiento').length, nI=conStock.length-nM;
   if(conStock.length){
     el.innerHTML=`Conectado al almacén: <b style="color:#22d3a5">${conStock.length}</b> material${conStock.length!==1?'es':''} con stock · ${nM} Mantenimiento · ${nI} Insumos.`;
@@ -17322,7 +17334,7 @@ function kitEquipoChange(){
   if(wrap) wrap.style.display=esJack?'':'none';
 }
 function abrirModalKitMant(){
-  mantRepLoad();
+  mantRepLoad(); kitStockRefrescar();   // lectura fresca del almacén al abrir
   const g=i=>document.getElementById(i);
   g('kit-id').value='';g('kit-fecha').value=hoy();g('kit-equipo').value='Compresora';g('kit-tipo').value='Preventivo';
   g('kit-resp').value='';g('kit-desc').value='';g('kit-manoobra').value='';g('kit-estado').value='ok';
@@ -17333,7 +17345,7 @@ function abrirModalKitMant(){
   abrirModal('modal-kit-mant');
 }
 function editarKitMant(id){
-  mantRepLoad();
+  mantRepLoad(); kitStockRefrescar();   // lectura fresca del almacén al abrir
   const m=(state.mantenimiento||[]).find(x=>x.id===id);if(!m)return;
   const g=i=>document.getElementById(i);
   g('kit-id').value=m.id;g('kit-fecha').value=m.fecha||hoy();g('kit-equipo').value=m.equipoBase||m.equipo||'Compresora';g('kit-tipo').value=m.tipo||'Preventivo';
@@ -17806,12 +17818,27 @@ function aprobarLogKitLog(id){
   // despacho de piezas de Insumos aunque tuvieran stock de sobra.
   const stk=(typeof calcStock==='function')?calcStock():[];
   const norm=s=>String(s||'').trim().toUpperCase();
-  for(const p of (m.repuestos||[])){
-    if(!p.key||!p.cant) continue;
+  // Un kit puede traer la MISMA pieza en dos renglones (por ejemplo dos medidas del mismo
+  // aceite): lo que hay que comparar contra el stock es la SUMA, no cada renglón por su lado.
+  const pedido=new Map();
+  (m.repuestos||[]).forEach(p=>{
+    if(!p.key||!p.cant) return;
+    const e=pedido.get(p.key)||{nombre:p.nombre,codigo:p.codigo,cant:0};
+    e.cant+=Number(p.cant)||0; pedido.set(p.key,e);
+  });
+  // Se revisan TODAS las piezas y se avisan juntas las que falten. Antes se cortaba en la
+  // primera: con un kit de cinco piezas había que aprobar, leer el error, corregir y repetir,
+  // cinco veces, para enterarte de a una cuál faltaba.
+  const faltan=[];
+  pedido.forEach((e,key)=>{
     // Coincidir por clave, por código o por nombre (los ingresos antiguos no traen código)
-    const r=stk.find(x=>x.key===p.key || norm(x.codigo)===norm(p.codigo||p.key) || norm(x.producto||x.descripcion)===norm(p.nombre));
+    const r=stk.find(x=>x.key===key || norm(x.codigo)===norm(e.codigo||key) || norm(x.producto||x.descripcion)===norm(e.nombre));
     const disp=r?(r.stock||0):0;
-    if(p.cant>disp){showNotif(`⚠ Stock insuficiente de ${p.nombre} en ${r?(r.almacen==='Mantenimiento'?'Almacén Mantenimiento':'Insumos'):'el almacén'} (disp. ${disp}) — no se puede aprobar el despacho`,'error');return;}
+    if(e.cant>disp) faltan.push(`${e.nombre||key} (pide ${e.cant}, hay ${disp} en ${r?(r.almacen==='Mantenimiento'?'Almacén Mantenimiento':'Insumos'):'el almacén'})`);
+  });
+  if(faltan.length){
+    showNotif('⚠ No se puede aprobar el despacho, falta stock de '+faltan.length+' pieza'+(faltan.length!==1?'s':'')+': '+faltan.join(' · '),'error');
+    return;
   }
   const def=(typeof usuarioActivo!=='undefined'&&usuarioActivo&&usuarioActivo.nombre)?usuarioActivo.nombre:'';
   const resp=(prompt('Responsable que aprueba el despacho (Logística):',def)||'').trim();
