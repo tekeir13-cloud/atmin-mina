@@ -14560,7 +14560,7 @@ function metasSave(){try{localStorage.setItem(METAS_KEY,JSON.stringify(state.met
 // Versión del lector: se muestra en pantalla para poder comparar entre equipos. Si dos
 // dispositivos dan resultados distintos con la misma foto, casi siempre es que uno tiene
 // la página vieja en caché.
-const HERR_VERSION='v7';
+const HERR_VERSION='v8';
 const HERR_KEY='atmin_herr_cuaderno';        // hoja de trabajo (lo que se está armando)
 const HERR_ARCH_KEY='atmin_herr_archivo';    // hojas ya guardadas
 const HERR_COLS=[
@@ -14872,9 +14872,114 @@ function herrParsearOcr(lineas){
 // OCR de la hoja del cuaderno. Se usa el modo "bloque uniforme de texto" y se conservan los
 // espacios entre palabras: con la tabla cuadriculada da renglones mucho más limpios que el
 // modo automático, que intenta detectar columnas y parte las frases.
+/* ── MEJORA DE LA FOTO ANTES DE LEERLA ──
+   Una foto de celular sobre un cuaderno llega torcida, con sombra de la mano, luz despareja y
+   el papel amarillento. Tal como sale, el OCR lee mal. Aquí se acondiciona en cuatro pasos,
+   todo dentro del equipo, sin mandar la imagen a ningún lado:
+     1) AMPLIAR a un tamaño de trabajo cómodo para el lector,
+     2) EMPAREJAR LA LUZ: se estima el fondo del papel y se divide, con lo que la sombra y el
+        amarillo desaparecen y la hoja queda pareja,
+     3) ENDEREZAR: se prueba una inclinación de −6° a +6° y se elige la que deja los renglones
+        más alineados (los renglones torcidos son la causa nº1 de que se pierdan filas),
+     4) BINARIZAR con umbral local: cada zona se decide con el promedio de su vecindad, no con
+        un valor único para toda la foto — así aguanta que un lado esté más oscuro que el otro.
+   La foto original NO se guarda ni se modifica: esto vive solo en memoria mientras se lee. */
+function _herrGris(cx,w,h){
+  const d=cx.getImageData(0,0,w,h), p=d.data, g=new Float32Array(w*h);
+  for(let i=0,j=0;i<p.length;i+=4,j++) g[j]=0.299*p[i]+0.587*p[i+1]+0.114*p[i+2];
+  return {img:d,g:g};
+}
+// Promedio por ventana con imagen integral: permite umbral local sin que cueste una eternidad.
+function _herrIntegral(g,w,h){
+  const S=new Float64Array((w+1)*(h+1));
+  for(let y=0;y<h;y++){ let fila=0;
+    for(let x=0;x<w;x++){ fila+=g[y*w+x]; S[(y+1)*(w+1)+(x+1)]=S[y*(w+1)+(x+1)]+fila; } }
+  return S;
+}
+function _herrMediaLocal(S,w,h,x,y,r){
+  const x0=Math.max(0,x-r), y0=Math.max(0,y-r), x1=Math.min(w-1,x+r), y1=Math.min(h-1,y+r);
+  const A=S[y0*(w+1)+x0], B=S[y0*(w+1)+(x1+1)], C=S[(y1+1)*(w+1)+x0], D=S[(y1+1)*(w+1)+(x1+1)];
+  return (D-B-C+A)/((x1-x0+1)*(y1-y0+1));
+}
+// Cuánto "se notan" los renglones a un ángulo dado: si están derechos, las filas oscuras y las
+// filas de papel en blanco se alternan con fuerza y la varianza del perfil es máxima.
+function _herrPuntajeAngulo(g,w,h,ang){
+  const s=Math.sin(ang), c=Math.cos(ang), cx=w/2, cy=h/2;
+  const perfil=new Float64Array(h);
+  const paso=Math.max(1,Math.floor(w/300));
+  for(let y=0;y<h;y+=2){
+    let suma=0,n=0;
+    for(let x=0;x<w;x+=paso){
+      const yr=Math.round((x-cx)*s+(y-cy)*c+cy);
+      if(yr<0||yr>=h) continue;
+      suma+=g[yr*w+x]; n++;
+    }
+    if(n) perfil[y]=suma/n;
+  }
+  let m=0,k=0; for(let y=0;y<h;y+=2){ m+=perfil[y]; k++; }
+  m/=(k||1);
+  let v=0; for(let y=0;y<h;y+=2){ const d=perfil[y]-m; v+=d*d; }
+  return v;
+}
+async function herrMejorarImagen(dataUrl){
+  const img=await new Promise((res,rej)=>{ const i=new Image();
+    i.onload=()=>res(i); i.onerror=()=>rej(new Error('imagen inválida')); i.src=dataUrl; });
+  // 1) Tamaño de trabajo
+  const lado=Math.max(img.width,img.height)||1;
+  let esc=2400/lado; if(esc>3) esc=3; if(esc<1) esc=1;
+  let w=Math.round(img.width*esc), h=Math.round(img.height*esc);
+  let cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+  let cx=cv.getContext('2d',{willReadFrequently:true});
+  cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality='high';
+  cx.drawImage(img,0,0,w,h);
+  let {img:datos,g}=_herrGris(cx,w,h);
+  // 2) Emparejar la luz: fondo = media de una ventana grande; se divide el gris por ese fondo
+  const S1=_herrIntegral(g,w,h);
+  const rFondo=Math.max(12,Math.round(Math.min(w,h)/18));
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    const f=_herrMediaLocal(S1,w,h,x,y,rFondo)||1;
+    let v=(g[y*w+x]/f)*205;                       // 205: deja el papel casi blanco sin quemar la tinta
+    g[y*w+x]=v<0?0:(v>255?255:v);
+  }
+  // 3) Enderezar
+  let mejor={ang:0,p:_herrPuntajeAngulo(g,w,h,0)};
+  for(let grados=-6; grados<=6; grados+=1){
+    if(!grados) continue;
+    const p=_herrPuntajeAngulo(g,w,h,grados*Math.PI/180);
+    if(p>mejor.p) mejor={ang:grados,p};
+  }
+  const p2=datos.data;
+  for(let i=0,j=0;i<p2.length;i+=4,j++){ p2[i]=p2[i+1]=p2[i+2]=g[j]; p2[i+3]=255; }
+  cx.putImageData(datos,0,0);
+  if(mejor.ang){
+    const cv2=document.createElement('canvas'); cv2.width=w; cv2.height=h;
+    const c2=cv2.getContext('2d',{willReadFrequently:true});
+    c2.fillStyle='#fff'; c2.fillRect(0,0,w,h);
+    c2.translate(w/2,h/2); c2.rotate(-mejor.ang*Math.PI/180); c2.translate(-w/2,-h/2);
+    c2.drawImage(cv,0,0);
+    cv=cv2; cx=c2;
+    const r=_herrGris(cx,w,h); datos=r.img; g=r.g;
+  }
+  // 4) Umbral local (método de Bradley): negro si el punto está bastante por debajo de su vecindad
+  const S2=_herrIntegral(g,w,h);
+  const rUmb=Math.max(8,Math.round(Math.min(w,h)/90));
+  const T=0.86;                                    // 14% por debajo de la media local
+  const p3=datos.data;
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    const m=_herrMediaLocal(S2,w,h,x,y,rUmb);
+    const v=(g[y*w+x] < m*T) ? 0 : 255;
+    const i=(y*w+x)*4; p3[i]=p3[i+1]=p3[i+2]=v; p3[i+3]=255;
+  }
+  cx.putImageData(datos,0,0);
+  return {url:cv.toDataURL('image/png'), angulo:mejor.ang};
+}
 async function herrOcrImagen(dataUrl, aviso){
   const T=await cmpCargarLib(CMP_LIB_TESS,'Tesseract');
-  let img=dataUrl; try{ img=await cmpPrepararOcr(dataUrl); }catch(e){}
+  // Primero se acondiciona la foto; si algo fallara, se sigue con la preparación simple.
+  let img=dataUrl, giro=0;
+  try{ const mej=await herrMejorarImagen(dataUrl); img=mej.url; giro=mej.angulo||0; }
+  catch(e){ try{ img=await cmpPrepararOcr(dataUrl); }catch(e2){} }
+  if(aviso) aviso(0, giro);
   const log=m=>{ if(aviso&&m&&m.status==='recognizing text'){ aviso(Math.round((m.progress||0)*100)); } };
   let d=null;
   // Con worker propio se pueden fijar los parámetros del OCR (bloque uniforme de texto y
@@ -14908,9 +15013,13 @@ async function herrAgregarFoto(input){
   const est=document.getElementById('herr-estado');
   const poner=(t,c)=>{ if(est){ est.style.display='block'; est.style.color=c||'var(--text3)'; est.textContent=t; } };
   try{
-    poner('Leyendo la foto… esto tarda un poco, no cierres la pestaña.');
+    poner('Mejorando la foto (luz pareja, enderezado y contraste)…');
     const dataUrl=await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(new Error('no se pudo leer la imagen')); r.readAsDataURL(file); });
-    const lineas=await herrOcrImagen(dataUrl, p=>poner('Leyendo la foto… '+p+'%'));
+    let giroAvisado=null;
+    const lineas=await herrOcrImagen(dataUrl, (p,giro)=>{
+      if(giro!=null && giroAvisado===null){ giroAvisado=giro; }
+      poner('Leyendo la foto… '+p+'%'+(giroAvisado?' · se enderezó '+Math.abs(giroAvisado)+'°':''));
+    });
     const filas=herrParsearOcr(lineas);
     if(!filas.length){
       poner('No se reconoció ningún renglón con fecha en esta foto. Puedes agregar las filas a mano con "+ Fila vacía".','#f59e0b');
