@@ -4591,6 +4591,22 @@ function mostrarAccesoDenegado(page){
   setActiveBottomNav(page);
 }
 
+/* ── DÓNDE ESTABAS ──
+   La aplicación se recarga sola cuando se publica una versión nueva. Si eso pasa mientras
+   estás trabajando dentro de un módulo, volvías al primer módulo de tu usuario y parecía que
+   te había expulsado. Se recuerda la última vista para volver a ella.
+   Caduca a las 12 horas: al día siguiente entras por donde entras siempre. */
+const VISTA_KEY='atmin_ultima_vista';
+function _vistaGuardar(o){
+  try{ localStorage.setItem(VISTA_KEY,JSON.stringify({page:o.page||'',mod:o.mod||'',pane:o.pane||'',t:Date.now()})); }catch(e){}
+}
+function _vistaLeer(){
+  try{
+    const v=JSON.parse(localStorage.getItem(VISTA_KEY)||'null');
+    if(!v||!v.t||!v.page) return null;
+    return (Date.now()-v.t < 12*3600*1000) ? v : null;
+  }catch(e){ return null; }
+}
 function navigate(page){
   if(usuarioActivo && usuarioActivo.modulos && !usuarioActivo.modulos.includes(page)){
     mostrarAccesoDenegado(page); return;
@@ -4598,6 +4614,7 @@ function navigate(page){
   // Si hay overlay de acceso denegado del page anterior, ocultarlo
   document.querySelectorAll('.acceso-denegado-overlay').forEach(el=>el.style.display='none');
   window._currentPage = page;
+  _vistaGuardar({page});          // por si la app se recarga sola: volver aquí
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('page-'+page).classList.add('active');
@@ -4645,6 +4662,9 @@ function modTab(mod, pane, btn){
   if(target){ target.classList.add('active'); target.style.display = 'block'; }
   // Activar el tab seleccionado
   if(btn) btn.classList.add('active');
+  // Recordar también la pestaña, no solo el módulo: si la app se recarga sola estando en
+  // "Cuaderno de reporte", vuelves ahí y no a la primera pestaña del módulo.
+  try{ _vistaGuardar({page:window._currentPage||'', mod, pane}); }catch(e){}
   // Renderizar contenido
   renderModPane(mod, pane);
 }
@@ -14568,7 +14588,7 @@ function metasSave(){try{localStorage.setItem(METAS_KEY,JSON.stringify(state.met
 // Versión del lector: se muestra en pantalla para poder comparar entre equipos. Si dos
 // dispositivos dan resultados distintos con la misma foto, casi siempre es que uno tiene
 // la página vieja en caché.
-const HERR_VERSION='v19';
+const HERR_VERSION='v20';
 const HERR_KEY='atmin_herr_cuaderno';        // hoja de trabajo (lo que se está armando)
 const HERR_ARCH_KEY='atmin_herr_archivo';    // hojas ya guardadas
 const HERR_COLS=[
@@ -15464,7 +15484,7 @@ let _herrOcupado=false;
 async function herrAgregarFoto(input){
   const file=input&&input.files&&input.files[0]; if(!file) return;
   if(_herrOcupado){ showNotif('Espera a que termine la foto anterior','warn'); return; }
-  _herrOcupado=true;
+  _herrOcupado=true; window._appOcupada=true;
   const est=document.getElementById('herr-estado');
   const poner=(t,c)=>{ if(est){ est.style.display='block'; est.style.color=c||'var(--text3)'; est.textContent=t; } };
   try{
@@ -15516,7 +15536,7 @@ async function herrAgregarFoto(input){
   }catch(e){
     poner('No se pudo leer la foto: '+(e&&e.message||e),'#f87171');
   }finally{
-    _herrOcupado=false; if(input) input.value='';
+    _herrOcupado=false; window._appOcupada=false; if(input) input.value='';
   }
 }
 /* Si la hoja salió de costado o al revés, se gira a mano y se vuelve a leer la MISMA foto.
@@ -15530,7 +15550,7 @@ async function herrGirarYReleer(){
   // Se quitan las filas que trajo la lectura anterior de ESTA foto y se lee de nuevo
   const fotoN=herrCargar().reduce((m,f)=>Math.max(m,Number(f.foto)||0),0);
   herrGuardarTrabajo(herrCargar().filter(f=>Number(f.foto)!==fotoN));
-  _herrOcupado=true;
+  _herrOcupado=true; window._appOcupada=true;
   const est=document.getElementById('herr-estado');
   const poner=(t,c)=>{ if(est){ est.style.display='block'; est.style.color=c||'var(--text3)'; est.textContent=t; } };
   try{
@@ -15553,7 +15573,7 @@ async function herrGirarYReleer(){
     }
     renderHerramientasOp();
   }catch(e){ poner('No se pudo releer: '+(e&&e.message||e),'#f87171'); }
-  finally{ _herrOcupado=false; }
+  finally{ _herrOcupado=false; window._appOcupada=false; }
 }
 function herrEditar(id,campo,valor){
   const a=herrCargar(); const f=a.find(x=>x.id===id); if(!f) return;
@@ -19398,10 +19418,20 @@ async function initSistema(){
   // había fallado. navigate() sí cambia la página activa, marca el menú y renderiza.
   const _mods=(usuarioActivo&&Array.isArray(usuarioActivo.modulos))?usuarioActivo.modulos:[];
   const primero = _mods[0] || 'dashboard';
+  // Si la app se recargó sola (versión nueva) mientras trabajabas, se vuelve a donde estabas
+  // en vez de mandarte al primer módulo, que es lo que parecía una expulsión.
+  const _ult=(typeof _vistaLeer==='function')?_vistaLeer():null;
+  const _volver=(_ult && _ult.page && _mods.indexOf(_ult.page)>=0 && document.getElementById('page-'+_ult.page))
+    ? _ult.page : null;
+  const destino=_volver||primero;
   try{
-    if(typeof navigate==='function' && document.getElementById('page-'+primero)) navigate(primero);
-    else renderPage(primero);
-  }catch(e){ try{ renderPage(primero); }catch(e2){} }
+    if(typeof navigate==='function' && document.getElementById('page-'+destino)) navigate(destino);
+    else renderPage(destino);
+  }catch(e){ try{ renderPage(destino); }catch(e2){} }
+  // …y dentro del módulo, a la misma pestaña (navigate deja siempre la primera).
+  if(_volver && _ult.mod && _ult.pane){
+    try{ if(typeof modTab==='function' && document.getElementById(_ult.mod+'-'+_ult.pane)) modTab(_ult.mod,_ult.pane); }catch(e){}
+  }
 }
 
 // Chips de módulos para crear usuarios
@@ -25755,8 +25785,28 @@ document.addEventListener('webkitfullscreenchange',_syncFullscreenBtn);
   // AUTO-ACTUALIZACIÓN: cuando un SW nuevo toma el control, recargar la página una sola vez.
   // Así ningún equipo se queda pegado en una versión vieja: al publicar una nueva, se actualiza
   // solo sin que nadie tenga que borrar caché ni tocar nada.
-  let _recargando=false;
-  const _recargarUnaVez=()=>{ if(_recargando) return; _recargando=true; try{ location.reload(); }catch(e){} };
+  let _recargando=false, _esperandoLibre=null;
+  // NUNCA recargar en medio de un trabajo. La lectura de una foto del cuaderno tarda, y al
+  // volver de la cámara el navegador busca versión nueva: si justo se publicó una, la app se
+  // recargaba encima de la lectura, la tiraba a la basura y te sacaba del módulo. Se espera a
+  // que el trabajo termine y recién ahí se toma la versión nueva.
+  const _appOcupada=()=>{
+    try{ if(typeof _herrOcupado!=='undefined' && _herrOcupado) return true; }catch(e){}
+    try{ if(window._appOcupada) return true; }catch(e){}
+    return false;
+  };
+  const _recargarUnaVez=()=>{
+    if(_recargando) return;
+    if(_appOcupada()){
+      if(!_esperandoLibre){
+        _esperandoLibre=setInterval(()=>{
+          if(!_appOcupada()){ clearInterval(_esperandoLibre); _esperandoLibre=null; _recargarUnaVez(); }
+        }, 1500);
+      }
+      return;
+    }
+    _recargando=true; try{ location.reload(); }catch(e){}
+  };
   navigator.serviceWorker.addEventListener('controllerchange', _recargarUnaVez);
   // El SW nuevo avisa "sw-updated" al activarse → recargar para tomar el código nuevo.
   navigator.serviceWorker.addEventListener('message',(ev)=>{ if(ev&&ev.data&&ev.data.type==='sw-updated') _recargarUnaVez(); });
@@ -25771,7 +25821,9 @@ document.addEventListener('webkitfullscreenchange',_syncFullscreenBtn);
       const bar=document.createElement('div');
       bar.id='sw-update-bar';
       bar.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:10000;background:#1a1f2e;border:1px solid #8b5cf6;border-radius:12px;padding:10px 16px;display:flex;gap:12px;align-items:center;box-shadow:0 8px 28px rgba(0,0,0,0.5);font-size:13px;color:#ece7da';
-      bar.innerHTML='✨ Actualizando MukiCloud a la versión nueva…';
+      bar.innerHTML=_appOcupada()
+        ? '✨ Hay una versión nueva: se instalará apenas termine lo que está leyendo.'
+        : '✨ Actualizando MukiCloud a la versión nueva…';
       document.body.appendChild(bar);
       // El SW nuevo se activa solo (skipWaiting) y controllerchange recarga; esto es solo aviso.
       try{ if(reg.waiting) reg.waiting.postMessage&&reg.waiting.postMessage('skip'); }catch(e){}
