@@ -10,7 +10,7 @@
      Cambiar aquí el número y los enlaces actualiza todo el sitio.
      El número va en formato internacional, solo dígitos.          */
   var CONFIG = {
-    whatsapp: '51999999999',           // ← reemplazar por el real
+    whatsapp: '51984139907',           // +51 984 139 907
     instagram: 'https://instagram.com/maisonliamblue',
     tiktok: 'https://tiktok.com/@maisonliamblue',
     saludo: 'Hola Liam Blue, vengo desde la web y quiero consultar por'
