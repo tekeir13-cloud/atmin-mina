@@ -4782,7 +4782,18 @@ async function cargarDesdeSB(){
     ]);
     // Stock de petróleo desde tabla dedicada
     if(petStock && petStock.data) state.petroleo.stock = Number(petStock.data.cantidad);
-    state.personal=(per.data||[]).map(p=>({id:p.id,nombre:p.nombre,dni:p.dni,rol:p.rol,frente:p.frente,estado:p.estado||'activo',jornal:Number(p.jornal)}));
+    // La tabla `personal` NO conoce todos los campos: no tiene `guardia`, ni `jefe`, ni la marca
+    // de edición `_ts`. Antes se construía un objeto nuevo con solo lo que trae la tabla, así que
+    // al recargar se PERDÍA la guardia y cualquier campo que viva solo en el equipo. Ahora los
+    // datos de la tabla se superponen sobre el registro local existente, conservando el resto.
+    {
+      const _prevP={}; (state.personal||[]).forEach(p=>{ if(p&&p.id!=null) _prevP[String(p.id)]=p; });
+      state.personal=(per.data||[]).map(p=>Object.assign({}, _prevP[String(p.id)]||{},
+        {id:p.id,nombre:p.nombre,dni:p.dni,rol:p.rol,frente:p.frente,estado:p.estado||'activo',jornal:Number(p.jornal)}));
+      // Quien exista solo en este equipo (alta que no llegó a la tabla) NO se descarta.
+      const _enTabla=new Set(state.personal.map(p=>String(p.id)));
+      Object.values(_prevP).forEach(p=>{ if(!_enTabla.has(String(p.id))) state.personal.push(p); });
+    }
     // Si la nube no tiene personal (tabla inexistente o vacía), sembrar la cuadrilla real local.
     if(!state.personal.length){ try{ seedData(); }catch(e){ console.error('seed personal:',e); } }
     normalizarCargos();
@@ -4926,7 +4937,7 @@ async function cargarAlmacenCombustibleSB(){
         try{localStorage.setItem(k,JSON.stringify(arrNube));}catch(e){}
       }else{
         const local=combCargar(tipo);
-        if(local.length) await sbSyncModulo('comb_'+tipo, local);
+        if(local.length) await _sbSubirSiNubeVacia('comb_'+tipo, local);
       }
     }
     // Apertura de petróleo del periodo (1650 gln). Se aplica DESPUÉS de traer la nube, por id
@@ -4944,7 +4955,7 @@ async function cargarAlmacenCombustibleSB(){
       }else{
         comprasLoad();
         const c=comprasNorm();
-        if(c.facturas.length||c.presupuestos.length) await sbSyncModulo('compras', c);
+        if(c.facturas.length||c.presupuestos.length) await _sbSubirSiNubeVacia('compras', c);
       }
       comprasNorm();
     }catch(e){}
@@ -4957,7 +4968,7 @@ async function cargarAlmacenCombustibleSB(){
     }else{
       // Nube vacía: subir lo que tenga este dispositivo
       try{valLaborLoad();}catch(e){}
-      if((state.valorizacionesLabor||[]).length) await sbSyncModulo('val_labor', state.valorizacionesLabor);
+      if((state.valorizacionesLabor||[]).length) await _sbSubirSiNubeVacia('val_labor', state.valorizacionesLabor);
     }
     // ── PERSONAL (RRHH) — snapshot confiable (localStorage + nube), independiente de la tabla ──
     {
@@ -4974,7 +4985,7 @@ async function cargarAlmacenCombustibleSB(){
       }else{
         let pLocal=[]; try{pLocal=JSON.parse(localStorage.getItem(PERSONAL_KEY)||'[]')||[];}catch(e){}
         if(pLocal.length) state.personal=pLocal;
-        if((state.personal||[]).length) await sbSyncModulo('personal', state.personal);
+        if((state.personal||[]).length) await _sbSubirSiNubeVacia('personal', state.personal);
       }
     }
     // ── TAREOS — snapshot confiable (todos los meses), independiente del mes_id de la tabla ──
@@ -4986,7 +4997,7 @@ async function cargarAlmacenCombustibleSB(){
       }else{
         let tLocal=[]; try{tLocal=JSON.parse(localStorage.getItem(TAREAS_KEY)||'[]')||[];}catch(e){}
         if(tLocal.length) state.tareas=tLocal;
-        else if((state.tareas||[]).length) await sbSyncModulo('tareas', state.tareas);
+        else if((state.tareas||[]).length) await _sbSubirSiNubeVacia('tareas', state.tareas);
       }
     }
     // ── REPORTES JEFE DE GUARDIA — UNIÓN por id de nube + local: nunca se pierde un reporte ──
@@ -5013,7 +5024,7 @@ async function cargarAlmacenCombustibleSB(){
         try{localStorage.setItem(DIST_KEY,JSON.stringify(dNube));}catch(e){}
       }else{
         try{distribLoad();}catch(e){}
-        if(state.distribucion&&Object.keys(state.distribucion).length) await sbSyncModulo('distribucion', state.distribucion);
+        if(state.distribucion&&Object.keys(state.distribucion).length) await _sbSubirSiNubeVacia('distribucion', state.distribucion);
       }
       const mNube=await sbLoadModulo('metas');
       if(mNube&&typeof mNube==='object'&&Object.keys(mNube).length){
@@ -5021,7 +5032,7 @@ async function cargarAlmacenCombustibleSB(){
         try{localStorage.setItem(METAS_KEY,JSON.stringify(state.metas));}catch(e){}
       }else{
         try{metasLoad();}catch(e){}
-        if(state.metas&&Object.keys(state.metas).length) await sbSyncModulo('metas', state.metas);
+        if(state.metas&&Object.keys(state.metas).length) await _sbSubirSiNubeVacia('metas', state.metas);
       }
       const ruNube=await sbLoadModulo('reuniones');
       if(Array.isArray(ruNube)&&ruNube.length){
@@ -5030,7 +5041,7 @@ async function cargarAlmacenCombustibleSB(){
         await sbSyncModulo('reuniones', state.reuniones);
       }else{
         try{reunionesLoad();}catch(e){}
-        if((state.reuniones||[]).length) await sbSyncModulo('reuniones', state.reuniones);
+        if((state.reuniones||[]).length) await _sbSubirSiNubeVacia('reuniones', state.reuniones);
       }
     }
     // ── MANTENIMIENTO: kits (solicitudes/aprobaciones) y repuestos — UNIÓN por id ──
@@ -5048,7 +5059,7 @@ async function cargarAlmacenCombustibleSB(){
         state.mantRepuestos=repNube;
         try{localStorage.setItem(MANTREP_KEY,JSON.stringify(repNube));}catch(e){}
       }else if((state.mantRepuestos||[]).length){
-        await sbSyncModulo('mant_repuestos', state.mantRepuestos);
+        await _sbSubirSiNubeVacia('mant_repuestos', state.mantRepuestos);
       }
     }
     // ── SERVICIOS / PAGOS A TERCEROS — unión por id (las fotos quedan locales) ──
@@ -5107,7 +5118,7 @@ async function cargarAlmacenCombustibleSB(){
       }else if(Object.keys(fimLocal).length){
         try{ if(typeof _fimMigrarNombres==='function') _fimMigrarNombres(fimLocal); }catch(e){}
         try{localStorage.setItem(FIN_ING_MAQ_KEY,JSON.stringify(fimLocal));}catch(e){}
-        await sbSyncModulo('fin_ing_maq', fimLocal);
+        await _sbSubirSiNubeVacia('fin_ing_maq', fimLocal);
       }
     }
     // ── PLANILLA SUPERVISIÓN — sueldos fijos por mes (nube gana, merge por mes) ──
@@ -6905,16 +6916,29 @@ async function sbLoadModuloEstado(modulo){
     return {estado:'ok', data:data[0].data};
   }catch(e){ return {estado:'ilegible', data:null}; }
 }
+// Estado de la ÚLTIMA lectura de cada módulo. Es lo que permite distinguir "la nube está vacía"
+// de "no pude leerla", que es la raíz de las pérdidas de datos entre equipos.
+const _sbEstadoUltimo={};
 async function sbLoadModulo(modulo){
-  if(!SB_ONLINE) return null;
-  // Si este módulo tiene un cambio LOCAL pendiente de subir (capturado sin señal), lo local es
-  // más nuevo que la nube: no devolver la copia de la nube para que "la nube manda" no pise el
-  // dato offline. EXCEPCIÓN: los módulos de fusión sí se traen (su carga une por id).
-  if((modulo in _sbPend) && !_sbModulosFusion.has(modulo)) return null;
-  try{
-    const { data } = await sb.from('app_modulos').select('data').eq('modulo', modulo).single();
-    return data ? data.data : null;
-  }catch(e){ return null; }
+  const r=await sbLoadModuloEstado(modulo);
+  _sbEstadoUltimo[modulo]=r.estado;
+  return r.estado==='ok' ? r.data : null;
+}
+// Sube lo local ENCIMA de la nube solo si consta que la nube está vacía.
+//
+// Este es el arreglo de fondo. Antes, la carga hacía: "pedí el módulo, me devolvió nulo → estará
+// vacío → subo lo mío". Pero ese nulo también aparecía cuando la lectura fallaba o cuando este
+// equipo tenía cambios sin subir. Resultado: bastaba con abrir sesión desde un equipo al que le
+// faltaba un dato para BORRARLO de la nube, y de ahí del resto de equipos en su siguiente carga.
+// Nadie borraba nada; alcanzaba con entrar.
+//
+// Ahora, si la lectura no fue concluyente NO se toca la nube. Lo local se conserva y se sube en
+// cuanto haya una lectura limpia. Solo afecta a las subidas de reconciliación del arranque: lo
+// que guarda el usuario sigue subiendo siempre.
+async function _sbSubirSiNubeVacia(modulo, data){
+  if(_sbEstadoUltimo[modulo]!=='vacio') return false;
+  await sbSyncModulo(modulo, data);
+  return true;
 }
 
 // ════════════════ SINCRONIZACIÓN EN TIEMPO REAL ════════════════
