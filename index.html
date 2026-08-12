@@ -2542,8 +2542,6 @@ select option{background:var(--coal3);}
                 letter-spacing:0.3px">
           Cierre Mensual
         </button>
-        <button id="btn-recuperar-val" onclick="recuperarValorizaciones()" title="Busca en todos los respaldos las valorizaciones que falten y las restaura sin borrar nada"
-          class="btn btn-outline" style="border-color:#22d3a5;color:#22d3a5">🛟 Recuperar valorizaciones</button>
         <button id="btn-respaldo" onclick="respaldoCompleto()" title="Respaldo completo: nube + descarga (JSON y Excel)"
                 style="background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.35);
                 color:#22c55e;border-radius:4px;padding:6px 12px;cursor:pointer;
@@ -4935,23 +4933,15 @@ async function cargarAlmacenCombustibleSB(){
       comprasNorm();
     }catch(e){}
     // ── VALORIZACIONES (compra de labor) — vinculadas al dashboard ──
-    // Se FUSIONA con la nube en vez de reemplazar en un sentido u otro. Antes, si la lectura de
-    // la nube fallaba o este equipo tenía algo pendiente, se daba por hecho que la nube estaba
-    // vacía y se subía encima el arreglo local: bastaba con que Finanzas entrara desde un equipo
-    // sin la valorización de julio para BORRARLA de la nube y, con ella, de todos los equipos.
-    {
-      const _vl = await sbLoadModuloEstado('val_labor');
-      try{ valLaborLoad(); }catch(e){}
-      const _local = state.valorizacionesLabor||[];
-      if(_vl.estado==='ok' && Array.isArray(_vl.data)){
-        state.valorizacionesLabor = valLaborMerge(_local, _vl.data);
-        try{ localStorage.setItem(VALLAB_KEY,JSON.stringify(state.valorizacionesLabor)); }catch(e){}
-        // Re-subir el consolidado solo si la fusión aportó algo que la nube no tenía.
-        if(state.valorizacionesLabor.length !== _vl.data.length) await sbSyncModulo('val_labor', state.valorizacionesLabor);
-      }else if(_vl.estado==='vacio'){
-        if(_local.length) await sbSyncModulo('val_labor', _local);   // nube realmente vacía: sí se sube
-      }
-      // 'ilegible' o 'pendiente': no se toca la nube. Se sigue con lo local.
+    const valNube = await sbLoadModulo('val_labor');
+    if(Array.isArray(valNube) && valNube.length){
+      // La nube manda: reemplaza el estado local y persiste
+      state.valorizacionesLabor=valNube;
+      try{localStorage.setItem(VALLAB_KEY,JSON.stringify(valNube));}catch(e){}
+    }else{
+      // Nube vacía: subir lo que tenga este dispositivo
+      try{valLaborLoad();}catch(e){}
+      if((state.valorizacionesLabor||[]).length) await sbSyncModulo('val_labor', state.valorizacionesLabor);
     }
     // ── PERSONAL (RRHH) — snapshot confiable (localStorage + nube), independiente de la tabla ──
     {
@@ -6879,25 +6869,7 @@ try{
 // Módulos cuya carga FUSIONA por id (unión), no reemplaza: para ellos SIEMPRE se trae la nube
 // aunque haya un pendiente, porque fusionar nunca pierde lo local y sí recupera lo de otros
 // equipos. Para los módulos de REEMPLAZO (personal, tareas…) sí se protege el dato offline.
-const _sbModulosFusion=new Set(['almacen','personal','reportes_guardia','mant_kits','compresorista','reuniones','remanente_salidas','remanente_ingresos','servicios_terceros','tombstones','val_labor']);
-// Devuelve el ESTADO de la lectura, no solo el dato. sbLoadModulo() contestaba null para tres
-// situaciones muy distintas —nube vacía, cambio local pendiente y error de lectura— y quien
-// llamaba no podía distinguirlas. Confundir "no pude leer" con "está vacía" y subir encima lo
-// local es exactamente como se pierde el trabajo de otro equipo.
-//   'ok'         → se leyó y hay dato
-//   'vacio'      → se leyó bien y NO hay nada en la nube (aquí sí es seguro subir lo local)
-//   'pendiente'  → este equipo tiene un cambio sin subir; lo local manda
-//   'ilegible'   → sin conexión o error: NO tocar la nube bajo ningún concepto
-async function sbLoadModuloEstado(modulo){
-  if(!SB_ONLINE) return {estado:'ilegible', data:null};
-  if((modulo in _sbPend) && !_sbModulosFusion.has(modulo)) return {estado:'pendiente', data:null};
-  try{
-    const { data, error } = await sb.from('app_modulos').select('data').eq('modulo', modulo).limit(1);
-    if(error) return {estado:'ilegible', data:null};
-    if(!data || !data.length || data[0].data==null) return {estado:'vacio', data:null};
-    return {estado:'ok', data:data[0].data};
-  }catch(e){ return {estado:'ilegible', data:null}; }
-}
+const _sbModulosFusion=new Set(['almacen','personal','reportes_guardia','mant_kits','compresorista','reuniones','remanente_salidas','remanente_ingresos','servicios_terceros','tombstones']);
 async function sbLoadModulo(modulo){
   if(!SB_ONLINE) return null;
   // Si este módulo tiene un cambio LOCAL pendiente de subir (capturado sin señal), lo local es
@@ -6937,7 +6909,7 @@ else if(Number(prevAlm.productosTs||0)>Number(data.productosTs||0)){ a.productos
     case 'mant_kits':          if(Array.isArray(data)){ state.mantenimiento=(typeof mergeMantKits==='function')?mergeMantKits(state.mantenimiento||[], data):M(data, state.mantenimiento||[]); setLS('atmin_mant_kits', state.mantenimiento); } break;
     case 'mant_repuestos':     if(Array.isArray(data)){ state.mantRepuestos=data; setLS('atmin_mant_repuestos', data); } break;
     case 'compresorista':      if(Array.isArray(data)){ state.compresorista=(typeof _compMergeByTs==='function')?_compMergeByTs(state.compresorista||[], data):data; setLS('atmin_compresorista', state.compresorista); } break;
-    case 'val_labor':          if(Array.isArray(data)){ state.valorizacionesLabor=(typeof valLaborMerge==='function')?valLaborMerge(state.valorizacionesLabor||[], data):data; setLS('atmin_valorizaciones_labor', state.valorizacionesLabor); } break;
+    case 'val_labor':          if(Array.isArray(data)){ state.valorizacionesLabor=data; setLS('atmin_valorizaciones_labor', data); } break;
     case 'distribucion':       if(data&&typeof data==='object'){ state.distribucion=data; setLS('atmin_distribucion', data); } break;
     case 'metas':              if(data&&typeof data==='object'){ state.metas=Object.assign(state.metas||{}, data); setLS('atmin_metas', state.metas); } break;
     case 'reuniones':          if(Array.isArray(data)){ state.reuniones=M(data, state.reuniones||[]); setLS('atmin_reuniones', state.reuniones); } break;
@@ -14255,21 +14227,6 @@ function tombPurgarState(){
     state.seguridad=(state.seguridad||[]).filter(r=>!(r&&typeof _segSig==='function'&&tombHas('seg:'+_segSig(r))));
   }catch(e){}
 }
-// Fusiona valorizaciones por id conservando la última edición. Se apoya en mergeById_ts, que ya
-// respeta las lápidas: lo borrado a propósito no resucita.
-function valLaborMerge(a,b){
-  const m=(typeof mergeById_ts==='function')?mergeById_ts(a||[], b||[]):(b||a||[]);
-  // Una sola valorización por mes/año: si dos equipos importaron el mismo mes, gana la más
-  // reciente en vez de dejar el mes duplicado y sumando doble en el dashboard.
-  const porMes={}, sueltas=[];
-  m.forEach(v=>{
-    if(!(v&&v.mesNum&&v.anio)){ sueltas.push(v); return; }
-    const k=v.anio+'-'+v.mesNum, ex=porMes[k];
-    const ts=x=>Number(x&&(x._ts||x.importadoEn))||0;
-    if(!ex || ts(v)>ts(ex)) porMes[k]=v;
-  });
-  return Object.values(porMes).concat(sueltas);
-}
 function mergeSnapById(a,b){
   const out=[],seen=new Set();
   const add=r=>{ if(!r)return; if(r.id!=null&&tombHas(r.id))return; const k=(r.id!=null)?('id:'+r.id):('j:'+JSON.stringify(r)); if(seen.has(k))return; seen.add(k); out.push(r); };
@@ -16024,13 +15981,9 @@ async function importarValorizacion(input){
     const {mesNum,anio}=valParsePeriodo(titulo+' '+((file&&file.name)||''));
     const periodo=(mesNum?VAL_MESES[mesNum-1]+' ':'')+(anio||'')||titulo.replace(/VALORIZACIÓN.*?-/i,'').trim()||titulo;
     // Reemplaza si ya existe el mismo mes/año (o mismo título si no se pudo parsear)
-    const _reemplazadas=(state.valorizacionesLabor||[]).filter(v=>
-      (mesNum&&anio)?(v.mesNum===mesNum&&v.anio===anio):(v.titulo===titulo));
-    state.valorizacionesLabor=(state.valorizacionesLabor||[]).filter(v=>_reemplazadas.indexOf(v)<0);
-    // Lápida a la versión anterior del mismo mes: al fusionar con otros equipos volvería a
-    // aparecer y el mes quedaría duplicado, sumando doble en el dashboard.
-    try{ _reemplazadas.forEach(v=>tombAdd(v.id)); }catch(e){}
-    state.valorizacionesLabor.push({id,titulo,periodo,mesNum,anio,rows,subtotal,descuento,total,importadoEn:Date.now(),_ts:Date.now()});
+    state.valorizacionesLabor=(state.valorizacionesLabor||[]).filter(v=>
+      (mesNum&&anio)?!(v.mesNum===mesNum&&v.anio===anio):(v.titulo!==titulo));
+    state.valorizacionesLabor.push({id,titulo,periodo,mesNum,anio,rows,subtotal,descuento,total,importadoEn:Date.now()});
     valLaborSave();
     input.value='';
     renderValorizacionOp(id);
@@ -16050,14 +16003,12 @@ function eliminarValorizacion(){
   const sel=document.getElementById('val-periodo');const id=sel&&sel.value;if(!id)return;
   if(!confirm('¿Eliminar esta valorización importada?'))return;
   state.valorizacionesLabor=(state.valorizacionesLabor||[]).filter(v=>v.id!==id);
-  try{ tombAdd(id); }catch(e){}          // lápida: ahora que se fusiona, sin esto revive
   valLaborSave();renderValorizacionOp();showNotif('✓ Valorización eliminada');
 }
 
 function guardarValorizacion(){
   const sel=document.getElementById('val-periodo');const id=sel&&sel.value;
   const v=(state.valorizacionesLabor||[]).find(x=>x.id===id);if(!v)return;
-  v._ts=Date.now();   // marca de edición: esta versión gana sobre la copia de otro equipo
   // Persistir local + nube; queda vinculada al dashboard de forma permanente
   valLaborSave();
   // Si tiene mes/año, asegurar que el dashboard apunte a ese mes
@@ -25196,66 +25147,6 @@ async function cmpExportarExcel(){
     setTimeout(()=>URL.revokeObjectURL(url),2000);
     showNotif('📊 Excel de compras generado');
   }catch(e){ showNotif('No se pudo generar el Excel','error'); }
-}
-
-
-// ══ RECUPERAR VALORIZACIONES DESDE LOS RESPALDOS ═════════════════════════════
-// restaurarPeriodo() filtra por RANGO DE FECHAS, y las valorizaciones no tienen fecha: van por
-// mes/año. Por eso quedaban fuera de la restauración aunque snapshotEstado() sí las guarda.
-// Esta función las busca en todos los respaldos de la nube y en el respaldo local, y las
-// devuelve FUSIONANDO: nunca borra ni pisa lo que ya está, solo agrega lo que falte.
-async function recuperarValorizaciones(){
-  showNotif('🔎 Buscando valorizaciones en los respaldos…','warn');
-  const encontradas=[];
-  const tomar=snap=>{
-    const v=snap&&snap.valorizacionesLabor;
-    if(Array.isArray(v)) v.forEach(x=>{ if(x&&x.id) encontradas.push(x); });
-  };
-  // 1) Respaldos de la nube: el último y los de los periodos recientes
-  const periodos=[];
-  try{
-    const hoyD=new Date(); let y=hoyD.getFullYear(), m=hoyD.getMonth()+1;
-    for(let i=0;i<14;i++){ periodos.push(y+'-'+String(m).padStart(2,'0')); m--; if(m<1){m=12;y--;} }
-  }catch(e){}
-  if(typeof SB_ONLINE!=='undefined' && SB_ONLINE){
-    try{
-      const u=await sbLoadModuloEstado('backup_ultimo');
-      if(u.estado==='ok' && u.data && u.data.snap) tomar(u.data.snap);
-    }catch(e){}
-    for(const per of periodos){
-      try{
-        const b=await sbLoadModuloEstado('backup_'+per);
-        if(b.estado==='ok' && b.data) tomar(b.data);
-      }catch(e){}
-    }
-  }
-  // 2) Respaldo local de este equipo
-  try{ const d=localStorage.getItem(VALLAB_KEY); if(d) (JSON.parse(d)||[]).forEach(x=>{ if(x&&x.id) encontradas.push(x); }); }catch(e){}
-
-  if(!encontradas.length){ showNotif('No se encontró ninguna valorización en los respaldos','error'); return []; }
-
-  // Las lápidas se ignoran a propósito: esto es un rescate y lo borrado por el bug de
-  // sincronización quedó marcado como borrado sin que nadie lo decidiera.
-  const antes=(state.valorizacionesLabor||[]).map(v=>v.id);
-  const porMes={}, ts=x=>Number(x&&(x._ts||x.importadoEn))||0;
-  (state.valorizacionesLabor||[]).concat(encontradas).forEach(v=>{
-    if(!(v&&v.mesNum&&v.anio)) return;
-    const k=v.anio+'-'+v.mesNum;
-    if(!porMes[k] || ts(v)>ts(porMes[k])) porMes[k]=v;
-  });
-  const lista=Object.values(porMes);
-  const nuevas=lista.filter(v=>antes.indexOf(v.id)<0);
-  const detalle=lista.map(v=>`  · ${v.periodo||v.titulo}: S/ ${Math.round(v.total||0).toLocaleString('es-PE')}`).join('\n');
-  if(!confirm(`Se recuperaron ${lista.length} valorización(es), ${nuevas.length} que no estaban:\n\n${detalle}\n\n¿Restaurarlas? No se borra nada de lo que ya tienes.`)) return lista;
-
-  // Levantar las lápidas de lo que se restaura, si no la fusión volvería a quitarlo
-  try{ const t=tombLoad(); lista.forEach(v=>{ delete t[String(v.id)]; }); tombPersist(); sbSyncModulo('tombstones', t); }catch(e){}
-  state.valorizacionesLabor=lista;
-  valLaborSave();
-  try{ renderValorizacionOp(); }catch(e){}
-  try{ renderDashboard(); }catch(e){}
-  showNotif(`✅ ${lista.length} valorización(es) restauradas y subidas a la nube`,'ok');
-  return lista;
 }
 
 const CICLO_2625_DESDE = '2026-07';   // periodo (YYYY-MM) desde el que el ciclo 26→25 está activo
