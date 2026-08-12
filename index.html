@@ -2896,7 +2896,11 @@ select option{background:var(--coal3);}
   <div class="mod-pane" style="display:none" id="rrhh-personal">
     <!-- Formulario alta -->
     <div class="card" style="margin-bottom:14px">
-      <div class="section-title">Registrar Personal</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <div class="section-title">Registrar Personal</div>
+        <button class="btn btn-outline" onclick="actualizarPlanillaOficial()" style="border-color:#60a5fa;color:#60a5fa;font-size:12px;padding:7px 14px"
+          title="Concilia el listado con la planilla oficial: actualiza jornal, cargo y guardia, y da de alta a quien falte. No borra a nadie.">📋 Actualizar planilla oficial</button>
+      </div>
       <div class="form-grid">
         <div class="form-group"><label>Nombre Completo</label><input type="text" id="p-nombre" placeholder="Ej: Juan Quispe"></div>
         <div class="form-group"><label>DNI</label><input type="text" id="p-dni" placeholder="12345678"></div>
@@ -4782,6 +4786,7 @@ async function cargarDesdeSB(){
     // Si la nube no tiene personal (tabla inexistente o vacía), sembrar la cuadrilla real local.
     if(!state.personal.length){ try{ seedData(); }catch(e){ console.error('seed personal:',e); } }
     normalizarCargos();
+    try{ if(typeof personalOrdenar==='function') personalOrdenar(); }catch(e){}
     state.perforacion=(perf.data||[]).map(p=>({_id:p.id,fecha:p.fecha,frente:p.frente,metros:Number(p.metros),personas:p.personas,roca:p.roca,obs:p.obs}));
     if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes();
     state.explosivos.historial=(expH.data||[]).map(e=>({_id:e.id,fecha:e.fecha,frente:e.frente,tipo:e.tipo,cantidad:e.cantidad,detalle:e.detalle,precio:Number(e.precio||0)}));
@@ -5214,6 +5219,7 @@ function seedData(){
 }
 
 function poblarSelects(){
+  try{ if(typeof personalOrdenar==='function') personalOrdenar(); }catch(e){}
   const activos=state.personal.filter(p=>p.estado!=='baja');
   ['pl-trabajador','tarea-trabajador'].forEach(id=>{
     const sel=document.getElementById(id);if(!sel)return;
@@ -9030,7 +9036,7 @@ function verHuerfanos(){
   document.getElementById('huerfanos-modal')?.remove();
   const h=almacenHuerfanos();
   const prods=((state.almacen&&state.almacen.productos)||[]).slice()
-    .sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||'')));
+    .sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'}));
   // Agrupar por artículo para reasignar de una sola vez
   const grupos={};
   h.forEach(m=>{
@@ -9500,7 +9506,7 @@ function poblarOperariosSalida(){
   const sel=document.getElementById('sa-operario'); if(!sel) return;
   const cur=sel.value;
   const activos=(state.personal||[]).filter(p=>p&&(p.estado||'activo')==='activo')
-    .sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||'')));
+    .sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'}));
   sel.innerHTML='<option value="">— Seleccionar operario —</option>'+
     activos.map(p=>`<option value="${escAttr(p.nombre)}">${p.nombre}${p.dni?' · '+p.dni:''}</option>`).join('');
   if(cur) sel.value=cur;
@@ -10045,7 +10051,7 @@ function abrirEditarSalida(id){
 function poblarOperariosEditSalida(sel){
   const s=document.getElementById('es-operario'); if(!s) return;
   const activos=(state.personal||[]).filter(p=>p&&(p.estado||'activo')==='activo')
-    .sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||'')));
+    .sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'}));
   // Incluir el operario ya guardado aunque no esté activo, para no perderlo al editar
   const nombres=[...new Set([sel,...activos.map(p=>p.nombre)].filter(Boolean))];
   s.innerHTML='<option value="">— Seleccionar operario —</option>'+nombres.map(n=>`<option value="${escAttr(n)}">${n}</option>`).join('');
@@ -12643,6 +12649,7 @@ function purgarPersonalBaja(){
   showNotif('🗑 '+bajas.length+' trabajador'+(bajas.length!==1?'es':'')+' eliminado'+(bajas.length!==1?'s':'')+' del listado');
 }
 function renderPersonal(){
+  try{ if(typeof personalOrdenar==='function') personalOrdenar(); }catch(e){}
   const activos=state.personal.filter(p=>p.estado!=='baja');
   const bajas=state.personal.filter(p=>p.estado==='baja');
   const g=id=>document.getElementById(id);
@@ -12672,7 +12679,7 @@ function renderPersonal(){
         tr.innerHTML=`
           <td style="padding:10px 12px;font-weight:600;color:var(--text)">${p.nombre}<br><span style="font-size:10px;color:var(--text3)">${p.dni||'—'}</span></td>
           <td style="padding:10px 12px;color:#94a3b8;font-size:12px">${p.rol}</td>
-          <td style="padding:10px 12px"><span style="color:${c};font-size:12px;font-weight:600">${FL[p.frente]||'—'}</span></td>
+          <td style="padding:10px 12px"><span style="color:${c};font-size:12px;font-weight:600">${FL[p.frente]||(p.guardia?'<span style="background:var(--coal5);color:var(--text2);padding:2px 8px;border-radius:10px;font-size:11px">'+p.guardia+'</span>':'—')}</span></td>
           <td style="padding:10px 12px;color:#fbbf24;font-weight:600">${esSueldoReservado(p.rol)?'<span title="Sueldo reservado — lo gestiona Finanzas" style="color:#94a3b8">🔒</span>':'S/ '+p.jornal}</td>
           <td style="padding:10px 12px">${estadoBadge}</td>
           <td style="padding:10px 12px">
@@ -14357,7 +14364,7 @@ function mergeMantKits(local,nube){
   (nube||[]).forEach(r=>{ if(r&&r.id==null) out.push(r); });
   return out.filter(r=>!(r&&r.id!=null&&typeof tombHas==='function'&&tombHas(r.id)));
 }
-function personalSave(){try{localStorage.setItem(PERSONAL_KEY,JSON.stringify(state.personal||[]));}catch(e){} try{ sbSyncModulo('personal', state.personal||[]); }catch(e){}}
+function personalSave(){try{ if(typeof personalOrdenar==='function') personalOrdenar(); }catch(e){} try{localStorage.setItem(PERSONAL_KEY,JSON.stringify(state.personal||[]));}catch(e){} try{ sbSyncModulo('personal', state.personal||[]); }catch(e){}}
 function tareasSave(){try{localStorage.setItem(TAREAS_KEY,JSON.stringify(state.tareas||[]));}catch(e){} try{ sbSyncModulo('tareas', state.tareas||[]); }catch(e){}}
 // Salidas del Stock Remanente (movimientos que controla Logística, NO afectan NV3190)
 const REMSAL_KEY='atmin_remanente_salidas';
@@ -25456,6 +25463,121 @@ async function recuperarPersonal(){
   try{ poblarSelects(); renderPersonal(); renderCostoRRHH(); }catch(e){}
   alert('✅ '+faltan.length+' persona(s) repuestas en el listado.');
   return faltan;
+}
+
+
+// ══ PLANILLA OFICIAL ═════════════════════════════════════════════════════════
+// Lista de referencia entregada por Administración. Se concilia por DNI (y por nombre para quien
+// no tiene DNI): a quien ya está se le actualizan jornal, cargo y guardia; a quien falta se le da
+// de alta. NUNCA borra ni da de baja a nadie que no figure aquí.
+const PLANILLA_OFICIAL=[
+  {nombre:"LUY SAAVEDRA CRISTIAN",dni:"74170577",jornal:500.00,rol:"JEFE DE PROYECTO",guardia:"SUPERFICIE"},
+  {nombre:"ALCANTARA RODRIGUEZ PERCY",dni:"70665725",jornal:183.33,rol:"JEFE DE FINANZAS",guardia:"SUPERFICIE"},
+  {nombre:"PIÑELLA VELIZ CARLOS MANUEL EDUARDO",dni:"46199017",jornal:150.00,rol:"ADMINISTRADOR",guardia:"SUPERFICIE"},
+  {nombre:"RODRIGUEZ SUNCION JORGE LUIS",dni:"75133914",jornal:120.00,rol:"LOGISTICO",guardia:"SUPERFICIE"},
+  {nombre:"AMARANTO BERNILLA CARLOS",dni:"75973823",jornal:233.33,rol:"JEFE DE GUARDIA",guardia:"SUPERFICIE"},
+  {nombre:"SOTELO BENGOLEA MANUEL KENEDY",dni:"73486403",jornal:200.00,rol:"JEFE DE GUARDIA",guardia:"B"},
+  {nombre:"REDHEAD ZAPATA GEORGE",dni:"42946095",jornal:333.33,rol:"ING. RESIDENTE",guardia:"SUPERFICIE"},
+  {nombre:"SALDAÑA VILLANUEVA EDINSON",dni:"41301662",jornal:183.33,rol:"CAPATAZ",guardia:"A"},
+  {nombre:"RABINES TERRONES ELVIS YULINIO",dni:"71236387",jornal:133.33,rol:"SUPERVISOR",guardia:"SUPERFICIE"},
+  {nombre:"VALVERDE TERRONES MICHAEL LEE",dni:"74542147",jornal:133.33,rol:"SUPERVISOR",guardia:"SUPERFICIE"},
+  {nombre:"ALIAGA HOYOS JAVIER GUSTAVO",dni:"40070886",jornal:166.67,rol:"ADMINISTRADOR",guardia:"SUPERFICIE"},
+  {nombre:"QUISPE RUIZ ANTHONY EDINSON",dni:"76262059",jornal:200.00,rol:"JEFE DE GUARDIA",guardia:""},
+  {nombre:"MELGAREJO DELGADO HILDER",dni:"73529707",jornal:200.00,rol:"MECANICO JEFE",guardia:"SUPERFICIE"},
+  {nombre:"MIRANDA RUIZ HENRY JAMER",dni:"47964727",jornal:130.00,rol:"OP. SCOOP",guardia:"A"},
+  {nombre:"RIOS PONCE EDWIN",dni:"72803258",jornal:115.00,rol:"PERFORISTA MINA M2",guardia:"B"},
+  {nombre:"PRETEL LEON WILBER ANGEL",dni:"10042002",jornal:130.00,rol:"PERFORISTA MINA M1",guardia:"C"},
+  {nombre:"RIOS ESCOBEDO CRISTIAN GIMI",dni:"76581867",jornal:133.33,rol:"OP. TRACTOR",guardia:"SUPERFICIE"},
+  {nombre:"GORMAS ROMERO FELIPE SAMUEL",dni:"41707906",jornal:120.00,rol:"MECANICO - SOLDADOR",guardia:"SUPERFICIE"},
+  {nombre:"FRANCISCO VILCA VICTOR EDGARDO",dni:"26959973",jornal:130.00,rol:"PERFORISTA MINA M1",guardia:"B"},
+  {nombre:"LUIS LEONARDO CIRILO",dni:"74054315",jornal:130.00,rol:"PERFORISTA MINA M1",guardia:"B"},
+  {nombre:"CASTILLO CHANTA JESUS JOEL",dni:"48368695",jornal:100.00,rol:"CONDUCTOR",guardia:"SUPERFICIE"},
+  {nombre:"PAULOT SEGURA EDY VICTOR",dni:"44436221",jornal:166.67,rol:"OP. EXCAVADORA",guardia:"SUPERFICIE"},
+  {nombre:"ROJAS GORMAS GUILLERMO RUBEN",dni:"44604194",jornal:130.00,rol:"PERFORISTA MINA M1",guardia:"C"},
+  {nombre:"MOYA DURAN ROVINSON ARISTIDES",dni:"46327526",jornal:130.00,rol:"PERFORISTA MINA M1",guardia:"A"},
+  {nombre:"LUIS LEONARDO GUILLERMO",dni:"45259793",jornal:130.00,rol:"PERFORISTA MINA M1",guardia:"C"},
+  {nombre:"JIMENEZ AZABACHE GILMER SANTOS",dni:"80639379",jornal:83.33,rol:"COMPRENSORISTA",guardia:"A"},
+  {nombre:"MOYA DURAN MISAEL",dni:"76755524",jornal:120.00,rol:"OP. DUMPER",guardia:"A"},
+  {nombre:"RIVAS RODRIGUEZ ALI EDUARDO",dni:"21404543",jornal:120.00,rol:"OP. DUMPER",guardia:"B"},
+  {nombre:"MUÑOZ JARA SANTOS",dni:"48307876",jornal:130.00,rol:"PERFORISTA MINA M1",guardia:"B"},
+  {nombre:"SOTELO BENGOLEA STEFANO IMANOL NARCISO",dni:"70200826",jornal:100.00,rol:"COMPRENSORISTA",guardia:"SUPERFICIE"},
+  {nombre:"INFANTES TANTAQUILLA SEGUNDO ANDRES",dni:"91450112",jornal:120.00,rol:"OP. DUMPER",guardia:"C"},
+  {nombre:"LUIS LEONARDO CRISTOBAL",dni:"47791659",jornal:100.00,rol:"AYUDANTE MINA",guardia:"C"},
+  {nombre:"MERCEDES LUIS WILDER",dni:"46908895",jornal:100.00,rol:"AYUDANTE MINA",guardia:"C"},
+  {nombre:"OSCATEGUI AYALA RAUL BENJAMIN",dni:"4209909",jornal:130.00,rol:"OP. SCOOP",guardia:"B"},
+  {nombre:"RENGIFO AZABACHE ANTHONY JEAN PAUL",dni:"74586708",jornal:83.33,rol:"COMPRENSORISTA",guardia:"C"},
+  {nombre:"DOMINGUEZ SEGURA HECTOR JAVIER",dni:"45761582",jornal:100.00,rol:"AYUDANTE MINA",guardia:"B"},
+  {nombre:"PINEDO RODRIGUEZ CESAR",dni:"46032937",jornal:130.00,rol:"OP. SCOOP",guardia:"C"},
+  {nombre:"ORTIZ RAMOS JOSE JUVER",dni:"44493547",jornal:100.00,rol:"AYUDANTE MINA",guardia:"A"},
+  {nombre:"MORALES RUIZ GEINER EBER",dni:"74318120",jornal:100.00,rol:"AYUDANTE MINA",guardia:"A"},
+  {nombre:"SOLANO VELARDE DIEGO ALBERTO",dni:"46992826",jornal:130.00,rol:"PERFORISTA MINA M1",guardia:"A"},
+  {nombre:"AVILA RODRIGUEZ JOSE LUIS",dni:"60196863",jornal:120.00,rol:"OP. DUMPER",guardia:"A"},
+  {nombre:"RODRIGUEZ AZABACHE MANUEL RICARDO",dni:"42506759",jornal:83.33,rol:"COMPRENSORISTA",guardia:"B"},
+  {nombre:"MORALES DIAZ NILS ERICSSON",dni:"62574313",jornal:83.33,rol:"MECANICO",guardia:"SUPERFICIE"},
+  {nombre:"GORMAS ROMERO JOSUE NEMIAS",dni:"71782247",jornal:130.00,rol:"PERFORISTA MINA M1",guardia:"A"},
+  {nombre:"AGUILA CARHUAPOMA MERCEDEZ",dni:"77126333",jornal:100.00,rol:"AYUDANTE MINA",guardia:"A"},
+  {nombre:"QUISPE BERNAL DEIVI YOEL",dni:"48867745",jornal:130.00,rol:"PERFORISTA MINA M1",guardia:"A"},
+  {nombre:"YAHUARCANI YAICATE JOAQUIN",dni:"60838913",jornal:120.00,rol:"PERFORISTA MINA M2",guardia:"C"},
+  {nombre:"POLO BRICEÑO CESARIO",dni:"42727576",jornal:100.00,rol:"AYUDANTE MINA",guardia:"C"},
+  {nombre:"LUIS POLO MILSER ALFREDO",dni:"60352381",jornal:100.00,rol:"AYUDANTE MINA",guardia:"B"},
+  {nombre:"ROJAS GORMAS PERCY RAFAEL",dni:"71779290",jornal:100.00,rol:"AYUDANTE MINA",guardia:"B"},
+  {nombre:"LOZADA GONZALES DIEGO ARMANDO",dni:"71860312",jornal:100.00,rol:"MAESTRO OBRA",guardia:"SUPERFICIE"},
+  {nombre:"PEREDA BASTIDAS JESUS",dni:"29322694",jornal:100.00,rol:"AYUDANTE OBRA",guardia:"SUPERFICIE"},
+  {nombre:"MATTOS CASTAÑEDA ADELINO",dni:"",jornal:100.00,rol:"COMPRENSORISTA",guardia:"MONTE"},
+  {nombre:"TERRONES PEÑA FRANCISCO",dni:"41346223",jornal:200.00,rol:"CAPATAZ",guardia:"MONTE"},
+  {nombre:"TERRONES PEÑA OMERO JESUS",dni:"70183242",jornal:130.00,rol:"PERFORISTA MINA M1",guardia:"MONTE"},
+  {nombre:"MURGA TOLENTINO LEYBER",dni:"72148477",jornal:115.00,rol:"PERFORISTA MINA M2",guardia:"MONTE"},
+  {nombre:"MURGA OTINIANO EDGAR ELISEO",dni:"62354818",jornal:100.00,rol:"AYUDANTE MINA",guardia:"MONTE"},
+  {nombre:"PAREDES MONZON TOMAS",dni:"60629624",jornal:100.00,rol:"AYUDANTE MINA",guardia:"MONTE"}
+];
+
+// Orden alfabético del personal. Se aplica sobre state.personal, así TODOS los desplegables que
+// leen de ahí —entrega de materiales, tareos, RRHH— salen ordenados sin tocar cada uno.
+function personalOrdenar(){
+  try{
+    (state.personal||[]).sort((a,b)=>String(a&&a.nombre||'').localeCompare(String(b&&b.nombre||''),'es',{sensitivity:'base'}));
+  }catch(e){}
+  return state.personal;
+}
+const _plNorm=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
+function actualizarPlanillaOficial(){
+  const porDni={}, porNom={};
+  (state.personal||[]).forEach(p=>{ if(p){ if(p.dni) porDni[String(p.dni).trim()]=p; porNom[_plNorm(p.nombre)]=p; } });
+  const nuevos=[], cambios=[];
+  PLANILLA_OFICIAL.forEach(o=>{
+    const ex = (o.dni && porDni[o.dni]) || porNom[_plNorm(o.nombre)];
+    if(ex){
+      const d=[];
+      if(Number(ex.jornal)!==Number(o.jornal)) d.push('jornal '+(ex.jornal!=null?ex.jornal:'—')+' → '+o.jornal);
+      if(_plNorm(ex.rol)!==_plNorm(o.rol))     d.push('cargo '+(ex.rol||'—')+' → '+o.rol);
+      if(_plNorm(ex.guardia)!==_plNorm(o.guardia)) d.push('guardia '+(ex.guardia||'—')+' → '+(o.guardia||'—'));
+      if(!ex.dni && o.dni) d.push('DNI '+o.dni);
+      if(d.length){ cambios.push({p:ex, o, d}); }
+    }else{ nuevos.push(o); }
+  });
+  if(!nuevos.length && !cambios.length){
+    alert('La planilla ya está al día: '+PLANILLA_OFICIAL.length+' personas verificadas, sin diferencias.'); personalOrdenar(); renderPersonal(); return;
+  }
+  const txt='PLANILLA OFICIAL — '+PLANILLA_OFICIAL.length+' personas\n\n'+
+    'ALTAS NUEVAS: '+nuevos.length+'\n'+nuevos.slice(0,20).map(o=>'  + '+o.nombre+' — '+o.rol+(o.guardia?' ('+o.guardia+')':'')).join('\n')+
+      (nuevos.length>20?'\n  + …y '+(nuevos.length-20)+' más':'')+
+    '\n\nACTUALIZACIONES: '+cambios.length+'\n'+cambios.slice(0,20).map(c=>'  ~ '+c.p.nombre+': '+c.d.join(', ')).join('\n')+
+      (cambios.length>20?'\n  ~ …y '+(cambios.length-20)+' más':'')+
+    '\n\nNo se da de baja ni se borra a nadie. ¿Aplicar?';
+  if(!confirm(txt)) return;
+  cambios.forEach(c=>{
+    c.p.jornal=Number(c.o.jornal); c.p.rol=c.o.rol; c.p.guardia=c.o.guardia||'';
+    if(!c.p.dni && c.o.dni) c.p.dni=c.o.dni;
+    c.p._ts=Date.now();
+  });
+  let seq=Date.now();
+  nuevos.forEach(o=>{ state.personal.push({id:++seq, nombre:o.nombre, dni:o.dni||'', rol:o.rol,
+    guardia:o.guardia||'', frente:null, estado:'activo', jornal:Number(o.jornal),
+    ingreso:(typeof hoy==='function'?hoy():''), _ts:seq}); });
+  personalOrdenar();
+  try{ personalSave(); }catch(e){}
+  try{ poblarSelects(); renderPersonal(); renderCostoRRHH(); }catch(e){}
+  alert('✅ Planilla actualizada.\n\n'+nuevos.length+' alta(s) nueva(s)\n'+cambios.length+' actualización(es)\n\nTotal en el listado: '+state.personal.length+' personas.');
 }
 
 const CICLO_2625_DESDE = '2026-07';   // periodo (YYYY-MM) desde el que el ciclo 26→25 está activo
