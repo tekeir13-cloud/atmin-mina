@@ -2542,6 +2542,9 @@ select option{background:var(--coal3);}
                 letter-spacing:0.3px">
           Cierre Mensual
         </button>
+        <button id="btn-diagnostico" onclick="diagnosticarPerdidas(prompt('¿Qué periodo diagnostico? (AAAA-MM)','2026-07'))"
+          title="Solo lectura: compara el periodo contra el respaldo y dice qué módulo perdió registros" class="btn btn-outline"
+          style="border-color:#f59e0b;color:#f59e0b">🔍 Diagnóstico</button>
         <button id="btn-recuperar-val" onclick="recuperarValorizaciones()" title="Busca en todos los respaldos las valorizaciones que falten y las restaura sin borrar nada"
           class="btn btn-outline" style="border-color:#22d3a5;color:#22d3a5">🛟 Recuperar valorizaciones</button>
         <button id="btn-respaldo" onclick="respaldoCompleto()" title="Respaldo completo: nube + descarga (JSON y Excel)"
@@ -25226,6 +25229,63 @@ async function recuperarValorizaciones(){
   try{ renderDashboard(); }catch(e){}
   showNotif(`✅ ${lista.length} valorización(es) restauradas y subidas a la nube`,'ok');
   return lista;
+}
+
+
+// ══ DIAGNÓSTICO: QUÉ SE PERDIÓ Y DE QUÉ MÓDULO ═══════════════════════════════
+// SOLO LECTURA. Compara lo que hay hoy contra el respaldo del periodo y dice, módulo por
+// módulo, cuántos registros faltan y cuánto dinero representan. No escribe nada, no sube nada.
+async function diagnosticarPerdidas(periodo){
+  periodo = periodo || '2026-07';
+  showNotif('🔎 Comparando '+periodo+' contra el respaldo…','warn');
+  let snap=null;
+  try{
+    const b=await sbLoadModuloEstado('backup_'+periodo);
+    if(b.estado==='ok' && b.data) snap=b.data;
+    if(!snap){ const u=await sbLoadModuloEstado('backup_ultimo');
+      if(u.estado==='ok' && u.data && u.data.periodo===periodo) snap=u.data.snap; }
+  }catch(e){}
+  if(!snap){ alert('No hay respaldo guardado del periodo '+periodo+'.\nSin respaldo no se puede comparar.'); return null; }
+
+  const enMes=f=>{ try{ return typeof _finEnPre==='function' ? _finEnPre(f,periodo) : String(f||'').slice(0,7)===periodo; }catch(e){ return false; } };
+  const S=n=>'S/ '+Math.round(n||0).toLocaleString('es-PE');
+  const filas=[];
+  const comparar=(label, ahora, antes, montoDe)=>{
+    const A=(ahora||[]).filter(r=>enMes(r&&r.fecha)), B=(antes||[]).filter(r=>enMes(r&&r.fecha));
+    const ids=new Set(A.map(r=>String(r.id)));
+    const faltan=B.filter(r=>!ids.has(String(r.id)));
+    const monto=montoDe?faltan.reduce((s,r)=>s+(montoDe(r)||0),0):0;
+    filas.push({label, ahora:A.length, antes:B.length, faltan:faltan.length, monto});
+  };
+
+  comparar('Combustible · petróleo', (typeof combCargar==='function')?combCargar('pet'):[],
+           snap.combustible&&snap.combustible.pet, r=>(r.cantidad||0)*(r.precio||0));
+  comparar('Combustible · gasolina', (typeof combCargar==='function')?combCargar('gas'):[],
+           snap.combustible&&snap.combustible.gas, r=>(r.cantidad||0)*(r.precio||0));
+  comparar('Tareos (planillas)', state.tareas, snap.tareas, r=>{
+    const p=(state.personal||[]).find(pp=>String(pp.id)===String(r.trabajadorId));
+    return ((r.jornal!=null?r.jornal:(p?p.jornal:0))||0)*(Number(r.multiplicador)||1); });
+  comparar('Reportes de compresorista', state.compresorista, snap.compresorista, null);
+  comparar('Mantenimiento', state.mantenimiento, snap.mantenimiento, r=>r.costo||0);
+  comparar('Reportes de guardia', state.reportesGuardia, snap.reportesGuardia, null);
+  comparar('Servicios a terceros',
+           (typeof servCargar==='function')?servCargar():[], snap.serviciosTerceros, r=>r.monto||0);
+
+  const val=(state.valorizacionesLabor||[]).find(v=>v.anio+'-'+String(v.mesNum).padStart(2,'0')===periodo);
+  const valB=(snap.valorizacionesLabor||[]).find(v=>v.anio+'-'+String(v.mesNum).padStart(2,'0')===periodo);
+  const perdidos=filas.filter(f=>f.faltan>0);
+  const totalPerdido=perdidos.reduce((s,f)=>s+f.monto,0);
+
+  const txt='DIAGNÓSTICO DE '+periodo+'\n'+
+    'Respaldo del '+String(snap._ts||'').slice(0,16).replace('T',' ')+'\n\n'+
+    filas.map(f=>(f.faltan>0?'  ⚠ ':'  ✓ ')+f.label+': '+f.ahora+' de '+f.antes+
+      (f.faltan>0?('  → FALTAN '+f.faltan+(f.monto?' ('+S(f.monto)+')':'')):'')).join('\n')+
+    '\n\n  Valorización: '+(val?S(val.total):'AUSENTE')+
+      (valB?('   ·  en el respaldo: '+S(valB.total)):'   ·  tampoco está en el respaldo')+
+    (perdidos.length? ('\n\n➜ Faltan registros en '+perdidos.length+' módulo(s). Gasto no contabilizado: '+S(totalPerdido))
+                    : '\n\n➜ No falta ningún registro respecto al respaldo.');
+  alert(txt); console.log(txt); console.table(filas);
+  return filas;
 }
 
 const CICLO_2625_DESDE = '2026-07';   // periodo (YYYY-MM) desde el que el ciclo 26→25 está activo
