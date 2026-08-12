@@ -2542,6 +2542,9 @@ select option{background:var(--coal3);}
                 letter-spacing:0.3px">
           Cierre Mensual
         </button>
+        <button id="btn-recuperar-per" onclick="recuperarPeriodo(prompt('¿Qué periodo recupero? (AAAA-MM)','2026-07'))"
+          title="Repone los registros que faltan segun el respaldo. Solo agrega, no borra nada." class="btn btn-outline"
+          style="border-color:#22d3a5;color:#22d3a5">♻ Recuperar periodo</button>
         <button id="btn-diagnostico" onclick="diagnosticarPerdidas(prompt('¿Qué periodo diagnostico? (AAAA-MM)','2026-07'))"
           title="Solo lectura: compara el periodo contra el respaldo y dice qué módulo perdió registros" class="btn btn-outline"
           style="border-color:#f59e0b;color:#f59e0b">🔍 Diagnóstico</button>
@@ -25286,6 +25289,82 @@ async function diagnosticarPerdidas(periodo){
                     : '\n\n➜ No falta ningún registro respecto al respaldo.');
   alert(txt); console.log(txt); console.table(filas);
   return filas;
+}
+
+
+// ══ RECUPERAR LOS REGISTROS QUE FALTAN EN UN PERIODO ═════════════════════════
+// Devuelve al sistema los registros que están en el respaldo y ya no en el estado. Es ADITIVO:
+// solo agrega lo que falta, nunca borra ni pisa lo que ya tienes. Muestra qué va a reponer y
+// cuánto gasto representa, y pide confirmación antes de escribir.
+async function recuperarPeriodo(periodo){
+  periodo = periodo || '2026-07';
+  showNotif('🔎 Buscando en el respaldo de '+periodo+'…','warn');
+  let snap=null;
+  try{
+    const b=await sbLoadModuloEstado('backup_'+periodo);
+    if(b.estado==='ok' && b.data) snap=b.data;
+    if(!snap){ const u=await sbLoadModuloEstado('backup_ultimo');
+      if(u.estado==='ok' && u.data && u.data.periodo===periodo) snap=u.data.snap; }
+  }catch(e){}
+  if(!snap){ alert('No hay respaldo guardado del periodo '+periodo+'.'); return null; }
+
+  const enMes=f=>{ try{ return typeof _finEnPre==='function' ? _finEnPre(f,periodo) : String(f||'').slice(0,7)===periodo; }catch(e){ return false; } };
+  const S=n=>'S/ '+Math.round(n||0).toLocaleString('es-PE');
+  const faltantesDe=(ahora,antes)=>{
+    const ids=new Set((ahora||[]).map(r=>String(r&&r.id)));
+    return (antes||[]).filter(r=>r&&enMes(r.fecha)&&!ids.has(String(r.id)));
+  };
+  const jornalDe=r=>{ const p=(state.personal||[]).find(pp=>String(pp.id)===String(r.trabajadorId));
+    return ((r.jornal!=null?r.jornal:(p?p.jornal:0))||0)*(Number(r.multiplicador)||1); };
+
+  const petAhora=(typeof combCargar==='function')?combCargar('pet'):[];
+  const gasAhora=(typeof combCargar==='function')?combCargar('gas'):[];
+  const fPet=faltantesDe(petAhora,(snap.combustible||{}).pet);
+  const fGas=faltantesDe(gasAhora,(snap.combustible||{}).gas);
+  const fTar=faltantesDe(state.tareas,snap.tareas);
+  const fMan=faltantesDe(state.mantenimiento,snap.mantenimiento);
+  const fCom=faltantesDe(state.compresorista,snap.compresorista);
+  const fRG =faltantesDe(state.reportesGuardia,snap.reportesGuardia);
+
+  const mComb=[...fPet,...fGas].reduce((s,r)=>s+(r.cantidad||0)*(r.precio||0),0);
+  const mTar =fTar.reduce((s,r)=>s+jornalDe(r),0);
+  const mMan =fMan.reduce((s,r)=>s+(r.costo||0),0);
+  const total=fPet.length+fGas.length+fTar.length+fMan.length+fCom.length+fRG.length;
+  if(!total){ alert('No falta ningún registro de '+periodo+' respecto al respaldo.'); return []; }
+
+  const det=[
+    fPet.length?'  · Combustible petróleo: '+fPet.length+' registro(s)':'',
+    fGas.length?'  · Combustible gasolina: '+fGas.length+' registro(s)':'',
+    fTar.length?'  · Tareos: '+fTar.length+' ('+S(mTar)+' de planilla)':'',
+    fMan.length?'  · Mantenimiento: '+fMan.length+' ('+S(mMan)+')':'',
+    fCom.length?'  · Reportes de compresorista: '+fCom.length:'',
+    fRG.length ?'  · Reportes de guardia: '+fRG.length:''
+  ].filter(Boolean).join('\n');
+  if(!confirm('Se repondrán '+total+' registro(s) de '+periodo+':\n\n'+det+
+     '\n\nGasto que vuelve a contabilizarse: '+S(mComb+mTar+mMan)+
+     '\n\nSolo se AGREGA lo que falta. No se borra ni se modifica nada de lo que ya tienes.')) return null;
+
+  // Las lápidas de lo repuesto se levantan: se perdió por el fallo de sincronización,
+  // nadie decidió borrarlo.
+  try{ const t=tombLoad();
+    [...fPet,...fGas,...fTar,...fMan,...fCom,...fRG].forEach(r=>{ delete t[String(r.id)]; });
+    tombPersist(); sbSyncModulo('tombstones', t); }catch(e){}
+
+  if(fPet.length) combGuardar('pet', petAhora.concat(fPet));
+  if(fGas.length) combGuardar('gas', gasAhora.concat(fGas));
+  if(fTar.length){ state.tareas=(state.tareas||[]).concat(fTar); tareasSave(); }
+  if(fMan.length){ state.mantenimiento=(state.mantenimiento||[]).concat(fMan);
+    try{ if(typeof mantSave==='function') mantSave(); }catch(e){} }
+  if(fCom.length){ state.compresorista=(state.compresorista||[]).concat(fCom);
+    try{ localStorage.setItem('atmin_compresorista',JSON.stringify(state.compresorista)); sbSyncModulo('compresorista', state.compresorista); }catch(e){} }
+  if(fRG.length){ state.reportesGuardia=(state.reportesGuardia||[]).concat(fRG);
+    try{ if(typeof rgSave==='function') rgSave(); else sbSyncModulo('reportes_guardia', state.reportesGuardia); }catch(e){} }
+
+  try{ _ejecMes=periodo; }catch(e){}
+  try{ renderDashboard(); }catch(e){}
+  alert('✅ '+total+' registro(s) repuestos.\nGasto recuperado: '+S(mComb+mTar+mMan)+
+        '\n\nRevisa el dashboard en '+periodo+'.');
+  return {fPet,fGas,fTar,fMan,fCom,fRG};
 }
 
 const CICLO_2625_DESDE = '2026-07';   // periodo (YYYY-MM) desde el que el ciclo 26→25 está activo
