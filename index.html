@@ -6924,7 +6924,7 @@ function _rtAplicarModulo(modulo, data){
   const setLS=(k,v)=>{ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} };
   const M=(typeof mergeSnapById==='function')?mergeSnapById:((a,b)=>b||a||[]);
   switch(modulo){
-    case 'almacen':            if(data&&typeof data==='object'){ const prevAlm=state.almacen||{}; let a=Object.assign({}, prevAlm, data); if(typeof mergeSnapById==='function'){ a.ingresos=mergeSnapById(data.ingresos||[], prevAlm.ingresos||[]); a.salidas=(typeof mergeById_ts==='function')?mergeById_ts(data.salidas||[], prevAlm.salidas||[]):mergeSnapById(data.salidas||[], prevAlm.salidas||[]); a.nv2820Apertura=(typeof mergeById_ts==='function')?mergeById_ts(data.nv2820Apertura||[], prevAlm.nv2820Apertura||[]):(data.nv2820Apertura||prevAlm.nv2820Apertura||[]); a.inventarioInicial=mergeSnapById(data.inventarioInicial||[], prevAlm.inventarioInicial||[]); const exN=data.explosivos||prevAlm.explosivos||{ingresos:[],salidas:[]}, exP=prevAlm.explosivos||{ingresos:[],salidas:[]}; a.explosivos={...exN, ingresos:mergeSnapById(exN.ingresos||[], exP.ingresos||[]), salidas:mergeSnapById(exN.salidas||[], exP.salidas||[])}; } /* MAESTRO EN TIEMPO REAL: unir producto por producto. Antes llegaba el maestro de otro equipo y
+    case 'almacen':            if(data&&typeof data==='object'){ const prevAlm=state.almacen||{}; let a=Object.assign({}, prevAlm, data); if(typeof mergeSnapById==='function'){ a.ingresos=mergeSnapById(data.ingresos||[], prevAlm.ingresos||[]); a.salidas=(typeof mergeById_ts==='function')?mergeById_ts(data.salidas||[], prevAlm.salidas||[]):mergeSnapById(data.salidas||[], prevAlm.salidas||[]); a.nv2820Apertura=(typeof mergeById_ts==='function')?mergeById_ts(data.nv2820Apertura||[], prevAlm.nv2820Apertura||[]):(data.nv2820Apertura||prevAlm.nv2820Apertura||[]); a.inventarioInicial=mergeSnapById(data.inventarioInicial||[], prevAlm.inventarioInicial||[]); const exN=data.explosivos||prevAlm.explosivos||{ingresos:[],salidas:[]}, exP=prevAlm.explosivos||{ingresos:[],salidas:[]}; a.explosivos={...exN, ingresos:_exploMergeMov(exN.ingresos||[], exP.ingresos||[]), salidas:_exploMergeMov(exN.salidas||[], exP.salidas||[])}; } /* MAESTRO EN TIEMPO REAL: unir producto por producto. Antes llegaba el maestro de otro equipo y
    reemplazaba la lista entera: los códigos que ACABABAS de crear aquí desaparecían de la pantalla
    sin tocar nada. Ahora se unen por id/código y solo una lápida borra. */
 if(typeof _mergeProductos==='function'){ a.productos=_mergeProductos(prevAlm.productos||[], data.productos||[], prevAlm.productosTs, data.productosTs); a.productosTs=Math.max(Number(prevAlm.productosTs||0), Number(data.productosTs||0)); }
@@ -7114,6 +7114,26 @@ function _mergeProductos(a,b,tsA,tsB){
   (bGana?(b||[]):(a||[])).forEach(p=>put(p,true));    // luego el más nuevo, que se impone
   return out;
 }
+// Fusiona movimientos de explosivos por id dejando ganar la EDICIÓN más reciente.
+// Antes se usaba mergeSnapById, que conserva la primera aparición del id: como la copia de la
+// nube se recorre primero, cualquier corrección hecha aquí se perdía en el acto —incluso al
+// subirla, porque la subida fusiona contra la nube antes de escribir. Editar un ingreso no
+// guardaba nada y el número volvía solo.
+// Se usa `_edit` y NO `_ts` a propósito: `_ts` decide si el movimiento es anterior al corte del
+// saldo base (EXPLO_STOCK_BASE_CUT). Tocarlo al editar movería el movimiento al otro lado del
+// corte y lo contaría dos veces.
+function _exploMergeMov(a,b){
+  const by={}, order=[];
+  const put=r=>{
+    if(!r) return;
+    if(r.id!=null && typeof tombHas==='function' && tombHas(r.id)) return;
+    const k=(r.id!=null)?('id:'+r.id):('j:'+JSON.stringify(r));
+    if(!(k in by)){ order.push(k); by[k]=r; return; }
+    if((Number(r._edit)||0) > (Number(by[k]._edit)||0)) by[k]=r;   // la corrección más nueva manda
+  };
+  (a||[]).forEach(put); (b||[]).forEach(put);
+  return order.map(k=>by[k]);
+}
 function _almMergeSnaps(a,b){
   a=a||{}; b=b||{};
   const M=(x,y)=>(typeof mergeSnapById==='function')?mergeSnapById(x||[], y||[]):(((x&&x.length)?x:y)||[]);
@@ -7134,7 +7154,7 @@ function _almMergeSnaps(a,b){
     // Stock inicial del NV2820: fusión por id con _ts reciente (antes se reemplazaba y un equipo
     // con copia vieja/vacía borraba lo que otro había cargado, p.ej. los 100 sacos de cemento).
     nv2820Apertura:Mts(a.nv2820Apertura,b.nv2820Apertura),
-    explosivos:{ ...exA, ...exB, ingresos:M(exA.ingresos,exB.ingresos), salidas:M(exA.salidas,exB.salidas) },
+    explosivos:{ ...exA, ...exB, ingresos:_exploMergeMov(exA.ingresos,exB.ingresos), salidas:_exploMergeMov(exA.salidas,exB.salidas) },
     productos, productosTs };
   ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','exploStockBaseV','catalogVersion','almExcelV','stockCorteTs','aguaFixV']
     .forEach(k=>{ const mx=Math.max(Number(a[k]||0), Number(b[k]||0)); if(mx) out[k]=mx; });
@@ -10935,6 +10955,8 @@ function editarMovimientoExplosivo(id,tipo){
   const preCorte=_exploEsPreCorte(mov);
   mov.cajas=cajas; mov.unidades=unidades; mov.totalUnidades=nuevoTot;
   mov.vale=sv.trim()||mov.vale;
+  mov._edit=Date.now();   // marca de corrección: gana sobre la copia vieja de la nube.
+                          // NO se toca _ts: define de qué lado del corte del saldo base cae.
   if(preCorte) _exploAjustarBase(mov.producto, tipo==='salida'?-delta:+delta);  // ajustar lo baked en la base
   almacenSave();
   renderExploTab();
