@@ -2542,6 +2542,9 @@ select option{background:var(--coal3);}
                 letter-spacing:0.3px">
           Cierre Mensual
         </button>
+        <button id="btn-recuperar-personal" onclick="recuperarPersonal()"
+          title="Busca en todas las copias al personal que falte en el listado y lo repone. Solo agrega." class="btn btn-outline"
+          style="border-color:#60a5fa;color:#60a5fa">👷 Recuperar personal</button>
         <button id="btn-recuperar-per" onclick="recuperarPeriodo(prompt('¿Qué periodo recupero? (AAAA-MM)','2026-07'))"
           title="Repone los registros que faltan segun el respaldo. Solo agrega, no borra nada." class="btn btn-outline"
           style="border-color:#22d3a5;color:#22d3a5">♻ Recuperar periodo</button>
@@ -25401,6 +25404,58 @@ async function recuperarPeriodo(periodo){
   alert('✅ '+total+' registro(s) repuestos.\nGasto recuperado: '+S(mComb+mTar+mMan)+
         '\n\nRevisa el dashboard en '+periodo+'.');
   return {fPet,fGas,fTar,fMan,fCom,fRG};
+}
+
+
+// ══ PERSONAL: QUIÉN FALTA Y RECUPERARLO ══════════════════════════════════════
+// Al cargar, state.personal se REEMPLAZA con lo que tenga la tabla `personal`. Si el alta de un
+// trabajador no llegó a esa tabla (sin señal, permisos, columna faltante), queda solo en la copia
+// local y en el snapshot del módulo; si además ese snapshot no subió, desaparece de la lista al
+// recargar. Esto lo busca en TODAS las copias y lo repone.
+// Es ADITIVO: solo agrega a quien falte, nunca borra ni modifica a nadie.
+async function recuperarPersonal(){
+  showNotif('🔎 Buscando personal en las copias…','warn');
+  const halladas=[]; const de={};
+  const tomar=(lista,fuente)=>{ (Array.isArray(lista)?lista:[]).forEach(p=>{
+    if(p&&p.id!=null&&p.nombre){ halladas.push(p); de[String(p.id)]=de[String(p.id)]||fuente; } }); };
+
+  try{ const snapMod=await sbLoadModuloEstado('personal');
+       if(snapMod.estado==='ok') tomar(snapMod.data,'nube (módulo)'); }catch(e){}
+  try{ tomar(JSON.parse(localStorage.getItem(PERSONAL_KEY)||'[]'),'este equipo'); }catch(e){}
+  const periodos=[]; try{ const d=new Date(); let y=d.getFullYear(), m=d.getMonth()+1;
+    for(let i=0;i<14;i++){ periodos.push(y+'-'+String(m).padStart(2,'0')); m--; if(m<1){m=12;y--;} } }catch(e){}
+  try{ const u=await sbLoadModuloEstado('backup_ultimo');
+       if(u.estado==='ok'&&u.data&&u.data.snap) tomar(u.data.snap.personal,'respaldo'); }catch(e){}
+  for(const per of periodos){
+    try{ const b=await sbLoadModuloEstado('backup_'+per);
+         if(b.estado==='ok'&&b.data) tomar(b.data.personal,'respaldo '+per); }catch(e){}
+  }
+
+  const actuales=new Set((state.personal||[]).map(p=>String(p.id)));
+  const nomAct=new Set((state.personal||[]).map(p=>String(p.nombre||'').trim().toUpperCase()));
+  const faltan=[], vistos=new Set();
+  halladas.forEach(p=>{
+    const k=String(p.id); if(vistos.has(k)) return;
+    if(actuales.has(k)) return;
+    if(nomAct.has(String(p.nombre||'').trim().toUpperCase())) return;  // ya está con otro id
+    vistos.add(k); faltan.push(p);
+  });
+
+  if(!faltan.length){ alert('No falta nadie: todo el personal de las copias ya está en la lista ('+(state.personal||[]).length+' personas).'); return []; }
+  const det=faltan.slice(0,25).map(p=>'  · '+p.nombre+(p.rol?' — '+p.rol:'')+'   ['+(de[String(p.id)]||'copia')+']').join('\n');
+  if(!confirm('Faltan '+faltan.length+' persona(s) en la lista actual:\n\n'+det+
+    (faltan.length>25?'\n  · …y '+(faltan.length-25)+' más':'')+
+    '\n\n¿Reponerlas? Solo se AGREGA a quien falta; no se borra ni se modifica a nadie.')) return faltan;
+
+  // Levantar sus lápidas: si desaparecieron por el fallo de sincronización, nadie decidió darlos de baja.
+  try{ const t=tombLoad(); faltan.forEach(p=>{ delete t[String(p.id)]; }); tombPersist(); sbSyncModulo('tombstones', t); }catch(e){}
+  faltan.forEach(p=>{ if(!p._ts) p._ts=Date.now(); });
+  state.personal=(state.personal||[]).concat(faltan);
+  try{ personalSave(); }catch(e){}
+  try{ if(typeof normalizarCargos==='function') normalizarCargos(); }catch(e){}
+  try{ poblarSelects(); renderPersonal(); renderCostoRRHH(); }catch(e){}
+  alert('✅ '+faltan.length+' persona(s) repuestas en el listado.');
+  return faltan;
 }
 
 const CICLO_2625_DESDE = '2026-07';   // periodo (YYYY-MM) desde el que el ciclo 26→25 está activo
