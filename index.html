@@ -18929,6 +18929,7 @@ const ROLES_MODULOS = {
   jefe_mantenimiento:   ['mantenimiento','seguridad'],
   compresorista:        ['logistica','compresorista','seguridad'],
   supervisor_materiales:['dashboard','logistica','compresorista','seguridad'],
+  compras:              ['compras'],
 };
 
 const ROL_LABELS = {
@@ -18942,6 +18943,7 @@ const ROL_LABELS = {
   jefe_mantenimiento:  'Jefe de Mantenimiento',
   compresorista:       'Compresorista',
   supervisor_materiales:'Supervisor de Materiales',
+  compras:             'Compras',
 };
 
 const ROL_COLORS = {
@@ -18955,6 +18957,7 @@ const ROL_COLORS = {
   jefe_mantenimiento:  '#d97706',
   compresorista:       '#5b6ef5',
   supervisor_materiales:'#0d9488',
+  compras:             '#c2410c',
 };
 
 let usuarios = [
@@ -18969,6 +18972,7 @@ let usuarios = [
   { id:9,  usuario:'comp1@temual.pe',        nombre:'Compresorista 1',      password:'Atmin2026',     rol:'compresorista',       activo:true, modulos:['compresorista','seguridad'] },
   { id:10, usuario:'comp2@temual.pe',        nombre:'Compresorista 2',      password:'Temual2027',    rol:'compresorista',       activo:true, modulos:['compresorista','seguridad'] },
   { id:11, usuario:'supervisor@temual.pe',   nombre:'Supervisor de Materiales',password:'supervisor24',rol:'supervisor_materiales',activo:true },
+  { id:12, usuario:'veronicahuaman@temual.pe',nombre:'Verónica Huamán',      password:'temual2026',    rol:'compras',             activo:true, modulos:['compras'] },
 ];
 
 let usuarioActivo = null;
@@ -19007,8 +19011,13 @@ async function doLogin(){
 }
 
 function iniciarSesion(user){
-  // Acceso al módulo de Seguridad para TODOS los usuarios (además de sus módulos)
-  if(user && Array.isArray(user.modulos) && !user.modulos.includes('seguridad')) user.modulos.push('seguridad');
+  // Seguridad se agrega solo a quien NO tiene lista propia de módulos. Si el usuario trae
+  // `modulos` explícitos, esa lista se respeta tal cual: es una decisión deliberada y forzarle
+  // Seguridad encima rompía los accesos restringidos (p. ej. el usuario de Compras).
+  if(user && !Array.isArray(user.modulos)){
+    user.modulos = (ROLES_MODULOS[user.rol] || []).slice();
+    if(!user.modulos.includes('seguridad')) user.modulos.push('seguridad');
+  }
   usuarioActivo = user;
   document.getElementById('login-screen').style.display = 'none';
   mostrarBottomNav(true);
