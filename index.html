@@ -5338,7 +5338,7 @@ function nv2820Stock(){
 }
 
 // Figuras (emoji) por explosivo del catálogo
-const EXPLO_FIG={M1000:'🧨',M3000:'🧨',M5000:'🧨',CARMEX18:'🧵',CARMEX240:'🧵',FAMECORTE:'🪢',NEITHER:'🌀'};
+const EXPLO_FIG={M1000:'🧨',M3000:'🧨',M5000:'🧨',CARMEX18:'🧵',CARMEX240:'🧵',FAMECORTE:'🪢',NEITHER:'🌀',CORDON5G:'🧶'};
 // Los 16 FANEL 3 comparten icono: son variantes del mismo detonador.
 function exploFig(id){ if(/^FANEL3_/.test(String(id||''))) return '⏱'; return EXPLO_FIG[id]||'🧨'; }
 // Stock de explosivos en almacén (ingresos − salidas de state.almacen.explosivos), en unidades
@@ -5375,7 +5375,7 @@ function renderStockRemanente(){
     const fig=(typeof exploFig==='function')?exploFig(c.id):'🧨';
     return `<div class="kpi-card" style="padding:14px 16px">
       <div style="display:flex;align-items:center;gap:8px"><span style="font-size:20px;line-height:1">${fig}</span><div class="kpi-label" style="font-size:11px">${c.nombre}</div></div>
-      <div style="font-size:24px;font-weight:800;color:${col};font-family:'DM Mono',monospace;margin:6px 0">${fmtN(q)} <span style="font-size:11px;color:var(--text3);font-weight:600">${c.id==='NEITHER'?'m':'und'}</span></div>
+      <div style="font-size:24px;font-weight:800;color:${col};font-family:'DM Mono',monospace;margin:6px 0">${fmtN(q)} <span style="font-size:11px;color:var(--text3);font-weight:600">${exploEsMetros(c)?'m':'und'}</span></div>
       <div style="font-size:11px;color:var(--text3)">${remLabelCajas(c.id,q)}</div>
     </div>`;
   }).join('') || `<div style="grid-column:1/-1;padding:18px;text-align:center;color:var(--text3)">Sin stock de remanente.</div>`;
@@ -5469,7 +5469,7 @@ function renderStockRemanente(){
   // verse abajo con su dona y su fila, si no parece que desapareció del remanente.
   const _stkPrev=(typeof remStockActual==='function')?remStockActual():{};
   const statsFilas=cat.filter(c=>(_egr[c.id]||0)||(_sal[c.id]||0)||(Number(_stkPrev[c.id])||0)).map(c=>({
-    id:c.id, nombre:c.nombre, upCaja:c.upCaja, esMecha:c.id==='NEITHER',
+    id:c.id, nombre:c.nombre, upCaja:c.upCaja, esMecha:exploEsMetros(c),
     egr:_egr[c.id]||0, sal:_sal[c.id]||0
   }));
   // ── PRECIO DE CADA EXPLOSIVO ──────────────────────────────────────────────────
@@ -5487,7 +5487,7 @@ function renderStockRemanente(){
   const _esBulto=u=>/^(CAJ|CJA|CJ|BOX|ROLL|RLL|RL|MILL)/i.test(String(u||'').trim());
   const _precioDe=id=>{
     const c=(typeof exploGetCat==='function')?exploGetCat(id):null;
-    const bulto=(c&&c.id==='NEITHER')?((c.mPorRollo)||150):((c&&c.upCaja)||1);
+    const bulto=exploEsMetros(c)?exploMPorRollo(c):((c&&c.upCaja)||1);
     const nom=_norm(c&&c.nombre);
     if(nom){
       let p=_maestro.find(x=>_norm(x.nombre)===nom);
@@ -5496,7 +5496,7 @@ function renderStockRemanente(){
       if(p){
         const porBulto=_esBulto(p.unidad);
         return { precio:(Number(p.precio)||0)/(porBulto?bulto:1), de:'Productos',
-          codigo:p.codigo||'', base:porBulto?(c&&c.id==='NEITHER'?'por rollo':'por caja'):'por unidad',
+          codigo:p.codigo||'', base:porBulto?(exploEsMetros(c)?'por rollo':'por caja'):'por unidad',
           precioOrig:Number(p.precio)||0, unidad:p.unidad||'' };
       }
     }
@@ -10204,10 +10204,24 @@ const EXPLO_CATALOGO=[
   {id:'CARMEX240',nombre:'CARMEX 2.40" MTRS',upCaja:300,unidad:'und'},
   {id:'FAMECORTE',nombre:'FAME CORTE',upCaja:144,unidad:'und'},
   {id:'NEITHER',nombre:'MECHA RAPIDA DE IGNISION',upCaja:10,unidad:'rollo',mPorRollo:150},
+  // Se mide en METROS y viene en rollos de 750 m. upCaja = mPorRollo para que cualquier cálculo
+  // genérico de "cajas" dé rollos correctos.
+  {id:'CORDON5G',nombre:'CORDON DETONANTE 5G',upCaja:750,unidad:'rollo',mPorRollo:750,precio:0.959},
   ...FANEL3_CATALOGO,
 ];
 // ¿Este explosivo entra al Stock Remanente? Los FANEL 3 no: remanente se queda como estaba.
 function exploVaARemanente(id){ const c=exploGetCat(id); return !c || c.remanente!==false; }
+// ¿Este explosivo se mide en METROS (y se agrupa en rollos) en vez de en unidades sueltas?
+// Antes esto se preguntaba comparando contra el id de la mecha en ~20 sitios, así que cualquier
+// producto nuevo por metros salía con las cuentas mal. Ahora es una propiedad del catálogo.
+function exploEsMetros(id){
+  const c=(typeof id==='object'&&id)?id:exploGetCat(id);
+  return !!(c && Number(c.mPorRollo)>0);
+}
+function exploMPorRollo(id){
+  const c=(typeof id==='object'&&id)?id:exploGetCat(id);
+  return Number(c&&c.mPorRollo)||150;
+}
 function exploGetCat(id){return EXPLO_CATALOGO.find(c=>c.id===id)||null;}
 // Apertura de inventario del polvorín NV3190: fija el stock exacto con 0 movimientos.
 // Se aplica UNA sola vez (control por versión). Para volver a resetear, sube EXPLO_APERTURA_V.
@@ -10358,7 +10372,7 @@ function remSupervisores(){
 function remLabelCajas(id,q){
   const c=(typeof exploGetCat==='function')?exploGetCat(id):null; q=Number(q)||0;
   if(!c) return q+' und';
-  if(c.id==='NEITHER'){ const mpr=c.mPorRollo||150, r=Math.floor(q/mpr), rst=Math.round((q-r*mpr)*100)/100; return `${q} m · ${r} rollo${r!==1?'s':''} + ${rst} m`; }
+  if(exploEsMetros(c)){ const mpr=exploMPorRollo(c), r=Math.floor(q/mpr), rst=Math.round((q-r*mpr)*100)/100; return `${q} m · ${r} rollo${r!==1?'s':''} + ${rst} m`; }
   const cajas=Math.floor(q/c.upCaja), und=q%c.upCaja;
   return `${cajas} caj${cajas!==1?'as':'a'} + ${und} und`;
 }
@@ -10547,7 +10561,7 @@ function renderExploStock(){
     const cajas=Math.floor(qty/c.upCaja);const sueltas=qty%c.upCaja;
     // Mecha rápida (NEITHER): qty está en METROS → mostrar metros + rollos completos + sobrante (150 m c/u)
     const _mpr=c.mPorRollo||150, _rll=Math.floor(qty/_mpr), _rst=Math.round((qty-_rll*_mpr)*100)/100;
-    const label=c.id==='NEITHER'?`${qty} m · ${_rll} rollo${_rll!==1?'s':''} + ${_rst} m`:`${cajas} caj${cajas!==1?'as':'a'} + ${sueltas} und`;
+    const label=exploEsMetros(c)?`${qty} m · ${_rll} rollo${_rll!==1?'s':''} + ${_rst} m`:`${cajas} caj${cajas!==1?'as':'a'} + ${sueltas} und`;
     return `<div class="kpi-card" style="padding:14px 16px">
       <div class="kpi-label" style="font-size:11px">${c.nombre}</div>
       <div style="font-size:24px;font-weight:800;color:${color};font-family:'DM Mono',monospace;margin:6px 0">${qty}</div>
@@ -10628,7 +10642,7 @@ function calcTotalExplo(pfx){
   // Mecha rápida (NEITHER): el stock vive en METROS → "Cajas" se interpreta como ROLLOS
   // (1 rollo = mPorRollo m) y "Unidades" como METROS sueltos. Antes usaba upCaja=10 y
   // registraba cantidades absurdas (1 rollo entraba como 10 "unidades" contra un stock en metros).
-  const esMecha=c&&c.id==='NEITHER';
+  const esMecha=exploEsMetros(c);
   const total=c?(esMecha?cajas*(c.mPorRollo||150)+und:cajas*c.upCaja+und):0;
   const el=document.getElementById(pfx+'-total');
   if(el)el.textContent=c?(esMecha?`${total} m (${cajas} rollo${cajas!==1?'s':''} + ${und} m)`:`${total} ${c.unidad}`):'Selecciona producto y cantidad';
@@ -10694,7 +10708,7 @@ function renderExploCart(pfx){
       <thead><tr style="font-size:9px;color:var(--text3);text-align:left">
         <th style="padding:4px 6px">Explosivo</th><th style="padding:4px 6px;text-align:right">Cajas</th>
         <th style="padding:4px 6px;text-align:right">Sueltas</th><th style="padding:4px 6px;text-align:right">Total</th><th></th></tr></thead>
-      <tbody>${arr.map((x,i)=>{ const c=exploGetCat(x.producto), mecha=c&&c.id==='NEITHER';
+      <tbody>${arr.map((x,i)=>{ const c=exploGetCat(x.producto), mecha=exploEsMetros(c);
         return `<tr style="border-top:1px solid var(--border2)">
           <td style="padding:5px 6px;font-weight:600">${(c&&c.nombre)||x.producto}</td>
           <td style="padding:5px 6px;text-align:right">${x.cajas||0}${mecha?' rollo(s)':''}</td>
@@ -10713,7 +10727,7 @@ function abrirModalExploIngreso(){
   const selI=g('exi-producto');
   if(selI) selI.innerHTML='<option value="">— Seleccionar —</option>'+
     EXPLO_CATALOGO.map(c=>{
-      const det=(c.id==='NEITHER')?' (Cajas = rollos de '+(c.mPorRollo||150)+' m · Unidades = metros)'
+      const det=exploEsMetros(c)?' (Cajas = rollos de '+exploMPorRollo(c)+' m · Unidades = metros)'
                                   :' ('+c.upCaja+'/caja)';
       return '<option value="'+c.id+'">'+escAttr(c.nombre+det)+'</option>';
     }).join('');
@@ -10775,7 +10789,7 @@ function autoFillExploSalida(){
       const cajasDisp=Math.floor(disp/c.upCaja);const sueltasDisp=disp%c.upCaja;
       document.getElementById('exs-cajas').max=cajasDisp;
       document.getElementById('exs-unidades').max=disp;
-      el.innerHTML=c.id==='NEITHER'
+      el.innerHTML=exploEsMetros(c)
         ?`${disp} rollos (${disp*(c.mPorRollo||0)} m)`
         :`<strong style="color:#22c55e">${cajasDisp}</strong> <span style="font-size:11px;color:var(--text3)">caj.</span> + <strong style="color:#22c55e">${sueltasDisp}</strong> <span style="font-size:11px;color:var(--text3)">und disponibles</span>`;
     }else{
@@ -10810,7 +10824,7 @@ function abrirModalExploSalida(){
       EXPLO_CATALOGO.map(c=>{
         const q=stock[c.id]||0;
         const cajas=Math.floor(q/c.upCaja);const und=q%c.upCaja;
-        const stockLabel=c.id==='NEITHER'?`${q} m · ${Math.floor(q/(c.mPorRollo||150))} rollo(s) + ${Math.round((q%(c.mPorRollo||150))*100)/100} m`:(q>0?`${cajas} caj. + ${und} und`:'Sin stock');
+        const stockLabel=exploEsMetros(c)?`${q} m · ${Math.floor(q/exploMPorRollo(c))} rollo(s) + ${Math.round((q%exploMPorRollo(c))*100)/100} m`:(q>0?`${cajas} caj. + ${und} und`:'Sin stock');
         return `<option value="${c.id}">${c.nombre} — ${stockLabel}</option>`;
       }).join('');
   }
@@ -10897,7 +10911,7 @@ function eliminarMovimientoExplosivo(id,tipo){
 function editarMovimientoExplosivo(id,tipo){
   const {mov}=_exploBuscarMov(id,tipo);
   if(!mov){showNotif('⚠ Movimiento no encontrado','error');return;}
-  const c=exploGetCat(mov.producto); const und=c?.unidad||'und'; const esMecha=c&&c.id==='NEITHER';
+  const c=exploGetCat(mov.producto); const und=c?.unidad||'und'; const esMecha=exploEsMetros(c);
   const viejo=Number(mov.totalUnidades)||0;
   const etiqCajas=esMecha?'Rollos':'Cajas', etiqUnd=esMecha?'Metros sueltos':'Unidades sueltas';
   const sc=prompt(`Editar ${tipo==='ingreso'?'INGRESO':'SALIDA'} — ${c?.nombre||mov.producto}\nVale ${mov.vale||'—'} · actual: ${viejo} ${und}\n\n${etiqCajas}:`, String(mov.cajas||0));
@@ -10995,7 +11009,7 @@ async function exportarExplosivosExcel(){
     const c=exploGetCat(r.producto);const bg=r.tipo==='INGRESO'?C_AZUL:C_ROJO;
     // La mecha rápida se guarda en METROS: su "caja" es un ROLLO de 150 m, no las 10 unidades
     // del catálogo. Sin esto, 175 m salían como "17 cajas + 5" en vez de "1 rollo + 25 m".
-    const _mecha=c&&c.id==='NEITHER';
+    const _mecha=exploEsMetros(c);
     const upCaja=_mecha?((c.mPorRollo)||150):((c&&c.upCaja)||1);
     const cajasR=Math.floor((r.totalUnidades||0)/upCaja);
     const sueltasR=Math.round(((r.totalUnidades||0)%upCaja)*100)/100;
@@ -11075,7 +11089,7 @@ async function exportarExplosivosExcel(){
     Object.values(grupos).forEach(gr=>{
       gr.lineas.forEach((r,i)=>{
         const c=exploGetCat(r.producto);
-        const mecha=c&&c.id==='NEITHER';
+        const mecha=exploEsMetros(c);
         const up=mecha?((c.mPorRollo)||150):((c&&c.upCaja)||1);
         const row=wsv.getRow(rv);
         row.getCell(1).value=i===0?gr.vale:'';
@@ -17906,7 +17920,7 @@ function rptGeneral(per,dt,usr,ac,aus,cos,ing,util,mrg){
   const exStockRows=(typeof EXPLO_CATALOGO!=='undefined'?EXPLO_CATALOGO:[]).map(c=>{
     const q=exStockGer[c.id]||0;
     const cajas=Math.floor(q/(c.upCaja||1)), sueltas=q%(c.upCaja||1);
-    const det=c.id==='NEITHER'?`${Math.floor(q/(c.mPorRollo||150))} rollos + ${(q%(c.mPorRollo||150)).toFixed(0)} m`:`${cajas} caj. + ${sueltas} und`;
+    const det=exploEsMetros(c)?`${Math.floor(q/exploMPorRollo(c))} rollos + ${(q%exploMPorRollo(c)).toFixed(0)} m`:`${cajas} caj. + ${sueltas} und`;
     return `<tr><td>${c.nombre}</td><td class="r" style="font-weight:700">${q.toLocaleString('es-PE')}</td><td class="r">${det}</td></tr>`;
   }).join('');
 
@@ -22080,13 +22094,13 @@ compCargarLocal();
 // Códigos alineados con EXPLO_CATALOGO para cruce correcto de stock
 // Los 16 FANEL 3 se agregan desde FANEL3_CATALOGO, no a mano: el Compresorista los reporta
 // para trazabilidad (el gasto se sigue contando solo cuando salen de Logística).
-const COMP_EXPLOSIVOS = ['M1000','M3000','M5000','CARMEX18','CARMEX240','FAMECORTE','NEITHER']
+const COMP_EXPLOSIVOS = ['M1000','M3000','M5000','CARMEX18','CARMEX240','FAMECORTE','NEITHER','CORDON5G']
   .concat(FANEL3_CATALOGO.map(c=>c.id));
 const COMP_EXPLO_LABEL = Object.assign(
-  {'M1000':'EMULNOR 1000 1" X 7"','M3000':'EMULNOR 3000 1" X 8"','M5000':'EMULNOR 5000 1" X 8"','CARMEX18':'CARMEX 1.8" MTRS','CARMEX240':'CARMEX 2.40" MTRS','FAMECORTE':'FAME CORTE','NEITHER':'MECHA RAPIDA DE IGNISION'},
+  {'M1000':'EMULNOR 1000 1" X 7"','M3000':'EMULNOR 3000 1" X 8"','M5000':'EMULNOR 5000 1" X 8"','CARMEX18':'CARMEX 1.8" MTRS','CARMEX240':'CARMEX 2.40" MTRS','FAMECORTE':'FAME CORTE','NEITHER':'MECHA RAPIDA DE IGNISION','CORDON5G':'CORDON DETONANTE 5G'},
   Object.fromEntries(FANEL3_CATALOGO.map(c=>[c.id,c.nombre])));
 const COMP_PRECIOS_EXP_DEFAULT = Object.assign(
-  {'M1000':1.36,'M3000':1.54,'M5000':2.34,'CARMEX18':3.81,'CARMEX240':4.10,'FAMECORTE':4.00,'NEITHER':2.00},
+  {'M1000':1.36,'M3000':1.54,'M5000':2.34,'CARMEX18':3.81,'CARMEX240':4.10,'FAMECORTE':4.00,'NEITHER':2.00,'CORDON5G':0.959},
   Object.fromEntries(FANEL3_CATALOGO.map(c=>[c.id,c.precio])));
 const COMP_ACEROS = ['BARRA CONICA 4\' X 7/8"','BARRA CONICA 6\' X 7/8"','BARRA CONICA 8\' X 7/8"','BROCA DESCARTABLE DE BOTONES 36 MM','BROCA DESCARTABLE DE BOTONES 32 MM','BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'','BARRA DE ALUMINIO PARA ACUÑAR 1" X 10\'','BARRA DE ALUMINIO PARA ACUÑAR 1" X 12'];
 const COMP_PRECIOS_ACEROS_DEFAULT = {'BARRA CONICA 4\' X 7/8"':249.17,'BARRA CONICA 6\' X 7/8"':330.29,'BARRA CONICA 8\' X 7/8"':411.41,'BROCA DESCARTABLE DE BOTONES 36 MM':76.88,'BROCA DESCARTABLE DE BOTONES 32 MM':74.91,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'':102.6,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 10\'':118.35,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 12':141.9};
