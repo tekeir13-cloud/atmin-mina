@@ -2898,6 +2898,8 @@ select option{background:var(--coal3);}
     <div class="card" style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <div class="section-title">Registrar Personal</div>
+        <button class="btn btn-outline" onclick="deduplicarPersonal()" style="border-color:#f59e0b;color:#f59e0b;font-size:12px;padding:7px 14px"
+          title="Deja una sola ficha por trabajador. Conserva la que tiene tareos y le reasigna los de las demas.">🧹 Quitar duplicados</button>
         <button class="btn btn-outline" onclick="actualizarPlanillaOficial()" style="border-color:#60a5fa;color:#60a5fa;font-size:12px;padding:7px 14px"
           title="Concilia el listado con la planilla oficial: actualiza jornal, cargo y guardia, y da de alta a quien falte. No borra a nadie.">📋 Actualizar planilla oficial</button>
       </div>
@@ -25570,6 +25572,80 @@ const _plNorm=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').t
 // Se aplica SOLA una vez por equipo. Pedir que alguien pulse un botón no es "actualizar el
 // personal": si nadie lo pulsa, la planilla nunca entra. La marca versionada evita repetirla y
 // evita resucitar a quien se dé de baja después. Para volver a forzarla, subir PLANILLA_OFICIAL_V.
+
+// ══ PERSONAL DUPLICADO ═══════════════════════════════════════════════════════
+// Deja UNA sola ficha por trabajador. Agrupa por DNI y, para quien no lo tiene, por nombre
+// normalizado (sin tildes ni dobles espacios).
+//
+// Al elegir cuál se queda NO se mira solo la fecha: gana la ficha que TIENE TAREOS, porque su id
+// es el que aparece en la planilla y en el historial. Si se borrara esa, los tareos quedarían
+// apuntando a nadie y se perdería el costo de planilla ya registrado. Los tareos de las fichas
+// eliminadas se reasignan a la que se conserva, así no se pierde ni un día trabajado.
+function deduplicarPersonal(){
+  const norm=t=>String(t||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
+  const nTareos=id=>(state.tareas||[]).filter(t=>String(t.trabajadorId)===String(id)).length;
+  const llenos=p=>['dni','rol','guardia','jornal','frente','ingreso'].filter(k=>p&&p[k]!=null&&p[k]!=='').length;
+
+  const grupos={};
+  (state.personal||[]).forEach(p=>{
+    if(!p) return;
+    const k = p.dni ? ('D:'+String(p.dni).trim()) : ('N:'+norm(p.nombre));
+    (grupos[k]=grupos[k]||[]).push(p);
+  });
+  const dups=Object.values(grupos).filter(g=>g.length>1);
+  if(!dups.length){ alert('No hay personal duplicado.\n\n'+(state.personal||[]).length+' fichas, todas de personas distintas.'); return []; }
+
+  const plan=dups.map(g=>{
+    // Se conserva el ID de la ficha con tareos (su historial y su costo de planilla cuelgan de
+    // ese id), pero los DATOS buenos vienen de la ficha más completa, que suele ser la de la
+    // planilla oficial. Si no, quedarse con el historial obligaría a tirar el cargo, el jornal y
+    // la guardia correctos.
+    const porHistorial=[...g].sort((a,b)=> nTareos(b.id)-nTareos(a.id) || (Number(a.id)||0)-(Number(b.id)||0));
+    const porDatos    =[...g].sort((a,b)=> llenos(b)-llenos(a) || (Number(b._ts)||0)-(Number(a._ts)||0));
+    const queda=porHistorial[0], mejor=porDatos[0];
+    const adoptados=[];
+    if(mejor!==queda){
+      ['nombre','dni','rol','guardia','jornal','frente','ingreso'].forEach(k=>{
+        if(mejor[k]!=null && mejor[k]!=='' && mejor[k]!==queda[k]){ adoptados.push(k); }
+      });
+    }
+    return {queda, mejor, adoptados, quitar:g.filter(x=>x!==queda)};
+  });
+  const totalQuitar=plan.reduce((s,x)=>s+x.quitar.length,0);
+  const conTareos=plan.reduce((s,x)=>s+x.quitar.reduce((a,q)=>a+nTareos(q.id),0),0);
+  const det=plan.slice(0,20).map(x=>
+    '  · '+x.queda.nombre+(x.queda.dni?' ('+x.queda.dni+')':'')+'\n'+
+    '      se queda: '+(x.adoptados.length?x.mejor.rol+' S/'+x.mejor.jornal+(x.mejor.guardia?' ('+x.mejor.guardia+')':''):x.queda.rol+' S/'+x.queda.jornal)+
+      (nTareos(x.queda.id)?' · conserva '+nTareos(x.queda.id)+' tareos':'')+'\n'+
+    x.quitar.map(q=>'      se quita: '+q.rol+' S/'+q.jornal+(nTareos(q.id)?' · '+nTareos(q.id)+' tareos → se pasan a la que queda':'')).join('\n')
+  ).join('\n');
+  if(!confirm('DUPLICADOS: '+plan.length+' trabajador(es) repetido(s), '+totalQuitar+' ficha(s) de más.\n\n'+det+
+    (plan.length>20?'\n  · …y '+(plan.length-20)+' más':'')+
+    (conTareos?('\n\nSe reasignarán '+conTareos+' tareo(s) a la ficha que se conserva: no se pierde ningún día trabajado.'):'')+
+    '\n\n¿Dejar una sola ficha por trabajador?')) return plan;
+
+  let reasignados=0;
+  plan.forEach(x=>{
+    // Volcar los datos buenos sobre la ficha que conserva el historial
+    if(x.adoptados.length){ x.adoptados.forEach(k=>{ x.queda[k]=x.mejor[k]; }); x.queda._ts=Date.now(); }
+    x.quitar.forEach(q=>{
+      (state.tareas||[]).forEach(t=>{ if(String(t.trabajadorId)===String(q.id)){ t.trabajadorId=x.queda.id; reasignados++; } });
+      try{ tombAdd(q.id); }catch(e){}     // lápida: la ficha de más no revive al sincronizar
+    });
+  });
+  const fuera=new Set(plan.flatMap(x=>x.quitar.map(q=>String(q.id))));
+  state.personal=(state.personal||[]).filter(p=>!fuera.has(String(p.id)));
+  personalOrdenar();
+  try{ personalSave(); }catch(e){}
+  if(reasignados){ try{ tareasSave(); }catch(e){} }
+  try{ poblarSelects(); renderPersonal(); renderCostoRRHH(); }catch(e){}
+  try{ if(typeof renderTareoMensual==='function') renderTareoMensual(); }catch(e){}
+  alert('✅ Duplicados eliminados.\n\n'+totalQuitar+' ficha(s) de más quitadas\n'+
+        (reasignados?reasignados+' tareo(s) reasignados\n':'')+
+        '\nQuedan '+state.personal.length+' personas, una ficha por trabajador.');
+  return plan;
+}
+
 const PLANILLA_OFICIAL_V = 1;
 const PLANILLA_V_KEY = 'atmin_planilla_oficial_v';
 function aplicarPlanillaOficialAuto(){
