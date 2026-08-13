@@ -19248,6 +19248,9 @@ async function initSistema(){
   // guardada, aunque sea de un mes pasado). _ejecMes queda null → renderDashEjecutivo usa
   // finMesActual(). Si el mes actual no tiene valorización aún, se ve "S/ 0" correctamente.
   _ejecMes=null;
+  // La planilla oficial se aplica DESPUÉS de cargar la nube: si se hiciera antes, la carga la
+  // sobrescribiría con la copia remota y no se vería nada.
+  try{ aplicarPlanillaOficialAuto(); }catch(e){}
   poblarSelects();
   if(state.maquinas) poblarSelectMaquinas();
   actualizarBadgeMes();
@@ -25564,7 +25567,23 @@ function personalOrdenar(){
   return state.personal;
 }
 const _plNorm=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
-function actualizarPlanillaOficial(){
+// Se aplica SOLA una vez por equipo. Pedir que alguien pulse un botón no es "actualizar el
+// personal": si nadie lo pulsa, la planilla nunca entra. La marca versionada evita repetirla y
+// evita resucitar a quien se dé de baja después. Para volver a forzarla, subir PLANILLA_OFICIAL_V.
+const PLANILLA_OFICIAL_V = 1;
+const PLANILLA_V_KEY = 'atmin_planilla_oficial_v';
+function aplicarPlanillaOficialAuto(){
+  try{
+    if((Number(localStorage.getItem(PLANILLA_V_KEY))||0) >= PLANILLA_OFICIAL_V) return false;
+    const r=actualizarPlanillaOficial(true);          // true = sin preguntar
+    localStorage.setItem(PLANILLA_V_KEY, String(PLANILLA_OFICIAL_V));
+    if(r && (r.nuevos||r.cambios)){
+      showNotif('✓ Planilla oficial aplicada: '+r.nuevos+' alta(s) y '+r.cambios+' actualización(es) — '+(state.personal||[]).length+' personas','ok');
+    }
+    return true;
+  }catch(e){ console.warn('planilla oficial',e); return false; }
+}
+function actualizarPlanillaOficial(auto){
   const porDni={}, porNom={};
   (state.personal||[]).forEach(p=>{ if(p){ if(p.dni) porDni[String(p.dni).trim()]=p; porNom[_plNorm(p.nombre)]=p; } });
   const nuevos=[], cambios=[];
@@ -25572,6 +25591,9 @@ function actualizarPlanillaOficial(){
     const ex = (o.dni && porDni[o.dni]) || porNom[_plNorm(o.nombre)];
     if(ex){
       const d=[];
+      // El nombre de la planilla oficial manda: si coincide por DNI pero está escrito distinto
+      // en el sistema, se corrige la grafía en vez de dejar dos versiones del mismo trabajador.
+      if(_plNorm(ex.nombre)!==_plNorm(o.nombre)) d.push('nombre "'+(ex.nombre||'—')+'" → "'+o.nombre+'"');
       if(Number(ex.jornal)!==Number(o.jornal)) d.push('jornal '+(ex.jornal!=null?ex.jornal:'—')+' → '+o.jornal);
       if(_plNorm(ex.rol)!==_plNorm(o.rol))     d.push('cargo '+(ex.rol||'—')+' → '+o.rol);
       if(_plNorm(ex.guardia)!==_plNorm(o.guardia)) d.push('guardia '+(ex.guardia||'—')+' → '+(o.guardia||'—'));
@@ -25580,7 +25602,9 @@ function actualizarPlanillaOficial(){
     }else{ nuevos.push(o); }
   });
   if(!nuevos.length && !cambios.length){
-    alert('La planilla ya está al día: '+PLANILLA_OFICIAL.length+' personas verificadas, sin diferencias.'); personalOrdenar(); renderPersonal(); return;
+    if(!auto) alert('La planilla ya está al día: '+PLANILLA_OFICIAL.length+' personas verificadas, sin diferencias.');
+    personalOrdenar(); try{ renderPersonal(); }catch(e){}
+    return {nuevos:0, cambios:0};
   }
   const txt='PLANILLA OFICIAL — '+PLANILLA_OFICIAL.length+' personas\n\n'+
     'ALTAS NUEVAS: '+nuevos.length+'\n'+nuevos.slice(0,20).map(o=>'  + '+o.nombre+' — '+o.rol+(o.guardia?' ('+o.guardia+')':'')).join('\n')+
@@ -25588,9 +25612,9 @@ function actualizarPlanillaOficial(){
     '\n\nACTUALIZACIONES: '+cambios.length+'\n'+cambios.slice(0,20).map(c=>'  ~ '+c.p.nombre+': '+c.d.join(', ')).join('\n')+
       (cambios.length>20?'\n  ~ …y '+(cambios.length-20)+' más':'')+
     '\n\nNo se da de baja ni se borra a nadie. ¿Aplicar?';
-  if(!confirm(txt)) return;
+  if(!auto && !confirm(txt)) return null;
   cambios.forEach(c=>{
-    c.p.jornal=Number(c.o.jornal); c.p.rol=c.o.rol; c.p.guardia=c.o.guardia||'';
+    c.p.nombre=c.o.nombre; c.p.jornal=Number(c.o.jornal); c.p.rol=c.o.rol; c.p.guardia=c.o.guardia||'';
     if(!c.p.dni && c.o.dni) c.p.dni=c.o.dni;
     c.p._ts=Date.now();
   });
@@ -25601,7 +25625,8 @@ function actualizarPlanillaOficial(){
   personalOrdenar();
   try{ personalSave(); }catch(e){}
   try{ poblarSelects(); renderPersonal(); renderCostoRRHH(); }catch(e){}
-  alert('✅ Planilla actualizada.\n\n'+nuevos.length+' alta(s) nueva(s)\n'+cambios.length+' actualización(es)\n\nTotal en el listado: '+state.personal.length+' personas.');
+  if(!auto) alert('✅ Planilla actualizada.\n\n'+nuevos.length+' alta(s) nueva(s)\n'+cambios.length+' actualización(es)\n\nTotal en el listado: '+state.personal.length+' personas.');
+  return {nuevos:nuevos.length, cambios:cambios.length};
 }
 
 const CICLO_2625_DESDE = '2026-07';   // periodo (YYYY-MM) desde el que el ciclo 26→25 está activo
