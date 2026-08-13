@@ -25586,12 +25586,18 @@ function deduplicarPersonal(){
   const nTareos=id=>(state.tareas||[]).filter(t=>String(t.trabajadorId)===String(id)).length;
   const llenos=p=>['dni','rol','guardia','jornal','frente','ingreso'].filter(k=>p&&p[k]!=null&&p[k]!=='').length;
 
+  // Se agrupa por DNI **y** por NOMBRE a la vez, uniendo los grupos que compartan cualquiera de
+  // los dos. Agrupar solo por DNI dejaba escapar el caso más común: la misma persona cargada dos
+  // veces con DNIs distintos (uno mal tecleado, o uno vacío). Y agrupar solo por nombre no une a
+  // quien está escrito de dos formas pero con el mismo DNI.
+  const padre={};
+  const buscar=k=>{ while(padre[k]!==k) k=padre[k]=padre[padre[k]]; return k; };
+  const unir=(a,b)=>{ const ra=buscar(a), rb=buscar(b); if(ra!==rb) padre[ra]=rb; };
+  const clavesDe=p=>{ const ks=['N:'+norm(p.nombre)]; if(p.dni) ks.push('D:'+String(p.dni).trim()); return ks; };
+  (state.personal||[]).forEach(p=>{ if(!p) return; clavesDe(p).forEach(k=>{ if(!(k in padre)) padre[k]=k; }); });
+  (state.personal||[]).forEach(p=>{ if(!p) return; const ks=clavesDe(p); for(let i=1;i<ks.length;i++) unir(ks[0],ks[i]); });
   const grupos={};
-  (state.personal||[]).forEach(p=>{
-    if(!p) return;
-    const k = p.dni ? ('D:'+String(p.dni).trim()) : ('N:'+norm(p.nombre));
-    (grupos[k]=grupos[k]||[]).push(p);
-  });
+  (state.personal||[]).forEach(p=>{ if(!p) return; const r=buscar(clavesDe(p)[0]); (grupos[r]=grupos[r]||[]).push(p); });
   const dups=Object.values(grupos).filter(g=>g.length>1);
   if(!dups.length){ alert('No hay personal duplicado.\n\n'+(state.personal||[]).length+' fichas, todas de personas distintas.'); return []; }
 
@@ -25614,10 +25620,11 @@ function deduplicarPersonal(){
   const totalQuitar=plan.reduce((s,x)=>s+x.quitar.length,0);
   const conTareos=plan.reduce((s,x)=>s+x.quitar.reduce((a,q)=>a+nTareos(q.id),0),0);
   const det=plan.slice(0,20).map(x=>
-    '  · '+x.queda.nombre+(x.queda.dni?' ('+x.queda.dni+')':'')+'\n'+
+    '  · '+((x.adoptados.indexOf('nombre')>=0)?x.mejor.nombre:x.queda.nombre)+
+      (((x.adoptados.indexOf('dni')>=0?x.mejor.dni:x.queda.dni))?' ('+(x.adoptados.indexOf('dni')>=0?x.mejor.dni:x.queda.dni)+')':'')+'\n'+
     '      se queda: '+(x.adoptados.length?x.mejor.rol+' S/'+x.mejor.jornal+(x.mejor.guardia?' ('+x.mejor.guardia+')':''):x.queda.rol+' S/'+x.queda.jornal)+
       (nTareos(x.queda.id)?' · conserva '+nTareos(x.queda.id)+' tareos':'')+'\n'+
-    x.quitar.map(q=>'      se quita: '+q.rol+' S/'+q.jornal+(nTareos(q.id)?' · '+nTareos(q.id)+' tareos → se pasan a la que queda':'')).join('\n')
+    x.quitar.map(q=>'      se quita: DNI '+(q.dni||'—')+' · '+q.rol+' S/'+q.jornal+(nTareos(q.id)?' · '+nTareos(q.id)+' tareos → se pasan a la que queda':'')).join('\n')
   ).join('\n');
   if(!confirm('DUPLICADOS: '+plan.length+' trabajador(es) repetido(s), '+totalQuitar+' ficha(s) de más.\n\n'+det+
     (plan.length>20?'\n  · …y '+(plan.length-20)+' más':'')+
