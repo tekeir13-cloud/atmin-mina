@@ -4069,6 +4069,25 @@ select option{background:var(--coal3);}
 </div>
 
 <!-- ════ MODAL: INGRESO EXPLOSIVO ════ -->
+
+<!-- ══ FICHA DE DATOS PERSONALES DEL TRABAJADOR (Anexo 2) ══ -->
+<div class="modal-overlay" id="modal-ficha" onclick="if(event.target===this)cerrarModal('modal-ficha')">
+  <div class="modal" style="max-width:1000px;width:96%;max-height:92vh;overflow-y:auto">
+    <div class="modal-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+      <div style="min-width:0">
+        <div class="modal-title">📋 Ficha de Datos Personales del Trabajador</div>
+        <div id="ficha-sub" style="font-size:12px;color:var(--text3);margin-top:2px"></div>
+      </div>
+      <button class="modal-close" onclick="cerrarModal('modal-ficha')" style="position:static;flex-shrink:0">✕</button>
+    </div>
+    <div id="ficha-avance" style="margin:0 0 14px 0"></div>
+    <div id="ficha-body"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap">
+      <button class="btn btn-outline" onclick="cerrarModal('modal-ficha')">Completar después</button>
+      <button class="btn btn-gold" onclick="guardarFichaTrabajador()">💾 Guardar ficha</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="modal-explo-ingreso" onclick="if(event.target===this)cerrarModal('modal-explo-ingreso')">
   <div class="modal" style="width:min(640px,96vw);max-height:92vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
@@ -12701,6 +12720,7 @@ function renderPersonal(){
     } else {
       activos.forEach(p=>{
         const c=FC[p.frente]||'#888';
+        const _fa=(typeof fichaAvance==='function')?fichaAvance(p.ficha):{pct:0};
         const estadoBadge=p.estado==='activo'
           ?`<span style="background:#166534;color:#bbf7d0;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">ACTIVO</span>`
           :`<span style="background:#854d0e;color:#fde68a;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">AUSENTE</span>`;
@@ -12716,6 +12736,7 @@ function renderPersonal(){
           <td style="padding:10px 12px">${estadoBadge}</td>
           <td style="padding:10px 12px">
             <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button onclick="abrirFichaTrabajador('${p.id}')" title="Ficha de datos personales (Anexo 2)" style="padding:5px 12px;font-size:11px;background:${_fa.pct>=80?'rgba(34,211,165,.15)':(_fa.pct>0?'rgba(245,158,11,.15)':'rgba(148,163,184,.12)')};color:${_fa.pct>=80?'#22d3a5':(_fa.pct>0?'#f59e0b':'#94a3b8')};border:1px solid ${_fa.pct>=80?'rgba(34,211,165,.4)':(_fa.pct>0?'rgba(245,158,11,.4)':'rgba(148,163,184,.3)')};border-radius:6px;cursor:pointer;font-weight:600;white-space:nowrap">📋 Ficha ${_fa.pct?_fa.pct+'%':''}</button>
               <button class="btn-editar-card" data-pid="${p.id}" style="padding:5px 12px;font-size:11px;background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.4);border-radius:6px;cursor:pointer;font-weight:600;white-space:nowrap">✏ Editar</button>
               <button class="btn-baja-card" data-pid="${p.id}" style="padding:5px 12px;font-size:11px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.4);border-radius:6px;cursor:pointer;font-weight:600;white-space:nowrap">⬇ Dar de Baja</button>
             </div>
@@ -12860,9 +12881,192 @@ async function agregarPersonal(){
   try{const{data}=await sb.from('personal').insert([nv]).select().single();state.personal.push({...nv,jefe,id:data.id});}
   catch(e){state.personal.push({...nv,jefe,id:Date.now()});}
   if(jefe&&nv.dni) pJefeSet(nv.dni,jefe);
-  personalSave();limpiarFormPersonal();poblarSelects();renderPersonal();renderCostoRRHH();showNotif('✓ Personal agregado');
+  // Guardar la referencia ANTES de ordenar: al ordenar alfabéticamente, "el último de la lista"
+  // deja de ser el recién creado y la ficha se abriría con otra persona.
+  const _nuevo=state.personal[state.personal.length-1];
+  personalOrdenar();
+  personalSave();limpiarFormPersonal();poblarSelects();renderPersonal();renderCostoRRHH();
+  showNotif('✓ Personal agregado — completa su ficha');
+  // La ficha se abre en el acto: registrar a alguien es el momento en que se tienen sus datos
+  // delante. Se puede cerrar y completarla luego desde el botón Ficha de su fila.
+  if(_nuevo&&_nuevo.id!=null){ try{ abrirFichaTrabajador(_nuevo.id); }catch(e){} }
 }
 function limpiarFormPersonal(){['p-nombre','p-dni','p-jornal','p-ingreso'].forEach(id=>document.getElementById(id).value='');const j=document.getElementById('p-jefe');if(j)j.value='';}
+
+
+// ══ FICHA DE DATOS PERSONALES DEL TRABAJADOR (Anexo 2) ═══════════════════════
+// Reproduce el formulario oficial. Se define como DATOS, no como HTML escrito a mano: así añadir
+// o quitar un campo es tocar una línea, y el avance de llenado se calcula solo.
+// t: 'txt' | 'fecha' | 'sel' | 'radio' | 'num' | 'email' | 'tel' | 'area'
+// Las secciones con `filas` son tablas repetibles (familiares, estudios, idiomas).
+const FICHA_SECCIONES=[
+ {id:'personales', tit:'Datos Personales', campos:[
+   {k:'apPaterno',l:'Apellido Paterno',req:1},{k:'apMaterno',l:'Apellido Materno',req:1},{k:'nombres',l:'Nombres',req:1},
+   {k:'fechaNac',l:'Fecha de nacimiento',t:'fecha',req:1},
+   {k:'dni',l:'DNI',req:1},{k:'carneExt',l:'Carné de extranjería'},
+   {k:'grupoSanguineo',l:'Grupo sanguíneo',t:'sel',op:['','O+','O-','A+','A-','B+','B-','AB+','AB-']},
+   {k:'ruc',l:'N° RUC'},{k:'colegiatura',l:'N° de colegio (colegiatura)'},
+   {k:'estadoCivil',l:'Estado civil',t:'sel',op:['','Soltero (a)','Casado (a)','Conviviente (a)','Divorciado (a)','Viudo (a)'],req:1},
+   {k:'nacDepartamento',l:'Lugar de nacimiento — Departamento'},{k:'nacProvincia',l:'Provincia'},{k:'nacDistrito',l:'Distrito'},
+ ]},
+ {id:'domicilio', tit:'Domicilio Actual', campos:[
+   {k:'via',l:'Tipo de vía',t:'sel',op:['','Avenida','Calle','Jirón','Pasaje']},
+   {k:'viaNombre',l:'Nombre de la vía',req:1},{k:'urb',l:'Urb. o lugar'},
+   {k:'numero',l:'Número'},{k:'interior',l:'Interior'},
+   {k:'domDistrito',l:'Distrito',req:1},{k:'domProvincia',l:'Provincia'},{k:'domDepartamento',l:'Departamento'},
+   {k:'referencia',l:'Referencia',t:'area'},
+   {k:'telDomicilio',l:'Teléfono domicilio',t:'tel'},{k:'celular',l:'Teléfono celular',t:'tel',req:1},
+   {k:'email',l:'Correo electrónico',t:'email'},
+ ]},
+ {id:'essalud', tit:'EsSalud', campos:[
+   {k:'carneEssalud',l:'N° carné EsSalud (autogenerado)'},{k:'centroEssalud',l:'Centro de atención EsSalud'},
+ ]},
+ {id:'laboral', tit:'Datos Laborales', campos:[
+   {k:'fechaIngreso',l:'Fecha de ingreso',t:'fecha',req:1},
+   {k:'cargoActual',l:'Cargo actual',req:1},
+   {k:'modalidad',l:'Modalidad según contrato'},
+   {k:'condLaboral',l:'Condición laboral',t:'sel',op:['','Micro empresa','Pequeña empresa','D.Leg. 728','Régimen minero']},
+ ]},
+ {id:'conyuge', tit:'Datos del Cónyuge', campos:[
+   {k:'cyApPaterno',l:'Apellido paterno'},{k:'cyApMaterno',l:'Apellido materno'},{k:'cyNombres',l:'Nombres'},
+   {k:'cyFechaNac',l:'Fecha de nacimiento',t:'fecha'},{k:'cyOcupacion',l:'Ocupación'},{k:'cyLugarLabora',l:'Lugar donde labora'},
+ ]},
+ {id:'familiares', tit:'Padres e Hijos', filas:'fam', cols:[
+   {k:'nombres',l:'Apellidos y nombres'},{k:'parentesco',l:'Parentesco',t:'sel',op:['','Padre','Madre','Hijo (a)']},
+   {k:'fechaNac',l:'Fecha de nacimiento',t:'fecha'},{k:'vive',l:'Vive',t:'sel',op:['','Sí','No']},
+ ]},
+ {id:'emergencia', tit:'Notificar en caso de Emergencia', filas:'eme', min:2, cols:[
+   {k:'nombres',l:'Apellidos y nombres'},{k:'parentesco',l:'Parentesco'},{k:'contacto',l:'Dirección y teléfono'},
+ ]},
+ {id:'pension', tit:'Régimen Pensionario', campos:[
+   {k:'sistema',l:'Sistema',t:'sel',op:['','ONP — Ley N° 19990','AFP Profuturo','AFP Prima','AFP Integra','AFP Habitat'],req:1},
+   {k:'cuspp',l:'Carné (CUSPP)'},{k:'fechaAfiliacion',l:'Fecha de afiliación',t:'fecha'},{k:'docAfiliacion',l:'Documento de afiliación'},
+ ]},
+ {id:'basica', tit:'Educación Básica', campos:[
+   {k:'priCentro',l:'Primaria — centro de estudios'},
+   {k:'priEstado',l:'Primaria — completa/incompleta',t:'sel',op:['','Completa','Incompleta']},
+   {k:'priDesde',l:'Primaria — desde'},{k:'priHasta',l:'Primaria — hasta'},
+   {k:'secCentro',l:'Secundaria — centro de estudios'},
+   {k:'secEstado',l:'Secundaria — completa/incompleta',t:'sel',op:['','Completa','Incompleta']},
+   {k:'secDesde',l:'Secundaria — desde'},{k:'secHasta',l:'Secundaria — hasta'},
+ ]},
+ {id:'superior', tit:'Educación Superior', filas:'sup', cols:[
+   {k:'nivel',l:'Nivel',t:'sel',op:['','Instituto superior','Universitario','Maestría','Doctorado']},
+   {k:'centro',l:'Centro de estudios'},{k:'especialidad',l:'Especialidad'},
+   {k:'desde',l:'Desde'},{k:'hasta',l:'Hasta'},
+   {k:'estado',l:'Completa/Incompleta',t:'sel',op:['','Completa','Incompleta']},
+   {k:'grado',l:'Grado académico obtenido'},
+ ]},
+ {id:'idiomas', tit:'Idiomas y/o Dialecto', filas:'idi', cols:[
+   {k:'idioma',l:'Idioma o dialecto'},
+   {k:'lee',l:'Lee',t:'sel',op:['','Con facilidad','Sin facilidad']},
+   {k:'habla',l:'Habla',t:'sel',op:['','Con facilidad','Sin facilidad']},
+   {k:'escribe',l:'Escribe',t:'sel',op:['','Con facilidad','Sin facilidad']},
+ ]},
+ {id:'cuenta', tit:'Cuenta para Abono de Remuneraciones', campos:[
+   {k:'entidad',l:'Entidad financiera'},{k:'numeroCuenta',l:'Número de cuenta'},{k:'cci',l:'Código de cuenta interbancario (CCI)'},
+ ]},
+];
+let _fichaPid=null;
+function _fichaInput(id,c,val){
+  const v=escAttr(val==null?'':String(val));
+  const st='width:100%';
+  if(c.t==='sel') return `<select id="${id}" style="${st}">`+(c.op||[]).map(o=>`<option value="${escAttr(o)}" ${String(val||'')===o?'selected':''}>${o||'—'}</option>`).join('')+`</select>`;
+  if(c.t==='area') return `<textarea id="${id}" rows="2" style="${st}">${escAttr(val==null?'':String(val))}</textarea>`;
+  const tipo=c.t==='fecha'?'date':(c.t==='email'?'email':(c.t==='tel'?'tel':(c.t==='num'?'number':'text')));
+  return `<input type="${tipo}" id="${id}" value="${v}" style="${st}">`;
+}
+function _fichaFilasRender(sec,datos){
+  const arr=(datos&&datos[sec.filas])||[];
+  const n=Math.max(arr.length+1, sec.min||1);
+  let h=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead><tr>${sec.cols.map(c=>`<th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:600;white-space:nowrap">${c.l}</th>`).join('')}</tr></thead><tbody>`;
+  for(let i=0;i<n;i++){
+    h+=`<tr>`+sec.cols.map(c=>`<td style="padding:4px 6px">${_fichaInput('fi-'+sec.filas+'-'+i+'-'+c.k,c,(arr[i]||{})[c.k])}</td>`).join('')+`</tr>`;
+  }
+  return h+`</tbody></table></div><div style="font-size:11px;color:var(--text3);margin-top:4px">Las filas vacías se descartan al guardar.</div>`;
+}
+function abrirFichaTrabajador(pid){
+  const p=(state.personal||[]).find(x=>String(x.id)===String(pid));
+  if(!p){ showNotif('⚠ Trabajador no encontrado','error'); return; }
+  _fichaPid=p.id;
+  const f=p.ficha||{};
+  // Lo que ya se sabe del trabajador se precarga: no se pide dos veces lo mismo.
+  const partes=String(p.nombre||'').trim().split(/\s+/);
+  const pre={ apPaterno:f.apPaterno||partes[0]||'', apMaterno:f.apMaterno||partes[1]||'',
+    nombres:f.nombres||partes.slice(2).join(' ')||'', dni:f.dni||p.dni||'',
+    cargoActual:f.cargoActual||p.rol||'', fechaIngreso:f.fechaIngreso||p.ingreso||'' };
+  document.getElementById('ficha-sub').textContent=p.nombre+(p.dni?' · DNI '+p.dni:'')+(p.rol?' · '+p.rol:'');
+  document.getElementById('ficha-body').innerHTML=FICHA_SECCIONES.map(sec=>`
+    <div class="card" style="margin-bottom:12px">
+      <div class="section-title" style="margin-top:0;font-size:13px">${sec.tit}</div>
+      ${sec.filas ? _fichaFilasRender(sec,f) : `<div class="form-grid">`+sec.campos.map(c=>`
+        <div class="form-group"><label>${c.l}${c.req?' <span style="color:#f87171">*</span>':''}</label>
+        ${_fichaInput('fi-'+c.k,c,(f[c.k]!=null&&f[c.k]!=='')?f[c.k]:(pre[c.k]||''))}</div>`).join('')+`</div>`}
+    </div>`).join('');
+  _fichaAvance();
+  document.getElementById('ficha-body').addEventListener('input',_fichaAvance);
+  abrirModal('modal-ficha');
+}
+function _fichaLeer(){
+  const f={};
+  FICHA_SECCIONES.forEach(sec=>{
+    if(sec.filas){
+      const arr=[]; let i=0;
+      while(document.getElementById('fi-'+sec.filas+'-'+i+'-'+sec.cols[0].k)){
+        const fila={}; let algo=false;
+        sec.cols.forEach(c=>{ const v=(document.getElementById('fi-'+sec.filas+'-'+i+'-'+c.k)||{}).value||''; fila[c.k]=v.trim(); if(fila[c.k]) algo=true; });
+        if(algo) arr.push(fila);
+        i++;
+      }
+      f[sec.filas]=arr;
+    }else{
+      sec.campos.forEach(c=>{ const el=document.getElementById('fi-'+c.k); if(el) f[c.k]=String(el.value||'').trim(); });
+    }
+  });
+  return f;
+}
+// Porcentaje de llenado: cuenta solo los campos simples, que son los que pide la ficha oficial.
+function fichaAvance(f){
+  let tot=0, hechos=0;
+  FICHA_SECCIONES.forEach(sec=>{ if(sec.filas) return; sec.campos.forEach(c=>{ tot++; if(f&&f[c.k]) hechos++; }); });
+  return {tot, hechos, pct: tot?Math.round(hechos/tot*100):0};
+}
+function fichaFaltantes(f){
+  const out=[];
+  FICHA_SECCIONES.forEach(sec=>{ if(sec.filas) return; sec.campos.forEach(c=>{ if(c.req && !(f&&f[c.k])) out.push(c.l); }); });
+  return out;
+}
+function _fichaAvance(){
+  const a=fichaAvance(_fichaLeer());
+  const el=document.getElementById('ficha-avance'); if(!el) return;
+  const col=a.pct>=80?'#22d3a5':(a.pct>=40?'#f59e0b':'#f87171');
+  el.innerHTML=`<div style="display:flex;align-items:center;gap:10px">
+    <div style="flex:1;background:var(--coal4);border-radius:99px;height:8px;overflow:hidden">
+      <div style="width:${a.pct}%;height:100%;background:${col};border-radius:99px;transition:width .2s"></div></div>
+    <div style="font-size:12px;color:${col};font-weight:700;white-space:nowrap">${a.pct}% · ${a.hechos} de ${a.tot}</div></div>`;
+}
+function guardarFichaTrabajador(){
+  const p=(state.personal||[]).find(x=>String(x.id)===String(_fichaPid));
+  if(!p){ showNotif('⚠ Trabajador no encontrado','error'); return; }
+  const f=_fichaLeer();
+  const faltan=fichaFaltantes(f);
+  if(faltan.length && !confirm('Faltan '+faltan.length+' dato(s) obligatorio(s):\n\n  · '+faltan.slice(0,12).join('\n  · ')+
+     (faltan.length>12?'\n  · …y '+(faltan.length-12)+' más':'')+'\n\nSe puede guardar igual y completarlos después. ¿Guardar así?')) return;
+  p.ficha=f; p._ts=Date.now();
+  // Lo que la ficha corrige se refleja en el listado, para que no queden dos verdades.
+  const nom=[f.apPaterno,f.apMaterno,f.nombres].filter(Boolean).join(' ').trim();
+  if(nom) p.nombre=nom;
+  if(f.dni) p.dni=f.dni;
+  if(f.cargoActual) p.rol=f.cargoActual;
+  if(f.fechaIngreso) p.ingreso=f.fechaIngreso;
+  personalOrdenar();
+  try{ personalSave(); }catch(e){}
+  try{ poblarSelects(); renderPersonal(); }catch(e){}
+  cerrarModal('modal-ficha');
+  const a=fichaAvance(f);
+  showNotif('✓ Ficha guardada — '+p.nombre+' ('+a.pct+'% completa)','ok');
+}
 
 function abrirEditarPersonal(id){
   const p=state.personal.find(x=>String(x.id)===String(id));
