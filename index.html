@@ -2576,22 +2576,12 @@ select option{background:var(--coal3);}
                 letter-spacing:0.3px">
           Cierre Mensual
         </button>
-        <button id="btn-recuperar-personal" onclick="recuperarPersonal()"
-          title="Busca en todas las copias al personal que falte en el listado y lo repone. Solo agrega." class="btn btn-outline"
-          style="border-color:#60a5fa;color:#60a5fa">👷 Recuperar personal</button>
-        <button id="btn-recuperar-per" onclick="recuperarPeriodo(prompt('¿Qué periodo recupero? (AAAA-MM)','2026-07'))"
-          title="Repone los registros que faltan segun el respaldo. Solo agrega, no borra nada." class="btn btn-outline"
-          style="border-color:#22d3a5;color:#22d3a5">♻ Recuperar periodo</button>
-        <button id="btn-diagnostico" onclick="diagnosticarPerdidas(prompt('¿Qué periodo diagnostico? (AAAA-MM)','2026-07'))"
-          title="Solo lectura: compara el periodo contra el respaldo y dice qué módulo perdió registros" class="btn btn-outline"
-          style="border-color:#f59e0b;color:#f59e0b">🔍 Diagnóstico</button>
-        <button id="btn-recuperar-val" onclick="recuperarValorizaciones()" title="Busca en todos los respaldos las valorizaciones que falten y las restaura sin borrar nada"
-          class="btn btn-outline" style="border-color:#22d3a5;color:#22d3a5">🛟 Recuperar valorizaciones</button>
-        <button id="btn-respaldo" onclick="respaldoCompleto()" title="Respaldo completo: nube + descarga (JSON y Excel)"
-                style="background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.35);
-                color:#22c55e;border-radius:4px;padding:6px 12px;cursor:pointer;
-                font-size:11px;font-family:'Syne',sans-serif;font-weight:700;letter-spacing:0.3px">
-          💾 Respaldo
+        <button id="btn-restaurar" onclick="abrirRestaurar()"
+          title="Puntos de restauración: cada mañana se guarda una copia del sistema. Si algo se pierde durante el día, aquí se recupera."
+          style="background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.35);
+                 color:#22c55e;border-radius:4px;padding:6px 12px;cursor:pointer;
+                 font-size:11px;font-family:'Syne',sans-serif;font-weight:700;letter-spacing:0.3px">
+          🛟 Restaurar
         </button>
         <button id="btn-sincronizar" onclick="abrirDiagSync()" title="Sincronizar equipos / diagnóstico"
                 style="background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.45);
@@ -4105,6 +4095,17 @@ select option{background:var(--coal3);}
 <!-- ════ MODAL: INGRESO EXPLOSIVO ════ -->
 
 <!-- ══ FICHA DE DATOS PERSONALES DEL TRABAJADOR (Anexo 2) ══ -->
+
+<div class="modal-overlay" id="modal-restaurar" onclick="if(event.target===this)cerrarModal('modal-restaurar')">
+  <div class="modal" style="max-width:680px;width:96%;max-height:88vh;overflow-y:auto">
+    <div class="modal-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+      <div><div class="modal-title">🛟 Puntos de restauración</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">Vuelve el sistema a como estaba</div></div>
+      <button class="modal-close" onclick="cerrarModal('modal-restaurar')" style="position:static;flex-shrink:0">✕</button>
+    </div>
+    <div id="restaurar-body"></div>
+  </div>
+</div>
 <div class="modal-overlay" id="modal-ficha" onclick="if(event.target===this)cerrarModal('modal-ficha')">
   <div class="modal" style="max-width:1000px;width:96%;max-height:92vh;overflow-y:auto">
     <div class="modal-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
@@ -19573,6 +19574,8 @@ async function initSistema(){
   // La planilla oficial se aplica DESPUÉS de cargar la nube: si se hiciera antes, la carga la
   // sobrescribiría con la copia remota y no se vería nada.
   try{ aplicarPlanillaOficialAuto(); }catch(e){}
+  // Copia del día: la primera vez que se abre el sistema cada mañana.
+  try{ puntoDiaGuardar(); }catch(e){}
   poblarSelects();
   if(state.maquinas) poblarSelectMaquinas();
   actualizarBadgeMes();
@@ -25568,6 +25571,164 @@ async function cmpExportarExcel(){
     setTimeout(()=>URL.revokeObjectURL(url),2000);
     showNotif('📊 Excel de compras generado');
   }catch(e){ showNotif('No se pudo generar el Excel','error'); }
+}
+
+
+// ══ PUNTOS DE RESTAURACIÓN DIARIOS ═══════════════════════════════════════════
+// Cada mañana, la primera vez que alguien abre el sistema, se guarda una copia completa del día.
+// Si durante la jornada algo borra datos, se vuelve a como estaba esa mañana.
+//
+// La clave lleva la FECHA (punto_2026-08-14). Antes el respaldo se guardaba siempre en la misma
+// clave, así que un respaldo hecho después de una pérdida pisaba al bueno y se quedaba uno sin
+// nada a lo que volver. Con una copia por día eso no puede pasar.
+const PUNTO_PREFIJO='punto_';
+const PUNTO_DIAS=10;                       // cuántos días hacia atrás se ofrecen
+function _puntoHoy(){ try{ return (typeof hoy==='function')?hoy():new Date().toISOString().slice(0,10); }catch(e){ return new Date().toISOString().slice(0,10); } }
+function _puntoUltimosDias(n){
+  const out=[]; const base=new Date(_puntoHoy()+'T12:00:00');
+  for(let i=0;i<n;i++){ const d=new Date(base); d.setDate(d.getDate()-i);
+    out.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')); }
+  return out;
+}
+function _puntoResumen(snap){
+  if(!snap) return {};
+  const n=x=>Array.isArray(x)?x.length:0;
+  const alm=snap.almacen||{};
+  return { personal:n(snap.personal), tareos:n(snap.tareas), valorizaciones:n(snap.valorizacionesLabor),
+    reportesGuardia:n(snap.reportesGuardia), compresorista:n(snap.compresorista), mantenimiento:n(snap.mantenimiento),
+    ingresosAlmacen:n(alm.ingresos), salidasAlmacen:n(alm.salidas),
+    explosivosIn:n((alm.explosivos||{}).ingresos), explosivosOut:n((alm.explosivos||{}).salidas),
+    combustible:n((snap.combustible||{}).pet)+n((snap.combustible||{}).gas) };
+}
+// Guarda la copia del día si aún no existe. Silenciosa: no interrumpe a nadie.
+async function puntoDiaGuardar(forzar){
+  try{
+    const dia=_puntoHoy(), clave=PUNTO_PREFIJO+dia;
+    if(!forzar){
+      const yaLocal=localStorage.getItem('atmin_'+clave);
+      if(yaLocal) return false;
+      const enNube=await sbLoadModuloEstado(clave);
+      if(enNube.estado==='ok' && enNube.data) { try{ localStorage.setItem('atmin_'+clave,'1'); }catch(e){} return false; }
+      if(enNube.estado==='ilegible') return false;      // sin lectura fiable, no se escribe
+    }
+    const snap=(typeof snapshotEstado==='function')?snapshotEstado():null;
+    if(!snap) return false;
+    await sbSyncModulo(clave, snap);
+    try{ localStorage.setItem('atmin_'+clave,'1'); localStorage.setItem('atmin_punto_local_'+dia, JSON.stringify(snap)); }catch(e){}
+    // Solo se conservan los últimos días en este equipo, para no llenar el almacenamiento.
+    try{ Object.keys(localStorage).filter(k=>k.indexOf('atmin_punto_local_')===0)
+      .sort().slice(0,-PUNTO_DIAS).forEach(k=>localStorage.removeItem(k)); }catch(e){}
+    return true;
+  }catch(e){ console.warn('punto del día',e); return false; }
+}
+async function abrirRestaurar(){
+  const cont=document.getElementById('restaurar-body'); if(!cont) return;
+  cont.innerHTML='<div style="padding:24px;text-align:center;color:var(--text3)">Buscando puntos de restauración…</div>';
+  abrirModal('modal-restaurar');
+  const dias=_puntoUltimosDias(PUNTO_DIAS), encontrados=[];
+  for(const d of dias){
+    let snap=null;
+    try{ const r=await sbLoadModuloEstado(PUNTO_PREFIJO+d); if(r.estado==='ok'&&r.data) snap=r.data; }catch(e){}
+    if(!snap){ try{ const l=localStorage.getItem('atmin_punto_local_'+d); if(l) snap=JSON.parse(l); }catch(e){} }
+    if(snap) encontrados.push({dia:d, snap, res:_puntoResumen(snap)});
+  }
+  if(!encontrados.length){
+    cont.innerHTML=`<div style="padding:20px;text-align:center;color:var(--text3)">
+      Todavía no hay ningún punto de restauración.<br><br>
+      Se guarda uno automáticamente cada mañana, la primera vez que se abre el sistema.
+      <div style="margin-top:14px"><button class="btn btn-gold" onclick="puntoDiaGuardar(true).then(()=>abrirRestaurar())">Guardar uno ahora</button></div>
+    </div>`; return;
+  }
+  const hoyD=_puntoHoy();
+  const fmt=d=>{ try{ return (typeof fmtF==='function')?fmtF(d):d; }catch(e){ return d; } };
+  cont.innerHTML=`<div style="font-size:12px;color:var(--text3);margin-bottom:12px">
+      Cada mañana se guarda una copia completa. Elige a qué momento volver.</div>`+
+    encontrados.map((e,i)=>{
+      const r=e.res;
+      const lin=[['Personal',r.personal],['Tareos',r.tareos],['Valorizaciones',r.valorizaciones],
+        ['Reportes de guardia',r.reportesGuardia],['Compresorista',r.compresorista],
+        ['Ingresos almacén',r.ingresosAlmacen],['Salidas almacén',r.salidasAlmacen],
+        ['Explosivos (mov.)',r.explosivosIn+r.explosivosOut],['Combustible',r.combustible]]
+        .filter(x=>x[1]).map(x=>x[0]+': <b style="color:var(--text2)">'+x[1]+'</b>').join(' · ');
+      return `<div style="background:var(--coal4);border:1px solid ${e.dia===hoyD?'var(--accent-border)':'var(--border)'};border-radius:10px;padding:12px 14px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <div>
+            <div style="font-weight:800;color:var(--text);font-size:14px">${e.dia===hoyD?'Esta mañana':fmt(e.dia)}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:3px">${lin||'copia vacía'}</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-gold" style="font-size:12px;padding:7px 14px" onclick="restaurarPunto('${e.dia}',false)">Reponer lo que falte</button>
+            <button class="btn btn-outline" style="font-size:12px;padding:7px 14px;border-color:#f87171;color:#f87171" onclick="restaurarPunto('${e.dia}',true)">Volver exacto</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('')+
+    `<div style="font-size:11px;color:var(--text3);line-height:1.6;margin-top:6px;border-top:1px solid var(--border);padding-top:10px">
+      <b style="color:var(--text2)">Reponer lo que falte</b> — devuelve lo que se haya perdido y <b>conserva</b> el trabajo hecho después. Es la opción segura.<br>
+      <b style="color:#f87171">Volver exacto</b> — deja el sistema tal cual estaba ese día. <b>Se descarta</b> todo lo registrado después.
+    </div>`;
+}
+async function restaurarPunto(dia, exacto){
+  let snap=null;
+  try{ const r=await sbLoadModuloEstado(PUNTO_PREFIJO+dia); if(r.estado==='ok'&&r.data) snap=r.data; }catch(e){}
+  if(!snap){ try{ const l=localStorage.getItem('atmin_punto_local_'+dia); if(l) snap=JSON.parse(l); }catch(e){} }
+  if(!snap){ alert('No se pudo leer el punto del '+dia+'.'); return; }
+  const r=_puntoResumen(snap);
+  const aviso=exacto
+    ? '⚠ VOLVER EXACTO al '+dia+'\n\nEl sistema quedará tal cual estaba ese día.\nTODO lo registrado después SE DESCARTA.\n\n¿Continuar?'
+    : 'Reponer lo que falte del '+dia+'\n\nSe devuelve lo que se haya perdido y se CONSERVA todo lo registrado después.\n\n¿Continuar?';
+  if(!confirm(aviso)) return;
+  // Antes de tocar nada se guarda el estado actual, por si la restauración no era lo que se quería.
+  try{ const ahora=snapshotEstado(); localStorage.setItem('atmin_punto_local_antes-de-restaurar', JSON.stringify(ahora));
+       await sbSyncModulo(PUNTO_PREFIJO+'antes-de-restaurar', ahora); }catch(e){}
+  const U=(a,b)=>(typeof mergeSnapById==='function')?mergeSnapById(a||[],b||[]):((a&&a.length)?a:(b||[]));
+  const pon=(k,v)=>{ if(v!=null) state[k]=v; };
+  if(exacto){
+    pon('personal',snap.personal); pon('tareas',snap.tareas); pon('valorizacionesLabor',snap.valorizacionesLabor);
+    pon('reportesGuardia',snap.reportesGuardia); pon('compresorista',snap.compresorista);
+    pon('mantenimiento',snap.mantenimiento); pon('mantRepuestos',snap.mantRepuestos);
+    pon('perforacion',snap.perforacion); pon('remanenteSalidas',snap.remanenteSalidas);
+    pon('reuniones',snap.reuniones); pon('distribucion',snap.distribucion); pon('metas',snap.metas);
+    if(snap.almacen) state.almacen=snap.almacen;
+  }else{
+    // Unión por id: lo que falta vuelve, lo que ya está se queda.
+    state.personal=U(state.personal,snap.personal);
+    state.tareas=U(state.tareas,snap.tareas);
+    state.valorizacionesLabor=U(state.valorizacionesLabor,snap.valorizacionesLabor);
+    state.reportesGuardia=U(state.reportesGuardia,snap.reportesGuardia);
+    state.compresorista=U(state.compresorista,snap.compresorista);
+    state.mantenimiento=U(state.mantenimiento,snap.mantenimiento);
+    state.remanenteSalidas=U(state.remanenteSalidas,snap.remanenteSalidas);
+    state.reuniones=U(state.reuniones,snap.reuniones);
+    if(snap.almacen && state.almacen){
+      state.almacen.ingresos=U(state.almacen.ingresos,snap.almacen.ingresos);
+      state.almacen.salidas=U(state.almacen.salidas,snap.almacen.salidas);
+      const ex=state.almacen.explosivos||{ingresos:[],salidas:[]}, sx=snap.almacen.explosivos||{};
+      state.almacen.explosivos={...ex, ingresos:U(ex.ingresos,sx.ingresos), salidas:U(ex.salidas,sx.salidas)};
+    }else if(snap.almacen && !state.almacen){ state.almacen=snap.almacen; }
+  }
+  // Combustible y planilla de supervisión viven fuera de `state`
+  try{ const c=snap.combustible||{};
+    if(typeof combGuardar==='function'){
+      if(c.pet) combGuardar('pet', exacto?c.pet:U(combCargar('pet'),c.pet));
+      if(c.gas) combGuardar('gas', exacto?c.gas:U(combCargar('gas'),c.gas));
+    } }catch(e){}
+  // Las lápidas de lo repuesto se levantan: se perdió por un fallo, nadie decidió borrarlo.
+  try{ const t=tombLoad(); let ids=[];
+    ['personal','tareas','valorizacionesLabor','reportesGuardia','compresorista','mantenimiento'].forEach(k=>{
+      (snap[k]||[]).forEach(x=>{ if(x&&x.id!=null) ids.push(String(x.id)); }); });
+    ids.forEach(id=>{ delete t[id]; }); tombPersist(); sbSyncModulo('tombstones',t); }catch(e){}
+  try{ personalOrdenar(); }catch(e){}
+  ['personalSave','tareasSave','valLaborSave','almacenSave','remSalSave'].forEach(fn=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(e){} });
+  try{ sbSyncModulo('reportes_guardia', state.reportesGuardia); sbSyncModulo('compresorista', state.compresorista);
+       sbSyncModulo('mant_kits', state.mantenimiento); }catch(e){}
+  cerrarModal('modal-restaurar');
+  try{ poblarSelects(); }catch(e){}
+  try{ if(typeof renderPage==='function' && window._currentPage) renderPage(window._currentPage); }catch(e){}
+  try{ renderDashboard(); }catch(e){}
+  alert('✅ Restaurado al '+dia+(exacto?' (estado exacto)':' (repuesto lo que faltaba)')+
+        '\n\nPersonal: '+r.personal+'  ·  Tareos: '+r.tareos+'  ·  Valorizaciones: '+r.valorizaciones+
+        '\n\nSi esto no era lo que querías, hay un punto llamado "antes-de-restaurar" con el estado previo.');
 }
 
 // ══ RECUPERAR VALORIZACIONES DESDE LOS RESPALDOS ═════════════════════════════
