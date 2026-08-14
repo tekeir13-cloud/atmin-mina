@@ -4533,6 +4533,12 @@ const FRENTES=[
 ];
 // Labores vigentes: las que se pueden reportar hoy.
 function frentesActivos(){ return FRENTES.filter(f=>f.activo!==false); }
+// Labores a MOSTRAR en un tablero: las vigentes siempre, y una retirada solo si tiene datos en
+// el periodo que se está mirando. Así una labor cerrada deja de ocupar sitio con ceros, pero no
+// desaparece de los meses en los que sí se trabajó.
+function frentesVisibles(tieneDatos){
+  return FRENTES.filter(f=>f.activo!==false || (typeof tieneDatos==='function' && tieneDatos(f)));
+}
 function frenteEsTajo(x){
   if(!x) return false;
   const f=(typeof x==='object')?x:(FRENTES.find(y=>String(y.id)===String(x)||y.key===String(x)));
@@ -6312,7 +6318,8 @@ function renderDashEjecutivo(){
   const diasPeriodoEjec=diasDelPeriodo(mes);               // horizonte real del pronóstico
   const rgMesEjec=(state.reportesGuardia||[]).filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mes):((r.fecha||'').slice(0,7)===mes));
   const cimbrasMesEjec=rgMesEjec.reduce((s,r)=>{ let c=FRENTES.reduce((ss,f)=>ss+((r[f.key]&&r[f.key].cimbra)||0),0); (r.frentesExtra||[]).forEach(fx=>c+=(fx.cimbra||0)); return s+c; },0);
-  const metaTotalEjec=FRENTES.reduce((s,f)=>s+(metaMensualFrente(f.id,diasHabEjec)||0),0);
+  // Solo labores vigentes: sumar la meta de una labor retirada inflaría el objetivo del mes.
+  const metaTotalEjec=frentesActivos().reduce((s,f)=>s+(metaMensualFrente(f.id,diasHabEjec)||0),0);
   const diasTranscEjec=diasTranscurridosPeriodo(mes);
   // Rendimiento promedio = metros ÷ días CALENDARIO transcurridos del periodo 26→25 (haya o
   // no reporte ese día), igual criterio que el pronóstico de cierre.
@@ -6632,7 +6639,7 @@ function renderDashAvanceMeta(){
   // del ritmo diario, para que los frentes sumen el total y no se infle el pronóstico).
   const perfPeriodo=state.perforacion.filter(p=>(typeof filtroMes==='function')?filtroMes(p.fecha,mesAct):true);
   const diasTransc=diasTranscurridosPeriodo(mesAct);
-  const datos=FRENTES.map(f=>{
+  const datos=frentesVisibles(f=>perfPeriodo.some(p=>String(p.frente)===String(f.id))).map(f=>{
     const perfF=perfPeriodo.filter(p=>String(p.frente)===String(f.id));
     const real=r1(perfF.reduce((s,p)=>s+(Number(p.metros)||0),0));
     const meta=metaMensualFrente(f.id,dias)||0;
@@ -14854,7 +14861,7 @@ function renderAvance(){
     </div>`;
   };
   const mf=document.getElementById('op-mes-frentes');
-  if(mf)mf.innerHTML=FRENTES.map(mesCard).join('');
+  if(mf)mf.innerHTML=frentesVisibles(f=>sum(f.key,'metros',rgMes)>0).map(mesCard).join('');
 
   const wrap=document.getElementById('rg-lista');if(!wrap)return;
   const lista=[...rg].sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')||(b.creadoEn||0)-(a.creadoEn||0));
@@ -14879,7 +14886,7 @@ function renderAvance(){
         </div>
       </div>
       <div id="${rgid}" class="two-col" style="display:none;margin-top:12px">
-        ${FRENTES.map(fc=>rgFrenteDetalleHTML(r[fc.key],fc.color,fc.emoji+' '+fc.nombre)).join('')}
+        ${FRENTES.filter(fc=>fc.activo!==false||r[fc.key]).map(fc=>rgFrenteDetalleHTML(r[fc.key],fc.color,fc.emoji+' '+fc.nombre)).join('')}
       </div>
     </div>`;
   }).join('');
@@ -15982,7 +15989,7 @@ function renderResidente(){
   const g=id=>document.getElementById(id);
   if(g('meta-mensual-f1'))g('meta-mensual-f1').value=state.metas.mensualF1||(state.metas.f1*state.metas.dias)||'';
   if(g('meta-mensual-f2'))g('meta-mensual-f2').value=state.metas.mensualF2||(state.metas.f2*state.metas.dias)||'';
-  FRENTES.filter(f=>f.id!==1&&f.id!==2).forEach(f=>{
+  frentesActivos().filter(f=>f.id!==1&&f.id!==2).forEach(f=>{
     const el=g('meta-mensual-'+f.id); if(el) el.value=metaMensualFrente(f.id)||'';
   });
   if(g('meta-dias'))g('meta-dias').value=state.metas.dias||26;
@@ -16000,7 +16007,7 @@ function renderVsProyectado(){
   const mesAct=(typeof finMesActual==='function')?finMesActual():hoy().slice(0,7);
   const vent=(typeof ventanaMes==='function')?ventanaMes(mesAct):null;
   const enCiclo=x=>(typeof filtroMes==='function')?filtroMes(x.fecha,mesAct):true;
-  const cards=FRENTES.map(f=>{
+  const cards=frentesVisibles(f=>state.perforacion.some(x=>String(x.frente)===String(f.id)&&enCiclo(x))).map(f=>{
     const metaEl=document.getElementById('meta-mensual-'+(f.id===1||f.id===2?('f'+f.id):f.id));
     const p=parseInt(metaEl?.value)||metaMensualFrente(f.id,dias)||0;
     const r=Math.round(state.perforacion.filter(x=>String(x.frente)===String(f.id)&&enCiclo(x)).reduce((s,x)=>s+(x.metros||0),0)*10)/10;
@@ -16186,7 +16193,7 @@ function renderTableroOp(){
   // Divisor del ritmo diario = días CALENDARIO transcurridos del periodo 26→25 (no solo días con
   // reporte), para no inflar el pronóstico al inicio del ciclo ni descuadrar frentes vs total.
   const diasTransc=diasTranscurridosPeriodo(mesAct);
-  const datos=FRENTES.map(f=>{
+  const datos=frentesVisibles(f=>sumF(rgMes,f.key,'metros')>0).map(f=>{
     const hoyM=r1m(sumF(rgHoy,f.key,'metros'));
     const mesM=r1m(sumF(rgMes,f.key,'metros'));
     const meta=metaMensualFrente(f.id,dias)||0;
