@@ -747,6 +747,40 @@ select option{background:var(--coal3);}
 .rp-r-mrg { font-family:'Syne',sans-serif; font-size:36px; font-weight:800; color:#4493f8; }
 .rp-r-mrg-l { font-size:7px; color:rgba(255,255,255,0.25); text-transform:uppercase; letter-spacing:1px; margin-top:3px; }
 
+
+/* ══ IMPRESIÓN DE LA FICHA DEL TRABAJADOR (Anexo 2) ══
+   Se imprime en DOS hojas A4. La segunda termina con la declaración jurada y el espacio de
+   firma, DNI y huella: por eso el bloque de firma no puede partirse entre páginas.
+   Los colores van fijos (negro sobre blanco), no por variables de tema: el papel no tiene
+   modo oscuro y con var(--text) saldría texto claro sobre fondo blanco. */
+#ficha-print{ display:none; }
+@media print{
+  body.imprimiendo-ficha > *{ display:none !important; }
+  body.imprimiendo-ficha #ficha-print{ display:block !important; }
+  body.imprimiendo-ficha{ background:#fff !important; }
+  #ficha-print, #ficha-print *{ color:#000; }
+  #ficha-print{ font-family:Arial,Helvetica,sans-serif; font-size:8.5pt; }
+  #ficha-print .et{ color:#333 !important; }
+  #ficha-print .hoja{ page-break-after:always; break-after:page; }
+  #ficha-print .hoja:last-child{ page-break-after:auto; break-after:auto; }
+  #ficha-print .fp-tit{ text-align:center; font-weight:bold; font-size:11.5pt; margin:0 0 1mm; letter-spacing:.4px; }
+  #ficha-print .fp-sub{ text-align:center; font-size:7.5pt; margin:0 0 2mm; }
+  #ficha-print .fp-sec{ background:#e8e8e8; border:1px solid #000; font-weight:bold; font-size:7.8pt;
+    padding:0.7mm 2mm; margin:1.6mm 0 0; text-transform:uppercase; }
+  #ficha-print table{ width:100%; border-collapse:collapse; }
+  #ficha-print td,#ficha-print th{ border:1px solid #000; padding:0.7mm 1.2mm; vertical-align:top; }
+  #ficha-print .et{ font-size:5.9pt; text-transform:uppercase; display:block; line-height:1.05; }
+  #ficha-print .va{ font-size:8.5pt; min-height:3.3mm; display:block; color:#000; font-weight:600; line-height:1.15; }
+  #ficha-print th{ background:#f2f2f2; font-size:6.2pt; text-transform:uppercase; text-align:left;
+    letter-spacing:normal !important; font-weight:bold; line-height:1.1; }
+  #ficha-print table td .va{ letter-spacing:normal !important; }
+  #ficha-print .fp-firma{ page-break-inside:avoid; break-inside:avoid; margin-top:4mm; }
+  #ficha-print .fp-jur{ font-size:7.4pt; text-align:justify; line-height:1.3; border:1px solid #000; padding:2mm; }
+  #ficha-print .fp-linea{ border-top:1px solid #000; margin-top:16mm; padding-top:1mm; text-align:center; font-size:8pt; }
+  #ficha-print .fp-huella{ border:1px solid #000; height:32mm; text-align:center; font-size:7.5pt; padding-top:1mm; color:#333; }
+  @page{ size:A4 portrait; margin:11mm 10mm; }
+}
+
 /* ═══════════════════════
    SOLO IMPRESIÓN
    ═══════════════════════ */
@@ -4084,6 +4118,8 @@ select option{background:var(--coal3);}
     <div id="ficha-body"></div>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap">
       <button class="btn btn-outline" onclick="cerrarModal('modal-ficha')">Completar después</button>
+      <button class="btn btn-outline" onclick="imprimirFichaTrabajador()" style="border-color:#60a5fa;color:#60a5fa"
+        title="Imprime la ficha en dos hojas A4, con la declaración jurada y el espacio de firma al final">🖨 Imprimir ficha</button>
       <button class="btn btn-gold" onclick="guardarFichaTrabajador()">💾 Guardar ficha</button>
     </div>
   </div>
@@ -13046,6 +13082,80 @@ function _fichaAvance(){
       <div style="width:${a.pct}%;height:100%;background:${col};border-radius:99px;transition:width .2s"></div></div>
     <div style="font-size:12px;color:${col};font-weight:700;white-space:nowrap">${a.pct}% · ${a.hechos} de ${a.tot}</div></div>`;
 }
+
+// ══ IMPRESIÓN DE LA FICHA (Anexo 2) — DOS HOJAS A4 ═══════════════════════════
+// Reparto pensado para que la firma quede SIEMPRE al final de la segunda hoja: si la
+// declaración cayera partida entre páginas, la ficha firmada no valdría.
+const FICHA_HOJA1=['personales','domicilio','essalud','laboral','conyuge','familiares','emergencia'];
+const FICHA_HOJA2=['pension','basica','superior','idiomas','cuenta'];
+const FICHA_JURAMENTO='Declaro bajo juramento que los datos proporcionados son exactos, autorizando a la Institución en la que laboro a efectuar las verificaciones que juzgue necesarias; así mismo me comprometo a presentar los documentos que me soliciten. En igual forma declaro válidos la dirección domiciliaria y el correo electrónico para las comunicaciones formales entre la empresa y mi persona.';
+function _fpEsc(v){ return escAttr(v==null?'':String(v)); }
+function _fpCampos(sec,f,porFila){
+  const cs=sec.campos, out=[]; 
+  for(let i=0;i<cs.length;i+=porFila){
+    const grupo=cs.slice(i,i+porFila);
+    out.push('<tr>'+grupo.map(c=>`<td><span class="et">${_fpEsc(c.l)}</span><span class="va">${_fpEsc(f[c.k])}</span></td>`).join('')+
+      (grupo.length<porFila?'<td colspan="'+(porFila-grupo.length)+'"></td>':'')+'</tr>');
+  }
+  return '<table>'+out.join('')+'</table>';
+}
+function _fpFilas(sec,f){
+  const arr=(f&&f[sec.filas])||[];
+  const min=Math.max(arr.length, sec.min||2);       // deja renglones en blanco para rellenar a mano
+  let h='<table><tr>'+sec.cols.map(c=>`<th>${_fpEsc(c.l)}</th>`).join('')+'</tr>';
+  for(let i=0;i<min;i++){
+    h+='<tr>'+sec.cols.map(c=>`<td><span class="va">${_fpEsc((arr[i]||{})[c.k])}</span></td>`).join('')+'</tr>';
+  }
+  return h+'</table>';
+}
+function _fpSeccion(id,f){
+  const sec=FICHA_SECCIONES.find(x=>x.id===id); if(!sec) return '';
+  return `<div class="fp-sec">${_fpEsc(sec.tit)}</div>`+(sec.filas?_fpFilas(sec,f):_fpCampos(sec,f,4));
+}
+function imprimirFichaTrabajador(pid){
+  const id=(pid!=null)?pid:_fichaPid;
+  const p=(state.personal||[]).find(x=>String(x.id)===String(id));
+  if(!p){ showNotif('⚠ Trabajador no encontrado','error'); return; }
+  // Si la ficha está abierta se imprime lo que hay EN PANTALLA, aunque no se haya guardado:
+  // así se puede imprimir en blanco para que la llenen a mano.
+  const abierta=document.getElementById('modal-ficha')?.classList.contains('show');
+  const f=(abierta && String(_fichaPid)===String(id))?_fichaLeer():(p.ficha||{});
+  const cont=document.getElementById('ficha-print'); if(!cont) return;
+  const hoy_=(typeof hoy==='function')?hoy():new Date().toISOString().slice(0,10);
+  const [yy,mm,dd]=String(hoy_).split('-');
+  const MES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const nombre=[f.apPaterno,f.apMaterno,f.nombres].filter(Boolean).join(' ')||p.nombre||'';
+  const enc=t=>`<div class="fp-tit">FICHA DE DATOS PERSONALES DEL TRABAJADOR</div>
+    <div class="fp-sub">${_fpEsc(nombre)}${(f.dni||p.dni)?' · DNI '+_fpEsc(f.dni||p.dni):''} — ${t}</div>`;
+  cont.innerHTML=
+    `<div class="hoja">${enc('Hoja 1 de 2')}${FICHA_HOJA1.map(x=>_fpSeccion(x,f)).join('')}</div>`+
+    `<div class="hoja">${enc('Hoja 2 de 2')}${FICHA_HOJA2.map(x=>_fpSeccion(x,f)).join('')}
+      <div class="fp-firma">
+        <div class="fp-sec">Declaración Jurada</div>
+        <div class="fp-jur">${_fpEsc(FICHA_JURAMENTO)}</div>
+        <div style="margin-top:5mm;font-size:9pt">Pataz, ${_fpEsc(dd)} de ${_fpEsc(MES[Number(mm)-1]||'')} del ${_fpEsc(yy)}</div>
+        <table style="margin-top:4mm;border:none">
+          <tr>
+            <td style="border:none;width:58%;vertical-align:bottom;padding-right:6mm">
+              <div class="fp-linea">FIRMA DEL TRABAJADOR</div>
+              <div style="margin-top:5mm;font-size:9pt">DNI N° ${_fpEsc(f.dni||p.dni||'')}</div>
+            </td>
+            <td style="border:none;width:42%"><div class="fp-huella">HUELLA DIGITAL</div></td>
+          </tr>
+        </table>
+      </div>
+    </div>`;
+  document.body.classList.add('imprimiendo-ficha');
+  // La limpieza va SOLO en afterprint. Un temporizador corto quitaba el modo impresión mientras
+  // el diálogo seguía abierto y entonces se imprimía la aplicación entera en vez de la ficha.
+  // El respaldo es largo y solo cubre navegadores que no disparan afterprint; mientras tanto no
+  // molesta, porque el contenedor está oculto en pantalla.
+  const limpiar=()=>{ document.body.classList.remove('imprimiendo-ficha'); cont.innerHTML=''; };
+  window.addEventListener('afterprint',limpiar,{once:true});
+  setTimeout(()=>{ try{ window.print(); }catch(e){ limpiar(); } },60);
+  setTimeout(limpiar,60000);
+}
+
 function guardarFichaTrabajador(){
   const p=(state.personal||[]).find(x=>String(x.id)===String(_fichaPid));
   if(!p){ showNotif('⚠ Trabajador no encontrado','error'); return; }
@@ -26664,5 +26774,6 @@ try{
 }catch(e){}
 </script>
 
+<div id="ficha-print"></div>
 </body>
 </html>
