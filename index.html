@@ -4317,7 +4317,7 @@ select option{background:var(--coal3);}
     </div>
 
     <!-- ─── GLSE-2 ─── -->
-    <div class="card" style="margin-bottom:14px;border-left:3px solid #f59e0b">
+    <div class="card" id="rg-card-g2" style="margin-bottom:14px;border-left:3px solid #f59e0b">
       <div class="section-title" style="margin-top:0;color:#f59e0b">🟧 GLSE-2</div>
       <div class="form-group" style="margin-bottom:10px"><label>Trabajos ejecutados</label><textarea id="rg-g2-trabajos" rows="2" placeholder="Detalle de trabajos realizados en el turno..." style="width:100%;resize:vertical"></textarea></div>
       <div id="rg-g2-disparos"></div>
@@ -4326,7 +4326,7 @@ select option{background:var(--coal3);}
     </div>
 
     <!-- ─── ESCM 4430 ─── -->
-    <div class="card" style="margin-bottom:14px;border-left:3px solid #a855f7">
+    <div class="card" id="rg-card-e43" style="margin-bottom:14px;border-left:3px solid #a855f7">
       <div class="section-title" style="margin-top:0;color:#a855f7">🟪 ESCM 4430</div>
       <div class="form-group" style="margin-bottom:10px"><label>Trabajos ejecutados</label><textarea id="rg-e43-trabajos" rows="2" placeholder="Detalle de trabajos realizados en el turno..." style="width:100%;resize:vertical"></textarea></div>
       <div id="rg-e43-disparos"></div>
@@ -4370,8 +4370,17 @@ select option{background:var(--coal3);}
       <div id="rg-gse3-totales" style="margin-top:10px"></div>
     </div>
 
+    <!-- ─── TJ 5100 (tajo: se mide en m³ rotos) ─── -->
+    <div class="card" id="rg-card-tj51" style="margin-bottom:14px;border-left:3px solid #2dd4bf">
+      <div class="section-title" style="margin-top:0;color:#2dd4bf">⬛ TJ 5100 <span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:none;letter-spacing:0">· tajo · potencia de veta 2.4 m · se mide en m³ rotos</span></div>
+      <div class="form-group" style="margin-bottom:10px"><label>Trabajos ejecutados</label><textarea id="rg-tj51-trabajos" rows="2" placeholder="Detalle de trabajos realizados en el turno..." style="width:100%;resize:vertical"></textarea></div>
+      <div id="rg-tj51-disparos"></div>
+      <button class="btn btn-outline" style="font-size:12px;padding:7px 14px;margin-top:2px;border-style:dashed;width:100%" onclick="rgAddDisparo('tj51')">➕ Agregar disparo</button>
+      <div id="rg-tj51-totales" style="margin-top:10px"></div>
+    </div>
+
     <!-- ─── SN 5100 NW 1 ─── -->
-    <div class="card" style="margin-bottom:14px;border-left:3px solid #38bdf8">
+    <div class="card" id="rg-card-snw1" style="margin-bottom:14px;border-left:3px solid #38bdf8">
       <div class="section-title" style="margin-top:0;color:#38bdf8">🔷 SN 5100 NW 1</div>
       <div class="form-group" style="margin-bottom:10px"><label>Trabajos ejecutados</label><textarea id="rg-snw1-trabajos" rows="2" placeholder="Detalle de trabajos realizados en el turno..." style="width:100%;resize:vertical"></textarea></div>
       <div id="rg-snw1-disparos"></div>
@@ -4502,17 +4511,38 @@ try {
 // numéricos por compatibilidad con datos ya guardados; los nuevos usan código de texto).
 // key: nombre de la sub-clave dentro de cada reporte de guardia (rep[key] = {...}).
 // pfx: prefijo usado en los ids del DOM del modal de reporte (rg-<pfx>-...).
+// `activo:false` = labor RETIRADA. Deja de aparecer en los reportes de Jefe de Guardia y de
+// Compresorista, pero NO se borra de la lista: sus metros ya reportados siguen contando en los
+// meses cerrados. Quitarla del todo haría que el avance y el costo de meses pasados cambiaran
+// solos, que es justo lo que no debe pasar en un histórico.
+//
+// `tajo:true` = se mide por METROS CÚBICOS ROTOS, no por avance lineal. Los m³ NO se suman a los
+// metros de avance: son unidades distintas y sumarlas daría un total sin sentido.
 const FRENTES=[
   {id:1,        key:'brenda',   pfx:'br',  nombre:'RA Brenda',  emoji:'🟦', color:'#60a5fa'},
   {id:2,        key:'crne',     pfx:'cr',  nombre:'CRNE',       emoji:'🟩', color:'#34d399'},
-  {id:'GLSE2',    key:'glse2',    pfx:'g2',  nombre:'GLSE-2',     emoji:'🟧', color:'#f59e0b'},
-  {id:'ESCM4430', key:'escm4430', pfx:'e43', nombre:'ESCM 4430',  emoji:'🟪', color:'#a855f7'},
+  {id:'GLSE2',    key:'glse2',    pfx:'g2',  nombre:'GLSE-2',     emoji:'🟧', color:'#f59e0b', activo:false},
+  {id:'ESCM4430', key:'escm4430', pfx:'e43', nombre:'ESCM 4430',  emoji:'🟪', color:'#a855f7', activo:false},
   {id:'ESCM4410', key:'escm4410', pfx:'e41', nombre:'ESCM 4410',  emoji:'🟥', color:'#ef4444'},
   {id:'SN5100NW',  key:'sn5100nw',  pfx:'sn51', nombre:'SN 5100 NW', emoji:'🟨', color:'#eab308'},
   {id:'GLNW3',     key:'glnw3',     pfx:'gnw3', nombre:'GLNW 3',     emoji:'🟫', color:'#a16207'},
   {id:'GLSE3',     key:'glse3',     pfx:'gse3', nombre:'GLSE 3',     emoji:'🟠', color:'#fb923c'},
-  {id:'SN5100NW1', key:'sn5100nw1', pfx:'snw1', nombre:'SN 5100 NW 1', emoji:'🔷', color:'#38bdf8'},
+  {id:'SN5100NW1', key:'sn5100nw1', pfx:'snw1', nombre:'SN 5100 NW 1', emoji:'🔷', color:'#38bdf8', activo:false},
+  {id:'TJ5100',    key:'tj5100',    pfx:'tj51', nombre:'TJ 5100',    emoji:'⬛', color:'#2dd4bf',
+   tajo:true, unidad:'m³', potencia:2.4},
 ];
+// Labores vigentes: las que se pueden reportar hoy.
+function frentesActivos(){ return FRENTES.filter(f=>f.activo!==false); }
+function frenteEsTajo(x){
+  if(!x) return false;
+  const f=(typeof x==='object')?x:(FRENTES.find(y=>String(y.id)===String(x)||y.key===String(x)));
+  return !!(f&&f.tajo);
+}
+// Unidad en la que se mide la labor: los tajos van en m³ rotos, el resto en metros de avance.
+function frenteUnidad(x){
+  const f=(typeof x==='object')?x:(FRENTES.find(y=>String(y.id)===String(x)||y.key===String(x)));
+  return (f&&f.unidad)||'m';
+}
 function frenteGet(id){ return FRENTES.find(f=>String(f.id)===String(id))||null; }
 function frenteNombre(id){ const f=frenteGet(id); return f?f.nombre:('Frente '+id); }
 // Meta mensual por frente: 1 y 2 conservan los campos legacy (mensualF1/mensualF2) para no
@@ -6258,15 +6288,18 @@ function renderDashEjecutivo(){
   const perfMes=(state.perforacion||[]).filter(p=>((typeof filtroMes==='function')?filtroMes(p.fecha,mes):(p.fecha||'').startsWith(mes))&&idsFrentes.includes(String(p.frente)));
   const frentesConDatos=FRENTES.filter(f=>perfMes.some(p=>String(p.frente)===String(f.id)));
   const r1m=n=>Math.round((Number(n)||0)*10)/10;   // redondeo a 1 decimal (evita 3.4000000004)
-  const metrosTot=r1m(perfMes.reduce((s,p)=>s+(p.metros||0),0));
-  const maxFr=Math.max(1,...frentesConDatos.map(f=>perfMes.filter(p=>String(p.frente)===String(f.id)).reduce((s,p)=>s+(p.metros||0),0)));
+  // El total es de AVANCE LINEAL: los m³ de un tajo se muestran en su fila, pero no se suman
+  // al total ni al máximo de la barra, porque son otra unidad.
+  const _esTajoId=id=>{ const f=FRENTES.find(x=>String(x.id)===String(id)); return !!(f&&f.tajo); };
+  const metrosTot=r1m(perfMes.filter(p=>!_esTajoId(p.frente)).reduce((s,p)=>s+(p.metros||0),0));
+  const maxFr=Math.max(1,...frentesConDatos.filter(f=>!f.tajo).map(f=>perfMes.filter(p=>String(p.frente)===String(f.id)).reduce((s,p)=>s+(p.metros||0),0)));
   const frentesHtml=frentesConDatos.length?frentesConDatos.map(f=>{
     const mt=r1m(perfMes.filter(p=>String(p.frente)===String(f.id)).reduce((s,p)=>s+(p.metros||0),0));
     const pct=Math.round(mt/maxFr*100);
     return `<div style="margin-bottom:13px">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
         <span style="font-size:13px;font-weight:700;color:var(--text)">${f.emoji} ${f.nombre}</span>
-        <span style="font-size:22px;font-weight:900;color:${f.color};letter-spacing:-1px">${mt} m</span>
+        <span style="font-size:22px;font-weight:900;color:${f.color};letter-spacing:-1px">${mt} ${f.unidad||'m'}</span>
       </div>
       <div style="background:rgba(255,255,255,.06);border-radius:99px;height:13px;overflow:hidden">
         <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,${f.color},${f.color}cc);border-radius:99px;transition:width .7s"></div>
@@ -12228,7 +12261,7 @@ function abrirSetupTareo(){
         </div>
       </div>
       <select class="tareo-labor" data-pid="${p.id}" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
-        ${FRENTES.map(f=>`<option value="${f.id}" ${String(labor)===String(f.id)?'selected':''}>${f.emoji} ${f.nombre}</option>`).join('')}
+        ${FRENTES.filter(f=>f.activo!==false||String(labor)===String(f.id)).map(f=>`<option value="${f.id}" ${String(labor)===String(f.id)?'selected':''}>${f.emoji} ${f.nombre}${f.activo===false?' (retirada)':''}</option>`).join('')}
         <option value="MARGINAL" ${labor==='MARGINAL'?'selected':''}>📊 Costeo Marginal</option>
       </select>
     </div>`;
@@ -14682,7 +14715,8 @@ function mergeSnapById(a,b){
 function _rgMetros(rep){
   if(!rep) return 0; let m=0;
   try{
-    (typeof FRENTES!=='undefined'?FRENTES:[]).forEach(f=>{ m+=Number(rep[f.key]&&rep[f.key].metros)||0; });
+    // Solo avance LINEAL: los m³ de un tajo no son metros y sumarlos falsearía el avance.
+    (typeof FRENTES!=='undefined'?FRENTES:[]).forEach(f=>{ if(f.tajo) return; m+=Number(rep[f.key]&&rep[f.key].metros)||0; });
     (rep.frentesExtra||[]).forEach(fx=>{ m+=Number(fx&&fx.metros)||0; });
   }catch(e){}
   return m;
@@ -14772,7 +14806,7 @@ function renderAvance(){
   const sum=(key,k,arr)=>(arr||hoyRep).reduce((s,r)=>s+(r[key]?.[k]||0),0);
   const f1h=sum('brenda','metros'),f2h=sum('crne','metros');
   // Avance de HOY sumando los 5 frentes (antes solo Brenda+CRNE, dejaba fuera los nuevos)
-  const hoyTotFrentes=r1m(FRENTES.reduce((s,f)=>s+sum(f.key,'metros'),0));
+  const hoyTotFrentes=r1m(FRENTES.filter(f=>!f.tajo).reduce((s,f)=>s+sum(f.key,'metros'),0));
   const brCimbra=sum('brenda','cimbra');
   const crPerno=sum('crne','perno'),crMalla=sum('crne','malla');
   const brTperf=sum('brenda','tperf'),crTperf=sum('crne','tperf');
@@ -14827,7 +14861,7 @@ function renderAvance(){
   if(!lista.length){wrap.innerHTML='<div class="card"><div class="empty-state">Sin reportes registrados. Genera el primero con el botón ➕.</div></div>';return;}
   wrap.innerHTML=lista.map(r=>{
     const b=r.brenda||{},c=r.crne||{};
-    const mt=r1m(FRENTES.reduce((s,f)=>s+((r[f.key]&&r[f.key].metros)||0),0)).toFixed(1);
+    const mt=r1m(FRENTES.filter(f=>!f.tajo).reduce((s,f)=>s+((r[f.key]&&r[f.key].metros)||0),0)).toFixed(1);
     const cell=(lbl,val)=>`<div style="font-size:11px;color:var(--text3)">${lbl}</div><div style="font-size:13px;color:var(--text);font-weight:600">${val}</div>`;
     const rgid='rgd-'+r.id;
     return`<div class="card" style="margin-bottom:12px">
@@ -14866,7 +14900,11 @@ function abrirModalReporteGuardia(){
   // Recorre FRENTES en vez de listar cada frente a mano: al agregar uno nuevo a la config
   // central queda operativo aquí sin tocar esta función (antes se olvidaba y el frente
   // aparecía en los tableros pero no se podía reportar).
+  // Las labores retiradas se ocultan del formulario: ya no se reportan, pero su historial sigue.
   FRENTES.forEach(f=>{
+    const card=g('rg-card-'+f.pfx); if(card) card.style.display=(f.activo===false)?'none':'';
+  });
+  frentesActivos().forEach(f=>{
     const tr=g('rg-'+f.pfx+'-trabajos'); if(tr) tr.value='';
     const ds=g('rg-'+f.pfx+'-disparos'); if(ds){ ds.innerHTML=''; rgAddDisparo(f.pfx); }
   });
@@ -14891,6 +14929,13 @@ function editarReporteGuardia(id){
   if(!document.querySelectorAll('#rg-cr-disparos .rg-disparo').length)rgAddDisparo('cr');
   // Resto de frentes: se toman de FRENTES (1 y 2 ya se cargaron arriba con sus campos legacy),
   // así un frente nuevo de la config central se edita sin tocar esta función.
+  // Al EDITAR, una labor retirada se muestra si ese reporte tiene datos suyos: si se ocultara,
+  // sus metros desaparecerían del reporte al volver a guardarlo.
+  FRENTES.forEach(f=>{
+    const card=g('rg-card-'+f.pfx); if(!card) return;
+    const conDatos=!!(r[f.key] && ((r[f.key].disparos||[]).length || r[f.key].metros || r[f.key].trabajos));
+    card.style.display=(f.activo===false && !conDatos)?'none':'';
+  });
   FRENTES.filter(f=>f.id!==1&&f.id!==2).map(f=>[f.pfx,f.key]).forEach(([pfx,key])=>{
     if(!g(`rg-${pfx}-disparos`)) return;
     const d0=r[key]||{};
@@ -16007,7 +16052,7 @@ function abrirModalDistribucion(){
         <div style="font-size:10px;color:var(--text3)">${p.rol} · S/${p.jornal}/día</div>
       </div>
       <select class="dist-frente" data-pid="${p.id}" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
-        ${FRENTES.map(f=>`<option value="${f.id}" ${frente==f.id||String(frente)===String(f.id)?'selected':''}>${f.emoji} ${f.nombre}</option>`).join('')}
+        ${FRENTES.filter(f=>f.activo!==false||frente==f.id||String(frente)===String(f.id)).map(f=>`<option value="${f.id}" ${frente==f.id||String(frente)===String(f.id)?'selected':''}>${f.emoji} ${f.nombre}${f.activo===false?' (retirada)':''}</option>`).join('')}
         <option value="MARGINAL" ${frente==='MARGINAL'?'selected':''}>📊 Costeo Marginal</option>
       </select>
       <select class="dist-guardia" data-pid="${p.id}" title="Guardia" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
@@ -16872,6 +16917,8 @@ function rgExploOptions(sel){
 }
 // ── DISPAROS por frente (multi-registro: explosivo + sostenimiento + metros + taladros) ──
 function rgFmtN(n){return (typeof fmtN==='function')?fmtN(n):(Math.round((Number(n)||0)*100)/100);}
+// ¿El bloque de disparo pertenece a un tajo? Se resuelve por el prefijo del formulario.
+function _rgEsTajoPfx(pfx){ const f=FRENTES.find(x=>x.pfx===pfx); return !!(f&&f.tajo); }
 function rgAddDisparo(pfx,d){
   d=d||{};
   const wrap=document.getElementById('rg-'+pfx+'-disparos');if(!wrap)return;
@@ -16883,7 +16930,7 @@ function rgAddDisparo(pfx,d){
     '<button onclick="rgRemoveDisparo(this,\''+pfx+'\')" title="Quitar disparo" style="position:absolute;top:8px;right:8px;background:none;border:none;color:#f87171;cursor:pointer;font-size:14px">✕</button>'
     +'<div class="rg-disp-titulo" style="font-size:12px;font-weight:800;color:var(--accent-light);margin-bottom:10px">💥 Disparo</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
-      +'<div class="form-group" style="margin:0"><label>Avance metros lineales</label><input type="number" class="rgd-metros" min="0" step="0.1" value="'+(d.metros||'')+'" placeholder="Ej: 3.5" oninput="rgCalcTotales(\''+pfx+'\')"></div>'
+      +'<div class="form-group" style="margin:0"><label>'+(_rgEsTajoPfx(pfx)?'Metros cúbicos rotos (m³)':'Avance metros lineales')+'</label><input type="number" class="rgd-metros" min="0" step="0.1" value="'+(d.metros||'')+'" placeholder="'+(_rgEsTajoPfx(pfx)?'Ej: 18.5':'Ej: 3.5')+'" oninput="rgCalcTotales(\''+pfx+'\')"></div>'
       +'<div class="form-group" style="margin:0"><label>Tipo de sostenimiento</label><select class="rgd-sost" style="width:100%" onchange="rgDisparoToggleSost(this)">'
         +'<option value="">Sin sostenimiento</option>'
         +'<option value="cimbra"'+(d.sost==='cimbra'?' selected':'')+'>Cimbra</option>'
@@ -22653,7 +22700,8 @@ function abrirModalCompresorista() {
   // explosivos por frente: una columna por CADA frente de FRENTES (igual que Jefe de Guardia).
   // Los inputs de brenda/crne conservan sus ids legacy (-R/-G); los demás usan -<key>.
   const _expfInputId=(c,f)=>'cexpf-'+c+(f.key==='brenda'?'-R':f.key==='crne'?'-G':'-'+f.key);
-  const _frs=(typeof FRENTES!=='undefined'?FRENTES:[]);
+  // Solo labores vigentes: las retiradas ya no se reportan (su historial se conserva aparte).
+  const _frs=(typeof frentesActivos==='function')?frentesActivos():((typeof FRENTES!=='undefined')?FRENTES:[]);
   const _head=document.getElementById('comp-expf-head');
   if(_head) _head.innerHTML='<th style="text-align:left;padding:6px 8px">Código</th>'+_frs.map(f=>`<th style="padding:6px 8px;text-align:center;color:${f.color||'var(--text2)'};white-space:nowrap">${f.emoji||''} ${compFrenteLabel(f.key)}</th>`).join('');
   document.getElementById('comp-expf-body').innerHTML = COMP_EXPLOSIVOS.map(c => `
