@@ -6282,10 +6282,16 @@ function renderDashEjecutivo(){
   const Sk=n=>{n=n||0;const a=Math.abs(n);return a>=1000000?'S/ '+(n/1000000).toFixed(1)+'M':a>=1000?'S/ '+Math.round(n/1000)+'k':'S/ '+Math.round(n);};
 
   // ── INGRESOS / GASTO / RESULTADO ──
-  const val=(typeof finValorizacionMes==='function')?finValorizacionMes(mes):{total:0,descuento:0};
-  const desglose=(typeof finDesgloseGastos==='function')?finDesgloseGastos(mes):[];
-  const costoTot=desglose.reduce((s,c)=>s+c.monto,0);
-  const costoExplo=(typeof finCostoExplosivos==='function')?finCostoExplosivos(mes):0;
+  // Si el periodo está CERRADO se muestran sus cifras congeladas, no un recálculo: un mes
+  // cerrado no puede cambiar de importe porque alguien corrigió un tareo o un precio después.
+  const _cong=(typeof finCongelado==='function')?finCongelado(mes):null;
+  const val=_cong?{total:_cong.valorizacion,descuento:0}
+    :((typeof finValorizacionMes==='function')?finValorizacionMes(mes):{total:0,descuento:0});
+  const desglose=_cong?(_cong.desglose||[])
+    :((typeof finDesgloseGastos==='function')?finDesgloseGastos(mes):[]);
+  const costoTot=_cong?_cong.gasto:desglose.reduce((s,c)=>s+c.monto,0);
+  const costoExplo=_cong?_cong.explosivos
+    :((typeof finCostoExplosivos==='function')?finCostoExplosivos(mes):0);
   const margen=val.total-costoTot;
   const pctMargen=val.total>0?Math.round(margen/val.total*100):0;
 
@@ -6424,7 +6430,7 @@ function renderDashEjecutivo(){
       <div style="position:absolute;top:-20px;right:-20px;width:90px;height:90px;background:rgba(255,255,255,.06);border-radius:50%"></div>
       <div style="font-size:10.5px;color:#fdba74;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:6px">📤 Gasto Total</div>
       <div style="font-size:33px;font-weight:900;color:#fff;letter-spacing:-1.5px;line-height:1">${S(costoTot)}</div>
-      <div style="margin-top:8px;font-size:11px;color:#fed7aa">Explosivos aparte: ${S(costoExplo)}</div>
+      <div style="margin-top:8px;font-size:11px;color:#fed7aa">Explosivos aparte: ${S(costoExplo)}${_cong?' · 🔒 periodo cerrado':''}</div>
     </div>
     <div style="background:${margen>=0?'linear-gradient(135deg,#1e1b4b,#312e81)':'linear-gradient(135deg,#450a0a,#7f1d1d)'};border-radius:18px;padding:20px;position:relative;overflow:hidden;box-shadow:0 8px 28px ${margen>=0?'rgba(99,102,241,.22)':'rgba(239,68,68,.18)'}">
       <div style="position:absolute;top:-20px;right:-20px;width:90px;height:90px;background:rgba(255,255,255,.06);border-radius:50%"></div>
@@ -26403,6 +26409,18 @@ function bloqueadoPorCierre(fecha,queCosa){
 }
 
 // Totales del periodo (consumos), para guardar en el índice del historial
+// Cifras congeladas de un mes ya cerrado, si las tiene. Devuelve null si el mes está abierto o
+// si se cerró con una versión anterior, que no las guardaba.
+function finCongelado(mesYM){
+  try{
+    const hist=(typeof histPeriodosLoad==='function')?histPeriodosLoad():[];
+    for(const h of hist){
+      const f=h&&h.totales&&h.totales.finanzas;
+      if(f && f.mes===mesYM) return f;
+    }
+  }catch(e){}
+  return null;
+}
 function periodoTotales(r){
   const inRango=arr=>(arr||[]).filter(x=>enRango(x.fecha,r));
   const sal=inRango(state.almacen&&state.almacen.salidas);
@@ -26417,7 +26435,24 @@ function periodoTotales(r){
   const reportes=(state.reportesGuardia||[]).filter(x=>enRango(x.fecha,r)).length;
   const mant=(state.mantenimiento||[]).filter(x=>enRango(x.fecha,r)).length;
   const metros=(state.reportesGuardia||[]).filter(x=>enRango(x.fecha,r)).reduce((a,g)=>a+((g.brenda&&g.brenda.metros)||0)+((g.crne&&g.crne.metros)||0),0);
-  return { consumoAlmacen:Math.round(consumoAlmacen*100)/100, petroleoGln:Math.round(pet*10)/10, gasolinaGln:Math.round(gas*10)/10,
+  // CIFRAS CONGELADAS DEL PERIODO. Sin esto, el tablero recalcula el costo de un mes cerrado
+  // cada vez que se abre, con los datos que haya HOY: cualquier tareo corregido, un precio que
+  // cambia o un cargo que pasa a sueldo reservado mueve el costo de un mes ya cerrado. Un
+  // periodo cerrado tiene que valer siempre lo mismo.
+  let fin=null;
+  try{
+    const mesP=(r&&r.fin)?String(r.fin).slice(0,7):null;
+    if(mesP){
+      const val=(typeof finValorizacionMes==='function')?finValorizacionMes(mesP):{total:0};
+      const desg=(typeof finDesgloseGastos==='function')?finDesgloseGastos(mesP):[];
+      fin={ mes:mesP, valorizacion:Number(val.total)||0,
+            gasto:desg.reduce((a,c)=>a+(Number(c.monto)||0),0),
+            desglose:desg.map(c=>({key:c.key,label:c.label,monto:Number(c.monto)||0})),
+            explosivos:(typeof finCostoExplosivos==='function')?(Number(finCostoExplosivos(mesP))||0):0,
+            congeladoEl:new Date().toISOString() };
+    }
+  }catch(e){ console.warn('congelar cifras',e); }
+  return { finanzas:fin, consumoAlmacen:Math.round(consumoAlmacen*100)/100, petroleoGln:Math.round(pet*10)/10, gasolinaGln:Math.round(gas*10)/10,
            ingresosAlmacen:ing.length, salidasAlmacen:sal.length, tareos, reportes, mantenimientos:mant, metrosAvance:Math.round(metros*100)/100 };
 }
 
@@ -26540,6 +26575,48 @@ async function confirmarCerrarPeriodo(periodo){
   if(ok) setTimeout(abrirHistorialPeriodos,400);
 }
 
+
+// Fija las cifras oficiales de un periodo YA cerrado. Hace falta para los que se cerraron con una
+// versión anterior, que no las guardaba: sin ellas el tablero sigue recalculándolos y su costo se
+// mueve solo. Se proponen las calculadas ahora, pero se pueden corregir a mano con las del cierre
+// real, que es el número que vale.
+function fijarCifrasCierre(periodo){
+  const hist=histPeriodosLoad();
+  const h=hist.find(x=>x.periodo===periodo);
+  if(!h){ alert('No se encontró el periodo '+periodo); return; }
+  const mesP=(h.rango&&h.rango.fin)?String(h.rango.fin).slice(0,7):periodo;
+  const yaF=(h.totales&&h.totales.finanzas)||null;
+  const calcVal=(typeof finValorizacionMes==='function')?(Number(finValorizacionMes(mesP).total)||0):0;
+  const desg=(typeof finDesgloseGastos==='function')?finDesgloseGastos(mesP):[];
+  const calcGas=desg.reduce((a,c)=>a+(Number(c.monto)||0),0);
+  const calcExp=(typeof finCostoExplosivos==='function')?(Number(finCostoExplosivos(mesP))||0):0;
+  const fN=n=>'S/ '+Math.round(Number(n)||0).toLocaleString('es-PE');
+  const sV=prompt('CIFRAS OFICIALES DEL CIERRE — '+(h.label||periodo)+'\n\n'+
+    'Calculado hoy con los datos actuales: '+fN(calcVal)+'\n'+
+    (yaF?('Congelado actualmente: '+fN(yaF.valorizacion)+'\n'):'')+
+    '\nValorización (ingreso del periodo):', String(Math.round(yaF?yaF.valorizacion:calcVal)));
+  if(sV===null) return;
+  const sG=prompt('Calculado hoy: '+fN(calcGas)+'\n'+(yaF?('Congelado actualmente: '+fN(yaF.gasto)+'\n'):'')+
+    '\nGasto total del periodo:', String(Math.round(yaF?yaF.gasto:calcGas)));
+  if(sG===null) return;
+  const val=Number(String(sV).replace(/[^\d.-]/g,''))||0;
+  const gas=Number(String(sG).replace(/[^\d.-]/g,''))||0;
+  if(!confirm('Fijar '+(h.label||periodo)+':\n\n  Valorización: '+fN(val)+'\n  Gasto total: '+fN(gas)+
+    '\n  Resultado: '+fN(val-gas)+
+    '\n\nA partir de ahora el tablero mostrará SIEMPRE estas cifras para este periodo, sin recalcularlas.')) return;
+  h.totales=h.totales||{};
+  // El desglose por categoría se ajusta proporcionalmente para que sume el gasto fijado, y así la
+  // gráfica de categorías siga cuadrando con el total.
+  const factor=calcGas>0?(gas/calcGas):0;
+  h.totales.finanzas={ mes:mesP, valorizacion:val, gasto:gas,
+    desglose:desg.map(c=>({key:c.key,label:c.label,monto:Math.round((Number(c.monto)||0)*factor*100)/100})),
+    explosivos:Math.round(calcExp*factor*100)/100,
+    congeladoEl:new Date().toISOString(), fijadoAMano:true };
+  histPeriodosSave(hist);
+  try{ _ejecMes=mesP; renderDashboard(); }catch(e){}
+  alert('✅ Cifras fijadas para '+(h.label||periodo)+'.\n\nEl tablero ya no las recalculará.');
+}
+
 // ── UI: historial de periodos ──
 function abrirHistorialPeriodos(){
   const hist=histPeriodosLoad();
@@ -26555,7 +26632,15 @@ function abrirHistorialPeriodos(){
         Tareos: <b>${t.tareos||0}</b> · Reportes: <b>${t.reportes||0}</b> · Mantenimientos: <b>${t.mantenimientos||0}</b> · Avance: <b>${t.metrosAvance||0} m</b>
       </div>
       <div style="font-size:10px;color:var(--text3);margin-top:6px">Cerrado: ${(h.cerradoEl||'').slice(0,16).replace('T',' ')} · Respaldo en nube: <code>${h.backupKey||''}</code></div>
-      <div style="margin-top:8px"><button class="btn btn-outline" style="font-size:11px;padding:5px 12px;border-color:#22d3a5;color:#22d3a5" onclick="restaurarPeriodo('${h.periodo}')">♻ Restaurar datos de este ciclo</button></div>
+      <div style="font-size:11px;margin-top:6px;padding:6px 8px;border-radius:6px;background:${t.finanzas?'rgba(34,211,165,.1)':'rgba(245,158,11,.12)'};color:${t.finanzas?'#22d3a5':'#f59e0b'}">
+        ${t.finanzas
+          ? `🔒 Cifras fijas — Valorización <b>${fmtS(t.finanzas.valorizacion)}</b> · Gasto <b>${fmtS(t.finanzas.gasto)}</b>${t.finanzas.fijadoAMano?' (fijadas a mano)':''}`
+          : `⚠ Sin cifras fijas: el tablero recalcula este periodo cada vez, así que su costo puede moverse.`}
+      </div>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-outline" style="font-size:11px;padding:5px 12px;border-color:#22d3a5;color:#22d3a5" onclick="restaurarPeriodo('${h.periodo}')">♻ Restaurar datos de este ciclo</button>
+        <button class="btn btn-outline" style="font-size:11px;padding:5px 12px;border-color:#f59e0b;color:#f59e0b" onclick="fijarCifrasCierre('${h.periodo}')">🔒 ${t.finanzas?'Corregir':'Fijar'} cifras del cierre</button>
+      </div>
     </div>`;
   }).join(''):'<div style="text-align:center;color:var(--text3);padding:24px">Aún no hay periodos cerrados.</div>';
   const html=`<div id="modal-historial-periodos" class="modal-overlay" style="display:flex" onclick="if(event.target===this)cerrarModal('modal-historial-periodos')">
