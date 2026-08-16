@@ -4,7 +4,7 @@
 //    si no hay señal, se sirve la última copia buena desde caché → la app abre en interior mina.
 //  · Supabase y demás peticiones de datos: solo red (la app ya maneja sus fallos y su cola offline).
 // Al desplegar una versión nueva basta con cambiar CACHE_V: el SW viejo se limpia solo.
-const CACHE_V = 'mukicloud-v2026.08.09-69';
+const CACHE_V = 'mukicloud-v2026.08.09-70';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
@@ -32,6 +32,10 @@ self.addEventListener('fetch', (e) => {
 
   // Datos (Supabase u otros orígenes): solo red — nunca cachear datos de la operación.
   if (url.origin !== self.location.origin) return;
+
+  // La consulta pública del trabajador (/tareo) va siempre a la red: no se cachea ni se
+  // reemplaza por la app, que es otra cosa.
+  if (url.pathname === '/tareo' || url.pathname.endsWith('/tareo.html') || url.pathname.startsWith('/api/')) return;
 
   // App shell (index.html y navegaciones): red primero, caché de respaldo.
   if (req.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('/index.html')) {
