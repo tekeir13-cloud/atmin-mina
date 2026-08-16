@@ -19614,6 +19614,7 @@ function iniciarSesion(user){
   usuarioActivo = user;
   document.getElementById('login-screen').style.display = 'none';
   mostrarBottomNav(true);
+  try{ armarBottomNav(); }catch(e){}
   setTimeout(()=>setActiveBottomNav('dashboard'), 100);
   // Extras — no críticos, no bloquean si fallan
   try{ setTimeout(() => deepmineVoice(), 300); }catch(e){}
@@ -20480,6 +20481,41 @@ async function cargarSeguridadSB(){
 // ════════════════════════════════════════════════════
 //  MÓVIL — Bottom nav y sidebar
 // ════════════════════════════════════════════════════
+// La barra inferior del celular traía cuatro módulos fijos (Inicio, Operaciones, Logística y
+// Seguridad). Para quien no tiene ninguno de esos —el usuario de Compras, por ejemplo— la barra
+// entera era inútil: cuatro botones que llevan a "Acceso denegado" y su módulo escondido detrás
+// del menú. Ahora se arma con los módulos que esa persona SÍ puede usar.
+const BN_MODULOS={
+  dashboard:    {icono:'⊞',  etiqueta:'Inicio'},
+  operaciones:  {icono:'⛏',  etiqueta:'Oper.'},
+  logistica:    {icono:'📦', etiqueta:'Log.'},
+  seguridad:    {icono:'🦺', etiqueta:'Segur.'},
+  compras:      {icono:'🧾', etiqueta:'Compras'},
+  compresorista:{icono:'🔧', etiqueta:'Compr.'},
+  rrhh:         {icono:'👷', etiqueta:'RRHH'},
+  mantenimiento:{icono:'🔧', etiqueta:'Mant.'},
+  finanzas:     {icono:'💰', etiqueta:'Finanzas'},
+  reporte:      {icono:'📊', etiqueta:'Reporte'},
+  ia:           {icono:'🤖', etiqueta:'IA'}
+};
+function armarBottomNav(){
+  const nav=document.getElementById('bottom-nav'); if(!nav) return;
+  const mods=(usuarioActivo&&Array.isArray(usuarioActivo.modulos))?usuarioActivo.modulos:[];
+  // Se respeta el orden de siempre para no mover el suelo a quien ya está acostumbrado.
+  const orden=['dashboard','operaciones','logistica','seguridad','compras','compresorista','rrhh','mantenimiento','finanzas','reporte','ia'];
+  const suyos=orden.filter(m=>mods.includes(m)).slice(0,4);
+  if(!suyos.length) return;                       // sin módulos: se deja la barra como está
+  nav.innerHTML=suyos.map(m=>{
+    const d=BN_MODULOS[m]||{icono:'•',etiqueta:m};
+    const icono=(m==='seguridad')
+      ? `<span class="bn-badge-wrap"><span class="bn-icon">${d.icono}</span><span class="nav-badge" id="seg-badge-bn"></span></span>`
+      : `<span class="bn-icon">${d.icono}</span>`;
+    return `<button class="bn-item" id="bn-${m}" onclick="navigate('${m}');setActiveBottomNav('${m}')">`+
+           `${icono}<span class="bn-label">${d.etiqueta}</span></button>`;
+  }).join('')+
+  `<button class="bn-item" id="bn-menu" onclick="abrirMenuMobile()">`+
+  `<span class="bn-icon">☰</span><span class="bn-label">Menú</span></button>`;
+}
 function abrirMenuMobile(){
   const _sm1=document.getElementById('sidebar-mobile');if(_sm1)_sm1.classList.add('show');
   const _smo1=document.getElementById('sidebar-mobile-overlay');if(_smo1)_smo1.classList.add('show');
@@ -20495,11 +20531,37 @@ function abrirMenuMobile(){
     if(nb) nb.textContent = usuarioActivo.nombre;
     if(rb) rb.textContent = ROL_LABELS[usuarioActivo.rol] || usuarioActivo.rol;
   }
-  // Marcar activo
-  document.querySelectorAll('.mob-nav-btn').forEach(b=>{
+  // Marcar activo y atenuar lo que esa persona no puede abrir, igual que en el menú de escritorio.
+  const _mods=(usuarioActivo&&Array.isArray(usuarioActivo.modulos))?usuarioActivo.modulos:null;
+  const _btns=[...document.querySelectorAll('.mob-nav-btn')];
+  _btns.forEach(b=>{
     const m = (b.getAttribute('onclick')||'').match(/navMobile\('([^']+)'\)/);
-    if(m) b.classList.toggle('active', m[1]===window._currentPage);
+    if(!m) return;
+    b.classList.toggle('active', m[1]===window._currentPage);
+    if(_mods){
+      // En el celular los módulos sin acceso se OCULTAN, no se atenúan. En el menú de escritorio
+      // atenuarlos está bien porque se ven todos de un vistazo; en una pantalla de teléfono
+      // obligaban a bajar pasando diez entradas apagadas para llegar a la única utilizable.
+      b.style.display = _mods.includes(m[1]) ? '' : 'none';
+    }
   });
+  // Un encabezado de sección cuyo grupo quedó entero oculto se esconde también: si no, quedan
+  // los títulos "Módulos" o "Reportes" flotando sin nada debajo.
+  if(_mods){
+    const cont=_btns.length?_btns[0].parentElement:null;
+    if(cont){
+      const hijos=[...cont.children];
+      hijos.forEach((el,i)=>{
+        if(el.classList.contains('mob-nav-btn')) return;
+        let hayAlguno=false;
+        for(let j=i+1;j<hijos.length;j++){
+          if(!hijos[j].classList.contains('mob-nav-btn')) break;
+          if(hijos[j].style.display!=='none'){ hayAlguno=true; break; }
+        }
+        el.style.display = hayAlguno ? '' : 'none';
+      });
+    }
+  }
 }
 
 function cerrarMenuMobile(){
@@ -22575,6 +22637,7 @@ function finGuardarIngresosMaq(){
       <button class="mob-nav-btn mob-nav-highlight" onclick="navMobile('ia')"><span>🤖</span> Asistente IA</button>
       <button class="mob-nav-btn" onclick="navMobile('reporte')"><span>📊</span> Reporte Mensual</button>
       <button class="mob-nav-btn" onclick="navMobile('compresorista')"><span>🔧</span> Compresorista</button>
+      <button class="mob-nav-btn" onclick="navMobile('compras')"><span>🧾</span> Compras</button>
     </div>
     <!-- Cerrar sesión -->
     <div style="padding:12px 16px;border-top:1px solid var(--border);margin-top:8px">
