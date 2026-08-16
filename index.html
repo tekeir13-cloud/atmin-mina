@@ -5464,7 +5464,7 @@ function nv2820Stock(){
 // Figuras (emoji) por explosivo del catálogo
 const EXPLO_FIG={M1000:'🧨',M3000:'🧨',M5000:'🧨',CARMEX18:'🧵',CARMEX240:'🧵',FAMECORTE:'🪢',NEITHER:'🌀',CORDON5G:'🧶'};
 // Los 16 FANEL 3 comparten icono: son variantes del mismo detonador.
-function exploFig(id){ if(/^FANEL3_/.test(String(id||''))) return '⏱'; return EXPLO_FIG[id]||'🧨'; }
+function exploFig(id){ if(/^FANEL[34]_/.test(String(id||''))) return '⏱'; return EXPLO_FIG[id]||'🧨'; }
 // Stock de explosivos en almacén (ingresos − salidas de state.almacen.explosivos), en unidades
 function exploStockTotal(){
   const cat=(typeof EXPLO_CATALOGO!=='undefined')?EXPLO_CATALOGO:[];
@@ -10363,6 +10363,16 @@ const FANEL3_CATALOGO=FANEL3_PRECIOS.map((precio,i)=>({
   nombre:'DETONADOR NO ELECTRICO FANEL 3 N° '+(i+1),
   upCaja:FANEL3_UPCAJA, unidad:'und', precio, remanente:false
 }));
+// ── FANEL DE 4 METROS — los mismos 16 tipos, mismo precio ──
+// Se DERIVAN de los de 3 m en vez de copiarse: así el precio del N° 7 de 4 m no puede quedarse
+// desfasado del N° 7 de 3 m cuando se corrija la lista de compra. Se toca un solo sitio.
+const FANEL4_CATALOGO=FANEL3_CATALOGO.map(c=>({
+  id:c.id.replace('FANEL3_','FANEL4_'),
+  nombre:c.nombre.replace('FANEL 3','FANEL 4'),
+  upCaja:c.upCaja, unidad:c.unidad, precio:c.precio, remanente:false
+}));
+// Todos los FANEL, de 3 y de 4 metros, para no repetir la lista en cada módulo.
+const FANEL_TODOS=FANEL3_CATALOGO.concat(FANEL4_CATALOGO);
 const EXPLO_CATALOGO=[
   {id:'M1000',nombre:'EMULNOR 1000 1" X 7"',upCaja:264,unidad:'und'},
   {id:'M3000',nombre:'EMULNOR 3000 1" X 8"',upCaja:228,unidad:'und'},
@@ -10374,7 +10384,7 @@ const EXPLO_CATALOGO=[
   // Se mide en METROS y viene en rollos de 750 m. upCaja = mPorRollo para que cualquier cálculo
   // genérico de "cajas" dé rollos correctos.
   {id:'CORDON5G',nombre:'CORDON DETONANTE 5G',upCaja:750,unidad:'rollo',mPorRollo:750,precio:0.959},
-  ...FANEL3_CATALOGO,
+  ...FANEL_TODOS,
 ];
 // ¿Este explosivo entra al Stock Remanente? Los FANEL 3 no: remanente se queda como estaba.
 function exploVaARemanente(id){ const c=exploGetCat(id); return !c || c.remanente!==false; }
@@ -22642,13 +22652,13 @@ compCargarLocal();
 // Los 16 FANEL 3 se agregan desde FANEL3_CATALOGO, no a mano: el Compresorista los reporta
 // para trazabilidad (el gasto se sigue contando solo cuando salen de Logística).
 const COMP_EXPLOSIVOS = ['M1000','M3000','M5000','CARMEX18','CARMEX240','FAMECORTE','NEITHER','CORDON5G']
-  .concat(FANEL3_CATALOGO.map(c=>c.id));
+  .concat(FANEL_TODOS.map(c=>c.id));
 const COMP_EXPLO_LABEL = Object.assign(
   {'M1000':'EMULNOR 1000 1" X 7"','M3000':'EMULNOR 3000 1" X 8"','M5000':'EMULNOR 5000 1" X 8"','CARMEX18':'CARMEX 1.8" MTRS','CARMEX240':'CARMEX 2.40" MTRS','FAMECORTE':'FAME CORTE','NEITHER':'MECHA RAPIDA DE IGNISION','CORDON5G':'CORDON DETONANTE 5G'},
-  Object.fromEntries(FANEL3_CATALOGO.map(c=>[c.id,c.nombre])));
+  Object.fromEntries(FANEL_TODOS.map(c=>[c.id,c.nombre])));
 const COMP_PRECIOS_EXP_DEFAULT = Object.assign(
   {'M1000':1.36,'M3000':1.54,'M5000':2.34,'CARMEX18':3.81,'CARMEX240':4.10,'FAMECORTE':4.00,'NEITHER':2.00,'CORDON5G':0.959},
-  Object.fromEntries(FANEL3_CATALOGO.map(c=>[c.id,c.precio])));
+  Object.fromEntries(FANEL_TODOS.map(c=>[c.id,c.precio])));
 const COMP_ACEROS = ['BARRA CONICA 4\' X 7/8"','BARRA CONICA 6\' X 7/8"','BARRA CONICA 8\' X 7/8"','BROCA DESCARTABLE DE BOTONES 36 MM','BROCA DESCARTABLE DE BOTONES 32 MM','BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'','BARRA DE ALUMINIO PARA ACUÑAR 1" X 10\'','BARRA DE ALUMINIO PARA ACUÑAR 1" X 12'];
 const COMP_PRECIOS_ACEROS_DEFAULT = {'BARRA CONICA 4\' X 7/8"':249.17,'BARRA CONICA 6\' X 7/8"':330.29,'BARRA CONICA 8\' X 7/8"':411.41,'BROCA DESCARTABLE DE BOTONES 36 MM':76.88,'BROCA DESCARTABLE DE BOTONES 32 MM':74.91,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'':102.6,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 10\'':118.35,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 12':141.9};
 
