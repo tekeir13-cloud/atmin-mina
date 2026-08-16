@@ -75,31 +75,32 @@ function formulario(msg){
     '<div class="card pad">' +
       '<div class="campo"><label>Tu DNI</label>' +
         '<input id="dni" type="tel" inputmode="numeric" maxlength="8" placeholder="12345678" autocomplete="off"></div>' +
-      '<div class="campo"><label>Tu fecha de nacimiento</label>' +
-        '<input id="fecha" type="date"></div>' +
+      '<div class="campo"><label>Las 3 primeras letras de tu nombre</label>' +
+        '<input id="letras" type="text" maxlength="3" placeholder="Ej: PER (de Percy)" autocomplete="off" ' +
+        'style="text-transform:uppercase"></div>' +
       '<button class="principal" id="ver">Ver mi tarjeta</button>' +
       (msg ? '<div class="aviso">' + esc(msg) + '</div>' : '') +
-      '<div class="pie">Si tu ficha todavía no está completa, usa tu <b>fecha de ingreso</b>.<br>' +
+      '<div class="pie">Sirven las tres primeras letras de tu nombre o de cualquiera de tus apellidos.<br>' +
       'Solo se muestra el mes en curso.</div>' +
     '</div>';
   document.getElementById('ver').onclick = consultar;
-  document.getElementById('fecha').addEventListener('keydown', e => { if(e.key==='Enter') consultar(); });
-  document.getElementById('dni').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('fecha').focus(); });
+  document.getElementById('letras').addEventListener('keydown', e => { if(e.key==='Enter') consultar(); });
+  document.getElementById('dni').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('letras').focus(); });
   document.getElementById('dni').focus();
 }
 
 async function consultar(){
   const dni = (document.getElementById('dni').value||'').trim();
-  const fecha = (document.getElementById('fecha').value||'').trim();
+  const letras = (document.getElementById('letras').value||'').trim();
   const btn = document.getElementById('ver');
   btn.disabled = true; btn.textContent = 'Consultando…';
   try{
     const r = await fetch('/api/tarjeta', { method:'POST', headers:{'Content-Type':'application/json'},
-                                            body: JSON.stringify({dni, fecha}) });
+                                            body: JSON.stringify({dni, letras}) });
     const d = await r.json();
     if(!d || !d.ok){ formulario((d && d.msg) || 'No se pudo consultar. Intenta de nuevo.');
                      document.getElementById('dni').value = dni;
-                     document.getElementById('fecha').value = fecha; return; }
+                     document.getElementById('letras').value = letras; return; }
     pintar(d);
   }catch(e){
     formulario('Sin conexión. Intenta de nuevo cuando tengas señal.');

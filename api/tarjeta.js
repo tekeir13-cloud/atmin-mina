@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // MUKICLOUD · Consulta pública de la tarjeta de tareo  (POST /api/tarjeta)
 //
-// El trabajador entra a /tareo, escribe su DNI y su fecha de nacimiento (o la de
-// ingreso, mientras RRHH no complete su ficha) y ve SU tarjeta del mes en curso.
+// El trabajador entra a /tareo, escribe su DNI y las TRES PRIMERAS LETRAS de su nombre
+// y ve SU tarjeta del mes en curso.
 //
 // El filtro se hace AQUÍ, en el servidor, y la respuesta lleva únicamente los datos
 // de esa persona. Si el filtro se hiciera en el navegador, cualquiera podría abrir
@@ -38,6 +38,9 @@ async function modulo(nombre) {
 }
 
 const soloDigitos = (s) => String(s == null ? '' : s).replace(/\D/g, '');
+// Sin tildes, sin Ñ y en mayúsculas: "MUÑOZ" y "munoz" tienen que valer lo mismo.
+const canon = (s) => String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toUpperCase().replace(/[^A-Z]/g, '');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -50,9 +53,9 @@ module.exports = async function handler(req, res) {
   try {
     const cuerpo = (typeof req.body === 'string') ? JSON.parse(req.body || '{}') : (req.body || {});
     const dni = soloDigitos(cuerpo.dni);
-    const fecha = String(cuerpo.fecha || '').slice(0, 10);
+    const letras = canon(cuerpo.letras).slice(0, 3);
     if (dni.length < 8) return res.status(200).json({ error: 'dni', msg: 'Escribe tu DNI completo (8 dígitos).' });
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return res.status(200).json({ error: 'fecha', msg: 'Falta tu fecha de nacimiento.' });
+    if (letras.length < 3) return res.status(200).json({ error: 'letras', msg: 'Escribe las tres primeras letras de tu nombre.' });
 
     const personal = await modulo('personal');
     if (!Array.isArray(personal)) return res.status(200).json({ error: 'nube', msg: 'No se pudo consultar en este momento. Intenta de nuevo.' });
@@ -60,12 +63,16 @@ module.exports = async function handler(req, res) {
     const p = personal.find(x => soloDigitos(x && x.dni) === dni && (x.estado !== 'baja'));
     // El mismo mensaje para DNI inexistente y fecha equivocada: si fueran distintos,
     // se podría averiguar qué DNI está en planilla probando uno por uno.
-    const noCoincide = { error: 'datos', msg: 'Los datos no coinciden. Verifica tu DNI y tu fecha; si tu ficha aún no está completa, usa tu fecha de ingreso.' };
+    const noCoincide = { error: 'datos', msg: 'Los datos no coinciden. Revisa tu DNI y las tres primeras letras de tu nombre.' };
     if (!p) return res.status(200).json(noCoincide);
 
+    // Valen las tres primeras letras de CUALQUIERA de sus nombres o apellidos: en la planilla
+    // unos figuran como "APELLIDO APELLIDO NOMBRES" y cada quien se identifica con lo suyo.
     const f = p.ficha || {};
-    const validas = [f.fechaNac, p.ingreso, f.fechaIngreso].filter(Boolean).map(x => String(x).slice(0, 10));
-    if (!validas.includes(fecha)) return res.status(200).json(noCoincide);
+    const piezas = String(p.nombre || '').split(/\s+/)
+      .concat([f.nombres, f.apPaterno, f.apMaterno].filter(Boolean))
+      .map(canon).filter(x => x.length >= 3);
+    if (!piezas.some(x => x.startsWith(letras))) return res.status(200).json(noCoincide);
 
     // ── Mes en curso, hora de Perú ──
     const ahora = new Date(Date.now() - 5 * 3600 * 1000);
