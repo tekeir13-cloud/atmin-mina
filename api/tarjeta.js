@@ -1,8 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // MUKICLOUD · Consulta pública de la tarjeta de tareo  (POST /api/tarjeta)
 //
-// El trabajador entra a /tareo, escribe su DNI y las TRES PRIMERAS LETRAS de su nombre
-// y ve SU tarjeta del mes en curso.
+// El trabajador entra a /tareo, escribe su DNI y su clave —las tres primeras letras de su
+// nombre o de un apellido— y ve SU tarjeta del mes en curso. La pantalla NO dice de qué son
+// las letras: eso lo sabe el trabajador porque RRHH se lo indica.
 //
 // El filtro se hace AQUÍ, en el servidor, y la respuesta lleva únicamente los datos
 // de esa persona. Si el filtro se hiciera en el navegador, cualquiera podría abrir
@@ -55,7 +56,7 @@ module.exports = async function handler(req, res) {
     const dni = soloDigitos(cuerpo.dni);
     const letras = canon(cuerpo.letras).slice(0, 3);
     if (dni.length < 8) return res.status(200).json({ error: 'dni', msg: 'Escribe tu DNI completo (8 dígitos).' });
-    if (letras.length < 3) return res.status(200).json({ error: 'letras', msg: 'Escribe las tres primeras letras de tu nombre.' });
+    if (letras.length < 3) return res.status(200).json({ error: 'letras', msg: 'Escribe tu clave.' });
 
     const personal = await modulo('personal');
     if (!Array.isArray(personal)) return res.status(200).json({ error: 'nube', msg: 'No se pudo consultar en este momento. Intenta de nuevo.' });
@@ -63,7 +64,7 @@ module.exports = async function handler(req, res) {
     const p = personal.find(x => soloDigitos(x && x.dni) === dni && (x.estado !== 'baja'));
     // El mismo mensaje para DNI inexistente y fecha equivocada: si fueran distintos,
     // se podría averiguar qué DNI está en planilla probando uno por uno.
-    const noCoincide = { error: 'datos', msg: 'Los datos no coinciden. Revisa tu DNI y las tres primeras letras de tu nombre.' };
+    const noCoincide = { error: 'datos', msg: 'Los datos no coinciden. Revisa tu DNI y tu clave.' };
     if (!p) return res.status(200).json(noCoincide);
 
     // Valen las tres primeras letras de CUALQUIERA de sus nombres o apellidos: en la planilla
