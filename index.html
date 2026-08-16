@@ -767,6 +767,7 @@ select option{background:var(--coal3);}
 #ficha-print .fp-tit{ text-align:center; font-weight:bold; font-size:11.5pt; margin:0 0 1mm; letter-spacing:.4px; }
 #ficha-print .fp-sub{ text-align:center; font-size:7.5pt; margin:0 0 2mm; }
 #ficha-print .fp-enc{ position:relative; min-height:30mm; }
+#ficha-print .fp-enc.fp-enc-simple{ min-height:0; }
 #ficha-print .fp-foto{ position:absolute; top:0; right:0; width:22mm; height:28mm; object-fit:cover;
   border:1px solid #000; background:#fff; }
 #ficha-print .fp-foto-vacia{ display:flex; align-items:center; justify-content:center;
@@ -13581,14 +13582,18 @@ function _fpMm(px){ return px/(96/25.4); }
 // juntos, el error se acumula y la última sección acaba desbordando la página. Aquí se añade
 // una sección, se mide la hoja entera, y si se pasó se retira y empieza otra hoja.
 // La firma va siempre al final de la última hoja y nunca se parte.
-function _fpRepartir(cont, f, encabezado, firmaHTML){
+// `enc` es una función que recibe el número de hoja (0,1,2…) y devuelve su cabecera: la hoja 1
+// lleva la foto y las siguientes no, así que cada hoja se mide con la cabecera que realmente
+// va a imprimirse. Medirlas todas con la cabecera alta hacía que la firma no cupiera y aparecía
+// una tercera hoja casi vacía.
+function _fpRepartir(cont, f, enc, firmaHTML){
   cont.classList.add('midiendo');
   cont.innerHTML='';
   const hoja=document.createElement('div'); hoja.className='hoja'; cont.appendChild(hoja);
   const alto=()=>_fpMm(hoja.getBoundingClientRect().height);
   const hojas=[[]];
-  const nuevaHoja=()=>{ hoja.innerHTML=encabezado; hojas.push([]); };
-  hoja.innerHTML=encabezado;
+  const nuevaHoja=()=>{ hojas.push([]); hoja.innerHTML=enc(hojas.length-1); };
+  hoja.innerHTML=enc(0);
   FICHA_ORDEN.forEach(id=>{
     const html=_fpSeccion(id,f); if(!html) return;
     const marca=hoja.innerHTML;
@@ -13625,7 +13630,8 @@ function imprimirFichaTrabajador(pid){
   const cajaFoto=p.foto
     ? `<img src="${escAttr(p.foto)}" class="fp-foto">`
     : `<div class="fp-foto fp-foto-vacia">FOTO</div>`;
-  const enc=t=>`<div class="fp-enc">${cajaFoto}
+  // La foto va SOLO en la primera hoja.
+  const enc=(t,conFoto)=>`<div class="fp-enc${conFoto?'':' fp-enc-simple'}">${conFoto?cajaFoto:''}
     <div class="fp-tit">FICHA DE DATOS PERSONALES DEL TRABAJADOR</div>
     <div class="fp-sub">${_fpEsc(nombre)}${(f.dni||p.dni)?' · DNI '+_fpEsc(f.dni||p.dni):''} — ${t}</div></div>`;
   const firmaHTML=`<div class="fp-firma">
@@ -13642,10 +13648,10 @@ function imprimirFichaTrabajador(pid){
         </tr>
       </table>
     </div>`;
-  const hojas=_fpRepartir(cont, f, enc('Hoja 1 de 2'), firmaHTML);
+  const hojas=_fpRepartir(cont, f, i=>enc('Hoja '+(i+1)+' de 2', i===0), firmaHTML);
   const n=hojas.length;
   cont.innerHTML=hojas.map((secs,i)=>
-    `<div class="hoja">${enc('Hoja '+(i+1)+' de '+n)}${secs.map(x=>x.html).join('')}${i===n-1?firmaHTML:''}</div>`
+    `<div class="hoja">${enc('Hoja '+(i+1)+' de '+n, i===0)}${secs.map(x=>x.html).join('')}${i===n-1?firmaHTML:''}</div>`
   ).join('');
   document.body.classList.add('imprimiendo-ficha');
   // La limpieza va SOLO en afterprint. Un temporizador corto quitaba el modo impresión mientras
