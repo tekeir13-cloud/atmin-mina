@@ -2779,6 +2779,7 @@ select option{background:var(--coal3);}
     <button class="mod-tab" onclick="modTab('rrhh','tareomes',this)">🗓 Tareo Mensual</button>
     <button class="mod-tab" onclick="modTab('rrhh','tareas',this)">📂 Historial &amp; Edición</button>
     <button class="mod-tab" onclick="modTab('rrhh','personal',this)">👥 Personal</button>
+    <button class="mod-tab" onclick="modTab('rrhh','tarjetas',this)">🪪 Tarjetas de Tareo</button>
     <button class="mod-tab" onclick="modTab('rrhh','costorrhh',this)">👷 Planilla Operarios</button>
     <button class="mod-tab" id="tab-planillaint" style="display:none" onclick="modTab('rrhh','planillaint',this)">🧾 Planilla Integrada</button>
     <button class="mod-tab" onclick="modTab('rrhh','servicios',this)">🤝 Servicios Terceros</button>
@@ -2915,6 +2916,11 @@ select option{background:var(--coal3);}
         <div class="form-group"><label>Rol / Cargo</label><select id="p-rol"></select></div>
         <div class="form-group"><label>Jornal diario (S/)</label><input type="number" id="p-jornal" placeholder="80"></div>
         <div class="form-group"><label>Fecha de ingreso</label><input type="date" id="p-ingreso"></div>
+        <div class="form-group"><label>Foto del trabajador</label>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div id="p-foto-prev"></div>
+            <input type="file" accept="image/*" id="p-foto" onchange="pFotoElegir(this)" style="font-size:11px">
+          </div></div>
       </div>
       <div class="btn-row">
         <button class="btn btn-gold" onclick="agregarPersonal()">+ Agregar trabajador</button>
@@ -2980,6 +2986,7 @@ select option{background:var(--coal3);}
       </div>
     </div>
   </div>
+  <div class="mod-pane" style="display:none" id="rrhh-tarjetas"></div>
   <div class="mod-pane" style="display:none" id="rrhh-costorrhh">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
       <select id="costo-mes-sel" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;font-weight:600" onchange="renderCostoRRHH()">
@@ -4727,7 +4734,7 @@ const MODULE_PANES = {
   // OJO: cada pane nuevo del módulo DEBE listarse aquí. modTab oculta los panes por esta lista,
   // así que uno ausente se queda visible encima del que acabas de abrir.
   'log': ['almacen','historial','inventario','solicitudcompra','productos','explosivos','stockremanente','subalmacen2820','solicitudmantlog','combustible','estadisticas'],
-  'rrhh': ['planilla','tareomes','tareas','personal','costorrhh','servicios','planillaint'],
+  'rrhh': ['planilla','tareomes','tareas','personal','tarjetas','costorrhh','servicios','planillaint'],
   'op': ['tablero','avance','solicitudes','vsproyectado','valorizaciones','herramientas'],
   'mant': ['registro','costosmant'],
   'fin': ['dashboard','informe','costocentro'],
@@ -5240,6 +5247,17 @@ async function cargarAlmacenCombustibleSB(){
         }
       }catch(e){}
     }
+    // ── TARJETAS DE TAREO — anotaciones de RRHH (merge por trabajador/mes, nube gana) ──
+    {
+      try{
+        const tnNube=await sbLoadModulo('tarjeta_notas');
+        if(tnNube&&typeof tnNube==='object'&&!Array.isArray(tnNube)){
+          const tnLocal=tarjNotasLoad(); const out={...tnLocal};
+          Object.keys(tnNube).forEach(pid=>{ out[pid]={...(tnLocal[pid]||{}), ...(tnNube[pid]||{})}; });
+          try{ localStorage.setItem(TARJ_NOTAS_KEY,JSON.stringify(out)); }catch(e){}
+        }
+      }catch(e){}
+    }
     // ── HISTORIAL DE PERIODOS — índice de cierres (unión por periodo, nube gana) ──
     {
       try{
@@ -5404,6 +5422,7 @@ function renderModPane(mod,pane){
   else if(k==='rrhh-tareomes')renderTareoMensual();
   else if(k==='rrhh-tareas')renderTareas();
   else if(k==='rrhh-personal')renderPersonal();
+  else if(k==='rrhh-tarjetas')renderTarjetas();
   else if(k==='rrhh-costorrhh')renderCostoRRHH();
   else if(k==='rrhh-servicios')renderServiciosTerceros();
   else if(k==='rrhh-planillaint')renderPlanillaIntegrada();
@@ -7094,6 +7113,8 @@ else if(Number(prevAlm.productosTs||0)>Number(data.productosTs||0)){ a.productos
     case 'remanente_ingresos': if(Array.isArray(data)){ state.remanenteIngresos=M(data, state.remanenteIngresos||[]); setLS('atmin_remanente_ingresos', state.remanenteIngresos); } break;
     case 'servicios_terceros': if(Array.isArray(data)){ let loc=[]; try{loc=JSON.parse(localStorage.getItem('atmin_servicios_terceros')||'[]');}catch(e){} setLS('atmin_servicios_terceros', M(data, loc)); } break;
     case 'planilla_supervision': if(data&&typeof data==='object'){ setLS('atmin_planilla_supervision', data); } break;
+    case 'tarjeta_notas':      if(data&&typeof data==='object'){ setLS('atmin_tarjeta_notas', data);
+                                 try{ if(document.getElementById('rrhh-tarjetas')&&typeof renderTarjetas==='function') renderTarjetas(); }catch(e){} } break;
     case 'almacen_histbackup': if(data&&typeof data==='object'){ setLS('atmin_almacen_histbackup', data); } break;
     case 'params_precios': case 'adelantos': case 'meses_cerrados': case 'fin_config': case 'personal_jefe':
       if(typeof _cfgAplicar==='function'&&data&&typeof data==='object'){ _cfgAplicar(modulo,data); try{ localStorage.setItem('atmin_cfg_ts_'+modulo,String(Number(data._ts)||0)); }catch(e){} } break;
@@ -12835,6 +12856,195 @@ function purgarPersonalBaja(){
   try{ if(typeof renderTareoMensual==='function') renderTareoMensual(); }catch(e){}
   showNotif('🗑 '+bajas.length+' trabajador'+(bajas.length!==1?'es':'')+' eliminado'+(bajas.length!==1?'s':'')+' del listado');
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   TARJETAS DE TAREO — la ficha de un trabajador vista mes a mes
+   Todo lo laboral (días, tareas, monto) se CALCULA de los tareos ya registrados en las
+   otras pestañas: aquí no se teclea ningún día. Lo único propio de la tarjeta son los
+   pendientes —préstamos y descuentos— y las anotaciones.
+   Los montos de préstamo y descuento se guardan en `state.adelantos`, que es de donde ya bebe
+   la Planilla de Operarios: así la tarjeta y la planilla nunca dicen cosas distintas del mismo
+   trabajador.
+   Bandera: ROJA con préstamo · NARANJA con otro descuento pendiente · VERDE si no debe nada.
+   ══════════════════════════════════════════════════════════════════════════════ */
+const TARJ_NOTAS_KEY='atmin_tarjeta_notas';
+function tarjNotasLoad(){ try{ return JSON.parse(localStorage.getItem(TARJ_NOTAS_KEY)||'{}')||{}; }catch(e){ return {}; } }
+function tarjNotasSave(o){ try{ localStorage.setItem(TARJ_NOTAS_KEY,JSON.stringify(o||{})); }catch(e){}
+  try{ sbSyncModulo('tarjeta_notas', o||{}); }catch(e){} }
+function tarjNota(pid,mes){ const o=tarjNotasLoad(); return ((o[pid]||{})[mes])||{texto:'',descTexto:''}; }
+function tarjSetNota(pid,mes,campo,valor){
+  const o=tarjNotasLoad(); o[pid]=o[pid]||{}; o[pid][mes]=o[pid][mes]||{texto:'',descTexto:''};
+  o[pid][mes][campo]=valor; tarjNotasSave(o);
+}
+function tarjPrestamo(pid,mes){ return Number(((state.adelantos||{})[pid]||{})[mes])||0; }
+function tarjDescuento(pid,mes){ return Number(((state.adelantos||{})[pid]||{})[mes+'_desc'])||0; }
+function tarjBandera(pid,mes){
+  if(tarjPrestamo(pid,mes)>0) return {color:'#ef4444', txt:'Con préstamo', icono:'🔴'};
+  const n=tarjNota(pid,mes);
+  if(tarjDescuento(pid,mes)>0 || (n.descTexto||'').trim()) return {color:'#f59e0b', txt:'Descuento pendiente', icono:'🟠'};
+  return {color:'#22c55e', txt:'Sin pendientes', icono:'🟢'};
+}
+function tarjMesesCon(pid){
+  const set=new Set();
+  (state.tareas||[]).forEach(t=>{ if(String(t.trabajadorId)===String(pid)&&t.fecha) set.add(String(t.fecha).slice(0,7)); });
+  return [...set].sort().reverse();
+}
+function tarjAcumulado(pid){
+  const meses=tarjMesesCon(pid);
+  let dias=0,tareas=0,pago=0;
+  meses.forEach(m=>{ const r=tareoResumen(pid,m); dias+=r.diasTrab; tareas+=r.tareas;
+    pago+=(typeof tareoPago==='function')?tareoPago(pid,m):0; });
+  return {meses:meses.length, dias, tareas:Math.round(tareas*100)/100, pago};
+}
+let _tarjSel=null, _tarjMes=null, _tarjBusca='';
+function tarjMesActual(){ return _tarjMes || ((typeof hoy==='function')?hoy().slice(0,7):new Date().toISOString().slice(0,7)); }
+function tarjFotoHTML(p,tam){
+  const t=tam||34;
+  if(p&&p.foto) return '<img src="'+escAttr(p.foto)+'" alt="" style="width:'+t+'px;height:'+t+'px;border-radius:'+Math.round(t/4)+'px;object-fit:cover;flex-shrink:0;border:1px solid var(--border)">';
+  const ini=String((p&&p.nombre)||'').trim().split(/\s+/).map(x=>x[0]).slice(0,2).join('').toUpperCase();
+  return '<div style="width:'+t+'px;height:'+t+'px;border-radius:'+Math.round(t/4)+'px;background:var(--coal5);color:var(--text2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:'+Math.round(t/2.6)+'px;flex-shrink:0;border:1px solid var(--border)">'+(ini||'—')+'</div>';
+}
+function _tarjS(n){ return 'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function _tarjMarca(v){ const m=TAREO_MARCAS.find(x=>x.v===v); return m?m.l:null; }
+function tarjGuardarPendientes(pid,mes){
+  const tipo=(document.getElementById('tarj-tipo')||{}).value||'ninguno';
+  const monto=parseFloat((document.getElementById('tarj-monto')||{}).value)||0;
+  const nota=((document.getElementById('tarj-nota')||{}).value||'').trim();
+  if(!state.adelantos) state.adelantos={};
+  if(!state.adelantos[pid]) state.adelantos[pid]={};
+  // Un solo pendiente activo por mes: elegir uno limpia el otro, para que la bandera no mienta.
+  state.adelantos[pid][mes]      = (tipo==='prestamo')  ? monto : 0;
+  state.adelantos[pid][mes+'_desc'] = (tipo==='descuento') ? monto : 0;
+  tarjSetNota(pid,mes,'descTexto', tipo==='descuento'?nota:'');
+  try{ saveState(); }catch(e){}
+  try{ if(document.getElementById('rrhh-costorrhh')) renderCostoRRHH(); }catch(e){}
+  renderTarjetas();
+  showNotif('✓ Pendiente actualizado');
+}
+function tarjGuardarAnotacion(pid,mes){
+  const t=((document.getElementById('tarj-anota')||{}).value||'');
+  tarjSetNota(pid,mes,'texto',t);
+  showNotif('✓ Anotación guardada');
+}
+function tarjetaHTML(pid,mes){
+  const p=(state.personal||[]).find(x=>String(x.id)===String(pid));
+  if(!p) return '<div class="card" style="margin-bottom:14px;color:var(--text3)">Trabajador no encontrado.</div>';
+  const b=tarjBandera(pid,mes), r=tareoResumen(pid,mes), pago=tareoPago(pid,mes);
+  const acc=tarjAcumulado(pid), nota=tarjNota(pid,mes);
+  const jornal=Number(p.jornal)||0;
+  const prest=tarjPrestamo(pid,mes), desc=tarjDescuento(pid,mes);
+  const tipo=prest>0?'prestamo':((desc>0||(nota.descTexto||'').trim())?'descuento':'ninguno');
+  const neto=pago-prest-desc;
+  const [aa,mm]=mes.split('-').map(Number);
+  const nDias=new Date(aa,mm,0).getDate();
+  let dias='';
+  for(let d=1;d<=nDias;d++){
+    const f=mes+'-'+String(d).padStart(2,'0');
+    const v=_tareoCell(pid,f);
+    if(!v) continue;
+    const marca=_tarjMarca(v);
+    const mult=marca?(TAREO_MARCAS.find(x=>x.v===v).paga||0):(Number(v)||0);
+    dias+='<tr><td style="padding:4px 8px;color:var(--text2)">'+String(d).padStart(2,'0')+'</td>'+
+      '<td style="padding:4px 8px"><span style="display:inline-block;min-width:30px;text-align:center;background:'+_tareoColVal(v)+';color:#fff;font-weight:800;font-size:10px;border-radius:5px;padding:2px 5px">'+v+'</span></td>'+
+      '<td style="padding:4px 8px;font-size:11px;color:var(--text3)">'+(marca||'Tareo')+'</td>'+
+      '<td style="padding:4px 8px;text-align:right">'+mult+'</td>'+
+      '<td style="padding:4px 8px;text-align:right;color:var(--text2)">'+_tarjS(mult*jornal)+'</td></tr>';
+  }
+  const kpi=(t,v,c)=>'<div style="flex:1;min-width:104px;background:var(--coal4);border:1px solid var(--border);border-radius:10px;padding:9px 12px">'+
+    '<div style="font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:var(--text3)">'+t+'</div>'+
+    '<div style="font-size:17px;font-weight:800;color:'+(c||'var(--text)')+'">'+v+'</div></div>';
+  return '<div class="card" style="margin-bottom:14px;padding:0;overflow:hidden;border-left:5px solid '+b.color+'">'+
+    /* cabecera */
+    '<div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--coal3);border-bottom:1px solid var(--border);flex-wrap:wrap">'+
+      tarjFotoHTML(p,66)+
+      '<div style="min-width:0;flex:1">'+
+        '<div style="font-size:16px;font-weight:800;color:var(--text)">'+escAttr(p.nombre||'')+'</div>'+
+        '<div style="font-size:11.5px;color:var(--text3);margin-top:2px">'+escAttr(p.rol||'—')+' · DNI '+escAttr(p.dni||'—')+' · Guardia '+escAttr(p.guardia||'—')+'</div>'+
+        '<div style="font-size:11px;color:var(--text3)">Jornal '+_tarjS(jornal)+' · Ingreso '+escAttr(p.ingreso||'—')+'</div>'+
+      '</div>'+
+      '<div style="text-align:right">'+
+        '<div style="display:inline-flex;align-items:center;gap:6px;background:'+b.color+'22;border:1px solid '+b.color+';color:'+b.color+';border-radius:999px;padding:4px 12px;font-size:11.5px;font-weight:700">'+b.icono+' '+b.txt+'</div>'+
+        '<div style="margin-top:7px"><label style="font-size:10.5px;color:var(--text3);cursor:pointer">📷 Cambiar foto'+
+          '<input type="file" accept="image/*" style="display:none" onchange="tarjFotoSubir(\''+pid+'\',this)"></label></div>'+
+      '</div>'+
+    '</div>'+
+    /* KPIs del mes */
+    '<div style="padding:14px 16px">'+
+      '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Mes '+((typeof finNombreMes==='function')?finNombreMes(mes):mes)+'</div>'+
+      '<div style="display:flex;gap:9px;flex-wrap:wrap">'+
+        kpi('Días trabajados',r.diasTrab)+kpi('Tareas',r.tareas)+kpi('Días libres',r.dlTomados)+kpi('Faltas',r.faltas,r.faltas?'#f87171':null)+
+        kpi('Ganado',_tarjS(pago),'var(--gold)')+kpi('Neto a pagar',_tarjS(neto),neto<pago?'#f59e0b':'var(--positive)')+
+      '</div>'+
+      /* récord acumulado */
+      '<div style="margin-top:12px;display:flex;gap:9px;flex-wrap:wrap">'+
+        kpi('Meses con tareo',acc.meses)+kpi('Días acumulados',acc.dias)+kpi('Tareas acumuladas',acc.tareas)+kpi('Acumulado ganado',_tarjS(acc.pago),'var(--gold)')+
+      '</div>'+
+      /* detalle diario */
+      '<div class="section-title" style="font-size:12.5px;margin:16px 0 6px">Tareo del mes</div>'+
+      (dias?'<div class="table-wrap" style="max-height:280px;overflow:auto"><table style="width:100%;font-size:11.5px">'+
+        '<thead><tr style="background:#1a2744;color:#fff"><th style="padding:5px 8px;text-align:left">Día</th><th style="padding:5px 8px;text-align:left">Marca</th><th style="padding:5px 8px;text-align:left">Concepto</th><th style="padding:5px 8px;text-align:right">Tareas</th><th style="padding:5px 8px;text-align:right">Monto</th></tr></thead>'+
+        '<tbody>'+dias+'</tbody>'+
+        '<tfoot><tr style="border-top:2px solid var(--border);font-weight:800"><td colspan="3" style="padding:6px 8px">Total del mes</td><td style="padding:6px 8px;text-align:right">'+r.tareas+'</td><td style="padding:6px 8px;text-align:right;color:var(--gold)">'+_tarjS(pago)+'</td></tr></tfoot>'+
+        '</table></div>'
+        :'<div style="color:var(--text3);font-size:12px;padding:8px 0">Sin tareos registrados este mes.</div>')+
+      /* pendientes */
+      '<div class="section-title" style="font-size:12.5px;margin:16px 0 6px">Pendientes del mes</div>'+
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'+
+        '<div class="form-group" style="margin:0;min-width:190px"><label>Tipo de pendiente</label>'+
+          '<select id="tarj-tipo" style="width:100%">'+
+            '<option value="ninguno"'+(tipo==='ninguno'?' selected':'')+'>🟢 Sin pendientes</option>'+
+            '<option value="prestamo"'+(tipo==='prestamo'?' selected':'')+'>🔴 Préstamo</option>'+
+            '<option value="descuento"'+(tipo==='descuento'?' selected':'')+'>🟠 Otro descuento pendiente</option>'+
+          '</select></div>'+
+        '<div class="form-group" style="margin:0;min-width:140px"><label>Monto (S/)</label>'+
+          '<input type="number" step="0.01" id="tarj-monto" value="'+(prest>0?prest:(desc>0?desc:''))+'" placeholder="0.00" style="width:100%"></div>'+
+        '<div class="form-group" style="margin:0;flex:1;min-width:220px"><label>Detalle del descuento</label>'+
+          '<input type="text" id="tarj-nota" value="'+escAttr(nota.descTexto||'')+'" placeholder="Ej: EPP perdido, adelanto de víveres…" style="width:100%"></div>'+
+        '<button class="btn btn-gold" style="padding:8px 16px" onclick="tarjGuardarPendientes(\''+pid+'\',\''+mes+'\')">Guardar pendiente</button>'+
+      '</div>'+
+      /* anotaciones */
+      '<div class="form-group" style="margin:14px 0 0"><label>Anotaciones de RRHH</label>'+
+        '<textarea id="tarj-anota" rows="2" placeholder="Observaciones del mes…" style="width:100%">'+escAttr(nota.texto||'')+'</textarea></div>'+
+      '<div class="btn-row" style="margin-top:8px"><button class="btn btn-outline" style="padding:7px 14px;font-size:12px" onclick="tarjGuardarAnotacion(\''+pid+'\',\''+mes+'\')">Guardar anotación</button></div>'+
+    '</div></div>';
+}
+function renderTarjetas(){
+  const cont=document.getElementById('rrhh-tarjetas'); if(!cont) return;
+  const q=_tarjBusca.trim().toUpperCase();
+  const lista=(state.personal||[]).filter(p=>p.estado!=='baja')
+    .filter(p=>!q || String(p.nombre||'').toUpperCase().includes(q) || String(p.dni||'').includes(q));
+  const mes=tarjMesActual();
+  const set=new Set(); (state.tareas||[]).forEach(t=>{ if(t.fecha) set.add(String(t.fecha).slice(0,7)); });
+  set.add(mes);
+  const opcMes=[...set].sort().reverse();
+  cont.innerHTML=
+  '<div class="card" style="margin-bottom:14px">'+
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'+
+      '<div class="form-group" style="margin:0;flex:1;min-width:200px"><label>Buscar trabajador</label>'+
+        '<input type="text" id="tarj-buscar" value="'+escAttr(_tarjBusca)+'" placeholder="Nombre o DNI…" style="width:100%"'+
+        ' oninput="_tarjBusca=this.value;renderTarjetas();var e=document.getElementById(\'tarj-buscar\');if(e){e.focus();e.setSelectionRange(e.value.length,e.value.length);}"></div>'+
+      '<div class="form-group" style="margin:0;min-width:160px"><label>Mes de la tarjeta</label>'+
+        '<select id="tarj-mes" onchange="_tarjMes=this.value;renderTarjetas()" style="width:100%">'+
+        opcMes.map(function(m){return '<option value="'+m+'"'+(m===mes?' selected':'')+'>'+((typeof finNombreMes==='function')?finNombreMes(m):m)+'</option>';}).join('')+
+        '</select></div>'+
+      '<div style="font-size:11px;color:var(--text3);padding-bottom:8px">'+lista.length+' trabajador(es)</div>'+
+    '</div></div>'+
+  (_tarjSel ? tarjetaHTML(_tarjSel, mes) : '<div class="card" style="margin-bottom:14px;text-align:center;color:var(--text3);padding:18px">Elige un trabajador para ver su tarjeta.</div>')+
+  '<div class="card"><div class="section-title" style="margin-top:0;font-size:13px">Trabajadores</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px">'+
+    (lista.map(function(p){
+      const b=tarjBandera(p.id,mes), r=tareoResumen(p.id,mes);
+      const sel=String(_tarjSel)===String(p.id);
+      return '<button onclick="_tarjSel=\''+p.id+'\';renderTarjetas()" style="text-align:left;background:'+(sel?'var(--coal5)':'var(--coal4)')+';border:1px solid '+(sel?'var(--accent-border)':'var(--border)')+';border-left:4px solid '+b.color+';border-radius:10px;padding:10px 12px;cursor:pointer">'+
+        '<div style="display:flex;align-items:center;gap:9px">'+tarjFotoHTML(p,34)+
+          '<div style="min-width:0;flex:1"><div style="font-size:12.5px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escAttr(p.nombre||'')+'</div>'+
+          '<div style="font-size:10px;color:var(--text3)">'+escAttr(p.rol||'')+'</div></div>'+
+          '<span style="font-size:13px" title="'+b.txt+'">'+b.icono+'</span></div>'+
+        '<div style="font-size:10.5px;color:var(--text3);margin-top:6px">'+r.diasTrab+' días · '+r.tareas+' tareas</div></button>';
+    }).join('')||'<div style="grid-column:1/-1;color:var(--text3);padding:16px;text-align:center">Sin coincidencias.</div>')+
+    '</div></div>';
+}
+
 function renderPersonal(){
   try{ if(typeof personalOrdenar==='function') personalOrdenar(); }catch(e){}
   try{ poblarSelectCargos('p-rol'); }catch(e){}
@@ -13015,8 +13225,10 @@ async function agregarPersonal(){
   const jefe=document.getElementById('p-jefe')?.value||'';
   const nv={nombre,dni:document.getElementById('p-dni').value,rol:document.getElementById('p-rol').value,frente:null,estado:'activo',jornal:parseFloat(document.getElementById('p-jornal').value)||80,ingreso:document.getElementById('p-ingreso').value||hoy(),_ts:Date.now()};
   // 'jefe' (hoja del Jefe de Guardia) se guarda localmente; no se envía al insert para no romper si la columna no existe en la BD
-  try{const{data}=await sb.from('personal').insert([nv]).select().single();state.personal.push({...nv,jefe,id:data.id});}
-  catch(e){state.personal.push({...nv,jefe,id:Date.now()});}
+  // 'foto' tampoco se envía al insert (columna opcional): se guarda en el módulo 'personal'
+  const foto=_pFotoTmp||'';
+  try{const{data}=await sb.from('personal').insert([nv]).select().single();state.personal.push({...nv,jefe,foto,id:data.id});}
+  catch(e){state.personal.push({...nv,jefe,foto,id:Date.now()});}
   if(jefe&&nv.dni) pJefeSet(nv.dni,jefe);
   // Guardar la referencia ANTES de ordenar: al ordenar alfabéticamente, "el último de la lista"
   // deja de ser el recién creado y la ficha se abriría con otra persona.
@@ -13028,7 +13240,49 @@ async function agregarPersonal(){
   // delante. Se puede cerrar y completarla luego desde el botón Ficha de su fila.
   if(_nuevo&&_nuevo.id!=null){ try{ abrirFichaTrabajador(_nuevo.id); }catch(e){} }
 }
-function limpiarFormPersonal(){['p-nombre','p-dni','p-jornal','p-ingreso'].forEach(id=>document.getElementById(id).value='');const j=document.getElementById('p-jefe');if(j)j.value='';}
+function limpiarFormPersonal(){['p-nombre','p-dni','p-jornal','p-ingreso'].forEach(id=>document.getElementById(id).value='');const j=document.getElementById('p-jefe');if(j)j.value='';
+  _pFotoTmp=''; const f=document.getElementById('p-foto'); if(f) f.value=''; const pv=document.getElementById('p-foto-prev'); if(pv) pv.innerHTML='';}
+
+/* ── FOTO DEL TRABAJADOR ──────────────────────────────────────────────────────
+   La foto se guarda dentro de la propia ficha (campo `foto`) como dataURL reducida a 320 px:
+   así viaja con el resto del personal a Supabase y al respaldo, sin depender de ningún
+   almacenamiento aparte que se pueda perder al cambiar de equipo. */
+let _pFotoTmp='';
+function _fotoLeer(file, cb){
+  if(!file){ cb(''); return; }
+  const fr=new FileReader();
+  fr.onload=function(){
+    const img=new Image();
+    img.onload=function(){
+      const L=320, esc=Math.min(1, L/Math.max(img.width,img.height));
+      const w=Math.round(img.width*esc), h=Math.round(img.height*esc);
+      const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+      cv.getContext('2d').drawImage(img,0,0,w,h);
+      try{ cb(cv.toDataURL('image/jpeg',0.82)); }catch(e){ cb(fr.result); }
+    };
+    img.onerror=function(){ cb(fr.result); };
+    img.src=fr.result;
+  };
+  fr.readAsDataURL(file);
+}
+function pFotoElegir(input){
+  _fotoLeer(input&&input.files&&input.files[0], function(d){
+    _pFotoTmp=d||'';
+    const pv=document.getElementById('p-foto-prev');
+    if(pv) pv.innerHTML=_pFotoTmp?('<img src="'+escAttr(_pFotoTmp)+'" style="width:44px;height:44px;border-radius:10px;object-fit:cover;border:1px solid var(--border)">'):'';
+  });
+}
+function tarjFotoSubir(pid, input){
+  _fotoLeer(input&&input.files&&input.files[0], function(d){
+    if(!d) return;
+    const p=(state.personal||[]).find(x=>String(x.id)===String(pid));
+    if(!p) return;
+    p.foto=d; p._ts=Date.now();
+    personalSave();   // sincroniza el módulo 'personal' completo: la foto viaja con él
+    renderTarjetas();
+    showNotif('📷 Foto actualizada');
+  });
+}
 
 
 // ══ FICHA DE DATOS PERSONALES DEL TRABAJADOR (Anexo 2) ═══════════════════════
@@ -26156,6 +26410,11 @@ async function _restaurarSnap(snap, exacto, etiqueta){
       const porPer={}; [...act, ...snap.historialPeriodos].forEach(h=>{ if(h&&h.periodo) porPer[h.periodo]=h; });
       if(exacto) histPeriodosSave(snap.historialPeriodos); else histPeriodosSave(Object.values(porPer));
     }
+    if(snap.tarjetaNotas && typeof tarjNotasSave==='function'){
+      const act=tarjNotasLoad(), out=exacto?snap.tarjetaNotas:{...act};
+      if(!exacto) Object.keys(snap.tarjetaNotas).forEach(pid=>{ out[pid]={...(snap.tarjetaNotas[pid]||{}), ...(act[pid]||{})}; });
+      tarjNotasSave(out);
+    }
     if(snap.precios && typeof paramsSet==='function'){ /* los precios se dejan como están salvo restauración exacta */ }
   }catch(e){ console.warn('restaurar extras',e); }
   try{ if(snap.remanenteIngresos && typeof remIngSave==='function') remIngSave(); }catch(e){}
@@ -26674,6 +26933,7 @@ function snapshotEstado(){
     serviciosTerceros:(typeof servCargar==='function'?servCargar():[]),
     finIngMaq:fim, mesesCerrados:state.mesesCerrados||[],
     planillaSupervision:(typeof planillaSupLoad==='function'?planillaSupLoad():{}),
+    tarjetaNotas:(typeof tarjNotasLoad==='function'?tarjNotasLoad():{}),   // pendientes y anotaciones de las tarjetas de tareo
     // Faltaban en el respaldo, y son datos que el sistema sí muestra y sí guarda en la nube: una
     // copia que no los lleve no devuelve el sistema al estado en que estaba.
     remanenteIngresos: state.remanenteIngresos||[],
@@ -27329,6 +27589,7 @@ const _SYNC_MODULOS=[
   ['comb_pet', ()=>{try{return combCargar('pet');}catch(e){return null;}}],
   ['comb_gas', ()=>{try{return combCargar('gas');}catch(e){return null;}}],
   ['planilla_supervision', ()=>{try{return planillaSupLoad();}catch(e){return null;}}],
+  ['tarjeta_notas', ()=>{try{return tarjNotasLoad();}catch(e){return null;}}],
   ['remanente_salidas', ()=>state.remanenteSalidas],
   ['remanente_ingresos', ()=>state.remanenteIngresos],
   ['mant_kits', ()=>state.mantenimiento],
