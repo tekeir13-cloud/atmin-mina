@@ -4784,6 +4784,27 @@ function _normCargo(s){return String(s||'').toLowerCase().normalize('NFD').repla
 // S/ 133.33— no se reconocían y quedaban fuera del costo de personal.
 const SUELDOS_RESERVADOS=['jefe de operaciones','jefe de proyecto','residente','ingeniero residente','asistente de residente','jefe de guardia','capataz','administrador','logistico','supervisor','supervisor de materiales','jefe de finanzas'];
 function esSueldoReservado(rol){const r=_normCargo(rol);return SUELDOS_RESERVADOS.some(c=>r===c||r.includes(c));}
+// ── CONFIDENCIALIDAD DE SUELDOS ──────────────────────────────────────────────
+// El sueldo de TODO el personal de superficie es confidencial: no lo ve Operaciones ni ningún
+// otro módulo. Solo Gerencia, Finanzas y Administración, que son quienes gestionan la planilla.
+// Se bloquea por la persona (dónde trabaja y qué cargo tiene), no por la pantalla: así el dato
+// no se escapa por una vista nueva que alguien agregue mañana sin acordarse de taparlo.
+const SUELDOS_VISIBLES_PARA=['gerente_general','jefe_finanzas','administrador'];
+function puedeVerSueldos(){
+  try{ return !!usuarioActivo && SUELDOS_VISIBLES_PARA.includes(usuarioActivo.rol); }catch(e){ return false; }
+}
+function sueldoConfidencial(p){
+  if(!p) return false;
+  if(String(p.guardia||'').toUpperCase()==='SUPERFICIE') return true;   // todo superficie
+  return esSueldoReservado(p.rol);                                       // y los cargos de staff
+}
+// Texto a mostrar para el jornal de una persona: la cifra o el candado.
+function sueldoTxt(p, valor){
+  const v=(valor!=null)?valor:(p&&p.jornal);
+  if(p && sueldoConfidencial(p) && !puedeVerSueldos())
+    return '<span title="Sueldo confidencial — solo Gerencia, Finanzas y Administración" style="color:#94a3b8">🔒</span>';
+  return 'S/ '+((typeof fmtN==='function')?fmtN(Number(v)||0):(Number(v)||0));
+}
 function showNotif(msg,type){
   const n=document.getElementById('notif');n.textContent=msg;
   n.style.borderColor=type==='error'?'var(--text3)':'var(--accent)';
@@ -12269,7 +12290,7 @@ function abrirSetupTareo(){
       <input type="checkbox" class="tareo-chk" data-pid="${p.id}" ${marcado?'checked':''} style="width:18px;height:18px;accent-color:var(--gold);cursor:pointer">
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.nombre}${asignado?' <span style="font-size:9px;color:var(--gold)">● asignado</span>':''}</div>
-        <div style="font-size:10px;color:var(--text3);display:flex;align-items:center;gap:6px;flex-wrap:wrap">${p.rol} · S/${p.jornal}/día
+        <div style="font-size:10px;color:var(--text3);display:flex;align-items:center;gap:6px;flex-wrap:wrap">${p.rol} · ${sueldoConfidencial(p)&&!puedeVerSueldos()?'🔒':'S/'+p.jornal+'/día'}
           ${g?`<span style="font-size:9px;font-weight:800;padding:1px 7px;border-radius:999px;background:${g==='dia'?'rgba(245,158,11,0.18)':g==='noche'?'rgba(96,165,250,0.18)':'rgba(34,211,165,0.18)'};color:${g==='dia'?'#f59e0b':g==='noche'?'#60a5fa':'#22d3a5'}">${GUARDIA_ICO[g]}</span>`:'<span style="font-size:9px;color:var(--text3);border:1px dashed var(--border);padding:1px 7px;border-radius:999px">sin guardia</span>'}
         </div>
       </div>
@@ -12495,7 +12516,7 @@ function registrarAsistencia(){
       <input type="checkbox" id="tar-chk-${p.id}" checked style="width:16px;height:16px;cursor:pointer">
       <div>
         <div style="font-size:13px;font-weight:600;color:var(--text)">${p.nombre}</div>
-        <div style="font-size:10px;color:var(--text3)">${p.rol||'—'} · Jornal: ${fmtS(p.jornal||0)}</div>
+        <div style="font-size:10px;color:var(--text3)">${p.rol||'—'} · Jornal: ${sueldoConfidencial(p)&&!puedeVerSueldos()?'🔒':fmtS(p.jornal||0)}</div>
       </div>
       <select id="tar-mult-${p.id}" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
         <option value="1">×1</option>
@@ -12801,7 +12822,7 @@ function renderPersonal(){
           <td style="padding:10px 12px;font-weight:600;color:var(--text)">${p.nombre}<br><span style="font-size:10px;color:var(--text3)">${p.dni||'—'}</span></td>
           <td style="padding:10px 12px;color:#94a3b8;font-size:12px">${p.rol}</td>
           <td style="padding:10px 12px"><span style="color:${c};font-size:12px;font-weight:600">${FL[p.frente]||(p.guardia?'<span style="background:var(--coal5);color:var(--text2);padding:2px 8px;border-radius:10px;font-size:11px">'+p.guardia+'</span>':'—')}</span></td>
-          <td style="padding:10px 12px;color:#fbbf24;font-weight:600">${esSueldoReservado(p.rol)?'<span title="Sueldo reservado — lo gestiona Finanzas" style="color:#94a3b8">🔒</span>':'S/ '+p.jornal}</td>
+          <td style="padding:10px 12px;color:#fbbf24;font-weight:600">${sueldoTxt(p)}</td>
           <td style="padding:10px 12px">${estadoBadge}</td>
           <td style="padding:10px 12px">
             <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -12838,7 +12859,7 @@ function renderPersonal(){
       <td style="padding:8px 12px;color:#f87171;text-decoration:line-through">${p.nombre}</td>
       <td style="padding:8px 12px;color:#94a3b8;font-size:12px">${p.rol}</td>
       <td style="padding:8px 12px;color:#94a3b8;font-size:12px">${FL[p.frente]||'—'}</td>
-      <td style="padding:8px 12px;color:#fbbf24">${esSueldoReservado(p.rol)?'<span title="Sueldo reservado — lo gestiona Finanzas" style="color:#94a3b8">🔒</span>':'S/ '+p.jornal}</td>
+      <td style="padding:8px 12px;color:#fbbf24">${sueldoTxt(p)}</td>
       <td style="padding:8px 12px"><span style="background:rgba(239,68,68,0.2);color:#f87171;padding:2px 8px;border-radius:10px;font-size:11px">BAJA</span></td>
       <td style="padding:8px 12px;font-size:11px;color:#f87171">${p.motivoBaja||''} ${p.fechaBaja?'('+p.fechaBaja+')':''}</td>
     </tr>`).join('');
@@ -13566,12 +13587,16 @@ function renderCostoRRHH(){
     const n15=pts.filter(t=>Number(t.mult||1)===1.5).length;
     const n2=pts.filter(t=>Number(t.mult||1)===2).length;
     const total=(typeof tareoPago==='function')?tareoPago(p.id,mes):0;   // (tareas + tomados + comprados) × jornal
+    // `reservado` decide si el importe entra en el total; `oculto` decide si se PUEDE ver.
+    // Son cosas distintas: un obrero de superficie sí suma al total, pero su sueldo no se enseña
+    // a quien no gestiona planilla.
     const reservado=esSueldoReservado(p.rol);
+    const oculto=(typeof sueldoConfidencial==='function') && sueldoConfidencial(p) && !puedeVerSueldos();
     if(!reservado) totTotal+=total;  // el total visible excluye sueldos reservados
     totTareas+=tareasPago;totDias+=dias;totLibres+=diasLibres;
-    return{p,pts:tareasPago,dias,diasLibres,n1,n15,n2,total,reservado,idx:i+1};
+    return{p,pts:tareasPago,dias,diasLibres,n1,n15,n2,total,reservado,oculto,idx:i+1};
   }).sort((a,b)=>b.total-a.total||a.p.nombre.localeCompare(b.p.nombre));
-  tbody.innerHTML=filas.map(({p,pts,dias,diasLibres,n1,n15,n2,total,reservado},i)=>{
+  tbody.innerHTML=filas.map(({p,pts,dias,diasLibres,n1,n15,n2,total,reservado,oculto},i)=>{
     const baja=p.estado==='baja';
     const rowStyle=baja?'opacity:0.5':'';
     const totalColor=total>0?'color:var(--gold-light);font-weight:800':'color:var(--text3)';
@@ -13580,14 +13605,14 @@ function renderCostoRRHH(){
       <td style="text-align:center;color:var(--text3);font-size:11px">${i+1}</td>
       <td><strong style="font-size:13px">${p.nombre}</strong>${baja?'<span style="font-size:9px;color:#f87171;margin-left:6px">BAJA</span>':''}</td>
       <td style="font-size:11px;color:var(--text3)">${p.rol}</td>
-      <td style="text-align:center;font-family:'DM Mono',monospace;font-size:12px">${reservado?lock:fmtS(p.jornal)}</td>
+      <td style="text-align:center;font-family:'DM Mono',monospace;font-size:12px">${(reservado||oculto)?lock:fmtS(p.jornal)}</td>
       <td style="text-align:center;font-weight:700;color:${pts>0?'#a78bfa':'var(--text3)'}">${pts||'—'}</td>
       <td style="text-align:center;font-weight:700;color:${dias>0?'var(--positive)':'var(--text3)'}">${dias||'—'}</td>
       <td style="text-align:center;font-weight:700;color:${diasLibres>0?'#22d3a5':'var(--text3)'}">${diasLibres||'—'}</td>
       <td style="text-align:center;color:#60a5fa">${n1||'—'}</td>
       <td style="text-align:center;color:#f59e0b">${n15||'—'}</td>
       <td style="text-align:center;color:#f87171">${n2||'—'}</td>
-      <td style="text-align:right;font-family:'DM Mono',monospace;font-size:13px;${totalColor}">${reservado?lock:(total>0?fmtS(total):'—')}</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;font-size:13px;${totalColor}">${(reservado||oculto)?lock:(total>0?fmtS(total):'—')}</td>
     </tr>`;
   }).join('')+`<tr style="background:rgba(201,168,76,0.1);border-top:2px solid rgba(201,168,76,0.4)">
     <td colspan="4" style="font-weight:800;color:var(--gold);padding:10px 12px">TOTAL MES ${mes}</td>
@@ -14446,7 +14471,10 @@ async function servReporteMensual(){
     const monto=jornal*mult; if(!reservado) totalPlanilla+=monto;
     const isAlt=i%2===0; const rowFill=fill(isAlt?fondoClaro:'FFFFFF');
     // Sueldos reservados: se deja el Jornal y Monto EN BLANCO para que Finanzas los complete manualmente
-    const vals=[i+1,t.fecha||'',(t.turno||'—'),p.nombre||t.trabajadorId||'—',p.rol||'—',reservado?'':jornal,mult,reservado?'':monto];
+    // Un Excel se reenvía por correo: si el sueldo es confidencial para quien exporta, tampoco
+    // puede salir en el archivo.
+    const _oc=reservado || ((typeof sueldoConfidencial==='function') && sueldoConfidencial(p) && !puedeVerSueldos());
+    const vals=[i+1,t.fecha||'',(t.turno||'—'),p.nombre||t.trabajadorId||'—',p.rol||'—',_oc?'':jornal,mult,_oc?'':monto];
     vals.forEach((v,ci)=>{ const c=wp.getCell(rp,ci+1); c.value=v;
       c.style={font:f({size:10}),fill:rowFill,border:bordeAll,
         alignment:{horizontal:(ci===5||ci===6||ci===7)?'right':ci===0?'center':'left'},
@@ -16065,7 +16093,7 @@ function abrirModalDistribucion(){
       <input type="checkbox" class="dist-chk" data-pid="${p.id}" ${asignado?'checked':''} style="width:18px;height:18px;accent-color:var(--gold);cursor:pointer">
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.nombre}</div>
-        <div style="font-size:10px;color:var(--text3)">${p.rol} · S/${p.jornal}/día</div>
+        <div style="font-size:10px;color:var(--text3)">${p.rol} · ${sueldoConfidencial(p)&&!puedeVerSueldos()?'🔒':'S/'+p.jornal+'/día'}</div>
       </div>
       <select class="dist-frente" data-pid="${p.id}" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
         ${FRENTES.filter(f=>f.activo!==false||frente==f.id||String(frente)===String(f.id)).map(f=>`<option value="${f.id}" ${frente==f.id||String(frente)===String(f.id)?'selected':''}>${f.emoji} ${f.nombre}${f.activo===false?' (retirada)':''}</option>`).join('')}
