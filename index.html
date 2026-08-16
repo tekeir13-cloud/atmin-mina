@@ -3121,13 +3121,10 @@ select option{background:var(--coal3);}
       <div class="form-grid">
         <div class="form-group"><label>Meta mensual RA Brenda (m)</label><input type="number" id="meta-mensual-f1" placeholder="520" min="1"></div>
         <div class="form-group"><label>Meta mensual CRNE (m)</label><input type="number" id="meta-mensual-f2" placeholder="520" min="1"></div>
-        <div class="form-group"><label>Meta mensual GLSE-2 (m)</label><input type="number" id="meta-mensual-GLSE2" placeholder="0" min="0"></div>
-        <div class="form-group"><label>Meta mensual ESCM 4430 (m)</label><input type="number" id="meta-mensual-ESCM4430" placeholder="0" min="0"></div>
-        <div class="form-group"><label>Meta mensual ESCM 4410 (m)</label><input type="number" id="meta-mensual-ESCM4410" placeholder="0" min="0"></div>
-        <div class="form-group"><label>Meta mensual SN 5100 NW (m)</label><input type="number" id="meta-mensual-SN5100NW" placeholder="0" min="0"></div>
-        <div class="form-group"><label>Meta mensual GLNW 3 (m)</label><input type="number" id="meta-mensual-GLNW3" placeholder="0" min="0"></div>
-        <div class="form-group"><label>Meta mensual GLSE 3 (m)</label><input type="number" id="meta-mensual-GLSE3" placeholder="0" min="0"></div>
-        <div class="form-group"><label>Meta mensual SN 5100 NW 1 (m)</label><input type="number" id="meta-mensual-SN5100NW1" placeholder="0" min="0"></div>
+        <!-- Los campos de meta se generan desde la MISMA lista de labores del tablero de
+             Operaciones (frentesActivos), no escritos a mano: así nunca falta una labor nueva
+             ni sobra una retirada. Cada uno usa la unidad de su labor (m, o m³ en un tajo). -->
+        <div id="metas-frentes" style="display:contents"></div>
         <div class="form-group"><label>Días hábiles del mes</label><input type="number" id="meta-dias" placeholder="26" min="1" max="31"></div>
       </div>
       <div class="btn-row"><button class="btn btn-gold" onclick="guardarMetas()">Guardar Metas</button></div>
@@ -15604,14 +15601,20 @@ async function herrLeerLocal(dataUrl, cuarto, aviso){
 
   // Los dos lectores, cada uno en lo suyo. Si el de escritura no carga (primera vez sin
   // señal), se sigue con las cifras: media hoja con fechas y números sirve más que nada.
-  let lector=null, motivoLector='';
-  try{ lector=await herrCargarLector(aviso); }
-  catch(e){ motivoLector='no se pudo descargar el lector de escritura (hace falta señal la primera vez)'; }
-  let T=null;
-  try{ T=await cmpCargarLib(CMP_LIB_TESS,'Tesseract'); }catch(e){}
+  // El lector local (Tesseract) es ahora el principal y vive DENTRO de la app: no se descarga
+  // de ningún tercero, así que no depende de que haya señal en la mina.
+  let T=null, motivoLector='';
+  try{ T=await cmpCargarLib(CMP_LIB_TESS,'Tesseract'); }
+  catch(e){ motivoLector='no se pudo cargar el lector incluido en la aplicación'; }
+  // El modelo de escritura a mano queda como AUXILIAR y solo se usa si Tesseract deja una
+  // celda de texto vacía. No se descarga aquí: no puede bloquear la lectura de una hoja impresa.
+  const lector=_herrLector||null;
   let w=null;
   if(T&&T.createWorker){
-    try{ w=await T.createWorker('spa',1,{workerPath:CMP_TESS_WORKER,corePath:CMP_TESS_CORE}); }catch(e){}
+    // langPath es imprescindible: sin él, tesseract va a buscar el idioma a un CDN y vuelve a
+    // depender de internet aunque la librería ya esté local.
+    try{ w=await T.createWorker('spa',1,{workerPath:CMP_TESS_WORKER,corePath:CMP_TESS_CORE,
+      langPath:CMP_TESS_LANG, gzip:true}); }catch(e){ console.warn('tesseract',e); }
   }
 
   const filas=[], crudas=[];
@@ -15626,13 +15629,21 @@ async function herrLeerLocal(dataUrl, cuarto, aviso){
         const esNumero=(col.lista && !/[A-Z]/.test(col.lista));
         let txt='';
         try{
-          if(esNumero && w){
-            // Cifras: Tesseract, limitado a los caracteres que esa columna puede contener.
-            await w.setParameters({tessedit_pageseg_mode:col.psm, tessedit_char_whitelist:col.lista});
+          if(w){
+            // La hoja del cuaderno viene IMPRESA, y para texto impreso Tesseract es el lector
+            // bueno: lee todas las columnas, no solo las cifras. Antes el texto iba al modelo de
+            // escritura a mano —que además había que descargar de internet— y con letra impresa
+            // acertaba menos que este.
+            await w.setParameters({
+              tessedit_pageseg_mode: col.psm,
+              tessedit_char_whitelist: col.lista || ''   // '' = sin restricción (descripción)
+            });
             const r=await w.recognize(celda.toDataURL('image/png'));
             txt=String(((r&&r.data)||{}).text||'');
-          }else if(lector){
-            // Letra: el modelo de escritura a mano.
+          }
+          // Si Tesseract no leyó nada en una celda de TEXTO y el lector de escritura está
+          // disponible, se intenta con él: sirve para las hojas que sí vengan a mano.
+          if(!txt.trim() && !esNumero && lector){
             const out=await lector(celda.toDataURL('image/png'));
             txt=String((Array.isArray(out)?(out[0]||{}):(out||{})).generated_text||'');
           }
@@ -16026,6 +16037,17 @@ function renderResidente(){
   const g=id=>document.getElementById(id);
   if(g('meta-mensual-f1'))g('meta-mensual-f1').value=state.metas.mensualF1||(state.metas.f1*state.metas.dias)||'';
   if(g('meta-mensual-f2'))g('meta-mensual-f2').value=state.metas.mensualF2||(state.metas.f2*state.metas.dias)||'';
+  // Se dibujan los campos de meta de las labores VIGENTES, en el mismo orden del tablero de
+  // Operaciones. Antes estaban escritos a mano en el HTML: faltaba TJ 5100 y sobraban las tres
+  // labores retiradas, así que no se podía poner la meta de una labor nueva.
+  const _cont=g('metas-frentes');
+  if(_cont){
+    _cont.innerHTML=frentesActivos().filter(f=>f.id!==1&&f.id!==2).map(f=>{
+      const u=(typeof frenteUnidad==='function')?frenteUnidad(f):'m';
+      return '<div class="form-group"><label>'+(f.emoji||'')+' Meta mensual '+escAttr(f.nombre)+' ('+u+')</label>'+
+        '<input type="number" id="meta-mensual-'+escAttr(String(f.id))+'" placeholder="0" min="0" step="0.1"></div>';
+    }).join('');
+  }
   frentesActivos().filter(f=>f.id!==1&&f.id!==2).forEach(f=>{
     const el=g('meta-mensual-'+f.id); if(el) el.value=metaMensualFrente(f.id)||'';
   });
@@ -16066,8 +16088,8 @@ function guardarMetas(){
   // Derivar metas diarias para mantener consistencia con finanzas/reportes
   state.metas.f1=Math.round(mens1/dias);state.metas.f2=Math.round(mens2/dias);
   // Metas de los frentes nuevos (GLSE-2, ESCM 4430, ESCM 4410)
-  FRENTES.filter(f=>f.id!==1&&f.id!==2).forEach(f=>{
-    const val=parseInt(document.getElementById('meta-mensual-'+f.id)?.value)||0;
+  frentesActivos().filter(f=>f.id!==1&&f.id!==2).forEach(f=>{
+    const val=parseFloat(document.getElementById('meta-mensual-'+f.id)?.value)||0;
     setMetaMensualFrente(f.id,val);
   });
   metasSave();
@@ -24318,9 +24340,14 @@ const CMP_LIB_PDFJS='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.
 const CMP_LIB_PDFJS_WORKER='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 const CMP_LIB_JSQR='https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
 // Lector de texto en imágenes (OCR). Corre dentro del navegador: la foto no se sube a ningún lado.
-const CMP_LIB_TESS='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
-const CMP_TESS_WORKER='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js';
-const CMP_TESS_CORE='https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.0';
+// El lector vive DENTRO de la aplicación (carpeta vendor/), no se descarga de ningún tercero.
+// Antes venía de un CDN y en la mina esa descarga falla o va lenta: la herramienta se quedaba
+// sin lector y no leía nada. Ahora lo sirve el mismo sitio que la app, el service worker lo
+// guarda en caché y a partir de la primera vez funciona incluso sin señal.
+const CMP_LIB_TESS='vendor/tesseract/tesseract.min.js';
+const CMP_TESS_WORKER='vendor/tesseract/worker.min.js';
+const CMP_TESS_CORE='vendor/tesseract';
+const CMP_TESS_LANG='vendor/tesseract';   // aquí está spa.traineddata.gz
 const _cmpLibs={};
 function cmpCargarLib(url,globalName){
   if(window[globalName]) return Promise.resolve(window[globalName]);
@@ -24455,7 +24482,7 @@ async function cmpOcrImagen(dataUrl, aviso){
   const T=await cmpCargarLib(CMP_LIB_TESS,'Tesseract');
   let img=dataUrl; try{ img=await cmpPrepararOcr(dataUrl); }catch(e){}
   const r=await T.recognize(img,'spa',{
-    workerPath:CMP_TESS_WORKER, corePath:CMP_TESS_CORE,
+    workerPath:CMP_TESS_WORKER, corePath:CMP_TESS_CORE, langPath:CMP_TESS_LANG, gzip:true,
     logger:m=>{ if(aviso&&m&&m.status==='recognizing text'){ aviso(Math.round((m.progress||0)*100)); } }
   });
   const d=(r&&r.data)||{};
