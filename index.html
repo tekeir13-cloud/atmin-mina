@@ -15329,11 +15329,24 @@ function herrMapaColumnas(cortes,w){
   // La descripción es, con mucho, la columna más ancha: sirve de ancla para ubicar el resto.
   let desc=anchos[0]; anchos.forEach(a=>{ if(a.an>desc.an) desc=a; });
   const iD=anchos.indexOf(desc);
-  if(iD<3 || anchos.length-iD<4) return null;         // no calza con el formato del cuaderno
-  return {
-    fecha:anchos[iD-3], turno:anchos[iD-2], labor:anchos[iD-1], descripcion:desc,
-    personal:anchos[iD+1], horas:anchos[iD+2], tareas:anchos[iD+3]
-  };
+  if(iD<3) return null;                               // no calza con el formato del cuaderno
+  const base={ fecha:anchos[iD-3], turno:anchos[iD-2], labor:anchos[iD-1], descripcion:desc };
+  if(anchos.length-iD>=4){
+    base.personal=anchos[iD+1]; base.horas=anchos[iD+2]; base.tareas=anchos[iD+3];
+    return base;
+  }
+  // Las tres últimas columnas son estrechas y pegadas: si la foto sale movida o con poco
+  // contraste, sus rayas no se detectan y quedaban SIN mapear, así que Personal, Horas y
+  // Tareas salían vacías. Cuando eso pasa, se reparte a partes iguales lo que queda a la
+  // derecha de la descripción, que es donde están de todos modos.
+  const x0=desc.x1, x1=(anchos.length>iD+1)?anchos[anchos.length-1].x1:w;
+  if(x1-x0<15) return null;
+  const t=(x1-x0)/3;
+  base.personal={x0:x0,        x1:x0+t};
+  base.horas   ={x0:x0+t,      x1:x0+2*t};
+  base.tareas  ={x0:x0+2*t,    x1:x1};
+  base._repartido=true;
+  return base;
 }
 function _herrRecorte(cv,x0,x1,y0,y1){
   const m=4;
@@ -15347,14 +15360,19 @@ function _herrRecorte(cv,x0,x1,y0,y1){
   g.drawImage(cv, x0,y0,an,al, 0,0,c.width,c.height);
   return c;
 }
+// `psm` = cómo mira Tesseract la celda. Personal, Horas y Tareas llevan psm 6 (bloque) y NO 7
+// (renglón): con una sola cifra suelta en medio de la celda, el modo renglón la confunde —el 2
+// salía como "A", el 1 como "o"— y esas tres columnas quedaban vacías. Medido celda a celda
+// sobre una hoja real: con psm 6 acierta las nueve; con psm 7, 8 o 10 falla casi todas.
+// La lista de caracteres SÍ se mantiene: en las cifras ayuda a descartar letras.
 const HERR_CELDAS=[
   {k:'fecha',      psm:'7', lista:'0123456789./-'},
   {k:'turno',      psm:'7', lista:'ABCDEFGHIJKLMNOPQRSTUVWXYZÁÉÍÓÚÑ'},
   {k:'labor',      psm:'7', lista:'ABCDEFGHIJKLMNOPQRSTUVWXYZÁÉÍÓÚÑ0123456789 -'},
   {k:'descripcion',psm:'6', lista:''},
-  {k:'personal',   psm:'7', lista:'0123456789'},
-  {k:'horas',      psm:'7', lista:'0123456789.,:'},
-  {k:'tareas',     psm:'7', lista:'0123456789.,'}
+  {k:'personal',   psm:'6', lista:'0123456789'},
+  {k:'horas',      psm:'6', lista:'0123456789.,:'},
+  {k:'tareas',     psm:'6', lista:'0123456789.,'}
 ];
 // Lee una hoja celda por celda. Devuelve filas ya armadas, no texto suelto.
 // Recorte liviano del renglón, para poder ver la letra dentro del sistema al corregir.
@@ -15625,7 +15643,11 @@ async function herrLeerLocal(dataUrl, cuarto, aviso){
       for(let c=0;c<HERR_CELDAS.length;c++){
         const col=HERR_CELDAS[c], tramo=mapa[col.k];
         if(!tramo){ fila[col.k]=''; continue; }
-        const celda=_herrCeldaAmpliada(cv, tramo.x0, tramo.x1, b.y0, b.y1);
+        // _herrRecorte y NO _herrCeldaAmpliada: esta última reduce la celda a ~64 px de alto y a
+        // ese tamaño Tesseract devuelve VACÍO. Medido celda a celda sobre una hoja real: con la
+        // celda pequeña, las nueve cifras salen en blanco; con el recorte a ~420 px, las nueve se
+        // leen bien. Era la razón de que Personal, Horas y Tareas no registraran nada.
+        const celda=_herrRecorte(cv, tramo.x0, tramo.x1, b.y0, b.y1);
         const esNumero=(col.lista && !/[A-Z]/.test(col.lista));
         let txt='';
         try{
@@ -15634,10 +15656,7 @@ async function herrLeerLocal(dataUrl, cuarto, aviso){
             // bueno: lee todas las columnas, no solo las cifras. Antes el texto iba al modelo de
             // escritura a mano —que además había que descargar de internet— y con letra impresa
             // acertaba menos que este.
-            await w.setParameters({
-              tessedit_pageseg_mode: col.psm,
-              tessedit_char_whitelist: col.lista || ''   // '' = sin restricción (descripción)
-            });
+            await w.setParameters({ tessedit_pageseg_mode: col.psm, tessedit_char_whitelist: col.lista||'' });
             const r=await w.recognize(celda.toDataURL('image/png'));
             txt=String(((r&&r.data)||{}).text||'');
           }
@@ -15671,6 +15690,12 @@ async function herrLeerLocal(dataUrl, cuarto, aviso){
     const fila={ fecha:_herrFechaNormal(f.fecha), turno, labor, descripcion:desc,
                  personal:num(f.personal), horas:num(f.horas), tareas:num(f.tareas),
                  crudo:'(leído en este equipo)' };
+    // La primera banda suele ser la CABECERA de la tabla. Se reconoce porque trae los títulos y
+    // ninguna cifra, y se descarta: si no, entraba como una fila más que había que borrar a mano.
+    const _txtFila=(fila.labor+' '+fila.descripcion+' '+fila.turno).toUpperCase();
+    const _esCabecera = !fila.personal && !fila.horas && !fila.tareas && !fila.fecha &&
+      /\b(FECHA|TURNO|LABOR|DESCRIPCION|DESCRIPCIÓN|PERSONAL|HORAS|TAREAS?|TONELADAS?)\b/.test(_txtFila);
+    if(_esCabecera) return;
     if(fila.fecha||fila.labor||fila.descripcion||fila.personal||fila.horas||fila.tareas) filas.push(fila);
   });
   // Si un renglón no repite la fecha, se hereda del anterior: el cuaderno va en orden.
