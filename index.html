@@ -2376,18 +2376,7 @@ select option{background:var(--coal3);}
       <div class="form-group"><label class="form-label">Nombre completo</label><input class="form-input" id="edit-p-nombre" placeholder="Apellidos y nombres"></div>
       <div class="form-group"><label class="form-label">DNI</label><input class="form-input" id="edit-p-dni" placeholder="12345678" maxlength="8"></div>
       <div class="form-group"><label class="form-label">Cargo / Rol</label>
-        <select class="form-input" id="edit-p-rol">
-          <option>Jefe de Operaciones</option><option>Ingeniero Residente</option><option>Administrador</option>
-          <option>Jefe de Finanzas</option>
-          <option>Logístico</option><option>Asistente de Residente</option><option>Jefe de Guardia</option>
-          <option>Capataz</option><option>Jefe de Mantenimiento</option><option>Supervisor de Materiales</option>
-          <option>Maestro Perforista</option><option>Maestro Perforista 1</option><option>Maestro Perforista 2</option>
-          <option>Ayudante de Mina</option><option>Ayudante Perforista</option>
-          <option>Operador de Scoop</option><option>Operador de Dumper</option><option>Operador de Excavadora</option>
-          <option>Operador de Tractor</option><option>Operador de Línea Amarilla</option><option>Operador Múltiple</option>
-          <option>Compresorista</option><option>Mecánico</option><option>Mecánico Soldador</option>
-          <option>Ayudante Mecánico</option><option>Conductor</option><option>Limpiador</option>
-        </select>
+        <select class="form-input" id="edit-p-rol"></select>
       </div>
       <div class="form-group"><label class="form-label">Frente</label>
         <select class="form-input" id="edit-p-frente">
@@ -2560,6 +2549,13 @@ select option{background:var(--coal3);}
         <!-- En la barra solo lo que se usa a diario. Lo administrativo —usuarios, cierres,
              periodos, sincronización— vive en el menú del usuario: se usa una vez al mes y
              llenaba la barra de botones de colores hasta desbordarla. -->
+        <button id="btn-bajar-respaldo" onclick="descargarRespaldo()"
+          title="Descarga una copia completa del sistema en un archivo. Sirve para volver a este estado."
+          style="background:rgba(96,165,250,0.12);border:1px solid rgba(96,165,250,0.35);
+                 color:#60a5fa;border-radius:6px;padding:7px 13px;cursor:pointer;
+                 font-size:11px;font-family:'Syne',sans-serif;font-weight:700;letter-spacing:0.3px">
+          ⬇ Descargar respaldo
+        </button>
         <button id="btn-restaurar" onclick="abrirRestaurar()"
           title="Puntos de restauración: cada mañana se guarda una copia del sistema. Si algo se pierde durante el día, aquí se recupera."
           style="background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.35);
@@ -2916,7 +2912,7 @@ select option{background:var(--coal3);}
       <div class="form-grid">
         <div class="form-group"><label>Nombre Completo</label><input type="text" id="p-nombre" placeholder="Ej: Juan Quispe"></div>
         <div class="form-group"><label>DNI</label><input type="text" id="p-dni" placeholder="12345678"></div>
-        <div class="form-group"><label>Rol / Cargo</label><select id="p-rol"><option>Jefe de Operaciones</option><option>Ingeniero Residente</option><option>Asistente de Residente</option><option>Jefe de Guardia</option><option>Capataz</option><option>Jefe de Mantenimiento</option><option>Logístico</option><option>Administrador</option><option>Jefe de Finanzas</option><option>Supervisor de Proyecto</option><option>Maestro Perforista 1</option><option>Maestro Perforista 2</option><option>Ayudante</option><option>Compresorista</option><option>Operador de Scoop</option><option>Operador de Dumper</option><option>Operador Múltiple</option><option>Operador de Línea Amarilla</option><option>Conductor</option><option>Ayudante Mecánico</option></select></div>
+        <div class="form-group"><label>Rol / Cargo</label><select id="p-rol"></select></div>
         <div class="form-group"><label>Jornal diario (S/)</label><input type="number" id="p-jornal" placeholder="80"></div>
         <div class="form-group"><label>Fecha de ingreso</label><input type="date" id="p-ingreso"></div>
       </div>
@@ -4087,6 +4083,14 @@ select option{background:var(--coal3);}
       <button class="modal-close" onclick="cerrarModal('modal-restaurar')" style="position:static;flex-shrink:0">✕</button>
     </div>
     <div id="restaurar-body"></div>
+    <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px">
+      <div style="font-size:12px;color:var(--text2);font-weight:700;margin-bottom:4px">Desde un archivo</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px">
+        Si tienes un respaldo descargado, se puede volver a ese estado. Repone lo que falte y conserva lo posterior.</div>
+      <input type="file" id="rest-archivo" accept=".json,application/json" style="display:none" onchange="restaurarDesdeArchivo(this)">
+      <button class="btn btn-outline" style="font-size:12px;padding:7px 14px;border-color:#60a5fa;color:#60a5fa"
+        onclick="document.getElementById('rest-archivo').click()">📂 Restaurar desde archivo</button>
+    </div>
   </div>
 </div>
 <div class="modal-overlay" id="modal-ficha" onclick="if(event.target===this)cerrarModal('modal-ficha')">
@@ -12196,14 +12200,48 @@ function renderCostosLog(){
 // ── RRHH ──
 
 // Corrige cargos inválidos heredados por otros válidos de la mina
+// Renombrados de cargo. normalizarCargos() los aplica al personal ya registrado, así que
+// cambiar aquí un nombre arrastra a quien lo tuviera puesto.
 const MAPA_CARGOS_INVALIDOS={
-  'Perforista':'Maestro Perforista 1',
-  'Explosivero':'Maestro Perforista 2',
+  'Perforista':'PERFORISTA MINA M1',
+  'Explosivero':'PERFORISTA MINA M2',
+  'Maestro Perforista 1':'PERFORISTA MINA M1',
+  'Maestro Perforista 2':'PERFORISTA MINA M2',
   'Chancador':'Operador Múltiple',
   'Mecánico':'Ayudante Mecánico',
   'Guardia':'Jefe de Guardia',
   'Operador':'Operador Múltiple'
 };
+// Llena el desplegable de cargos. Sale de los cargos que DE VERDAD se usan —los de la planilla
+// oficial y los del personal ya registrado— más una lista base. Antes estaba escrito a mano en
+// el HTML y se desfasaba: decía "Maestro Perforista 1" cuando los trabajadores ya estaban
+// registrados como "PERFORISTA MINA M1", así que al editar a alguien el cargo no calzaba con
+// ninguna opción y se perdía.
+const CARGOS_BASE=['Jefe de Operaciones','Ingeniero Residente','Asistente de Residente',
+  'Jefe de Guardia','Capataz','Jefe de Mantenimiento','Logístico','Administrador',
+  'Jefe de Finanzas','Supervisor de Proyecto','Ayudante','Compresorista',
+  'Operador de Scoop','Operador de Dumper','Operador Múltiple','Operador de Línea Amarilla',
+  'Conductor','Ayudante Mecánico'];
+function cargosDisponibles(){
+  // Los cargos que SE USAN mandan. Mezclarlos con una lista teórica llenaba el desplegable de
+  // parejas casi iguales —"Compresorista" y "COMPRENSORISTA", "Administrador" y
+  // "ADMINISTRADOR"— y elegir se volvía adivinar cuál es el bueno. La lista base solo entra si
+  // todavía no hay personal cargado.
+  const vistos=new Map();   // clave normalizada → cómo se escribe realmente
+  const meter=c=>{ const t=String(c||'').trim(); if(!t) return;
+    const k=t.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    if(!vistos.has(k)) vistos.set(k,t); };
+  try{ (state.personal||[]).forEach(p=>meter(p.rol)); }catch(e){}
+  if(vistos.size<3) CARGOS_BASE.forEach(meter);      // sistema recién instalado
+  return [...vistos.values()].sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
+}
+function poblarSelectCargos(sel){
+  const el=(typeof sel==='string')?document.getElementById(sel):sel;
+  if(!el) return;
+  const actual=el.value;
+  el.innerHTML=cargosDisponibles().map(c=>'<option>'+escAttr(c)+'</option>').join('');
+  if(actual) el.value=actual;
+}
 function normalizarCargos(){
   (state.personal||[]).forEach(p=>{
     if(MAPA_CARGOS_INVALIDOS[p.rol]){
@@ -12799,6 +12837,7 @@ function purgarPersonalBaja(){
 }
 function renderPersonal(){
   try{ if(typeof personalOrdenar==='function') personalOrdenar(); }catch(e){}
+  try{ poblarSelectCargos('p-rol'); }catch(e){}
   const activos=state.personal.filter(p=>p.estado!=='baja');
   const bajas=state.personal.filter(p=>p.estado==='baja');
   const g=id=>document.getElementById(id);
@@ -13288,6 +13327,7 @@ function abrirEditarPersonal(id){
   document.getElementById('edit-p-id').value=p.id;
   document.getElementById('edit-p-nombre').value=p.nombre||'';
   document.getElementById('edit-p-dni').value=p.dni||'';
+  try{ poblarSelectCargos('edit-p-rol'); }catch(e){}
   document.getElementById('edit-p-rol').value=p.rol||'';
   document.getElementById('edit-p-frente').value=(p.frente===1||p.frente===2)?p.frente:'';
   document.getElementById('edit-p-jornal').value=p.jornal||80;
@@ -13331,6 +13371,36 @@ async function eliminarPersonal(id){
 //  · Un día puede valer 1 / 1.5 / 2 TAREAS (se pagan como tal), pero sigue siendo 1 día trabajado.
 //  · Días libres COMPRADOS = ganados − tomados (DL). Pago = (tareas + tomados + comprados) × jornal.
 const TAREO_CICLO=['','1','1.25','1.5','1.75','2','2.25','2.5','2.75','3','DL'];
+// ── MARCADORES DEL TAREO (lo que no es un número de tareas) ──
+// `paga` = unidades de pago que vale ese día. `tipo:'ausencia'` es la clave: cuenta para el PAGO
+// pero NO como día trabajado, así que no genera días libres ganados. Un descanso médico o unas
+// vacaciones se pagan, pero no son un día de mina y no deben producir libres.
+// Todo sale de aquí: el color de la celda, el selector, el arrastre y el resumen. Agregar un
+// marcador nuevo es añadir una línea.
+const TAREO_MARCAS=[
+  {v:'DL',  l:'DL · Día libre',           c:'#2563eb', tipo:'libre',    paga:0},
+  {v:'F',   l:'F · Falta',                c:'#6b7280', tipo:'falta',    paga:0},
+  {v:'DM',  l:'DM · Descanso médico',     c:'#06b6d4', tipo:'ausencia', paga:1},
+  {v:'P',   l:'P · Permiso con goce',     c:'#4f46e5', tipo:'ausencia', paga:1},
+  {v:'PSG', l:'PSG · Permiso sin goce',   c:'#78716c', tipo:'ausencia', paga:0},
+  {v:'T',   l:'T · Tardanza',             c:'#ea580c', tipo:'ausencia', paga:1},
+  {v:'S',   l:'S · Suspensión',           c:'#7f1d1d', tipo:'ausencia', paga:0},
+  {v:'V',   l:'V · Vacaciones',           c:'#14b8a6', tipo:'ausencia', paga:1}
+];
+function tareoMarca(v){ return TAREO_MARCAS.find(m=>m.v===v)||null; }
+// Leyenda de los marcadores. Se arma aparte porque el texto de ayuda del tareo se construye con
+// comillas simples y no admite interpolación de plantilla.
+function _tareoChipsMarcas(){
+  return TAREO_MARCAS.map(m=>'<b style="color:'+m.c+'">'+m.v+'</b>').join(', ');
+}
+function _tareoLeyendaMarcas(){
+  const nom=m=>(m.l.split(' · ')[1]||m.v);
+  const chip=m=>'<b style="color:'+m.c+'">'+m.v+'</b> '+nom(m);
+  const pagan=TAREO_MARCAS.filter(m=>m.paga>0).map(chip).join(' · ');
+  const noPagan=TAREO_MARCAS.filter(m=>m.paga===0&&m.v!=='DL').map(chip).join(' · ');
+  return '<span style="color:var(--text3)">Pagan una tarea: '+pagan+'. &nbsp;No pagan: '+noPagan+
+         '. Ninguno cuenta como día trabajado, así que no generan días libres.</span>';
+}
 // Multiplicadores de tarea disponibles en la HOJA DE TAREO (diaria y hojas archivadas).
 // Lista única para que los tres sitios donde se eligen no se desincronicen.
 const TAREO_MULTS=['1','1.25','1.5','1.75','2','2.25','2.5','2.75','3'];
@@ -13363,10 +13433,15 @@ function _tareoCell(tid,fecha){
   if(!t) return '';
   if(t.tipo==='libre') return 'DL';
   if(t.tipo==='falta') return 'F';
+  if(t.tipo==='ausencia') return t.codigo||'F';
   const m=Number(t.mult||1); const s=String(m); return TAREO_CICLO.includes(s)?s:'1';
 }
 function _tareoColVal(v){
-  const colorMap={'1':'#16a34a','1.25':'#84cc16','1.5':'#d97706','1.75':'#f59e0b','2':'#dc2626','2.25':'#e11d48','2.5':'#ec4899','2.75':'#c026d3','3':'#8b5cf6','DL':'#2563eb'};
+  // La F no tenía color: se pintaba en blanco sobre fondo transparente, así que en modo oscuro
+  // se veía y en modo claro desaparecía. Ahora TODOS los marcadores tienen su color, y salen
+  // de TAREO_MARCAS para que no vuelva a faltar ninguno.
+  const colorMap={'1':'#16a34a','1.25':'#84cc16','1.5':'#d97706','1.75':'#f59e0b','2':'#dc2626','2.25':'#e11d48','2.5':'#ec4899','2.75':'#c026d3','3':'#8b5cf6'};
+  TAREO_MARCAS.forEach(m=>{ colorMap[m.v]=m.c; });
   return colorMap[v]||'transparent';
 }
 function _tareoPintaCelda(td,v){ if(!td)return; td.textContent=v; td.style.background=_tareoColVal(v); td.style.color=(v===''?'#39415a':'#fff'); }
@@ -13385,8 +13460,11 @@ function tareoGridSet(tid,fecha,val){
   const p=(state.personal||[]).find(x=>String(x.id)===String(tid));
   if(val!==''){
     const base={fecha,trabajadorId:tid,id:'T'+Date.now()+Math.random().toString(36).slice(2),_ts:Date.now(),jornal:p?p.jornal:0};
-    if(val==='DL') state.tareas.push({...base,tipo:'libre',mult:0,tarea:'Día libre'});
-    else if(val==='F') state.tareas.push({...base,tipo:'falta',mult:0,tarea:'Falta',paga:false});
+    const marca=tareoMarca(val);
+    if(marca){
+      state.tareas.push({...base, tipo:marca.tipo, codigo:marca.v, mult:marca.paga,
+        tarea:marca.l.split(' · ')[1]||marca.v, paga:marca.paga>0});
+    }
     else state.tareas.push({...base,tipo:'trabajo',mult:parseFloat(val),tarea:'Tareo diario',frente:p?p.frente:1});
   }
   try{
@@ -13411,7 +13489,8 @@ function tareoGridShowModal(tid,fecha){
     {v:'1',l:'1',c:'#16a34a'},{v:'1.25',l:'1.25',c:'#84cc16'},{v:'1.5',l:'1.5',c:'#d97706'},
     {v:'1.75',l:'1.75',c:'#f59e0b'},{v:'2',l:'2',c:'#dc2626'},{v:'2.25',l:'2.25',c:'#e11d48'},
     {v:'2.5',l:'2.5',c:'#ec4899'},{v:'2.75',l:'2.75',c:'#c026d3'},
-    {v:'3',l:'3',c:'#8b5cf6'},{v:'DL',l:'DL · Día libre',c:'#2563eb'},{v:'F',l:'F · Falta',c:'#6b7280'},
+    {v:'3',l:'3',c:'#8b5cf6'},
+    ...TAREO_MARCAS.map(m=>({v:m.v,l:m.l,c:m.c})),
     {v:'',l:'Vacío',c:''}
   ];
   const btn=o=>`<button onclick="tareoGridSet('${tid}','${fecha}','${o.v}');document.getElementById('tareo-cell-modal').remove()"
@@ -13420,8 +13499,11 @@ function tareoGridShowModal(tid,fecha){
     <div style="background:var(--coal2);border-radius:14px;padding:20px;border:1px solid var(--border);width:min(340px,94vw);box-shadow:0 8px 32px rgba(0,0,0,0.6)" onclick="event.stopPropagation()">
       <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">${p?.nombre||'Trabajador'}</div>
       <div style="font-size:11px;color:var(--text3);margin-bottom:14px">📅 ${fecha}</div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">${opciones.slice(0,7).map(btn).join('')}</div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px">${opciones.slice(7).map(btn).join('')}</div>
+      <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Tareas del día</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">${opciones.filter(o=>/^[\d.]+$/.test(o.v)).map(btn).join('')}</div>
+      <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:10px 0 5px">Marcadores</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px">${opciones.filter(o=>o.v&&!/^[\d.]+$/.test(o.v)).map(btn).join('')}</div>
+      <div style="display:grid;grid-template-columns:1fr;gap:6px;margin-top:6px">${opciones.filter(o=>o.v==='').map(btn).join('')}</div>
       <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);line-height:1.7">
         • <b>1 a 3</b> = tareas hechas ese día (cada casillero = 1 día trabajado)<br>
         • <b>DL</b> = día libre tomado · <b>F</b> = falta (no se paga)<br>
@@ -13465,7 +13547,8 @@ function tareoFillUp(e,tid,fecha){
     const tc=td.dataset.tc||''; const sep=tc.indexOf('|');
     if(sep>0) tareoGridSet(tc.slice(0,sep), tc.slice(sep+1), f.val);
   });
-  showNotif('✓ '+(f.val===''?'Casillas borradas':f.val==='DL'?'Días libres aplicados':f.val==='F'?'Faltas aplicadas':'Tareas ×'+f.val+' aplicadas')+' ('+f.celdas.length+' días)');
+  const _m=tareoMarca(f.val);
+  showNotif('✓ '+(f.val===''?'Casillas borradas':(_m?(_m.l.split(' · ')[1]||_m.v)+' aplicado':'Tareas ×'+f.val+' aplicadas'))+' ('+f.celdas.length+' días)');
 }
 document.addEventListener('mouseup',()=>{  // soltar fuera de la grilla cancela sin aplicar
   if(_tareoFill.activo){ _tareoFillLimpia(_tareoFill.celdas); _tareoFill={activo:false,arrastro:false,val:null,tid:null,celdas:[]}; }
@@ -13495,9 +13578,14 @@ function tareoMensualGuardar(mes){
 }
 function tareoResumen(tid,mes){
   const ents=(state.tareas||[]).filter(t=>String(t.trabajadorId)===String(tid)&&(t.fecha||'').slice(0,7)===mes);
-  const trabajo=ents.filter(t=>t.tipo!=='libre'&&t.tipo!=='falta');   // trabajo (incluye legacy sin tipo)
+  const trabajo=ents.filter(t=>t.tipo!=='libre'&&t.tipo!=='falta'&&t.tipo!=='ausencia'); // incluye legacy sin tipo
+  const ausencias=ents.filter(t=>t.tipo==='ausencia');
   const diasTrab=new Set(trabajo.map(t=>t.fecha)).size;               // días de calendario trabajados
-  const tareas=trabajo.reduce((s,t)=>s+(Number(t.mult)||1),0);        // unidades de pago
+  // Las ausencias pagadas (descanso médico, permiso con goce, tardanza, vacaciones) suman al
+  // pago, pero NO a los días trabajados: si contaran, generarían días libres ganados que nadie
+  // se ganó estando de vacaciones.
+  const tareas=trabajo.reduce((s,t)=>s+(Number(t.mult)||1),0)
+             + ausencias.reduce((s,t)=>s+(Number(t.mult)||0),0);      // unidades de pago
   const dlTomados=ents.filter(t=>t.tipo==='libre').length;
   const faltas=ents.filter(t=>t.tipo==='falta').length;
   const ganados=diasTrab/2;
@@ -13566,7 +13654,7 @@ function renderTareoMensual(){
     ${_arch?`<div style="font-size:11px;color:#f59e0b;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:8px;padding:9px 12px;margin-bottom:10px">
       🔒 ${nombreMes} ${y} ya se cumplió y quedó archivado${_puede?'. Como Gerencia/Finanzas puedes corregirlo, pero recuerda que su costo ya se cargó al ciclo.':'. Solo Gerencia o Finanzas pueden corregirlo.'}
     </div>`:''}
-    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6">${isEditing?'<b style="color:var(--gold)">✏️ Modo edición activado</b> — Haz <b>clic en una celda</b> para elegir: <b style="color:#16a34a">1</b>, <b style="color:#84cc16">1.25</b>, <b style="color:#d97706">1.5</b>, <b style="color:#f59e0b">1.75</b>, <b style="color:#dc2626">2</b>, <b style="color:#e11d48">2.25</b>, <b style="color:#ec4899">2.5</b>, <b style="color:#c026d3">2.75</b>, <b style="color:#8b5cf6">3</b> (tareas del día), <b style="color:#2563eb">DL</b> (día libre) o <b style="color:#9ca3af">F</b> (falta, no paga). Para copiar como en Excel: <b>mantén presionado y arrastra</b> sobre la fila (desde una celda vacía, el arrastre <b>borra</b> las casillas por donde pasa).<br>':'Lectura — haz clic en Editar para modificar.<br>'}<b>Trab</b>=días trabajados · <b>Tareas</b>=unidades de pago · <b>Gan</b>=libres ganados (trab÷2) · <b>Tom</b>=libres tomados (DL) · <b>Compr</b>=comprados (ganados−tomados). &nbsp;<b>Pago = (tareas + tomados + comprados) × jornal.</b></div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6">${isEditing?'<b style="color:var(--gold)">✏️ Modo edición activado</b> — Haz <b>clic en una celda</b> para elegir: <b style="color:#16a34a">1</b>, <b style="color:#84cc16">1.25</b>, <b style="color:#d97706">1.5</b>, <b style="color:#f59e0b">1.75</b>, <b style="color:#dc2626">2</b>, <b style="color:#e11d48">2.25</b>, <b style="color:#ec4899">2.5</b>, <b style="color:#c026d3">2.75</b>, <b style="color:#8b5cf6">3</b> (tareas del día) o un marcador: '+_tareoChipsMarcas()+'. Para copiar como en Excel: <b>mantén presionado y arrastra</b> sobre la fila (desde una celda vacía, el arrastre <b>borra</b> las casillas por donde pasa).<br>':'Lectura — haz clic en Editar para modificar.<br>'}<b>Trab</b>=días trabajados · <b>Tareas</b>=unidades de pago · <b>Gan</b>=libres ganados (trab÷2) · <b>Tom</b>=libres tomados (DL) · <b>Compr</b>=comprados (ganados−tomados). &nbsp;<b>Pago = (tareas + tomados + comprados) × jornal.</b><br>${_tareoLeyendaMarcas()}</div>
     <div class="table-wrap" style="max-height:72vh;overflow:auto;border:1px solid var(--border);border-radius:10px">
       <table style="border-collapse:collapse;font-size:11px;min-width:100%;table-layout:fixed;width:max-content">
         <thead><tr style="background:#1a2744;color:#fff;position:sticky;top:0;z-index:3">${head}</tr></thead>
@@ -25817,6 +25905,81 @@ async function cmpExportarExcel(){
 }
 
 
+
+// ══ RESPALDO DESCARGABLE ═════════════════════════════════════════════════════
+// Un solo archivo con TODO el sistema. Se escribe autodescriptivo a propósito: lleva dentro qué
+// es, de cuándo, qué contiene y cómo devolverlo. Así sirve tanto para restaurarlo desde la propia
+// aplicación como para entregárselo a alguien —o a Claude— y decirle "devuélvelo a este estado"
+// sin tener que explicar nada más.
+const RESPALDO_FORMATO='mukicloud-respaldo/1';
+function _respaldoNombre(d){
+  const p=n=>String(n).padStart(2,'0');
+  return 'mukicloud_respaldo_'+d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+
+         '_'+p(d.getHours())+p(d.getMinutes())+'.json';
+}
+function armarRespaldo(){
+  const snap=(typeof snapshotEstado==='function')?snapshotEstado():{};
+  const ahora=new Date();
+  const n=x=>Array.isArray(x)?x.length:0;
+  const alm=snap.almacen||{};
+  return {
+    formato: RESPALDO_FORMATO,
+    _lea_esto: 'Respaldo completo de MukiCloud. Para volver el sistema a este estado: abrir la '+
+               'aplicación, botón "Restaurar" y elegir "Restaurar desde archivo". El contenido '+
+               'está en la clave "datos", tal como lo guarda la aplicación.',
+    generado: ahora.toISOString(),
+    generadoPor: (typeof usuarioActivo!=='undefined' && usuarioActivo)?(usuarioActivo.nombre+' ('+usuarioActivo.rol+')'):'—',
+    periodo: (typeof periodoActual==='function')?periodoActual():'',
+    resumen: {
+      personal: n(snap.personal), tareos: n(snap.tareas),
+      valorizaciones: n(snap.valorizacionesLabor), reportesGuardia: n(snap.reportesGuardia),
+      compresorista: n(snap.compresorista), mantenimiento: n(snap.mantenimiento),
+      ingresosAlmacen: n(alm.ingresos), salidasAlmacen: n(alm.salidas),
+      explosivosIngresos: n((alm.explosivos||{}).ingresos),
+      explosivosSalidas: n((alm.explosivos||{}).salidas),
+      combustible: n((snap.combustible||{}).pet)+n((snap.combustible||{}).gas),
+      serviciosTerceros: n(snap.serviciosTerceros), reuniones: n(snap.reuniones)
+    },
+    datos: snap
+  };
+}
+function descargarRespaldo(){
+  try{
+    const r=armarRespaldo();
+    const blob=new Blob([JSON.stringify(r,null,2)],{type:'application/json'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=_respaldoNombre(new Date());
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+    const t=r.resumen;
+    showNotif('⬇ Respaldo descargado — '+t.personal+' personas, '+t.tareos+' tareos, '+
+              (t.explosivosIngresos+t.explosivosSalidas)+' movimientos de explosivo','ok');
+  }catch(e){ showNotif('No se pudo generar el respaldo','error'); console.warn(e); }
+}
+// Restaurar desde un archivo descargado antes.
+function restaurarDesdeArchivo(input){
+  const f=input&&input.files&&input.files[0]; if(!f) return;
+  const lector=new FileReader();
+  lector.onload=()=>{
+    let r=null;
+    try{ r=JSON.parse(String(lector.result||'')); }catch(e){ alert('El archivo no se pudo leer: no es un respaldo válido.'); return; }
+    const snap=(r&&r.datos)?r.datos:r;      // admite el archivo completo o solo el contenido
+    if(!snap || typeof snap!=='object' || (!snap.personal && !snap.almacen)){
+      alert('El archivo no parece un respaldo de MukiCloud.'); return;
+    }
+    const n=x=>Array.isArray(x)?x.length:0;
+    const cuando=(r&&r.generado)?String(r.generado).slice(0,16).replace('T',' '):'fecha desconocida';
+    if(!confirm('RESTAURAR DESDE ARCHIVO\n\nRespaldo del '+cuando+'\n'+
+      '  Personal: '+n(snap.personal)+'\n  Tareos: '+n(snap.tareas)+
+      '\n  Valorizaciones: '+n(snap.valorizacionesLabor)+
+      '\n\nSe repondrá lo que falte y se CONSERVARÁ lo registrado después.\n¿Continuar?')) return;
+    _restaurarSnap(snap, false, 'archivo del '+cuando);
+    input.value='';
+  };
+  lector.readAsText(f);
+}
+
 // ══ PUNTOS DE RESTAURACIÓN DIARIOS ═══════════════════════════════════════════
 // Cada mañana, la primera vez que alguien abre el sistema, se guarda una copia completa del día.
 // Si durante la jornada algo borra datos, se vuelve a como estaba esa mañana.
@@ -25826,7 +25989,18 @@ async function cmpExportarExcel(){
 // nada a lo que volver. Con una copia por día eso no puede pasar.
 const PUNTO_PREFIJO='punto_';
 const PUNTO_DIAS=10;                       // cuántos días hacia atrás se ofrecen
-function _puntoHoy(){ try{ return (typeof hoy==='function')?hoy():new Date().toISOString().slice(0,10); }catch(e){ return new Date().toISOString().slice(0,10); } }
+// El día del respaldo empieza a las 5 de la mañana, que es cuando arranca la jornada: la copia
+// se crea con la primera sesión que se abre después de esa hora. Quien entre a las 3 de la
+// madrugada sigue trabajando sobre el día anterior y no dispara una copia nueva.
+const PUNTO_HORA_CORTE=5;
+function _puntoHoy(){
+  try{
+    const d=new Date();
+    if(d.getHours()<PUNTO_HORA_CORTE) d.setDate(d.getDate()-1);
+    const p=n=>String(n).padStart(2,'0');
+    return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());
+  }catch(e){ return new Date().toISOString().slice(0,10); }
+}
 function _puntoUltimosDias(n){
   const out=[]; const base=new Date(_puntoHoy()+'T12:00:00');
   for(let i=0;i<n;i++){ const d=new Date(base); d.setDate(d.getDate()-i);
@@ -25934,6 +26108,12 @@ async function restaurarPunto(dia, exacto){
     ? '⚠ VOLVER EXACTO al '+dia+'\n\nEl sistema quedará tal cual estaba ese día.\nTODO lo registrado después SE DESCARTA.\n\n¿Continuar?'
     : 'Reponer lo que falte del '+dia+'\n\nSe devuelve lo que se haya perdido y se CONSERVA todo lo registrado después.\n\n¿Continuar?';
   if(!confirm(aviso)) return;
+  await _restaurarSnap(snap, exacto, dia);
+}
+// Vuelca un respaldo sobre el estado. Lo usan el punto del día y el archivo descargado, para que
+// los dos caminos se comporten igual y no haya dos versiones de la misma lógica.
+async function _restaurarSnap(snap, exacto, etiqueta){
+  const r=_puntoResumen(snap);
   // Antes de tocar nada se guarda el estado actual, por si la restauración no era lo que se quería.
   try{ const ahora=snapshotEstado(); localStorage.setItem('atmin_punto_local_antes-de-restaurar', JSON.stringify(ahora));
        await sbSyncModulo(PUNTO_PREFIJO+'antes-de-restaurar', ahora); }catch(e){}
@@ -25963,6 +26143,22 @@ async function restaurarPunto(dia, exacto){
       state.almacen.explosivos={...ex, ingresos:U(ex.ingresos,sx.ingresos), salidas:U(ex.salidas,sx.salidas)};
     }else if(snap.almacen && !state.almacen){ state.almacen=snap.almacen; }
   }
+  // Lo que vive fuera de las listas por id: se repone tal cual venga en el respaldo.
+  try{
+    if(snap.remanenteIngresos) state.remanenteIngresos = exacto ? snap.remanenteIngresos
+      : U(state.remanenteIngresos, snap.remanenteIngresos);
+    if(snap.seguridad) state.seguridad = exacto ? snap.seguridad : U(state.seguridad, snap.seguridad);
+    if(snap.compras && (exacto || !state.compras)) state.compras = snap.compras;
+    if(snap.historialPeriodos && typeof histPeriodosSave==='function'){
+      // El historial de periodos lleva las cifras CONGELADAS de cada cierre: si no vuelve, un
+      // periodo cerrado se pondría a recalcularse otra vez.
+      const act=(typeof histPeriodosLoad==='function')?histPeriodosLoad():[];
+      const porPer={}; [...act, ...snap.historialPeriodos].forEach(h=>{ if(h&&h.periodo) porPer[h.periodo]=h; });
+      if(exacto) histPeriodosSave(snap.historialPeriodos); else histPeriodosSave(Object.values(porPer));
+    }
+    if(snap.precios && typeof paramsSet==='function'){ /* los precios se dejan como están salvo restauración exacta */ }
+  }catch(e){ console.warn('restaurar extras',e); }
+  try{ if(snap.remanenteIngresos && typeof remIngSave==='function') remIngSave(); }catch(e){}
   // Combustible y planilla de supervisión viven fuera de `state`
   try{ const c=snap.combustible||{};
     if(typeof combGuardar==='function'){
@@ -25982,7 +26178,7 @@ async function restaurarPunto(dia, exacto){
   try{ poblarSelects(); }catch(e){}
   try{ if(typeof renderPage==='function' && window._currentPage) renderPage(window._currentPage); }catch(e){}
   try{ renderDashboard(); }catch(e){}
-  alert('✅ Restaurado al '+dia+(exacto?' (estado exacto)':' (repuesto lo que faltaba)')+
+  alert('✅ Restaurado — '+etiqueta+(exacto?' (estado exacto)':' (repuesto lo que faltaba)')+
         '\n\nPersonal: '+r.personal+'  ·  Tareos: '+r.tareos+'  ·  Valorizaciones: '+r.valorizaciones+
         '\n\nSi esto no era lo que querías, hay un punto llamado "antes-de-restaurar" con el estado previo.');
 }
@@ -26477,7 +26673,20 @@ function snapshotEstado(){
     combustible:{ pet:(typeof combCargar==='function'?combCargar('pet'):[]), gas:(typeof combCargar==='function'?combCargar('gas'):[]) },
     serviciosTerceros:(typeof servCargar==='function'?servCargar():[]),
     finIngMaq:fim, mesesCerrados:state.mesesCerrados||[],
-    planillaSupervision:(typeof planillaSupLoad==='function'?planillaSupLoad():{})
+    planillaSupervision:(typeof planillaSupLoad==='function'?planillaSupLoad():{}),
+    // Faltaban en el respaldo, y son datos que el sistema sí muestra y sí guarda en la nube: una
+    // copia que no los lleve no devuelve el sistema al estado en que estaba.
+    remanenteIngresos: state.remanenteIngresos||[],
+    compras: state.compras||null,                    // módulo de Compras
+    seguridad: state.seguridad||[],                  // reportes de seguridad
+    historialPeriodos: (typeof histPeriodosLoad==='function'?histPeriodosLoad():[]),  // cierres y sus cifras fijas
+    tombstones: (typeof tombLoad==='function'?tombLoad():{}),                          // qué se borró a propósito
+    precios: {                                       // parámetros que cambian el costo
+      explosivos:(typeof compGetPreciosExp==='function'?compGetPreciosExp():null),
+      aceros:(typeof compGetPreciosAce==='function'?compGetPreciosAce():null),
+      petroleo:(typeof compGetPrecioPet==='function'?compGetPrecioPet():null),
+      gasolina:(typeof compGetPrecioGas==='function'?compGetPrecioGas():null)
+    }
   };
 }
 
