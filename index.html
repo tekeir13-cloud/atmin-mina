@@ -2757,8 +2757,28 @@ select option{background:var(--coal3);}
       <button class="btn btn-outline" style="font-size:14px;padding:12px 24px;border-color:#22c55e;color:#22c55e" onclick="exportarExplosivosExcel()">📊 Exportar Excel</button>
       <div style="font-size:12px;color:var(--text3);margin-left:8px">Ingreso: Polvorín Santa María → NV3190 &nbsp;|&nbsp; Salida: NV3190 → Almacén NV2820</div>
     </div>
+    <!-- ── TRAZABILIDAD PLEGADA ──
+         El historial completo se sigue guardando y pintando igual (mismo id 'exp-historial-wrap',
+         mismos botones de editar/eliminar). Lo único que cambia es que arranca PLEGADO: la lista
+         se había vuelto tan larga que tapaba todo lo demás de la pestaña. -->
     <div class="section-title">📋 Trazabilidad de Explosivos</div>
-    <div id="exp-historial-wrap"></div>
+    <div class="card" style="padding:14px 16px;margin-bottom:20px">
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <button id="exp-hist-btn" class="btn btn-outline" style="font-size:13px;padding:8px 18px" onclick="exploToggleHistorial()">▸ Mostrar historial</button>
+        <div id="exp-hist-resumen" style="font-size:11.5px;color:var(--text3)"></div>
+      </div>
+      <div id="exp-historial-wrap" style="display:none;margin-top:14px"></div>
+    </div>
+
+    <!-- ── ESTADÍSTICAS DEL CICLO ── -->
+    <div class="section-title">📊 Estadísticas del Ciclo</div>
+    <div class="card" style="padding:12px 16px;margin-bottom:14px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+      <label style="font-size:11px;color:var(--text3)">Ciclo (26 → 25):</label>
+      <select id="exp-est-periodo" onchange="renderExploStats()" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px"></select>
+      <div style="flex:1"></div>
+      <button class="btn btn-outline" style="padding:6px 14px;font-size:11px" onclick="renderExploStats()">↻ Actualizar</button>
+    </div>
+    <div id="exp-stats-wrap"></div>
   </div>
   <div class="mod-pane" style="display:none" id="log-solicitudmantlog"></div>
   <div class="mod-pane" style="display:none" id="log-combustible"></div>
@@ -4490,6 +4510,12 @@ function toggleTema(){
   const t = temaActual()==='light' ? 'dark' : 'light';
   try{ localStorage.setItem(TEMA_KEY,t); }catch(e){}
   aplicarTema(t);
+  // Los gráficos son canvas: no heredan las variables CSS del tema, hay que repintarlos. Solo si
+  // la pestaña de explosivos está a la vista, para no hacer trabajo invisible.
+  try{
+    const p=document.getElementById('log-explosivos');
+    if(p && p.style.display!=='none' && typeof renderExploStats==='function') renderExploStats();
+  }catch(e){}
 }
 try{ aplicarTema(temaActual()); }catch(e){}
 try{ document.addEventListener('DOMContentLoaded',()=>{ try{ aplicarTema(temaActual()); }catch(e){} }); }catch(e){}
@@ -10779,7 +10805,16 @@ function exploStockActual(){
   }
   return map;
 }
-function renderExploTab(){renderExploStock();renderExploHistorial();}
+function renderExploTab(){renderExploStock();renderExploHistorial();renderExploStats();}
+// ¿El historial está desplegado? Vive fuera del DOM porque la pestaña se repinta entera cada vez
+// que se guarda un movimiento: si se leyera del estilo del div, se volvería a plegar solo.
+let _expHistAbierto=false;
+function exploToggleHistorial(){ _expHistAbierto=!_expHistAbierto; _exploAplicarHist(); }
+function _exploAplicarHist(){
+  const w=document.getElementById('exp-historial-wrap'), b=document.getElementById('exp-hist-btn');
+  if(w) w.style.display=_expHistAbierto?'block':'none';
+  if(b) b.textContent=_expHistAbierto?'▾ Ocultar historial':'▸ Mostrar historial';
+}
 function renderExploStock(){
   const wrap=document.getElementById('exp-stock-wrap');if(!wrap)return;
   const stock=exploStockActual();
@@ -10809,12 +10844,27 @@ function renderExploHistorial(){
     ...(exp.ingresos||[]).map(r=>({...r,tipo:'ingreso'})),
     ...(exp.salidas||[]).map(r=>({...r,tipo:'salida'}))
   ].sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
-  if(!todos.length){wrap.innerHTML='<div style="color:var(--text3);font-size:13px;padding:20px 0">Sin movimientos registrados.</div>';return;}
+  // Resumen que se ve SIEMPRE, con el historial plegado o desplegado: así se sabe que los
+  // movimientos siguen ahí sin tener que abrir la lista.
+  const res=document.getElementById('exp-hist-resumen');
+  if(res){
+    const nI=(exp.ingresos||[]).length, nS=(exp.salidas||[]).length;
+    const ult=todos.length?fmtF(todos[0].fecha):null;
+    res.textContent=todos.length
+      ? `${todos.length} movimiento${todos.length!==1?'s':''} guardado${todos.length!==1?'s':''} · ${nI} ingreso${nI!==1?'s':''} · ${nS} salida${nS!==1?'s':''}${ult?' · último: '+ult:''}`
+      : 'Sin movimientos registrados.';
+  }
+  if(!todos.length){wrap.innerHTML='<div style="color:var(--text3);font-size:13px;padding:20px 0">Sin movimientos registrados.</div>';_exploAplicarHist();return;}
   wrap.innerHTML=todos.map(r=>{
     const c=exploGetCat(r.producto);const esIng=r.tipo==='ingreso';
     const color=esIng?'#60a5fa':'#f87171';
-    const cajas=Math.floor(r.totalUnidades/(c?.upCaja||1));const sueltas=r.totalUnidades%(c?.upCaja||1);
-    const cantLabel=`${r.totalUnidades} ${c?.unidad||'und'} (${cajas} caj. + ${sueltas} und)`;
+    // La mecha y el cordón se miden en METROS: sus "cajas" son rollos de mPorRollo metros. Antes
+    // se dividía siempre entre upCaja y un vale de 350 m de mecha se leía "35 caj.", cuando son
+    // 2 rollos + 50 m. Es el mismo cálculo que ya usan el stock y las estadísticas del ciclo.
+    const _cj=_expCajasDe(r.producto,r.totalUnidades);
+    const cantLabel=_cj.esRollo
+      ? `${r.totalUnidades} m (${_cj.cajas} rollo${_cj.cajas!==1?'s':''} + ${_cj.sueltas} m)`
+      : `${r.totalUnidades} ${c?.unidad||'und'} (${_cj.cajas} caj. + ${_cj.sueltas} und)`;
     return `<div class="card" style="margin-bottom:8px;padding:12px 16px;border-left:3px solid ${color}">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
         <div>
@@ -10832,6 +10882,192 @@ function renderExploHistorial(){
       </div>
     </div>`;
   }).join('');
+  _exploAplicarHist();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ESTADÍSTICAS DEL POLVORÍN NV3190 — ingresos y salidas del ciclo
+// Se calculan de los MISMOS registros que la trazabilidad (state.almacen.explosivos) y con los
+// MISMOS precios que el gasto de explosivos de Finanzas (compGetPreciosExp), así que las cifras
+// de esta pestaña nunca pueden discrepar del costo del mes. No guarda nada: solo lee y suma.
+// ═══════════════════════════════════════════════════════════════════════════
+let _expCharts=[];
+function _expDestruirCharts(){ try{ _expCharts.forEach(c=>{ try{c.destroy();}catch(e){} }); }catch(e){} _expCharts=[]; }
+// Paleta de los gráficos. Azul = entra, rojo = sale (igual que el borde de cada tarjeta del
+// historial). En tema claro se usan los tonos profundos: los claros no llegan a 3:1 de contraste
+// contra el fondo blanco y las barras finas se perdían.
+function _expPaleta(){
+  const claro=(()=>{ try{ return document.documentElement.getAttribute('data-theme')==='light'; }catch(e){ return false; } })();
+  return claro
+    ? {ing:'#2563eb', sal:'#dc2626', ok:'#0f8f63', avi:'#b45309', ejes:'#8a836e', grid:'rgba(35,33,28,0.10)'}
+    : {ing:'#60a5fa', sal:'#f87171', ok:'#22d3a5', avi:'#f59e0b', ejes:'#8b8574', grid:'rgba(255,255,255,0.06)'};
+}
+// Cuántas cajas (o rollos, en lo que se mide por metros) y cuántas unidades sueltas representa
+// una cantidad de un producto. Se agrupa por producto y no por vale: 100 + 200 unidades de
+// EMULNOR 1000 son 1 caja + 36 und, no dos veces "0 cajas".
+function _expCajasDe(prodId,unidades){
+  const c=exploGetCat(prodId);
+  const u=Number(unidades)||0;
+  const porCaja=c?(exploEsMetros(c)?exploMPorRollo(c):(c.upCaja||1)):1;
+  if(!(porCaja>0)) return {cajas:0,sueltas:u,esRollo:false};
+  return {cajas:Math.floor(u/porCaja), sueltas:Math.round((u%porCaja)*100)/100, esRollo:exploEsMetros(c)};
+}
+function renderExploStats(){
+  const wrap=document.getElementById('exp-stats-wrap'); if(!wrap) return;
+  // Selector de ciclo — mismos periodos que la pestaña de Estadísticas de Logística
+  const sel=document.getElementById('exp-est-periodo');
+  const pers=(typeof estPeriodos==='function')?estPeriodos():[];
+  if(sel){
+    const prev=sel.value;
+    if(sel.options.length!==pers.length||!prev){
+      sel.innerHTML=pers.map(p=>{ const w=ventanaMes(p); return `<option value="${p}">${p} · ${w.ini} → ${w.fin}</option>`; }).join('');
+      sel.value=(prev&&pers.includes(prev))?prev
+        :((typeof periodoActual==='function'&&pers.includes(periodoActual()))?periodoActual():(pers[0]||''));
+    }
+  }
+  const per=(sel&&sel.value)||(typeof periodoActual==='function'?periodoActual():'');
+  if(!per){ wrap.innerHTML='<div style="color:var(--text3);font-size:13px;padding:16px 0">Sin ciclos con movimientos todavía.</div>'; return; }
+  const w=ventanaMes(per);
+  const S=n=>(typeof fmtS2==='function')?fmtS2(n):('S/ '+(Number(n)||0).toFixed(2));
+  const N=n=>(Number(n)||0).toLocaleString('es-PE',{maximumFractionDigits:2});
+  const pex=(typeof compGetPreciosExp==='function')?(compGetPreciosExp()||{}):{};
+
+  const exp=(state.almacen&&state.almacen.explosivos)||{ingresos:[],salidas:[]};
+  const exIn=(exp.ingresos||[]).filter(r=>r&&enVentana(r.fecha,per));
+  const exSa=(exp.salidas||[]).filter(r=>r&&enVentana(r.fecha,per));
+
+  // ── Detalle por producto (base de los KPI, los gráficos y la tabla) ──
+  const cat=(typeof EXPLO_CATALOGO!=='undefined')?EXPLO_CATALOGO:[];
+  const uDe=(arr,id)=>arr.filter(r=>r.producto===id).reduce((s,r)=>s+(Number(r.totalUnidades)||Number(r.unidades)||0),0);
+  const filas=cat.map(c=>{
+    const ui=uDe(exIn,c.id), us=uDe(exSa,c.id);
+    const pr=Number(pex[c.id])||0;
+    return {id:c.id, nombre:c.nombre, unidad:c.unidad||'und', precio:pr,
+            ui, us, ci:_expCajasDe(c.id,ui), cs:_expCajasDe(c.id,us), si:ui*pr, ss:us*pr};
+  }).filter(f=>f.ui||f.us);
+  const T=(k)=>filas.reduce((s,f)=>s+(Number(f[k])||0),0);
+  const totUi=T('ui'), totUs=T('us'), totSi=T('si'), totSs=T('ss');
+  const totCi=filas.reduce((s,f)=>s+f.ci.cajas,0), totCs=filas.reduce((s,f)=>s+f.cs.cajas,0);
+  const totSueltasI=filas.reduce((s,f)=>s+f.ci.sueltas,0), totSueltasS=filas.reduce((s,f)=>s+f.cs.sueltas,0);
+  const sinPrecio=filas.filter(f=>!f.precio).length;
+
+  // ── Serie por día del ciclo (valor en S/) ──
+  const dias=[]; { let d=new Date(w.ini+'T00:00:00'); const fin=new Date(w.fin+'T00:00:00');
+    while(d<=fin&&dias.length<40){ dias.push(d.toISOString().slice(0,10)); d=new Date(d.getTime()+86400000); } }
+  const zero=()=>{ const o={}; dias.forEach(d=>o[d]=0); return o; };
+  const dIng=zero(), dSal=zero();
+  const acum=(arr,dest)=>arr.forEach(r=>{ const d=String(r.fecha||'').slice(0,10);
+    if(dest[d]!==undefined) dest[d]+=(Number(r.totalUnidades)||Number(r.unidades)||0)*(Number(pex[r.producto])||0); });
+  acum(exIn,dIng); acum(exSa,dSal);
+  const etq=dias.map(d=>d.slice(8,10)+'/'+d.slice(5,7));
+  const hayValorDia=dias.some(d=>dIng[d]||dSal[d]);
+
+  // Una sola paleta para KPI, tabla y gráficos: los mismos azul/rojo en los tres sitios, y en
+  // tema claro los tonos profundos (los claros no llegan a 3:1 sobre fondo blanco).
+  const P=_expPaleta();
+  const kpi=(label,valor,sub,sub2,color)=>`<div class="kpi-card" style="padding:14px 16px">
+    <div class="kpi-label" style="font-size:10px">${label}</div>
+    <div class="kpi-value" style="font-size:21px;color:${color}">${valor}</div>
+    <div style="font-size:10.5px;color:var(--text2);margin-top:3px">${sub||''}</div>
+    <div style="font-size:10px;color:var(--text3);margin-top:1px">${sub2||''}</div></div>`;
+  const cajTxt=(caj,sueltas)=>`${N(caj)} caja${caj!==1?'s':''} + ${N(sueltas)} und sueltas`;
+
+  wrap.innerHTML=`
+    <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Ciclo <b style="color:var(--text2)">${w.ini} → ${w.fin}</b> · ${dias.length} días · ${exIn.length} ingreso${exIn.length!==1?'s':''} y ${exSa.length} salida${exSa.length!==1?'s':''} registrados</div>
+
+    <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(215px,1fr));margin-bottom:8px">
+      ${kpi('⬇ Ingresos del ciclo · unidades',N(totUi)+' und',cajTxt(totCi,totSueltasI),'Polvorín Santa María → NV3190',P.ing)}
+      ${kpi('⬇ Ingresos del ciclo · valor',S(totSi),'a precio de lista de explosivos','',P.ing)}
+      ${kpi('⬆ Salidas del ciclo · unidades',N(totUs)+' und',cajTxt(totCs,totSueltasS),'NV3190 → Almacén NV2820',P.sal)}
+      ${kpi('⬆ Salidas del ciclo · valor',S(totSs),'es el gasto de explosivos del mes','',P.sal)}
+    </div>
+    <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(215px,1fr));margin-bottom:16px">
+      ${kpi('Saldo del ciclo · unidades',N(totUi-totUs)+' und','ingresos − salidas','no es el stock: es el movimiento del ciclo',(totUi-totUs)>=0?P.ok:P.avi)}
+      ${kpi('Saldo del ciclo · valor',S(totSi-totSs),'ingresos − salidas','',(totSi-totSs)>=0?P.ok:P.avi)}
+    </div>
+    ${sinPrecio?`<div style="font-size:11px;background:rgba(245,158,11,.08);border:1px dashed rgba(245,158,11,.35);border-radius:8px;padding:9px 13px;margin-bottom:16px;color:${P.avi}">⚠ ${sinPrecio} producto${sinPrecio!==1?'s':''} con movimiento no tiene${sinPrecio!==1?'n':''} precio cargado — sus unidades cuentan pero su valor entra como S/ 0. Se corrige en <b>Productos › 💥 Explosivos</b>.</div>`:''}
+
+    ${filas.length?`
+    <div class="card" style="padding:16px;margin-bottom:16px">
+      <div class="section-title" style="margin-top:0;font-size:13px">Ingresos vs salidas por explosivo (unidades)</div>
+      <div style="height:${Math.max(240,Math.min(560,filas.length*30+70))}px"><canvas id="exp-ch-und"></canvas></div>
+    </div>
+    <div class="card" style="padding:16px;margin-bottom:16px">
+      <div class="section-title" style="margin-top:0;font-size:13px">Valor movido por día del ciclo (S/)</div>
+      ${hayValorDia?'<div style="height:270px"><canvas id="exp-ch-val"></canvas></div>'
+        :'<div style="color:var(--text3);font-size:12px;padding:14px 0">Los movimientos del ciclo no tienen valor asignado (falta el precio de esos productos).</div>'}
+    </div>
+
+    <!-- Tabla: las mismas cifras de los gráficos, legibles sin depender del color -->
+    <div class="card" style="padding:16px;margin-bottom:8px">
+      <div class="section-title" style="margin-top:0;font-size:13px">Detalle por producto</div>
+      <div class="table-wrap" style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:640px">
+          <thead><tr style="color:var(--text3);font-size:10px;text-transform:uppercase;border-bottom:1px solid var(--border)">
+            <th style="padding:7px 8px;text-align:left">Explosivo</th>
+            <th style="padding:7px 8px;text-align:right">P. unit.</th>
+            <th style="padding:7px 8px;text-align:right;color:${P.ing}">Ingr. cajas</th>
+            <th style="padding:7px 8px;text-align:right;color:${P.ing}">Ingr. und</th>
+            <th style="padding:7px 8px;text-align:right;color:${P.ing}">Ingr. S/</th>
+            <th style="padding:7px 8px;text-align:right;color:${P.sal}">Sal. cajas</th>
+            <th style="padding:7px 8px;text-align:right;color:${P.sal}">Sal. und</th>
+            <th style="padding:7px 8px;text-align:right;color:${P.sal}">Sal. S/</th>
+          </tr></thead>
+          <tbody>
+            ${filas.map(f=>`<tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:6px 8px;color:var(--text)">${f.nombre}${f.precio?'':` <span style="color:${P.avi};font-size:10px">· sin precio</span>`}</td>
+              <td style="padding:6px 8px;text-align:right;color:var(--text3)">${f.precio?S(f.precio):'—'}</td>
+              <td style="padding:6px 8px;text-align:right">${f.ci.cajas?N(f.ci.cajas)+(f.ci.esRollo?' rollo'+(f.ci.cajas!==1?'s':''):''):'—'}</td>
+              <td style="padding:6px 8px;text-align:right;font-weight:600">${f.ui?N(f.ui):'—'}</td>
+              <td style="padding:6px 8px;text-align:right">${f.si?S(f.si):'—'}</td>
+              <td style="padding:6px 8px;text-align:right">${f.cs.cajas?N(f.cs.cajas)+(f.cs.esRollo?' rollo'+(f.cs.cajas!==1?'s':''):''):'—'}</td>
+              <td style="padding:6px 8px;text-align:right;font-weight:600">${f.us?N(f.us):'—'}</td>
+              <td style="padding:6px 8px;text-align:right">${f.ss?S(f.ss):'—'}</td>
+            </tr>`).join('')}
+            <tr style="font-weight:700;background:var(--coal3)">
+              <td style="padding:7px 8px;color:var(--text)">TOTAL DEL CICLO</td>
+              <td style="padding:7px 8px"></td>
+              <td style="padding:7px 8px;text-align:right">${N(totCi)}</td>
+              <td style="padding:7px 8px;text-align:right">${N(totUi)}</td>
+              <td style="padding:7px 8px;text-align:right">${S(totSi)}</td>
+              <td style="padding:7px 8px;text-align:right">${N(totCs)}</td>
+              <td style="padding:7px 8px;text-align:right">${N(totUs)}</td>
+              <td style="padding:7px 8px;text-align:right">${S(totSs)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-top:8px">Las cajas se cuentan por producto sobre el total del ciclo (mecha y cordón detonante van en rollos, porque se miden en metros). El valor usa el precio de <b>Productos › 💥 Explosivos</b>, el mismo que Finanzas.</div>
+    </div>`
+    :`<div class="card" style="padding:22px 16px;color:var(--text3);font-size:13px">Sin ingresos ni salidas de explosivos en este ciclo.</div>`}`;
+
+  // ── Gráficos ──
+  _expDestruirCharts();
+  if(!filas.length) return;
+  if(typeof Chart==='undefined'){
+    const av=document.createElement('div');
+    av.style.cssText='font-size:12px;color:var(--text3);padding:10px 0';
+    av.textContent='Los gráficos necesitan conexión a internet. Los totales y la tabla de arriba sí son correctos.';
+    wrap.appendChild(av); return;
+  }
+  const ejes=(sufijo,horizontal)=>({responsive:true,maintainAspectRatio:false,
+    indexAxis:horizontal?'y':'x',
+    plugins:{legend:{labels:{color:P.ejes,boxWidth:12,font:{size:11}}},
+      tooltip:{callbacks:{label:c=>c.dataset.label+': '+N(horizontal?c.parsed.x:c.parsed.y)+sufijo}}},
+    scales:{x:{beginAtZero:!!horizontal,ticks:{color:P.ejes,font:{size:horizontal?10:9},maxRotation:60,minRotation:0},grid:{display:!!horizontal,color:P.grid}},
+      y:{beginAtZero:!horizontal,ticks:{color:P.ejes,font:{size:10}},grid:{display:!horizontal,color:P.grid}}}});
+  const mk=(id,cfg)=>{ const cv=document.getElementById(id); if(!cv) return; try{ _expCharts.push(new Chart(cv.getContext('2d'),cfg)); }catch(e){} };
+
+  // Barras horizontales: los nombres de los explosivos son largos y en vertical se pisaban.
+  mk('exp-ch-und',{type:'bar',data:{labels:filas.map(f=>f.nombre),datasets:[
+    {label:'Ingresado',data:filas.map(f=>f.ui),backgroundColor:P.ing,borderRadius:4,borderSkipped:false},
+    {label:'Salido',data:filas.map(f=>f.us),backgroundColor:P.sal,borderRadius:4,borderSkipped:false}]},
+    options:ejes(' und',true)});
+
+  if(hayValorDia) mk('exp-ch-val',{type:'bar',data:{labels:etq,datasets:[
+    {label:'Ingresos S/',data:dias.map(d=>Math.round(dIng[d]*100)/100),backgroundColor:P.ing,borderRadius:4,borderSkipped:false},
+    {label:'Salidas S/',data:dias.map(d=>Math.round(dSal[d]*100)/100),backgroundColor:P.sal,borderRadius:4,borderSkipped:false}]},
+    options:ejes(' S/',false)});
 }
 function verFotoExplo(id){
   const exp=state.almacen.explosivos||{ingresos:[],salidas:[]};
