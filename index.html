@@ -6493,7 +6493,7 @@ function renderDashEjecutivo(){
       <div style="position:absolute;top:-20px;right:-20px;width:90px;height:90px;background:rgba(255,255,255,.06);border-radius:50%"></div>
       <div style="font-size:10.5px;color:#fdba74;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:6px">📤 Gasto Total</div>
       <div style="font-size:33px;font-weight:900;color:#fff;letter-spacing:-1.5px;line-height:1">${S(costoTot)}</div>
-      <div style="margin-top:8px;font-size:11px;color:#fed7aa">Explosivos aparte: ${S(costoExplo)}${_cong?' · 🔒 periodo cerrado':''}</div>
+      <div style="margin-top:8px;font-size:11px;color:#fed7aa">Del cual, explosivos: ${S(costoExplo)}${_cong?' · 🔒 periodo cerrado':''}</div>
     </div>
     <div style="background:${margen>=0?'linear-gradient(135deg,#1e1b4b,#312e81)':'linear-gradient(135deg,#450a0a,#7f1d1d)'};border-radius:18px;padding:20px;position:relative;overflow:hidden;box-shadow:0 8px 28px ${margen>=0?'rgba(99,102,241,.22)':'rgba(239,68,68,.18)'}">
       <div style="position:absolute;top:-20px;right:-20px;width:90px;height:90px;background:rgba(255,255,255,.06);border-radius:50%"></div>
@@ -7918,7 +7918,10 @@ function importarMaestroExcel(input){
       const now=hoy();
       const quien=(usuarioActivo&&usuarioActivo.nombre)||'Sistema';
       const newComb={...(paramsGetComb()||{pet:24.5,gas:21.0}), updatedAt:now, updatedBy:quien};
-      const newExp={...COMP_PRECIOS_EXP_DEFAULT};
+      // Arranca de los precios VIGENTES (como el combustible en la línea de arriba): antes partía
+      // de la lista por defecto, así que importar un Excel que no listara explosivos borraba de
+      // golpe todos los precios que Finanzas había ajustado a mano.
+      const newExp={...COMP_PRECIOS_EXP_DEFAULT, ...(paramsGetExp()||{})};
 
       // Reemplaza todo el catálogo general con lo que viene en el Excel
       const nuevosProductos=[];
@@ -22234,7 +22237,9 @@ function finCostoPlanilla(mesYM){
   const supervision=(esMes && typeof planillaSupTotal==='function')?planillaSupTotal(mesYM):0;
   return operarios+supervision;
 }
-// Explosivos: gasto SEPARADO — NO se suma al costo operativo total.
+// Explosivos: SÍ entran al costo operativo total (van como una categoría más de
+// finDesgloseGastos / finCostoTotal). Donde se muestran solos es como detalle "del cual", nunca
+// como un gasto fuera del total.
 // Modelo nuevo: salidas de explosivos del almacén NV3190 (totalUnidades) × precio unitario.
 function finCostoExplosivos(mesYM){
   let b=0;
@@ -22432,7 +22437,7 @@ function renderFinDashboard(){
     </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">${compHtml}</div>
     <div style="margin-top:12px;background:rgba(231,76,60,.08);border:1px dashed rgba(231,76,60,.4);border-radius:12px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
-      <div><span style="font-size:13px;color:var(--text2);font-weight:600">💥 Explosivos (NV3190)</span><div style="font-size:11px;color:var(--text3);margin-top:2px">Se contabiliza por separado — no entra en el costo operativo</div></div>
+      <div><span style="font-size:13px;color:var(--text2);font-weight:600">💥 Explosivos (NV3190)</span><div style="font-size:11px;color:var(--text3);margin-top:2px">Ya incluido en el total operativo — se detalla aquí por su peso en el gasto</div></div>
       <div style="font-size:22px;font-weight:800;color:#e74c3c">${S(costoExplo)}</div>
     </div>
   </div>
@@ -22726,7 +22731,7 @@ function finGenerarInforme(){
           ...desg.map(c=>['Egreso: '+c.label,-c.monto,-prevByKey(c.key),true]),
           ['TOTAL COSTOS OPERATIVOS',-costoTot,-costoTotP,true,'font-weight:600'],
           ['UTILIDAD ESTIMADA',utilidad,utilP,false,'font-weight:700;background:#f8f9fa'],
-          ['Explosivos (aparte, no en total)',-costoExplo,-finCostoExplosivos(prevMes),true,'color:#999;font-style:italic']
+          ['Del cual: Explosivos (ya incluido en los costos)',-costoExplo,-finCostoExplosivos(prevMes),true,'color:#999;font-style:italic']
         ].map(([lbl,cur,prev,isNeg,st=''])=>`<tr style="border-bottom:1px solid #eee;${st}">
           <td style="padding:7px 8px">${lbl}</td>
           <td style="padding:7px 8px;text-align:right;color:${isNeg&&cur<0?'#e74c3c':cur<0?'#e74c3c':'inherit'}">${fmtS(Math.round(Math.abs(cur)))}</td>
@@ -22786,7 +22791,7 @@ async function finExportarInforme(){
     ...desg.map(c=>['Egreso: '+c.label,-c.monto]),
     ['TOTAL COSTOS OPERATIVOS',-costoTot],
     ['UTILIDAD ESTIMADA',utilidad],
-    ['Explosivos (aparte, no en total)',-costoExplo],
+    ['Del cual: Explosivos (ya incluido en los costos)',-costoExplo],
     [],
     ['Metros avanzados',avance],
     ['Costo por metro',cpMetro]
@@ -22867,9 +22872,9 @@ function renderFinCostoCentro(){
           <td colspan="2"></td>
         </tr>
         <tr style="color:var(--text3);font-style:italic">
-          <td style="padding:8px">💥 Explosivos (aparte)</td>
+          <td style="padding:8px">Del cual: 💥 Explosivos</td>
           <td style="padding:8px;text-align:right">${fmtS(Math.round(finCostoExplosivos(mes)))}</td>
-          <td colspan="2" style="padding:8px;font-size:11px">No incluido en el total operativo</td>
+          <td colspan="2" style="padding:8px;font-size:11px">Ya incluido en el TOTAL OPERATIVO (fila de arriba)</td>
         </tr>
       </tbody>
     </table>
@@ -23233,8 +23238,17 @@ const COMP_PRECIO_GAS_KEY='atmin_comp_precio_gas';
 function paramsGetComb(){
   try{ const d=JSON.parse(localStorage.getItem(PARAMS_COMB_KEY)); return d||null; }catch(e){return null;}
 }
+// Los precios guardados se FUSIONAN sobre la lista de precios por defecto, no la reemplazan.
+// Un dict guardado antes de que existieran los 32 FANEL no trae esos códigos: al reemplazar,
+// cada FANEL que salía del polvorín se valorizaba en S/ 0 y el gasto de explosivos del mes salía
+// por debajo sin avisar. Lo guardado GANA en los códigos que trae (incluido un precio puesto a 0
+// a propósito) y los códigos que falten toman el precio de lista.
 function paramsGetExp(){
-  try{ const d=JSON.parse(localStorage.getItem(PARAMS_EXP_KEY)); return d&&Object.keys(d).length?d:null; }catch(e){return null;}
+  try{
+    const d=JSON.parse(localStorage.getItem(PARAMS_EXP_KEY));
+    if(!d||!Object.keys(d).length) return null;
+    return {...COMP_PRECIOS_EXP_DEFAULT, ...d};
+  }catch(e){return null;}
 }
 function paramsGetAce(){
   try{ const d=JSON.parse(localStorage.getItem(PARAMS_ACE_KEY)); return d&&Object.keys(d).length?d:null; }catch(e){return null;}
