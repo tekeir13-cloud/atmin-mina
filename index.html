@@ -7131,6 +7131,8 @@ async function _sbSubirSiNubeVacia(modulo, data){
 // para que dos dispositivos vean los cambios del otro sin recargar la página.
 const _rtSelfWrite={};
 let _rtChannel=null, _rtLastNotif=0, _rtRerenderT=null;
+// ¿El canal de tiempo real está entregando cambios? De esto depende cada cuánto sondea la nube.
+let _rtVivo=false;
 
 // Aplica al estado local un módulo que cambió en la nube (SIN re-subir → evita bucles).
 function _rtAplicarModulo(modulo, data){
@@ -7238,9 +7240,12 @@ async function _syncPoll(){
       _pollUpd[m]=upd;
       // Ignorar el eco de nuestra propia escritura reciente
       if(_rtSelfWrite[m] && (Date.now()-_rtSelfWrite[m] < 6000)) continue;
-      // Los respaldos no los aplica nadie (_rtAplicarModulo los ignora), y son las filas más
-      // pesadas de la tabla: no se bajan.
-      if(String(m).indexOf('backup_')===0) continue;
+      // Filas que NO aplica nadie (_rtAplicarModulo las ignora): no se bajan.
+      //  · backup_*      → copias completas del sistema, las filas más pesadas de la tabla
+      //  · diag_equipos  → el latido que cada equipo escribe cada 10 min; solo se lee en el
+      //                    diagnóstico, a pedido. Sin esto, N equipos se avisan entre sí todo
+      //                    el día de un dato que ninguno usa.
+      if(String(m).indexOf('backup_')===0 || m==='diag_equipos') continue;
       pedir.push(m);
     }
     _pollPrimera=false;
@@ -7257,9 +7262,22 @@ async function _syncPoll(){
     if(cambios){ try{ _rtRerenderDebounced(); }catch(e){} try{ _rtIndicador(); }catch(e){} }
   }catch(e){}
 }
-// Arranca el sondeo ~15 s después de cargar (para que la línea base sea posterior a la carga
-// inicial) y luego cada 20 s. También al volver el foco a la ventana, para ver lo último ya.
-setTimeout(()=>{ _syncPoll(); setInterval(_syncPoll, 20000); }, 15000);
+// CADENCIA ADAPTATIVA.
+// Cuando el tiempo real está "En vivo" entrega los cambios al instante y el sondeo es solo una red
+// de seguridad: con mirar cada 60 s sobra. Cuando el canal está caído —pasa cuando la tabla no
+// está en la publicación realtime— el sondeo ES la sincronización y vuelve a 20 s.
+// A 20 s fijos eran 4.320 consultas diarias por equipo aunque no cambiara nada en todo el turno.
+let _syncPollT=null;
+function _syncPollProgramar(){
+  clearTimeout(_syncPollT);
+  _syncPollT=setTimeout(async ()=>{
+    try{ await _syncPoll(); }catch(e){}
+    _syncPollProgramar();
+  }, _rtVivo?60000:20000);
+}
+// Arranca ~15 s después de cargar, para que la línea base sea posterior a la carga inicial.
+// También sondea al volver el foco a la ventana, para ver lo último ya.
+setTimeout(()=>{ _syncPoll(); _syncPollProgramar(); }, 15000);
 try{ document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ setTimeout(_syncPoll, 500); } }); }catch(e){}
 
 // Indicador PERMANENTE del estado del tiempo real (esquina inferior izquierda, siempre visible)
@@ -7286,6 +7304,10 @@ function iniciarRealtime(){
           const row = payload.new || payload.old || {};
           const modulo = row.modulo, data = row.data;
           if(!modulo) return;
+          // El tiempo real ya trajo la fila COMPLETA. Anotar su marca de tiempo como vista evita
+          // que el sondeo, 20 s después, note el cambio y se baje exactamente lo mismo otra vez:
+          // cada modificación de otro equipo se estaba descargando dos veces.
+          if(row.updated_at) _pollUpd[modulo]=row.updated_at;
           // Señal "publicar vista oficial": otro equipo pidió que TODOS jalen la nube ahora.
           if(modulo==='sync_broadcast'){ try{ _aplicarBroadcastSync(data); }catch(e){} return; }
           // Ignora el eco de nuestra propia escritura reciente
@@ -7298,14 +7320,14 @@ function iniciarRealtime(){
       .subscribe((status, err)=>{
         try{
           console.log('[realtime] estado:', status, err||'');
-          if(status==='SUBSCRIBED'){ _rtSetStatus('En vivo', '#22c55e'); try{ if(typeof sbFlushPendientes==='function') sbFlushPendientes(); }catch(e){} }
-          else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){ _rtSetStatus('Sin tiempo real ('+status+')', '#ef4444'); }
+          if(status==='SUBSCRIBED'){ _rtVivo=true; _rtSetStatus('En vivo', '#22c55e'); try{ if(typeof sbFlushPendientes==='function') sbFlushPendientes(); }catch(e){} }
+          else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){ _rtVivo=false; _rtSetStatus('Sin tiempo real ('+status+')', '#ef4444'); }
           else { _rtSetStatus('Tiempo real: '+status, '#f59e0b'); }
         }catch(e){}
       });
     // Fallback: si a los 8s el canal no quedó "joined", marcar en rojo (Realtime desactivado o RLS)
-    setTimeout(()=>{ try{ if(_rtChannel && _rtChannel.state!=='joined'){ _rtSetStatus('Sin tiempo real ('+(_rtChannel.state||'?')+')', '#ef4444'); } }catch(e){} }, 8000);
-  }catch(e){ console.warn('realtime no disponible', e); _rtSetStatus('Sin tiempo real (error)', '#ef4444'); }
+    setTimeout(()=>{ try{ if(_rtChannel && _rtChannel.state!=='joined'){ _rtVivo=false; _rtSetStatus('Sin tiempo real ('+(_rtChannel.state||'?')+')', '#ef4444'); } }catch(e){} }, 8000);
+  }catch(e){ console.warn('realtime no disponible', e); _rtVivo=false; _rtSetStatus('Sin tiempo real (error)', '#ef4444'); }
 }
 
 // ════════════════ MÓDULO ALMACÉN / INVENTARIO ════════════════
