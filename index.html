@@ -3680,7 +3680,7 @@ select option{background:var(--coal3);}
       <button class="mod-tab" onclick="switchCompTab('petroleo',this)">⛽ Petróleo/Gasolina</button>
       <button class="mod-tab" onclick="switchCompTab('horometros',this)">⏱️ Horómetros</button>
       <button class="mod-tab" onclick="switchCompTab('observaciones',this)">📝 Observaciones</button>
-      <button class="mod-tab" onclick="switchCompTab('historial',this)">📅 Historial</button>
+      <button class="mod-tab" onclick="switchCompTab('historial',this)">📊 Estadísticas</button>
     </div>
     <div id="comp-tab-explosivos" class="comp-tab-content">
       <div class="table-wrap"><table><thead><tr id="thead-explosivos"><th>Fecha</th><th>Turno</th><th>Código</th><th class="r">I</th><th class="r">E</th><th class="r">C</th><th class="r">F</th></tr></thead><tbody id="tbody-explosivos"><tr><td colspan="13" style="text-align:center;color:var(--text3);padding:20px">Sin reportes aún</td></tr></tbody></table></div>
@@ -3692,16 +3692,6 @@ select option{background:var(--coal3);}
       <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Equipo</th><th>Tipo</th><th class="r">Galones</th></tr></thead><tbody id="tbody-petroleo"><tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">Sin reportes aún</td></tr></tbody></table></div>
     </div>
     <div id="comp-tab-horometros" class="comp-tab-content" style="display:none">
-      <!-- Consumo por hora de cada equipo: se calcula de estos mismos horómetros y del petróleo
-           del reporte. Se pinta al abrir la pestaña (un canvas oculto se dibuja en 0x0). -->
-      <div class="card" style="padding:12px 16px;margin-bottom:14px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-        <label style="font-size:11px;color:var(--text3)">Periodo:</label>
-        <select id="hh-periodo" onchange="renderCompConsumoHora()" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px"></select>
-        <div style="flex:1"></div>
-        <button class="btn btn-outline" style="padding:6px 14px;font-size:11px" onclick="renderCompConsumoHora()">↻ Actualizar</button>
-      </div>
-      <div id="comp-hh-wrap" style="margin-bottom:18px"></div>
-      <div class="section-title" style="font-size:13px">⏱️ Horómetros reportados</div>
       <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Equipo</th><th class="r">HI</th><th class="r">HF</th><th class="r">HT</th></tr></thead><tbody id="tbody-horometros"><tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sin reportes aún</td></tr></tbody></table></div>
     </div>
     <div id="comp-tab-observaciones" class="comp-tab-content" style="display:none">
@@ -3710,10 +3700,14 @@ select option{background:var(--coal3);}
     </div>
     <div id="comp-tab-historial" class="comp-tab-content" style="display:none">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
-        <div><div class="section-title" style="margin:0">📅 Historial — Acumulado Mensual</div><div style="font-size:12px;color:var(--text3);margin-top:4px">Consumo por frente y por equipos · explosivo costeado (diario y del mes)</div></div>
+        <div><div class="section-title" style="margin:0">📊 Estadísticas — Acumulado Mensual</div><div style="font-size:12px;color:var(--text3);margin-top:4px">Consumo por frente y por equipos · explosivo costeado (diario y del mes) · consumo por hora de cada equipo</div></div>
         <select id="comp-hist-mes" onchange="renderCompHistorial()" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:13px"></select>
       </div>
       <div id="comp-hist-cont"></div>
+      <!-- Consumo por hora de cada equipo. Va DESPUÉS de comp-hist-cont, no dentro: esa caja se
+           reescribe entera en cada render y se llevaría por delante los canvas. Manda el mismo
+           selector de mes de arriba, para que toda la pestaña hable del mismo periodo. -->
+      <div id="comp-hh-wrap" style="margin-top:18px"></div>
     </div>
   </div>
 </div>
@@ -4527,8 +4521,8 @@ function toggleTema(){
     if(p && p.style.display!=='none' && typeof renderExploStats==='function') renderExploStats();
   }catch(e){}
   try{
-    const h=document.getElementById('comp-tab-horometros');
-    if(h && h.style.display!=='none' && typeof renderCompConsumoHora==='function') renderCompConsumoHora();
+    const h=document.getElementById('comp-tab-historial');
+    if(h && h.style.display!=='none' && typeof renderCompHistorial==='function') renderCompHistorial();
   }catch(e){}
 }
 try{ aplicarTema(temaActual()); }catch(e){}
@@ -23984,10 +23978,9 @@ function switchCompTab(tab, btn) {
   document.querySelectorAll('#page-compresorista .mod-tab').forEach(el=>el.classList.remove('active'));
   document.getElementById('comp-tab-'+tab).style.display='block';
   btn.classList.add('active');
+  // Se dibuja AL ABRIR la pestaña: un canvas dentro de un contenedor con display:none mide 0x0
+  // y Chart.js lo pintaría vacío. renderCompHistorial arrastra consigo el consumo por hora.
   if(tab==='historial') renderCompHistorial();
-  // Los gráficos de consumo por hora se dibujan AL ABRIR la pestaña: un canvas dentro de un
-  // contenedor con display:none mide 0x0 y Chart.js lo pinta vacío.
-  if(tab==='horometros'){ try{ renderCompConsumoHora(); }catch(e){} }
 }
 
 // Figuras (íconos) de los equipos del compresorista
@@ -24043,6 +24036,9 @@ function renderCompHistorial(){
   const mes=(selEl&&selEl.value)||mesAct;
   const enMes=r=>(typeof enVentana==='function')?enVentana(r.fecha,mes):((r.fecha||'').slice(0,7)===mes);
   const repMes=data.filter(enMes);
+  // El consumo por hora vive en su propia caja, fuera de comp-hist-cont: se pinta aquí para que
+  // salga también cuando el mes no tiene reportes y la función de abajo se corta.
+  try{ renderCompConsumoHora(mes); }catch(e){}
   const precios=(typeof compGetPreciosExp==='function')?compGetPreciosExp():COMP_PRECIOS_EXP_DEFAULT;
   const pPet=(typeof compGetPrecioPet==='function')?compGetPrecioPet():24.5;
   const pGas=(typeof compGetPrecioGas==='function')?compGetPrecioGas():21;
@@ -24137,7 +24133,7 @@ function _hhPaleta(){
 }
 // Galones y horas por equipo en el periodo, con el detalle por día.
 function _hhDatos(per){
-  const reps=(state.compresorista||[]).filter(r=>r && (per==='__todo' || enVentana(r.fecha,per)));
+  const reps=(state.compresorista||[]).filter(r=>r && enVentana(r.fecha,per));
   const eq={};
   const dame=nombre=>{ const e=(typeof compEquipoNorm==='function')?compEquipoNorm(nombre):nombre;
     if(!e) return null; if(!eq[e]) eq[e]={gln:0,horas:0,porDia:{}}; return eq[e]; };
@@ -24163,27 +24159,18 @@ function _hhDatos(per){
     })
     .sort((a,b)=>b.ratio-a.ratio);
 }
-function renderCompConsumoHora(){
+// El mes lo manda quien llama (la pestaña de Estadísticas, con su propio selector), para que
+// toda la pestaña hable del mismo periodo y no haya dos selectores que se contradigan.
+function renderCompConsumoHora(per){
   const wrap=document.getElementById('comp-hh-wrap'); if(!wrap) return;
-  // Selector de periodo — los mismos ciclos del resto de la app, más el histórico completo
-  const sel=document.getElementById('hh-periodo');
-  const pers=(typeof estPeriodos==='function')?estPeriodos():[];
-  if(sel){
-    const prev=sel.value;
-    if(sel.options.length!==pers.length+1 || !prev){
-      sel.innerHTML=pers.map(p=>{ const w=ventanaMes(p); return `<option value="${p}">${p} · ${w.ini} → ${w.fin}</option>`; }).join('')
-        +'<option value="__todo">Todo el historial</option>';
-      sel.value=(prev&&(prev==='__todo'||pers.includes(prev)))?prev
-        :((typeof periodoActual==='function'&&pers.includes(periodoActual()))?periodoActual():(pers[0]||'__todo'));
-    }
-  }
-  const per=(sel&&sel.value)||'__todo';
+  if(!per){ const sel=document.getElementById('comp-hist-mes'); per=(sel&&sel.value)||''; }
+  if(!per) return;
   const N=(n,d)=>(Number(n)||0).toLocaleString('es-PE',{maximumFractionDigits:(d==null?1:d)});
   const pPet=(typeof compGetPrecioPet==='function')?(Number(compGetPrecioPet())||0):0;
   const eqs=_hhDatos(per);
   const P=_hhPaleta();
   const fig=e=>(typeof compFig==='function')?compFig(e):'🛠️';
-  const rango=per==='__todo'?'todo el historial':(()=>{ const w=ventanaMes(per); return `${w.ini} → ${w.fin}`; })();
+  const rango=(()=>{ try{ const w=ventanaMes(per); return `${w.ini} → ${w.fin}`; }catch(e){ return per; } })();
 
   _hhDestruirCharts();
   if(!eqs.length){
@@ -24358,10 +24345,10 @@ function renderTablaCompresorista() {
     </tr>`;
   });
   document.getElementById('tbody-observaciones').innerHTML = obsRows || '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">Sin datos</td></tr>';
-  // Si la pestaña de horómetros está a la vista (llegó un parte nuevo de otro equipo, por ejemplo),
-  // sus gráficos se rehacen con el dato nuevo. Si está oculta, se dibujan al abrirla.
-  try{ const t=document.getElementById('comp-tab-horometros');
-    if(t && t.style.display!=='none') renderCompConsumoHora(); }catch(e){}
+  // Si la pestaña de Estadísticas está a la vista (llegó un parte nuevo de otro equipo, por
+  // ejemplo), se rehace con el dato nuevo. Si está oculta, se dibuja al abrirla.
+  try{ const t=document.getElementById('comp-tab-historial');
+    if(t && t.style.display!=='none') renderCompHistorial(); }catch(e){}
 }
 
 // Clic en un reporte de la lista → carga sus gráficos y totales en el visor
