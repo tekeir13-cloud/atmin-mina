@@ -7220,24 +7220,40 @@ let _pollPrimera=true;
 async function _syncPoll(){
   try{
     if(!SB_ONLINE || !sb || document.hidden) return;
-    const { data, error } = await sb.from('app_modulos').select('modulo,data,updated_at');
-    if(error || !Array.isArray(data)) return;
-    let cambios=0;
-    for(const row of data){
+    // PASO 1 — solo las marcas de tiempo (unos pocos KB).
+    // Antes esta consulta pedía también la columna 'data' de TODAS las filas: el estado completo
+    // de la app y, encima, cada respaldo backup_*, que es una copia entera de todo. Se bajaba eso
+    // cada 20 s, en cada equipo y con la app abierta todo el turno, para al final comparar solo
+    // updated_at y tirar el resto. Ahí se iban los gigas de salida del plan de Supabase.
+    const { data:marcas, error } = await sb.from('app_modulos').select('modulo,updated_at');
+    if(error || !Array.isArray(marcas)) return;
+    const pedir=[];
+    for(const row of marcas){
       const m=row.modulo, upd=row.updated_at||'';
       if(!m) continue;
       const primeraVezModulo=!(m in _pollUpd);
       // Primera pasada tras cargar: solo registrar la línea base, no re-aplicar (ya se cargó al abrir)
       if(_pollPrimera || primeraVezModulo){ _pollUpd[m]=upd; continue; }
-      if(upd && upd!==_pollUpd[m]){
-        _pollUpd[m]=upd;
-        // Ignorar el eco de nuestra propia escritura reciente
-        if(_rtSelfWrite[m] && (Date.now()-_rtSelfWrite[m] < 6000)) continue;
-        if(m==='sync_broadcast'){ try{ _aplicarBroadcastSync(row.data); }catch(e){} continue; }
-        try{ _rtAplicarModulo(m, row.data); cambios++; }catch(e){}
-      }
+      if(!upd || upd===_pollUpd[m]) continue;
+      _pollUpd[m]=upd;
+      // Ignorar el eco de nuestra propia escritura reciente
+      if(_rtSelfWrite[m] && (Date.now()-_rtSelfWrite[m] < 6000)) continue;
+      // Los respaldos no los aplica nadie (_rtAplicarModulo los ignora), y son las filas más
+      // pesadas de la tabla: no se bajan.
+      if(String(m).indexOf('backup_')===0) continue;
+      pedir.push(m);
     }
     _pollPrimera=false;
+    if(!pedir.length) return;
+    // PASO 2 — bajar 'data' SOLO de los módulos que cambiaron de verdad.
+    const { data:filas, error:err2 } = await sb.from('app_modulos').select('modulo,data').in('modulo', pedir);
+    if(err2 || !Array.isArray(filas)) return;
+    let cambios=0;
+    for(const row of filas){
+      const m=row.modulo; if(!m) continue;
+      if(m==='sync_broadcast'){ try{ _aplicarBroadcastSync(row.data); }catch(e){} continue; }
+      try{ _rtAplicarModulo(m, row.data); cambios++; }catch(e){}
+    }
     if(cambios){ try{ _rtRerenderDebounced(); }catch(e){} try{ _rtIndicador(); }catch(e){} }
   }catch(e){}
 }
