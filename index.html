@@ -5534,7 +5534,7 @@ function nv2820Stock(){
 
 // Figuras (emoji) por explosivo del catálogo
 const EXPLO_FIG={M1000:'🧨',M3000:'🧨',M5000:'🧨',CARMEX18:'🧵',CARMEX240:'🧵',FAMECORTE:'🪢',NEITHER:'🌀',CORDON5G:'🧶'};
-// Los 16 FANEL 3 comparten icono: son variantes del mismo detonador.
+// Todos los FANEL comparten icono, sea cual sea la medida: son variantes del mismo detonador.
 function exploFig(id){ if(/^FANEL\d+_/.test(String(id||''))) return '⏱'; return EXPLO_FIG[id]||'🧨'; }
 // Stock de explosivos en almacén (ingresos − salidas de state.almacen.explosivos), en unidades
 function exploStockTotal(){
@@ -10462,7 +10462,7 @@ const SC_UMBRAL_URGENTE=5;
 const SC_UMBRAL_BAJO=15;
 
 // ── EXPLOSIVOS NV3190 ──
-/* ══ DETONADOR NO ELECTRICO FANEL 3 — 16 TIPOS ══
+/* ══ DETONADOR NO ELECTRICO FANEL — 16 TIPOS EN CADA MEDIDA (2.40 m, 3 m y 4.2 m) ══
    Un mismo producto en 16 variantes, cada una con su precio. Se definen UNA vez aquí y de este
    bloque salen solos: el catálogo del polvorín NV3190, los selectores de ingreso y salida, el
    reporte del Compresorista, el reporte del Jefe de Guardia y el Excel.
@@ -10481,17 +10481,22 @@ const FANEL3_CATALOGO=FANEL3_PRECIOS.map((precio,i)=>({
   nombre:'DETONADOR NO ELECTRICO FANEL 3 N° '+(i+1),
   upCaja:FANEL3_UPCAJA, unidad:'und', precio, remanente:false
 }));
-// ── FANEL DE 4.2 METROS — los mismos 16 tipos, mismo precio ──
-// Se DERIVAN de los de 3 m en vez de copiarse: así el precio del N° 7 de 4.2 m no puede quedarse
-// desfasado del N° 7 de 3 m cuando se corrija la lista de compra. Se toca un solo sitio.
-//
-const FANEL42_CATALOGO=FANEL3_CATALOGO.map(c=>({
-  id:c.id.replace('FANEL3_','FANEL42_'),
-  nombre:c.nombre.replace('FANEL 3','FANEL 4.2'),
+// ── LAS DEMÁS MEDIDAS DE FANEL — los mismos 16 tipos, con el mismo precio ──
+// Se DERIVAN de los de 3 m en vez de copiarse: así el precio del N° 7 no puede quedarse desfasado
+// entre una medida y otra cuando se corrija la lista de compra. Se toca un solo sitio.
+// El id lleva la medida sin punto (FANEL42_, FANEL240_) y el nombre la lleva como se lee.
+// Para sumar otra medida basta con una línea más abajo.
+const _fanelMedida=(idMedida,etiqueta)=>FANEL3_CATALOGO.map(c=>({
+  id:c.id.replace('FANEL3_','FANEL'+idMedida+'_'),
+  nombre:c.nombre.replace('FANEL 3','FANEL '+etiqueta),
   upCaja:c.upCaja, unidad:c.unidad, precio:c.precio, remanente:false
 }));
-// Todos los FANEL, de 3 y de 4 metros, para no repetir la lista en cada módulo.
-const FANEL_TODOS=FANEL3_CATALOGO.concat(FANEL42_CATALOGO);
+const FANEL42_CATALOGO =_fanelMedida('42','4.2');
+const FANEL240_CATALOGO=_fanelMedida('240','2.40');
+// Todos los FANEL, de todas las medidas, para no repetir la lista en cada módulo.
+// Las medidas nuevas se AÑADEN al final: los ids de las que ya existen no se tocan, así ningún
+// movimiento ya registrado queda huérfano.
+const FANEL_TODOS=FANEL3_CATALOGO.concat(FANEL42_CATALOGO, FANEL240_CATALOGO);
 const EXPLO_CATALOGO=[
   {id:'M1000',nombre:'EMULNOR 1000 1" X 7"',upCaja:264,unidad:'und'},
   {id:'M3000',nombre:'EMULNOR 3000 1" X 8"',upCaja:228,unidad:'und'},
@@ -10505,7 +10510,7 @@ const EXPLO_CATALOGO=[
   {id:'CORDON5G',nombre:'CORDON DETONANTE 5G',upCaja:750,unidad:'rollo',mPorRollo:750,precio:0.959},
   ...FANEL_TODOS,
 ];
-// ¿Este explosivo entra al Stock Remanente? Los FANEL 3 no: remanente se queda como estaba.
+// ¿Este explosivo entra al Stock Remanente? Los FANEL no: remanente se queda como estaba.
 function exploVaARemanente(id){ const c=exploGetCat(id); return !c || c.remanente!==false; }
 // ¿Este explosivo se mide en METROS (y se agrupa en rollos) en vez de en unidades sueltas?
 // Antes esto se preguntaba comparando contra el id de la mecha en ~20 sitios, así que cualquier
@@ -10639,7 +10644,7 @@ function remEgresosPrevios(dias){
 // Las salidas ANTERIORES a la fecha de apertura no restan: ya están dentro del conteo físico
 // (mismo criterio que los egresos del compresorista).
 function remStockActual(){
-  // Solo los explosivos que SÍ van a remanente: los FANEL 3 no entran aquí ni siquiera en cero,
+  // Solo los explosivos que SÍ van a remanente: los FANEL no entran aquí ni siquiera en cero,
   // para que ninguna vista ni ningún Excel los pueda mostrar por descuido.
   const map={}; (typeof EXPLO_CATALOGO!=='undefined'?EXPLO_CATALOGO:[])
     .filter(c=>exploVaARemanente(c.id)).forEach(c=>{ map[c.id]=0; });
@@ -23462,8 +23467,8 @@ function compCargarLocal() {
 compCargarLocal();
 
 // Códigos alineados con EXPLO_CATALOGO para cruce correcto de stock
-// Los 32 FANEL (3 m y 4.2 m) se agregan desde FANEL_TODOS, no a mano: el Compresorista los reporta
-// para trazabilidad (el gasto se sigue contando solo cuando salen de Logística).
+// Los 48 FANEL (2.40 m, 3 m y 4.2 m) se agregan desde FANEL_TODOS, no a mano: el Compresorista
+// los reporta para trazabilidad (el gasto se sigue contando solo cuando salen de Logística).
 const COMP_EXPLOSIVOS = ['M1000','M3000','M5000','CARMEX18','CARMEX240','FAMECORTE','NEITHER','CORDON5G']
   .concat(FANEL_TODOS.map(c=>c.id));
 const COMP_EXPLO_LABEL = Object.assign(
@@ -23517,7 +23522,8 @@ function paramsGetComb(){
   try{ const d=JSON.parse(localStorage.getItem(PARAMS_COMB_KEY)); return d||null; }catch(e){return null;}
 }
 // Los precios guardados se FUSIONAN sobre la lista de precios por defecto, no la reemplazan.
-// Un dict guardado antes de que existieran los 32 FANEL no trae esos códigos: al reemplazar,
+// Un dict guardado antes de que existieran los FANEL (o antes de una medida nueva) no trae esos
+// códigos: al reemplazar,
 // cada FANEL que salía del polvorín se valorizaba en S/ 0 y el gasto de explosivos del mes salía
 // por debajo sin avisar. Lo guardado GANA en los códigos que trae (incluido un precio puesto a 0
 // a propósito) y los códigos que falten toman el precio de lista.
