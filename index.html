@@ -7230,6 +7230,7 @@ async function _syncPoll(){
     const { data:marcas, error } = await sb.from('app_modulos').select('modulo,updated_at');
     if(error || !Array.isArray(marcas)) return;
     const pedir=[];
+    const porBajar={};        // modulo -> marca de tiempo pendiente de CONFIRMAR
     for(const row of marcas){
       const m=row.modulo, upd=row.updated_at||'';
       if(!m) continue;
@@ -7237,25 +7238,28 @@ async function _syncPoll(){
       // Primera pasada tras cargar: solo registrar la línea base, no re-aplicar (ya se cargó al abrir)
       if(_pollPrimera || primeraVezModulo){ _pollUpd[m]=upd; continue; }
       if(!upd || upd===_pollUpd[m]) continue;
-      _pollUpd[m]=upd;
       // Ignorar el eco de nuestra propia escritura reciente
-      if(_rtSelfWrite[m] && (Date.now()-_rtSelfWrite[m] < 6000)) continue;
+      if(_rtSelfWrite[m] && (Date.now()-_rtSelfWrite[m] < 6000)){ _pollUpd[m]=upd; continue; }
       // Filas que NO aplica nadie (_rtAplicarModulo las ignora): no se bajan.
       //  · backup_*      → copias completas del sistema, las filas más pesadas de la tabla
       //  · diag_equipos  → el latido que cada equipo escribe cada 10 min; solo se lee en el
       //                    diagnóstico, a pedido. Sin esto, N equipos se avisan entre sí todo
       //                    el día de un dato que ninguno usa.
-      if(String(m).indexOf('backup_')===0 || m==='diag_equipos') continue;
-      pedir.push(m);
+      if(String(m).indexOf('backup_')===0 || m==='diag_equipos'){ _pollUpd[m]=upd; continue; }
+      pedir.push(m); porBajar[m]=upd;
     }
     _pollPrimera=false;
     if(!pedir.length) return;
     // PASO 2 — bajar 'data' SOLO de los módulos que cambiaron de verdad.
+    // La marca de tiempo NO se da por vista hasta que el dato llega. En interior mina la señal se
+    // corta a media consulta: si se marcara antes, ese cambio quedaría descartado para siempre y
+    // el equipo se quedaría sin verlo. Si esta consulta falla, el próximo sondeo lo reintenta.
     const { data:filas, error:err2 } = await sb.from('app_modulos').select('modulo,data').in('modulo', pedir);
     if(err2 || !Array.isArray(filas)) return;
     let cambios=0;
     for(const row of filas){
       const m=row.modulo; if(!m) continue;
+      _pollUpd[m]=porBajar[m]||_pollUpd[m];   // ahora sí: bajado y aplicado
       if(m==='sync_broadcast'){ try{ _aplicarBroadcastSync(row.data); }catch(e){} continue; }
       try{ _rtAplicarModulo(m, row.data); cambios++; }catch(e){}
     }
