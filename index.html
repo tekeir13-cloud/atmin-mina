@@ -3692,6 +3692,16 @@ select option{background:var(--coal3);}
       <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Equipo</th><th>Tipo</th><th class="r">Galones</th></tr></thead><tbody id="tbody-petroleo"><tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">Sin reportes aún</td></tr></tbody></table></div>
     </div>
     <div id="comp-tab-horometros" class="comp-tab-content" style="display:none">
+      <!-- Consumo por hora de cada equipo: se calcula de estos mismos horómetros y del petróleo
+           del reporte. Se pinta al abrir la pestaña (un canvas oculto se dibuja en 0x0). -->
+      <div class="card" style="padding:12px 16px;margin-bottom:14px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+        <label style="font-size:11px;color:var(--text3)">Periodo:</label>
+        <select id="hh-periodo" onchange="renderCompConsumoHora()" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px"></select>
+        <div style="flex:1"></div>
+        <button class="btn btn-outline" style="padding:6px 14px;font-size:11px" onclick="renderCompConsumoHora()">↻ Actualizar</button>
+      </div>
+      <div id="comp-hh-wrap" style="margin-bottom:18px"></div>
+      <div class="section-title" style="font-size:13px">⏱️ Horómetros reportados</div>
       <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Equipo</th><th class="r">HI</th><th class="r">HF</th><th class="r">HT</th></tr></thead><tbody id="tbody-horometros"><tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sin reportes aún</td></tr></tbody></table></div>
     </div>
     <div id="comp-tab-observaciones" class="comp-tab-content" style="display:none">
@@ -4515,6 +4525,10 @@ function toggleTema(){
   try{
     const p=document.getElementById('log-explosivos');
     if(p && p.style.display!=='none' && typeof renderExploStats==='function') renderExploStats();
+  }catch(e){}
+  try{
+    const h=document.getElementById('comp-tab-horometros');
+    if(h && h.style.display!=='none' && typeof renderCompConsumoHora==='function') renderCompConsumoHora();
   }catch(e){}
 }
 try{ aplicarTema(temaActual()); }catch(e){}
@@ -23971,6 +23985,9 @@ function switchCompTab(tab, btn) {
   document.getElementById('comp-tab-'+tab).style.display='block';
   btn.classList.add('active');
   if(tab==='historial') renderCompHistorial();
+  // Los gráficos de consumo por hora se dibujan AL ABRIR la pestaña: un canvas dentro de un
+  // contenedor con display:none mide 0x0 y Chart.js lo pinta vacío.
+  if(tab==='horometros'){ try{ renderCompConsumoHora(); }catch(e){} }
 }
 
 // Figuras (íconos) de los equipos del compresorista
@@ -24097,6 +24114,194 @@ function renderCompHistorial(){
   cont.innerHTML=kpiFrentes+graficaDiaria+equiposCards+horoCard;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// CONSUMO POR HORA DE CADA EQUIPO (pestaña Horómetros del Compresorista)
+// Cruza las DOS cosas que ya reporta el compresorista en el mismo parte: las horas del horómetro
+// (HT) y los galones de petróleo despachados a ese equipo. No hay dato nuevo que llenar ni cifra
+// propia que se pueda desalinear: si se corrige un parte, esto cambia con él.
+//
+// La cifra de cabecera de cada equipo es la del PERIODO: total de galones ÷ total de horas. Es la
+// robusta. El gráfico diario es más fino pero más ruidoso —un día pueden cargarle el tanque lleno
+// y trabajar dos horas— así que solo se dibujan los días que tienen las dos cosas, horas Y carga,
+// y se marca el promedio del periodo como línea de referencia para leer cada día contra él.
+// ═══════════════════════════════════════════════════════════════════════════
+let _hhCharts=[];
+function _hhDestruirCharts(){ try{ _hhCharts.forEach(c=>{ try{c.destroy();}catch(e){} }); }catch(e){} _hhCharts=[]; }
+// Ámbar = galones por hora, azul = promedio del periodo. Los tonos profundos en tema claro: los
+// claros no llegan a 3:1 contra el fondo blanco.
+function _hhPaleta(){
+  const claro=(()=>{ try{ return document.documentElement.getAttribute('data-theme')==='light'; }catch(e){ return false; } })();
+  return claro
+    ? {barra:'#b45309', linea:'#2563eb', ejes:'#8a836e', grid:'rgba(35,33,28,0.10)'}
+    : {barra:'#d97706', linea:'#3b82f6', ejes:'#8b8574', grid:'rgba(255,255,255,0.06)'};
+}
+// Galones y horas por equipo en el periodo, con el detalle por día.
+function _hhDatos(per){
+  const reps=(state.compresorista||[]).filter(r=>r && (per==='__todo' || enVentana(r.fecha,per)));
+  const eq={};
+  const dame=nombre=>{ const e=(typeof compEquipoNorm==='function')?compEquipoNorm(nombre):nombre;
+    if(!e) return null; if(!eq[e]) eq[e]={gln:0,horas:0,porDia:{}}; return eq[e]; };
+  const dia=(o,f)=>{ o.porDia[f]=o.porDia[f]||{gln:0,horas:0}; return o.porDia[f]; };
+  reps.forEach(r=>{
+    const f=String(r.fecha||'').slice(0,10); if(!f) return;
+    (r.horometros||[]).forEach(h=>{ const ht=Number(h&&h.HT)||0; if(ht<=0) return;
+      const o=dame(h.equipo); if(!o) return; o.horas+=ht; dia(o,f).horas+=ht; });
+    // Solo PETRÓLEO: los equipos con horómetro son los que consumen petróleo. La gasolina va a
+    // cuatrimotos y al trompo, que no llevan horómetro.
+    (r.petroleo||[]).forEach(x=>{ const g=Number(x&&x.gln)||0; if(g<=0) return;
+      const o=dame(x.equipo); if(!o) return; o.gln+=g; dia(o,f).gln+=g; });
+  });
+  return Object.entries(eq)
+    .filter(([,o])=>o.horas>0 && o.gln>0)   // sin las dos cosas no hay consumo por hora que mostrar
+    .map(([nombre,o])=>{
+      const dias=Object.entries(o.porDia)
+        .filter(([,d])=>d.horas>0 && d.gln>0)
+        .map(([f,d])=>({fecha:f, gln:d.gln, horas:d.horas, ratio:d.gln/d.horas}))
+        .sort((a,b)=>a.fecha.localeCompare(b.fecha));
+      return {nombre, gln:o.gln, horas:o.horas, ratio:o.gln/o.horas,
+              dias, nDias:dias.length, nDiasTot:Object.keys(o.porDia).length};
+    })
+    .sort((a,b)=>b.ratio-a.ratio);
+}
+function renderCompConsumoHora(){
+  const wrap=document.getElementById('comp-hh-wrap'); if(!wrap) return;
+  // Selector de periodo — los mismos ciclos del resto de la app, más el histórico completo
+  const sel=document.getElementById('hh-periodo');
+  const pers=(typeof estPeriodos==='function')?estPeriodos():[];
+  if(sel){
+    const prev=sel.value;
+    if(sel.options.length!==pers.length+1 || !prev){
+      sel.innerHTML=pers.map(p=>{ const w=ventanaMes(p); return `<option value="${p}">${p} · ${w.ini} → ${w.fin}</option>`; }).join('')
+        +'<option value="__todo">Todo el historial</option>';
+      sel.value=(prev&&(prev==='__todo'||pers.includes(prev)))?prev
+        :((typeof periodoActual==='function'&&pers.includes(periodoActual()))?periodoActual():(pers[0]||'__todo'));
+    }
+  }
+  const per=(sel&&sel.value)||'__todo';
+  const N=(n,d)=>(Number(n)||0).toLocaleString('es-PE',{maximumFractionDigits:(d==null?1:d)});
+  const pPet=(typeof compGetPrecioPet==='function')?(Number(compGetPrecioPet())||0):0;
+  const eqs=_hhDatos(per);
+  const P=_hhPaleta();
+  const fig=e=>(typeof compFig==='function')?compFig(e):'🛠️';
+  const rango=per==='__todo'?'todo el historial':(()=>{ const w=ventanaMes(per); return `${w.ini} → ${w.fin}`; })();
+
+  _hhDestruirCharts();
+  if(!eqs.length){
+    wrap.innerHTML=`<div class="card" style="padding:20px 16px;color:var(--text3);font-size:13px">
+      Sin equipos con horas y petróleo en este periodo (<b>${rango}</b>). El consumo por hora necesita
+      las dos cosas en el mismo parte: horas del horómetro y galones despachados a ese equipo.</div>`;
+    return;
+  }
+  const totGln=eqs.reduce((s,e)=>s+e.gln,0), totH=eqs.reduce((s,e)=>s+e.horas,0);
+
+  wrap.innerHTML=`
+    <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Periodo <b style="color:var(--text2)">${rango}</b> · ${eqs.length} equipo${eqs.length!==1?'s':''} con horas y petróleo · ${N(totGln)} gln en ${N(totH)} h · promedio general <b style="color:var(--text2)">${N(totGln/totH,2)} gal/h</b></div>
+
+    <div class="card" style="padding:16px;margin-bottom:16px">
+      <div class="section-title" style="margin-top:0;font-size:13px">⛽ Consumo por hora — comparación entre equipos</div>
+      <div style="height:${Math.max(200,eqs.length*38+60)}px"><canvas id="hh-ch-comp"></canvas></div>
+      <div style="font-size:10px;color:var(--text3);margin-top:8px">Galones de petróleo ÷ horas de horómetro en todo el periodo.</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;margin-bottom:16px">
+      ${eqs.map((e,i)=>`<div class="card" style="padding:14px 16px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:22px">${fig(e.nombre)}</span>
+          <div style="font-size:12.5px;font-weight:700;color:var(--text);line-height:1.15">${e.nombre}</div>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+          <div style="font-size:26px;font-weight:900;color:${P.barra};letter-spacing:-.5px">${N(e.ratio,2)} <span style="font-size:13px;font-weight:700">gal/h</span></div>
+          ${pPet?`<div style="font-size:11px;color:var(--text3)">≈ S/ ${N(e.ratio*pPet,2)} por hora</div>`:''}
+        </div>
+        <div style="font-size:11px;color:var(--text2);margin-top:3px">${N(e.gln)} gln en ${N(e.horas)} h</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:1px">${e.nDias} día${e.nDias!==1?'s':''} con horas y carga el mismo día${e.nDiasTot>e.nDias?` · ${e.nDiasTot-e.nDias} con solo una de las dos, fuera del gráfico diario`:''}</div>
+        ${e.dias.length>1
+          ? `<div style="height:170px;margin-top:10px"><canvas id="hh-ch-${i}"></canvas></div>`
+          : `<div style="font-size:11px;color:var(--text3);margin-top:10px;padding:14px 0;border-top:1px solid var(--border)">${e.dias.length===1
+              ? 'Un solo día con horas y carga en el periodo: todavía no hay serie diaria que dibujar.'
+              : 'En este periodo las horas y las cargas cayeron en fechas distintas, así que no hay serie diaria. La cifra de arriba sí vale: son los galones y las horas de todo el periodo.'}</div>`}
+      </div>`).join('')}
+    </div>
+
+    <!-- Las mismas cifras en tabla: legibles sin depender del color ni de los gráficos -->
+    <div class="card" style="padding:16px">
+      <div class="section-title" style="margin-top:0;font-size:13px">Detalle por equipo</div>
+      <div class="table-wrap" style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:560px">
+          <thead><tr style="color:var(--text3);font-size:10px;text-transform:uppercase;border-bottom:1px solid var(--border)">
+            <th style="padding:7px 8px;text-align:left">Equipo</th>
+            <th style="padding:7px 8px;text-align:right">Petróleo (gln)</th>
+            <th style="padding:7px 8px;text-align:right">Horas</th>
+            <th style="padding:7px 8px;text-align:right">Gal/h</th>
+            ${pPet?'<th style="padding:7px 8px;text-align:right">S/ por hora</th>':''}
+            <th style="padding:7px 8px;text-align:right">Días</th>
+          </tr></thead>
+          <tbody>
+            ${eqs.map(e=>`<tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:6px 8px;color:var(--text)">${fig(e.nombre)} ${e.nombre}</td>
+              <td style="padding:6px 8px;text-align:right">${N(e.gln)}</td>
+              <td style="padding:6px 8px;text-align:right">${N(e.horas)}</td>
+              <td style="padding:6px 8px;text-align:right;font-weight:700">${N(e.ratio,2)}</td>
+              ${pPet?`<td style="padding:6px 8px;text-align:right">S/ ${N(e.ratio*pPet,2)}</td>`:''}
+              <td style="padding:6px 8px;text-align:right;color:var(--text3)">${e.nDias}</td>
+            </tr>`).join('')}
+            <tr style="font-weight:700;background:var(--coal3)">
+              <td style="padding:7px 8px;color:var(--text)">PROMEDIO GENERAL</td>
+              <td style="padding:7px 8px;text-align:right">${N(totGln)}</td>
+              <td style="padding:7px 8px;text-align:right">${N(totH)}</td>
+              <td style="padding:7px 8px;text-align:right">${N(totGln/totH,2)}</td>
+              ${pPet?`<td style="padding:7px 8px;text-align:right">S/ ${N((totGln/totH)*pPet,2)}</td>`:''}
+              <td style="padding:7px 8px"></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-top:8px">Sale de los mismos partes del compresorista: horas del horómetro (HT) y galones de petróleo despachados a cada equipo. Un equipo aparece solo si tiene las dos cosas en el periodo.${pPet?` El costo usa el precio de petróleo vigente (S/ ${N(pPet,2)} por galón).`:''}</div>
+    </div>`;
+
+  // ── Gráficos ──
+  if(typeof Chart==='undefined'){
+    const av=document.createElement('div');
+    av.style.cssText='font-size:12px;color:var(--text3);padding:10px 0';
+    av.textContent='Los gráficos necesitan conexión a internet. Las cifras y la tabla de arriba sí son correctas.';
+    wrap.appendChild(av); return;
+  }
+  const mk=(id,cfg)=>{ const cv=document.getElementById(id); if(!cv) return; try{ _hhCharts.push(new Chart(cv.getContext('2d'),cfg)); }catch(e){} };
+
+  // Comparación entre equipos — barras horizontales: los nombres son largos
+  mk('hh-ch-comp',{type:'bar',
+    data:{labels:eqs.map(e=>e.nombre),
+      datasets:[{label:'gal/h del periodo',data:eqs.map(e=>Math.round(e.ratio*100)/100),
+        backgroundColor:P.barra,borderRadius:4,borderSkipped:false,maxBarThickness:22}]},
+    options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:c=>N(c.parsed.x,2)+' gal/h',
+          afterLabel:c=>{const e=eqs[c.dataIndex];return N(e.gln)+' gln · '+N(e.horas)+' h';}}}},
+      scales:{x:{beginAtZero:true,grace:'6%',ticks:{color:P.ejes,font:{size:10}},grid:{color:P.grid}},
+        y:{ticks:{color:P.ejes,font:{size:10}},grid:{display:false}}}}});
+
+  // Una serie por equipo — el día contra el promedio del periodo
+  eqs.forEach((e,i)=>{
+    if(e.dias.length<2) return;
+    const prom=Math.round(e.ratio*100)/100;
+    mk('hh-ch-'+i,{type:'bar',
+      data:{labels:e.dias.map(d=>d.fecha.slice(8,10)+'/'+d.fecha.slice(5,7)),
+        datasets:[
+          {label:'gal/h del día',data:e.dias.map(d=>Math.round(d.ratio*100)/100),
+           backgroundColor:P.barra,borderRadius:4,borderSkipped:false,maxBarThickness:26},
+          {type:'line',label:'promedio del periodo ('+N(e.ratio,2)+')',data:e.dias.map(()=>prom),
+           borderColor:P.linea,borderWidth:2,borderDash:[5,4],pointRadius:0,fill:false}
+        ]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{labels:{color:P.ejes,boxWidth:12,font:{size:10}}},
+          tooltip:{callbacks:{label:c=>c.dataset.label+': '+N(c.parsed.y,2)+' gal/h',
+            afterLabel:c=>{ if(c.datasetIndex!==0) return ''; const d=e.dias[c.dataIndex];
+              return N(d.gln)+' gln · '+N(d.horas)+' h'; }}}},
+        scales:{x:{ticks:{color:P.ejes,font:{size:9},maxRotation:60},grid:{display:false}},
+          y:{beginAtZero:true,grace:'12%',ticks:{color:P.ejes,font:{size:9}},grid:{color:P.grid}}}}});
+  });
+}
+
 function renderTablaCompresorista() {
   const data = state.compresorista;
   if(!data.length) return;
@@ -24153,6 +24358,10 @@ function renderTablaCompresorista() {
     </tr>`;
   });
   document.getElementById('tbody-observaciones').innerHTML = obsRows || '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">Sin datos</td></tr>';
+  // Si la pestaña de horómetros está a la vista (llegó un parte nuevo de otro equipo, por ejemplo),
+  // sus gráficos se rehacen con el dato nuevo. Si está oculta, se dibujan al abrirla.
+  try{ const t=document.getElementById('comp-tab-horometros');
+    if(t && t.style.display!=='none') renderCompConsumoHora(); }catch(e){}
 }
 
 // Clic en un reporte de la lista → carga sus gráficos y totales en el visor
