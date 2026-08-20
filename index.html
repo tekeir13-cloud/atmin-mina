@@ -7041,6 +7041,26 @@ const SBPEND_KEY='atmin_sb_pend';
 const _sbPend=(function(){ try{ const d=JSON.parse(localStorage.getItem(SBPEND_KEY)||'{}'); return (d&&typeof d==='object')?d:{}; }catch(e){ return {}; } })();
 function _sbPendSave(){ try{ localStorage.setItem(SBPEND_KEY, JSON.stringify(_sbPend)); }catch(e){} try{ if(typeof actualizarChipConexion==='function') actualizarChipConexion(); }catch(e){} }
 let _sbFallo=0;
+// Cómo se une cada módulo con lo que ya hay en la nube ANTES de subirlo. Misma regla que al bajar.
+const _MERGE_AL_SUBIR = {
+  compresorista:      (loc,nub)=> (typeof _compMergeByTs==='function') ? _compMergeByTs(loc,nub) : loc,
+  reportes_guardia:   (loc,nub)=> (typeof mergeById_ts==='function')
+                                    ? mergeById_ts(loc,nub,(typeof _rgMetros==='function'?_rgMetros:null)) : loc,
+  mant_kits:          (loc,nub)=> (typeof mergeMantKits==='function') ? mergeMantKits(loc,nub) : loc,
+  remanente_salidas:  (loc,nub)=> (typeof mergeSnapById==='function') ? mergeSnapById(loc,nub) : loc,
+  remanente_ingresos: (loc,nub)=> (typeof mergeSnapById==='function') ? mergeSnapById(loc,nub) : loc,
+  reuniones:          (loc,nub)=> (typeof mergeSnapById==='function') ? mergeSnapById(loc,nub) : loc,
+};
+// Dónde vive cada uno en este equipo, para que la unión se vea también en pantalla.
+const _GUARDAR_TRAS_FUSION = {
+  compresorista:      m=>{ state.compresorista=m;     _lsSet('atmin_compresorista', m); },
+  reportes_guardia:   m=>{ state.reportesGuardia=m;   _lsSet('atmin_reportes_guardia', m); },
+  mant_kits:          m=>{ state.mantenimiento=m;     _lsSet('atmin_mant_kits', m); },
+  remanente_salidas:  m=>{ state.remanenteSalidas=m;  _lsSet('atmin_remanente_salidas', m); },
+  remanente_ingresos: m=>{ state.remanenteIngresos=m; _lsSet('atmin_remanente_ingresos', m); },
+  reuniones:          m=>{ state.reuniones=m;         _lsSet('atmin_reuniones', m); },
+};
+function _lsSet(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
 async function _sbSubirModulo(modulo){
   if(!SB_ONLINE || !CLOUD_SYNC_READY) return false;
   if(!(modulo in _sbPend)) return true;
@@ -7076,6 +7096,33 @@ async function _sbSubirModulo(modulo){
         dataObj=merged;
         if(Array.isArray(_sbPend['personal'])) _sbPend['personal']=merged;   // reflejar la unión en la cola
         try{ state.personal=merged; localStorage.setItem(PERSONAL_KEY, JSON.stringify(merged)); }catch(e){}
+      }
+    }catch(e){}
+  }
+  // READ-MERGE-WRITE para los demás módulos que son listas de registros.
+  // Sin esto, el equipo que sube de último reemplaza la fila entera de su módulo y borra lo que
+  // había registrado otro. Con señal no se nota, porque los equipos convergen en un minuto; pero
+  // basta un día sin conexión en dos computadoras para perder los partes de una. Cada módulo se
+  // une con la MISMA regla que ya usa al bajar, así que subir y bajar no pueden contradecirse, y
+  // todas esas reglas respetan las lápidas: lo borrado a propósito no resucita.
+  //
+  // 'tareas' queda FUERA A PROPÓSITO. Los tareos se borran filtrando, sin dejar lápida, y corregir
+  // la marca de un día borra el registro y crea otro con id nuevo. Unirlos por id resucitaría el
+  // tareo viejo: el trabajador aparecería con dos el mismo día y la planilla lo pagaría dos veces.
+  // Para incluirlo primero hay que darle lápida al borrado del tareo.
+  const _fusionar=_MERGE_AL_SUBIR[modulo];
+  if(_fusionar && Array.isArray(dataObj)){
+    try{
+      const { data:cloudRow } = await sb.from('app_modulos').select('data').eq('modulo', modulo).single();
+      if(cloudRow && Array.isArray(cloudRow.data)){
+        const merged=_fusionar(dataObj, cloudRow.data);
+        if(Array.isArray(merged)){
+          dataObj=merged;
+          if(_sbPend[modulo]!=null) _sbPend[modulo]=merged;
+          // Aplicar la unión también aquí: si no, este equipo sube lo de los dos pero en su
+          // pantalla sigue viendo solo lo suyo (el sondeo se salta el eco de la propia escritura).
+          try{ const g=_GUARDAR_TRAS_FUSION[modulo]; if(g) g(merged); }catch(e){}
+        }
       }
     }catch(e){}
   }
