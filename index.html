@@ -4832,6 +4832,34 @@ function toggleFrente(n){state.frenteActivo=n;}
 function fechaLocalISO(d){const p=n=>String(n).padStart(2,'0');return`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;}
 function hoy(){return fechaLocalISO(new Date());}
 function fmtF(d){if(!d)return'—';const[y,m,dia]=d.split('-');return`${dia}/${m}/${y}`;}
+// ── GRÁFICOS QUE NO SE LLEVAN LOS DATOS POR DELANTE ──
+// Chart.js se descarga de un CDN externo. Si no llega —interior mina, jsdelivr caído, red que lo
+// bloquea— 'Chart' queda sin definir y cada 'new Chart(...)' LANZA. Como la mayoría de las vistas
+// pintan los gráficos en medio del render, esa excepción se llevaba también todo lo que venía
+// después: al abrir un reporte del compresorista se perdían los gráficos Y la información de
+// abajo. Este envoltorio devuelve null en vez de lanzar. Se pueden perder los gráficos; los datos
+// nunca.
+function chartSeguro(ctx, cfg){
+  try{
+    if(!ctx) return null;
+    if(typeof Chart==='undefined'){
+      // Deja dicho en el sitio del gráfico por qué no está, para que no parezca un hueco raro.
+      try{
+        const cv = ctx.canvas || ctx;
+        const pa = cv && cv.parentNode;
+        if(pa && !pa.querySelector('.chart-off')){
+          const d=document.createElement('div');
+          d.className='chart-off';
+          d.style.cssText='font-size:11px;color:var(--text3);padding:14px 0;text-align:center';
+          d.textContent='Gráfico no disponible sin conexión — los datos sí son correctos.';
+          pa.appendChild(d);
+        }
+      }catch(_){}
+      return null;
+    }
+    return new Chart(ctx, cfg);
+  }catch(e){ try{ console.warn('gráfico no disponible', e); }catch(_){} return null; }
+}
 // Ordena registros por fecha (más reciente primero); empata por id/timestamp desc.
 function sortRegistros(arr){return[...(arr||[])].sort((a,b)=>{const fa=(a&&a.fecha)||'',fb=(b&&b.fecha)||'';if(fa!==fb)return fb.localeCompare(fa);return String((b&&b.id)||'').localeCompare(String((a&&a.id)||''));});}
 function fmt(n){return(Math.round(n||0)).toLocaleString('es-PE');}
@@ -20120,7 +20148,7 @@ function renderGraficosReporte(modulo, ac, cos, ing, util){
     const _dgLabels=_dg?_dg.map(c=>c.label):['Jornales / Planilla','Explosivos','Petróleo (logística)','Mantenimiento','Maquinaria'];
     const _dgData=_dg?_dg.map(c=>c.monto):[j, exp, petL, man, maqTotal];
     const _dgColors=_dg?_dg.map(c=>c.color):[COLORS.jornales, COLORS.explosivos, COLORS.petroleo, COLORS.mant, COLORS.maquinaria];
-    window._chartCostos = new Chart(ctxC, {
+    window._chartCostos = chartSeguro(ctxC, {
       type: 'doughnut',
       data: {
         labels: _dgLabels,
@@ -20165,7 +20193,7 @@ function renderGraficosReporte(modulo, ac, cos, ing, util){
   // ── GRÁFICO 2: Barras horizontales — Ingresos vs Costos vs Utilidad ──
   const ctxF = document.getElementById('rep-chart-financiero');
   if(ctxF){
-    window._chartFin = new Chart(ctxF, {
+    window._chartFin = chartSeguro(ctxF, {
       type: 'bar',
       data: {
         labels: ['Ingresos','Costos','Utilidad'],
@@ -20192,7 +20220,7 @@ function renderGraficosReporte(modulo, ac, cos, ing, util){
   if(ctxA){
     const ps = [...perf].sort((a,b)=>a.fecha.localeCompare(b.fecha)).slice(-14);
     const du = [...new Set(ps.map(p=>p.fecha))];
-    window._chartAvance = new Chart(ctxA, {
+    window._chartAvance = chartSeguro(ctxA, {
       type: 'bar',
       data: {
         labels: du.map(f=>{ const[y,m,d]=f.split('-'); return d+'/'+m; }),
@@ -20227,7 +20255,7 @@ function renderGraficosReporte(modulo, ac, cos, ing, util){
   if(ctxFr){
     const d7 = [];
     for(let d=6;d>=0;d--){ const f=new Date(); f.setDate(f.getDate()-d); d7.push(fechaLocalISO(f)); }
-    window._chartFrentes = new Chart(ctxFr, {
+    window._chartFrentes = chartSeguro(ctxFr, {
       type: 'line',
       data: {
         labels: d7.map(f=>{ const[y,m,d]=f.split('-'); return d+'/'+m; }),
@@ -20880,7 +20908,7 @@ function imprimirReporte(){
   d.write('<scr'+'ipt>');
   d.write('var D=' + JSON.stringify(DATA) + ';');
   d.write('var C={j:"#2563eb",e:"#dc2626",p:"#d97706",m:"#16a34a",q:"#7c3aed",i:"#0891b2",c:"#be185d",u:"#15803d"};');
-  d.write('function gc(id,tp,dt,op){var el=document.getElementById(id);if(el)new Chart(el,{type:tp,data:dt,options:op});}');
+  d.write('function gc(id,tp,dt,op){var el=document.getElementById(id);if(el)chartSeguro(el,{type:tp,data:dt,options:op});}');
   d.write('window.onload=function(){');
   d.write('gc("rep-chart-costos","doughnut",{labels:["Jornales","Explosivos","Petr\xf3leo","Mantenimiento","Maquinaria"],datasets:[{data:D.costos,backgroundColor:[C.j,C.e,C.p,C.m,C.q],borderColor:"#fff",borderWidth:3}]},{responsive:true,maintainAspectRatio:true,cutout:"55%",plugins:{legend:{position:"right",labels:{color:"#374151",font:{size:9},boxWidth:12,padding:8}}}});');
   d.write('gc("rep-chart-financiero","bar",{labels:["Ingresos","Costos","Utilidad"],datasets:[{data:D.fin,backgroundColor:[C.i,C.c,D.util_pos?C.u:"#dc2626"],borderRadius:4}]},{responsive:true,maintainAspectRatio:true,indexAxis:"y",plugins:{legend:{display:false}},scales:{x:{ticks:{color:"#9ca3af",font:{size:8},callback:function(v){return"S/"+Math.round(v/1000)+"k"}},grid:{color:"#f0f0f0"}},y:{ticks:{color:"#374151",font:{size:10,weight:"600"}},grid:{display:false}}}});');
@@ -22760,7 +22788,7 @@ function finInicializarGraficos(){
     const descuento=-(d.val.descuento||0);
     const costoOp=-(d.costoKit+d.costoOC+d.costoAlm);
     const utilidad=d.val.total+costoOp;
-    window._finWaterfallChart=new Chart(wc,{
+    window._finWaterfallChart=chartSeguro(wc,{
       type:'bar',
       data:{
         labels:['Valor. Bruta','Descuento','Costos Oper.','Utilidad Est.'],
@@ -22790,7 +22818,7 @@ function finInicializarGraficos(){
     if(window._finPieChart){window._finPieChart.destroy();}
     const datos=[d.costoKit,d.costoOC,d.costoAlm].map(v=>Math.max(0,Math.round(v)));
     const total=datos.reduce((a,b)=>a+b,0);
-    window._finPieChart=new Chart(pc,{
+    window._finPieChart=chartSeguro(pc,{
       type:'doughnut',
       data:{
         labels:['Mantenimiento','Compras/OC','Almacén'],
@@ -24353,7 +24381,24 @@ function renderTablaCompresorista() {
 
 // Clic en un reporte de la lista → carga sus gráficos y totales en el visor
 function abrirReporteVisor(fecha, turno){
-  visorTurno(turno);
+  // El selector de día solo trae los días del MES que el visor tiene puesto. Si el reporte al que
+  // se hace clic es de otro mes, ese <option> todavía no existe: asignar sel.value no hacía nada
+  // y el visor se quedaba en blanco, sin información y sin gráficos, como si el reporte no
+  // estuviera. Primero se mueve el mes, y con él se repueblan los días.
+  const mes = String(fecha||'').slice(0,7);
+  const mesSel = document.getElementById('vt-mes-sel');
+  if(mesSel && mes){
+    if(!mesSel.options.length && typeof visorPoblarMeses==='function'){ try{ visorPoblarMeses(); }catch(e){} }
+    mesSel.value = mes;
+    // Si el mes no figuraba en la lista (se armó antes de que llegara este reporte), se agrega.
+    if(mesSel.value !== mes){
+      const o=document.createElement('option'); o.value=mes;
+      const [y,mm]=mes.split('-');
+      o.textContent=((typeof _VT_MESES!=='undefined' && _VT_MESES[parseInt(mm,10)-1])||mm)+' '+y;
+      mesSel.appendChild(o); mesSel.value=mes;
+    }
+  }
+  visorTurno(turno);          // repuebla los días DEL MES correcto
   const sel = document.getElementById('vt-dia-sel');
   if(sel) sel.value = fecha;
   visorRenderDia();
@@ -24749,7 +24794,7 @@ function pintarFrenteChart(cfg){
         c.restore();
       }
     };
-    _vtCharts[key] = new Chart(ctx, {
+    _vtCharts[key] = chartSeguro(ctx, {
       type:'bar',
       data:{ labels: datos.map(f=>shortLabel?shortLabel(f.codigo):f.codigo), datasets },
       options:{
@@ -25031,7 +25076,7 @@ function visorRenderDia() {
   const ctxFuel = document.getElementById('vt-chart-fuel');
   const detFuel = document.getElementById('vt-fuel-detalle');
   if(ctxFuel && fuelItems.length){
-    _vtCharts.fuel = new Chart(ctxFuel, {
+    _vtCharts.fuel = chartSeguro(ctxFuel, {
       type:'doughnut',
       data:{
         labels: fuelItems.map(x=>x.label),
@@ -25086,7 +25131,7 @@ function visorRenderDia() {
   const horoActivos = r.horometros.filter(h=>h.HT>0);
   const ctxHoro = document.getElementById('vt-chart-horo');
   if(ctxHoro && horoActivos.length){
-    _vtCharts.horo = new Chart(ctxHoro, {
+    _vtCharts.horo = chartSeguro(ctxHoro, {
       type:'bar',
       data:{labels:horoActivos.map(h=>h.equipo),datasets:[{label:'Horas trabajadas',data:horoActivos.map(h=>h.HT),backgroundColor:'rgba(91,110,245,0.75)',borderRadius:4}]},
       options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#8b8ba7',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}},y:{ticks:{color:'#8b8ba7',font:{size:10}},grid:{display:false}}}}

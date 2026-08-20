@@ -4,7 +4,7 @@
 //    si no hay señal, se sirve la última copia buena desde caché → la app abre en interior mina.
 //  · Supabase y demás peticiones de datos: solo red (la app ya maneja sus fallos y su cola offline).
 // Al desplegar una versión nueva basta con cambiar CACHE_V: el SW viejo se limpia solo.
-const CACHE_V = 'mukicloud-v2026.08.19-78';
+const CACHE_V = 'mukicloud-v2026.08.20-79';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
@@ -29,6 +29,22 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
+
+  // Chart.js viene de un CDN y es el ÚNICO recurso de fuera que se guarda. Sin él la app se queda
+  // sin gráficos justo donde peor cae: en interior mina, sin señal. Caché primero, red de respaldo.
+  // (Los datos de la operación nunca se cachean: eso sigue igual, en la línea de abajo.)
+  if (url.href.indexOf('cdn.jsdelivr.net/npm/chart.js') >= 0) {
+    e.respondWith(
+      caches.match(req).then(hit => hit || fetch(req).then(res => {
+        if (res && (res.ok || res.type === 'opaque')) {
+          const copia = res.clone();
+          caches.open(CACHE_V).then(c => c.put(req, copia)).catch(() => {});
+        }
+        return res;
+      }).catch(() => caches.match(req)))
+    );
+    return;
+  }
 
   // Datos (Supabase u otros orígenes): solo red — nunca cachear datos de la operación.
   if (url.origin !== self.location.origin) return;
