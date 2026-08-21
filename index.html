@@ -2635,6 +2635,7 @@ select option{background:var(--coal3);}
     <button class="mod-tab" onclick="modTab('log','solicitudcompra',this)">🛒 Solicitud de Compra</button>
     <button class="mod-tab" id="tab-productos" onclick="modTab('log','productos',this);renderProductos()">📦 Productos</button>
     <button class="mod-tab" onclick="modTab('log','explosivos',this)">💣 Explosivos NV3190</button>
+    <button class="mod-tab" onclick="modTab('log','acopiomb',this)">🏔️ Acopio Monte Bravo</button>
     <button class="mod-tab" onclick="modTab('log','stockremanente',this)">📉 Stock Remanente</button>
     <button class="mod-tab" onclick="modTab('log','subalmacen2820',this)">🏗 Subalmacén NV2820</button>
     <button class="mod-tab" onclick="modTab('log','solicitudmantlog',this)">📋 Solic. Mantenimiento</button>
@@ -2746,6 +2747,30 @@ select option{background:var(--coal3);}
     </div>
     <!-- Historial solicitudes -->
     <div id="sc-historial"></div>
+  </div>
+
+  <!-- ════ TAB: ACOPIO DE EXPLOSIVO — MONTE BRAVO ════
+       Mismo patrón que el polvorín NV3190: entra, sale, y el stock es la resta. Lo que cambia es
+       de dónde viene y a dónde va: el ingreso llega del NV3190 (o de compra directa) y la salida
+       va a los frentes de Monte Bravo. Vive en Logística porque lo opera la misma gente. -->
+  <div class="mod-pane" style="display:none" id="log-acopiomb">
+    <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px">
+      <div class="section-title" style="margin:0">🏔️ Acopio de Explosivo — Monte Bravo</div>
+      <div style="font-size:12px;color:var(--text3)">Ingreso: Polvorín NV3190 → Acopio &nbsp;|&nbsp; Salida: Acopio → frentes de Monte Bravo</div>
+    </div>
+    <div id="mb-stock-wrap" style="margin:14px 0 18px"></div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:18px">
+      <button class="btn btn-gold" style="font-size:14px;padding:12px 24px" onclick="mbAbrirMov('ingreso')">⬇ Registrar Ingreso</button>
+      <button class="btn btn-outline" style="font-size:14px;padding:12px 24px;border-color:#f87171;color:#f87171" onclick="mbAbrirMov('salida')">⬆ Registrar Salida</button>
+    </div>
+    <div class="section-title">📋 Trazabilidad del Acopio</div>
+    <div class="card" style="padding:14px 16px;margin-bottom:20px">
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <button id="mb-hist-btn" class="btn btn-outline" style="font-size:13px;padding:8px 18px" onclick="mbToggleHistorial()">▸ Mostrar historial</button>
+        <div id="mb-hist-resumen" style="font-size:11.5px;color:var(--text3)"></div>
+      </div>
+      <div id="mb-historial-wrap" style="display:none;margin-top:14px"></div>
+    </div>
   </div>
 
   <!-- ════ TAB: EXPLOSIVOS NV3190 ════ -->
@@ -4255,6 +4280,46 @@ select option{background:var(--coal3);}
   </div>
 </div>
 
+<!-- ════ MODAL: MOVIMIENTO DEL ACOPIO MONTE BRAVO ════
+     Un solo modal para ingreso y salida: es el mismo formulario y así el operario no aprende dos.
+     El título, el color y los campos de origen/destino cambian según el tipo. -->
+<div class="modal-overlay" id="modal-mb-mov" onclick="if(event.target===this)cerrarModal('modal-mb-mov')">
+  <div class="modal" style="width:min(640px,96vw);max-height:92vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div class="modal-title" id="mb-mov-titulo" style="margin-bottom:0">Movimiento</div>
+      <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-mb-mov')">✕</button>
+    </div>
+    <div id="mb-mov-ruta" style="font-size:12px;color:var(--text3);margin-bottom:14px"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div class="form-group" style="margin:0"><label>Fecha</label><input type="date" id="mb-fecha"></div>
+      <div class="form-group" style="margin:0"><label>N° de vale / guía</label><input type="text" id="mb-vale" placeholder="Ej: MB-001"></div>
+    </div>
+    <div class="form-group" style="margin:0 0 12px"><label id="mb-contra-lbl">Origen</label>
+      <input type="text" id="mb-contra" placeholder="Ej: Polvorín NV3190"></div>
+    <div style="background:var(--coal4);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px">Agregar explosivos (puedes agregar varios)</div>
+      <div style="display:grid;grid-template-columns:1fr 90px 110px auto;gap:8px;align-items:end">
+        <div class="form-group" style="margin:0"><label style="font-size:10px">Explosivo</label>
+          <select id="mb-producto" onchange="mbCalcTotal()"><option value="">— Seleccionar —</option></select>
+          <div id="mb-disp" style="font-size:10px;color:var(--text3);margin-top:3px"></div></div>
+        <div class="form-group" style="margin:0"><label style="font-size:10px" id="mb-lbl-cajas">Cajas</label>
+          <input type="number" id="mb-cajas" min="0" placeholder="0" oninput="mbCalcTotal()"></div>
+        <div class="form-group" style="margin:0"><label style="font-size:10px" id="mb-lbl-und">Unidades</label>
+          <input type="number" id="mb-unidades" min="0" step="any" placeholder="0" oninput="mbCalcTotal()"></div>
+        <button class="btn btn-outline" style="padding:7px 14px;font-size:12px" onclick="mbAgregarItem()">+ Agregar</button>
+      </div>
+      <div id="mb-total" style="font-size:11px;color:var(--text3);margin-top:6px">Selecciona producto y cantidad</div>
+      <div id="mb-cart" style="margin-top:10px"></div>
+    </div>
+    <div class="form-group" style="margin:0 0 12px"><label>Observación <span style="color:var(--text3);font-size:10px">(opcional)</span></label>
+      <input type="text" id="mb-obs" placeholder=""></div>
+    <div class="btn-row" style="margin-top:6px">
+      <button class="btn btn-gold" id="mb-guardar" onclick="mbGuardarMov()">✓ Guardar</button>
+      <button class="btn btn-outline" onclick="cerrarModal('modal-mb-mov')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ════ MODAL: SALIDA EXPLOSIVO ════ -->
 <div class="modal-overlay" id="modal-explo-salida" onclick="if(event.target===this)cerrarModal('modal-explo-salida')">
   <div class="modal" style="width:min(640px,96vw);max-height:92vh;overflow-y:auto">
@@ -4789,7 +4854,7 @@ function navigate(page){
 const MODULE_PANES = {
   // OJO: cada pane nuevo del módulo DEBE listarse aquí. modTab oculta los panes por esta lista,
   // así que uno ausente se queda visible encima del que acabas de abrir.
-  'log': ['almacen','historial','inventario','solicitudcompra','productos','explosivos','stockremanente','subalmacen2820','solicitudmantlog','combustible','estadisticas'],
+  'log': ['almacen','historial','inventario','solicitudcompra','productos','explosivos','acopiomb','stockremanente','subalmacen2820','solicitudmantlog','combustible','estadisticas'],
   'rrhh': ['planilla','tareomes','tareas','personal','tarjetas','costorrhh','servicios','planillaint'],
   'op': ['tablero','avance','solicitudes','vsproyectado','valorizaciones','herramientas'],
   'mant': ['registro','costosmant'],
@@ -5493,6 +5558,7 @@ function renderModPane(mod,pane){
   else if(k==='log-solicitudcompra')renderSolicitudCompra();
   else if(k==='log-productos')renderProductos();
   else if(k==='log-explosivos')renderExploTab();
+  else if(k==='log-acopiomb')mbRenderTab();
   else if(k==='log-stockremanente')renderStockRemanente();
   else if(k==='log-subalmacen2820')renderSubalmacen2820();
   else if(k==='log-solicitudmantlog')renderSolicitudMantLog();
@@ -7486,6 +7552,9 @@ function _almMergeSnaps(a,b){
   // del Compresorista (que marca _ts nuevo) NO la pisa una copia vieja "sin confirmar" de Logística.
   const Mts=(x,y)=>(typeof mergeById_ts==='function')?mergeById_ts(x||[], y||[]):M(x,y);
   const exA=a.explosivos||{ingresos:[],salidas:[]}, exB=b.explosivos||{ingresos:[],salidas:[]};
+  // Acopio de Monte Bravo: se une movimiento por movimiento, igual que el polvorín. Sin esto, el
+  // objeto entero lo ganaría el último snapshot y el acopio de un equipo borraría el del otro.
+  const mbA=a.mbAcopio||{ingresos:[],salidas:[]}, mbB=b.mbAcopio||{ingresos:[],salidas:[]};
   // EL MAESTRO SE FUSIONA POR PRODUCTO, NO SE REEMPLAZA ENTERO.
   // Antes ganaba la LISTA COMPLETA del snapshot con productosTs mayor: si un equipo daba de alta
   // productos y otro sincronizaba después con un maestro más viejo, esas altas DESAPARECÍAN sin
@@ -7500,6 +7569,7 @@ function _almMergeSnaps(a,b){
     // con copia vieja/vacía borraba lo que otro había cargado, p.ej. los 100 sacos de cemento).
     nv2820Apertura:Mts(a.nv2820Apertura,b.nv2820Apertura),
     explosivos:{ ...exA, ...exB, ingresos:_exploMergeMov(exA.ingresos,exB.ingresos), salidas:_exploMergeMov(exA.salidas,exB.salidas) },
+    mbAcopio:{ ...mbA, ...mbB, ingresos:_exploMergeMov(mbA.ingresos,mbB.ingresos), salidas:_exploMergeMov(mbA.salidas,mbB.salidas) },
     productos, productosTs };
   ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','exploStockBaseV','catalogVersion','almExcelV','stockCorteTs','aguaFixV']
     .forEach(k=>{ const mx=Math.max(Number(a[k]||0), Number(b[k]||0)); if(mx) out[k]=mx; });
@@ -10580,6 +10650,19 @@ const FANEL240_CATALOGO=_fanelMedida('240','2.40');
 // Las medidas nuevas se AÑADEN al final: los ids de las que ya existen no se tocan, así ningún
 // movimiento ya registrado queda huérfano.
 const FANEL_TODOS=FANEL3_CATALOGO.concat(FANEL42_CATALOGO, FANEL240_CATALOGO);
+/* ══ UNIDADES DE LA OPERACIÓN ══
+   NV2820 es la unidad histórica: TODO lo registrado hasta hoy es suyo, y por eso es la que manda
+   por defecto en cualquier registro que no diga otra cosa. Monte Bravo se suma con su propia
+   producción, su propio gasto y sus propias liquidaciones —que no son valorizaciones—.
+   Almacén y Logística surten a las dos: lo que las separa no es quién compra, sino a dónde va. */
+const UNIDADES = [
+  {id:'NV2820', nombre:'NV 2820',     corto:'2820',  emoji:'⛏️', color:'#c9a84c', ingreso:'valorizacion'},
+  {id:'MB',     nombre:'Monte Bravo', corto:'M. Bravo', emoji:'🏔️', color:'#22d3a5', ingreso:'liquidacion'},
+];
+const UNIDAD_DEF='NV2820';   // lo que no diga unidad, es de 2820
+function unidadGet(id){ return UNIDADES.find(u=>u.id===String(id||''))||UNIDADES[0]; }
+function unidadNombre(id){ return unidadGet(id).nombre; }
+
 const EXPLO_CATALOGO=[
   {id:'M1000',nombre:'EMULNOR 1000 1" X 7"',upCaja:264,unidad:'und'},
   {id:'M3000',nombre:'EMULNOR 3000 1" X 8"',upCaja:228,unidad:'und'},
@@ -10935,6 +11018,226 @@ function exploStockActual(){
   }
   return map;
 }
+// ═══════════════════════════════════════════════════════════════════════════
+// ACOPIO DE EXPLOSIVO — MONTE BRAVO
+// Mismo modelo que el polvorín NV3190: los movimientos se guardan y el stock es la resta, sin
+// ningún saldo guardado aparte que se pueda descuadrar. Vive dentro de state.almacen para viajar
+// en el mismo módulo que ya se sincroniza y se fusiona por movimiento entre equipos.
+//   ingresos → llegan del NV3190 (o compra directa)
+//   salidas  → van a los frentes de Monte Bravo; ESTO es lo que consume la unidad
+// El catálogo de explosivos es el MISMO de siempre: un solo sitio donde corregir precios y nombres.
+// ═══════════════════════════════════════════════════════════════════════════
+const MB_ACOPIO_KEY='mbAcopio';
+function mbAcopio(){
+  state.almacen=state.almacen||{};
+  if(!state.almacen[MB_ACOPIO_KEY]) state.almacen[MB_ACOPIO_KEY]={ingresos:[],salidas:[]};
+  const a=state.almacen[MB_ACOPIO_KEY];
+  a.ingresos=a.ingresos||[]; a.salidas=a.salidas||[];
+  return a;
+}
+// Stock por producto = ingresos − salidas. Sin base ni apertura: el acopio nace en cero.
+function mbStock(){
+  const a=mbAcopio(); const map={};
+  EXPLO_CATALOGO.forEach(c=>{map[c.id]=0;});
+  a.ingresos.forEach(r=>{ map[r.producto]=(map[r.producto]||0)+(Number(r.totalUnidades)||0); });
+  a.salidas .forEach(r=>{ map[r.producto]=(map[r.producto]||0)-(Number(r.totalUnidades)||0); });
+  return map;
+}
+// Cuántas cajas (o rollos) y sueltas representa una cantidad. Misma regla que el resto de la app.
+function mbCajas(prodId,und){ return _expCajasDe(prodId,und); }
+
+function mbRenderTab(){ mbRenderStock(); mbRenderHistorial(); }
+
+function mbRenderStock(){
+  const w=document.getElementById('mb-stock-wrap'); if(!w) return;
+  const st=mbStock();
+  // Solo lo que tiene stock o tuvo movimiento: la rejilla completa serían 56 tarjetas en cero.
+  const a=mbAcopio();
+  const tocados=new Set([...a.ingresos,...a.salidas].map(r=>r.producto));
+  const lista=EXPLO_CATALOGO.filter(c=>(st[c.id]||0)!==0 || tocados.has(c.id));
+  if(!lista.length){
+    w.innerHTML='<div class="card" style="padding:22px 16px;color:var(--text3);font-size:13px">'
+      +'El acopio está vacío. Registra un ingreso desde el polvorín NV3190 para empezar.</div>';
+    return;
+  }
+  const cards=lista.map(c=>{
+    const q=st[c.id]||0;
+    const col=q>20?'#22c55e':q>0?'#f59e0b':'#ef4444';
+    const cj=mbCajas(c.id,q);
+    const lbl=cj.esRollo?`${q} m · ${cj.cajas} rollo${cj.cajas!==1?'s':''} + ${cj.sueltas} m`
+                        :`${cj.cajas} caj${cj.cajas!==1?'as':'a'} + ${cj.sueltas} und`;
+    return `<div class="kpi-card" style="padding:14px 16px">
+      <div class="kpi-label" style="font-size:11px">${c.nombre}</div>
+      <div style="font-size:24px;font-weight:800;color:${col};font-family:'DM Mono',monospace;margin:6px 0">${q}</div>
+      <div style="font-size:11px;color:var(--text3)">${lbl}</div>
+    </div>`;}).join('');
+  w.innerHTML=`<div class="section-title" style="margin-top:0">📦 Stock del acopio</div>
+    <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:0">${cards}</div>`;
+}
+
+// ── Historial, plegado como el del NV3190 ──
+let _mbHistAbierto=false;
+function mbToggleHistorial(){ _mbHistAbierto=!_mbHistAbierto; _mbAplicarHist(); }
+function _mbAplicarHist(){
+  const w=document.getElementById('mb-historial-wrap'), b=document.getElementById('mb-hist-btn');
+  if(w) w.style.display=_mbHistAbierto?'block':'none';
+  if(b) b.textContent=_mbHistAbierto?'▾ Ocultar historial':'▸ Mostrar historial';
+}
+function mbRenderHistorial(){
+  const w=document.getElementById('mb-historial-wrap'); if(!w) return;
+  const a=mbAcopio();
+  const todos=[...a.ingresos.map(r=>({...r,tipo:'ingreso'})), ...a.salidas.map(r=>({...r,tipo:'salida'}))]
+    .sort((x,y)=>String(y.fecha||'').localeCompare(String(x.fecha||'')));
+  const res=document.getElementById('mb-hist-resumen');
+  if(res){
+    res.textContent = todos.length
+      ? `${todos.length} movimiento${todos.length!==1?'s':''} · ${a.ingresos.length} ingreso${a.ingresos.length!==1?'s':''} · ${a.salidas.length} salida${a.salidas.length!==1?'s':''}${todos[0].fecha?' · último: '+fmtF(todos[0].fecha):''}`
+      : 'Sin movimientos registrados.';
+  }
+  if(!todos.length){ w.innerHTML='<div style="color:var(--text3);font-size:13px;padding:20px 0">Sin movimientos registrados.</div>'; _mbAplicarHist(); return; }
+  w.innerHTML=todos.map(r=>{
+    const c=exploGetCat(r.producto); const esIng=r.tipo==='ingreso';
+    const col=esIng?'#60a5fa':'#f87171';
+    const cj=mbCajas(r.producto,r.totalUnidades);
+    const cant=cj.esRollo?`${r.totalUnidades} m (${cj.cajas} rollo${cj.cajas!==1?'s':''} + ${cj.sueltas} m)`
+                         :`${r.totalUnidades} ${c?c.unidad:'und'} (${cj.cajas} caj. + ${cj.sueltas} und)`;
+    return `<div class="card" style="margin-bottom:8px;padding:12px 16px;border-left:3px solid ${col}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div>
+          <div style="font-weight:700;font-size:13px">${esIng?'⬇ Ingreso':'⬆ Salida'} · <span style="color:${col}">${c?c.nombre:r.producto}</span>
+            <span style="color:var(--text3);font-weight:400;font-size:11px">· ${fmtF(r.fecha)}</span></div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">${esIng?`${r.contra||'—'} → Acopio Monte Bravo`:`Acopio Monte Bravo → ${r.contra||'—'}`}</div>
+          <div style="font-size:12px;margin-top:4px">Vale: <strong>${r.vale||'—'}</strong> · Cantidad: <strong style="color:${col}">${cant}</strong></div>
+          ${r.obs?`<div style="font-size:11px;color:var(--text3);margin-top:3px">${r.obs}</div>`:''}
+        </div>
+        <button onclick="mbEliminarMov('${r.id}','${r.tipo}')" style="padding:4px 9px;font-size:11px;background:rgba(239,68,68,0.12);color:#f87171;border:1px solid rgba(239,68,68,0.35);border-radius:4px;cursor:pointer">🗑 Eliminar</button>
+      </div>
+    </div>`;}).join('');
+  _mbAplicarHist();
+}
+
+// ── Registrar un movimiento ──
+let _mbTipo='ingreso', _mbCart=[];
+function mbAbrirMov(tipo){
+  _mbTipo=(tipo==='salida')?'salida':'ingreso'; _mbCart=[];
+  const g=id=>document.getElementById(id);
+  const esIng=_mbTipo==='ingreso';
+  g('mb-mov-titulo').textContent=esIng?'⬇ Ingreso al Acopio — Monte Bravo':'⬆ Salida del Acopio — Monte Bravo';
+  g('mb-mov-titulo').style.color=esIng?'#60a5fa':'#f87171';
+  g('mb-mov-ruta').innerHTML=esIng?'Origen: <strong>Polvorín NV3190</strong> → Acopio Monte Bravo'
+                                  :'Acopio Monte Bravo → <strong>frente de Monte Bravo</strong>';
+  g('mb-contra-lbl').textContent=esIng?'¿De dónde viene?':'¿A dónde va?';
+  g('mb-contra').value=esIng?'Polvorín NV3190':'';
+  g('mb-contra').placeholder=esIng?'Ej: Polvorín NV3190':'Ej: frente / labor de Monte Bravo';
+  g('mb-fecha').value=hoy(); g('mb-vale').value=''; g('mb-obs').value='';
+  g('mb-cajas').value=''; g('mb-unidades').value='';
+  g('mb-guardar').textContent=esIng?'✓ Registrar ingreso':'✓ Registrar salida';
+  const st=mbStock();
+  g('mb-producto').innerHTML='<option value="">— Seleccionar explosivo —</option>'+
+    EXPLO_CATALOGO.map(c=>{
+      // En la salida se muestra el stock disponible; en el ingreso no hace falta.
+      const q=st[c.id]||0;
+      return `<option value="${c.id}">${c.nombre}${esIng?'':' — '+q+' '+(exploEsMetros(c)?'m':'und')}</option>`;
+    }).join('');
+  mbRenderCart(); mbCalcTotal();
+  abrirModal('modal-mb-mov');
+}
+function mbCalcTotal(){
+  const g=id=>document.getElementById(id);
+  const c=exploGetCat(g('mb-producto').value);
+  const esM=c?exploEsMetros(c):false;
+  g('mb-lbl-cajas').textContent=esM?'Rollos':'Cajas';
+  g('mb-lbl-und').textContent=esM?'Metros sueltos':'Unidades';
+  const cj=parseInt(g('mb-cajas').value)||0, un=parseFloat(g('mb-unidades').value)||0;
+  const porCaja=c?(esM?exploMPorRollo(c):(c.upCaja||1)):0;
+  const total=c?(cj*porCaja+un):0;
+  const disp=g('mb-disp');
+  if(disp&&c&&_mbTipo==='salida'){ const q=mbStock()[c.id]||0; disp.textContent='Disponible: '+q+' '+(esM?'m':'und'); }
+  else if(disp) disp.textContent='';
+  g('mb-total').textContent = c
+    ? `Total: ${Math.round(total*100)/100} ${esM?'m':(c.unidad||'und')}`
+    : 'Selecciona producto y cantidad';
+  return total;
+}
+function mbAgregarItem(){
+  const g=id=>document.getElementById(id);
+  const pid=g('mb-producto').value;
+  if(!pid){ showNotif('⚠ Elige un explosivo','error'); return false; }
+  const total=mbCalcTotal();
+  if(!(total>0)){ showNotif('⚠ Ingresa la cantidad','error'); return false; }
+  if(_mbTipo==='salida'){
+    const yaEnCarrito=_mbCart.filter(x=>x.producto===pid).reduce((s,x)=>s+x.total,0);
+    const disp=(mbStock()[pid]||0)-yaEnCarrito;
+    if(total>disp){
+      const c=exploGetCat(pid);
+      showNotif(`⚠ Stock insuficiente de ${(c&&c.nombre)||pid}. Pide ${total} y hay ${disp}`,'error');
+      return false;
+    }
+  }
+  const c=exploGetCat(pid), esM=c?exploEsMetros(c):false;
+  _mbCart.push({producto:pid, cajas:parseInt(g('mb-cajas').value)||0,
+                unidades:parseFloat(g('mb-unidades').value)||0, total, esM});
+  g('mb-producto').value=''; g('mb-cajas').value=''; g('mb-unidades').value='';
+  mbRenderCart(); mbCalcTotal();
+  return true;
+}
+function mbQuitarItem(i){ _mbCart.splice(i,1); mbRenderCart(); }
+function mbRenderCart(){
+  const w=document.getElementById('mb-cart'); if(!w) return;
+  if(!_mbCart.length){ w.innerHTML='<div style="font-size:11px;color:var(--text3)">Todavía no agregaste nada a este vale.</div>'; return; }
+  w.innerHTML=_mbCart.map((x,i)=>{
+    const c=exploGetCat(x.producto);
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--coal3);border:1px solid var(--border);border-radius:6px;padding:6px 10px;margin-bottom:5px">
+      <div style="font-size:12px;color:var(--text)">${c?c.nombre:x.producto}
+        <span style="color:var(--text3)">· ${x.total} ${x.esM?'m':(c?c.unidad:'und')}</span></div>
+      <button onclick="mbQuitarItem(${i})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px">✕</button>
+    </div>`;}).join('');
+}
+async function mbGuardarMov(){
+  const g=id=>document.getElementById(id);
+  const vale=g('mb-vale').value.trim();
+  if(!vale){ showNotif('⚠ Ingresa el N° de vale','error'); return; }
+  if(g('mb-producto').value && mbCalcTotal()>0){ if(!mbAgregarItem()) return; }
+  if(!_mbCart.length){ showNotif('⚠ Agrega al menos un explosivo','error'); return; }
+  // Comprobación final del stock, sumando lo que pide el vale por tipo
+  if(_mbTipo==='salida'){
+    const st=mbStock(), pedido={};
+    _mbCart.forEach(x=>{ pedido[x.producto]=(pedido[x.producto]||0)+x.total; });
+    for(const pr in pedido){
+      if(pedido[pr]>(st[pr]||0)){
+        const c=exploGetCat(pr);
+        showNotif(`⚠ Stock insuficiente de ${(c&&c.nombre)||pr}. Pide ${pedido[pr]} y hay ${st[pr]||0}`,'error');
+        return;
+      }
+    }
+  }
+  const a=mbAcopio();
+  const fecha=g('mb-fecha').value||hoy(), contra=g('mb-contra').value.trim(), obs=g('mb-obs').value.trim();
+  const base=Date.now(), grupo='MB'+base;
+  _mbCart.forEach((x,i)=>{
+    (_mbTipo==='ingreso'?a.ingresos:a.salidas).push({
+      id:'MB'+(_mbTipo==='ingreso'?'I':'S')+(base+i)+Math.random().toString(36).slice(2,6),
+      _ts:base+i, fecha, vale, grupo, unidad:'MB',
+      producto:x.producto, cajas:x.cajas, unidades:x.unidades, totalUnidades:x.total,
+      contra, obs
+    });
+  });
+  almacenSave();
+  _mbCart=[]; cerrarModal('modal-mb-mov'); mbRenderTab();
+  showNotif(`✓ ${_mbTipo==='ingreso'?'Ingreso':'Salida'} registrada en el acopio · vale ${vale}`);
+}
+function mbEliminarMov(id,tipo){
+  if(!confirm('¿Eliminar este movimiento del acopio?')) return;
+  const a=mbAcopio();
+  const arr=(tipo==='ingreso')?a.ingresos:a.salidas;
+  const i=arr.findIndex(r=>String(r.id)===String(id));
+  if(i<0){ showNotif('No se encontró el movimiento','error'); return; }
+  arr.splice(i,1);
+  try{ if(typeof tombAdd==='function') tombAdd(id); }catch(e){}   // lápida: no revive al sincronizar
+  almacenSave(); mbRenderTab();
+  showNotif('✓ Movimiento eliminado');
+}
+
 function renderExploTab(){renderExploStock();renderExploHistorial();renderExploStats();}
 // ¿El historial está desplegado? Vive fuera del DOM porque la pestaña se repinta entera cada vez
 // que se guarda un movimiento: si se leyera del estilo del div, se volvería a plegar solo.
