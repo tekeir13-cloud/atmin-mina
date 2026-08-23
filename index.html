@@ -19719,6 +19719,13 @@ function horoResumenMes(mes){
 // un reporte viejo —"Grupo Electrógeno" a secas, por ejemplo— no es un equipo: es una lectura mal
 // rotulada, y mezclarla con las demás produce horas negativas. Se saca de la tabla y se lista
 // aparte para corregirla o borrarla.
+// Equipos que salieron de NV 2820: sus lecturas viejas siguen guardadas en los reportes, pero ya
+// no se muestran ni piden corrección — no son parte del parque de la unidad.
+const COMP_EQUIPOS_RETIRADOS = ['Scoop DALI','Scoop Monte'];
+function horoRetirado(nombre){
+  const k=String(compEquipoNorm(nombre)||'').trim().toUpperCase();
+  return COMP_EQUIPOS_RETIRADOS.some(x=>x.toUpperCase()===k);
+}
 function horoEsCodificado(nombre){
   const k=compEquipoNorm(nombre);
   return (typeof COMP_HOROMETROS!=='undefined'?COMP_HOROMETROS:[]).indexOf(k)>=0;
@@ -19732,6 +19739,7 @@ function horoLecturasSueltas(mes){
       const hi=Number(h&&h.HI)||0, hf=Number(h&&h.HF)||0, ht=Number(h&&h.HT)||0;
       if(hi<=0&&hf<=0&&ht<=0) return;
       if(horoEsCodificado(h.equipo)) return;
+      if(horoRetirado(h.equipo)) return;      // equipo que ya no es de la unidad: no se pide corregir
       out.push({fecha:r.fecha, turno:r.turno||'', idx:i, equipo:h.equipo||'(sin nombre)', HI:hi, HF:hf, HT:ht});
     });
   });
