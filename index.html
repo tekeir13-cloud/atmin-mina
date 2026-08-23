@@ -21452,6 +21452,8 @@ async function initSistema(){
   // La planilla oficial se aplica DESPUÉS de cargar la nube: si se hiciera antes, la carga la
   // sobrescribiría con la copia remota y no se vería nada.
   try{ aplicarPlanillaOficialAuto(); }catch(e){}
+  // Los cambios de puesto se aplican aunque la planilla oficial ya se haya corrido antes.
+  try{ aplicarCambiosCargo(); }catch(e){}
   // Copia del día: la primera vez que se abre el sistema cada mañana.
   try{ puntoDiaGuardar(); }catch(e){}
   poblarSelects();
@@ -28288,7 +28290,7 @@ const PLANILLA_OFICIAL=[
   {nombre:"PRETEL LEON WILBER ANGEL",dni:"10042002",jornal:130.00,rol:"PERFORISTA MINA M1",guardia:"C"},
   {nombre:"RIOS ESCOBEDO CRISTIAN GIMI",dni:"76581867",jornal:133.33,rol:"OP. TRACTOR",guardia:"SUPERFICIE"},
   {nombre:"GORMAS ROMERO FELIPE SAMUEL",dni:"41707906",jornal:120.00,rol:"MECANICO - SOLDADOR",guardia:"SUPERFICIE"},
-  {nombre:"FRANCISCO VILCA VICTOR EDGARDO",dni:"26959973",jornal:130.00,rol:"PERFORISTA MINA M1",guardia:"B"},
+  {nombre:"FRANCISCO VILCA VICTOR EDGARDO",dni:"26959973",jornal:130.00,rol:"CAPATAZ",guardia:"B"},
   {nombre:"LUIS LEONARDO CIRILO",dni:"74054315",jornal:130.00,rol:"PERFORISTA MINA M1",guardia:"B"},
   {nombre:"CASTILLO CHANTA JESUS JOEL",dni:"48368695",jornal:100.00,rol:"CONDUCTOR",guardia:"SUPERFICIE"},
   {nombre:"PAULOT SEGURA EDY VICTOR",dni:"44436221",jornal:166.67,rol:"OP. EXCAVADORA",guardia:"SUPERFICIE"},
@@ -28423,6 +28425,37 @@ function deduplicarPersonal(){
   return plan;
 }
 
+/* ── CAMBIOS DE PUESTO ─────────────────────────────────────────────────────────
+   Un ascenso no se puede escribir solo en la planilla oficial: el personal ya está cargado en
+   cada equipo y en la nube. Esta lista se aplica UNA vez —al subir CARGOS_CAMBIO_V— sobre la
+   ficha que ya existe, y queda anotada la fecha desde la que rige.
+   ─────────────────────────────────────────────────────────────────────────── */
+const CARGOS_CAMBIO_V = 1;
+const CARGOS_CAMBIO_KEY = 'atmin_cargos_cambio_v';
+const CARGOS_CAMBIOS = [
+  { dni:'26959973', nombre:'FRANCISCO VILCA VICTOR EDGARDO', rol:'CAPATAZ', desde:'2026-08-23' },
+];
+function aplicarCambiosCargo(){
+  try{
+    if((Number(localStorage.getItem(CARGOS_CAMBIO_KEY))||0) >= CARGOS_CAMBIO_V) return false;
+    let n=0;
+    CARGOS_CAMBIOS.forEach(c=>{
+      const p=(state.personal||[]).find(x=>x && (String(x.dni||'').trim()===c.dni ||
+              _plNorm(x.nombre)===_plNorm(c.nombre)));
+      if(!p || p.rol===c.rol) return;
+      p.rolAnterior=p.rol; p.rol=c.rol; p.cargoDesde=c.desde; p._ts=Date.now(); n++;
+      try{ if(p.id) sb.from('personal').update({rol:c.rol}).eq('id',p.id); }catch(e){}
+    });
+    localStorage.setItem(CARGOS_CAMBIO_KEY, String(CARGOS_CAMBIO_V));
+    if(n){
+      try{ personalSave(); }catch(e){}
+      try{ poblarSelects(); }catch(e){}
+      showNotif('✓ '+n+' cambio(s) de puesto aplicado(s)','ok');
+    }
+    return n>0;
+  }catch(e){ console.warn('cambios de cargo',e); return false; }
+}
+
 const PLANILLA_OFICIAL_V = 1;
 const PLANILLA_V_KEY = 'atmin_planilla_oficial_v';
 function aplicarPlanillaOficialAuto(){
@@ -28430,6 +28463,7 @@ function aplicarPlanillaOficialAuto(){
     if((Number(localStorage.getItem(PLANILLA_V_KEY))||0) >= PLANILLA_OFICIAL_V) return false;
     const r=actualizarPlanillaOficial(true);          // true = sin preguntar
     localStorage.setItem(PLANILLA_V_KEY, String(PLANILLA_OFICIAL_V));
+    try{ aplicarCambiosCargo(); }catch(e){}
     if(r && (r.nuevos||r.cambios)){
       showNotif('✓ Planilla oficial aplicada: '+r.nuevos+' alta(s) y '+r.cambios+' actualización(es) — '+(state.personal||[]).length+' personas','ok');
     }
