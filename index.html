@@ -3190,7 +3190,9 @@ select option{background:var(--coal3);}
   <div class="mod-tabs">
     <button class="mod-tab active" onclick="modTab('mant','registro',this)">🧰 Solicitud de Kit</button>
     <button class="mod-tab" onclick="modTab('mant','costosmant',this)">💲 Costo de Mantenimiento</button>
+    <button class="mod-tab" onclick="modTab('mant','horometros',this)">⏱️ Horómetros por Equipo</button>
   </div>
+  <div class="mod-pane" style="display:none" id="mant-horometros"></div>
   <div class="mod-pane active" style="display:block" id="mant-registro">
     <div class="kpi-grid">
       <div class="kpi-card"><div class="kpi-label">Costo Kits Hoy</div><div class="kpi-value red" id="mant-costo-hoy">S/ 0</div></div>
@@ -5083,7 +5085,7 @@ const MODULE_PANES = {
   'log': ['almacen','historial','inventario','solicitudcompra','productos','explosivos','stockremanente','subalmacen2820','solicitudmantlog','combustible','estadisticas'],
   'rrhh': ['planilla','tareomes','tareas','personal','tarjetas','costorrhh','servicios','planillaint'],
   'op': ['tablero','avance','solicitudes','vsproyectado','valorizaciones'],
-  'mant': ['registro','costosmant'],
+  'mant': ['registro','costosmant','horometros'],
   'fin': ['dashboard','informe','costocentro'],
   'cmp': ['facturas','informe','presupuestos','balance'],
   'mb': ['dashboard','produccion','acopio','compresorista','planilla','liquidaciones','terceros','estadisticas']
@@ -5810,6 +5812,7 @@ function renderModPane(mod,pane){
   else if(k==='op-vsproyectado')renderResidente();
   else if(k==='mant-registro')renderMantenimiento();
   else if(k==='mant-costosmant')renderCostosMant();
+  else if(k==='mant-horometros')renderHorometrosMant();
   else if(k==='fin-dashboard') renderFinDashboard();
   else if(k==='fin-informe') renderFinInforme();
   else if(k==='fin-costocentro') renderFinCostoCentro();
@@ -19630,6 +19633,121 @@ function generarValeDespacho(id){
     a.download=`Vale_Despacho_${(m.equipo||'kit').replace(/\s+/g,'_')}_${m.fecha||hoy()}.xlsx`;a.click();
   });
   showNotif('✓ Vale de despacho generado');
+}
+/* ══════════════════════════════════════════════════════════════════════════════
+   HORÓMETROS POR EQUIPO · herramienta de Mantenimiento
+   Para cada equipo que reporta horómetro se muestra la LECTURA INICIAL DEL MES —la del primer
+   reporte del mes— y la LECTURA FINAL —la del último reporte del día más reciente—, con las
+   horas trabajadas entre ambas.
+   No se teclea nada: todo sale de los reportes del Compresorista ya guardados. Si un equipo se
+   reportó de día y de noche, manda el último turno del día, que es el que cierra la lectura.
+   ══════════════════════════════════════════════════════════════════════════════ */
+// Orden dentro del mismo día: primero Día, luego Noche. Así "el último del día" es el de noche
+// cuando lo hay, que es el que deja la lectura final.
+function _horoOrden(r){ return String(r.fecha||'')+(String(r.turno||'').toLowerCase().startsWith('n')?'-2':'-1'); }
+function horoMesesDisponibles(){
+  const set=new Set();
+  (state.compresorista||[]).forEach(r=>{ if(r&&r.fecha) set.add(String(r.fecha).slice(0,7)); });
+  set.add(hoy().slice(0,7));
+  return [...set].sort().reverse();
+}
+// Devuelve, por equipo: lectura inicial del mes, lectura final, horas del periodo y las horas
+// sumadas de los partes (HT). Las dos formas de contar deberían coincidir: cuando no coinciden,
+// falta un reporte o alguien tecleó mal, y la pantalla lo señala.
+function horoResumenMes(mes){
+  const reps=(state.compresorista||[])
+    .filter(r=>r&&String(r.fecha||'').slice(0,7)===mes)
+    .sort((a,b)=>_horoOrden(a).localeCompare(_horoOrden(b)));
+  const eq={};
+  const tocar=nombre=>{ const k=compEquipoNorm(nombre);
+    if(!eq[k]) eq[k]={equipo:k, ini:null, iniFecha:'', iniTurno:'', fin:null, finFecha:'', finTurno:'', sumaHT:0, lecturas:0};
+    return eq[k]; };
+  reps.forEach(r=>{
+    (r.horometros||[]).forEach(h=>{
+      const hi=Number(h&&h.HI)||0, hf=Number(h&&h.HF)||0, ht=Number(h&&h.HT)||0;
+      if(hi<=0 && hf<=0 && ht<=0) return;              // equipo sin movimiento: no ensucia la tabla
+      const e=tocar(h.equipo);
+      e.sumaHT+=ht;
+      if(hi>0 || hf>0){
+        e.lecturas++;
+        if(e.ini===null){ e.ini=(hi>0?hi:hf); e.iniFecha=r.fecha; e.iniTurno=r.turno||''; }
+        if(hf>0){ e.fin=hf; e.finFecha=r.fecha; e.finTurno=r.turno||''; }
+        else if(e.fin===null && hi>0){ e.fin=hi; e.finFecha=r.fecha; e.finTurno=r.turno||''; }
+      }
+    });
+  });
+  // Los equipos del catálogo salen siempre, aunque este mes no tengan lectura: que falte uno es
+  // justamente lo que Mantenimiento necesita ver.
+  (typeof COMP_HOROMETROS!=='undefined'?COMP_HOROMETROS:[]).forEach(m=>tocar(m));
+  return Object.values(eq).map(e=>{
+    const horas=(e.ini!=null&&e.fin!=null)?Math.round((e.fin-e.ini)*100)/100:0;
+    const dif=Math.round((horas-e.sumaHT)*100)/100;
+    return {...e, horas, sumaHT:Math.round(e.sumaHT*100)/100, dif};
+  }).sort((a,b)=>b.horas-a.horas || a.equipo.localeCompare(b.equipo));
+}
+let _horoMesSel=null;
+function renderHorometrosMant(){
+  const cont=document.getElementById('mant-horometros'); if(!cont) return;
+  const meses=horoMesesDisponibles();
+  const mes=_horoMesSel && meses.includes(_horoMesSel) ? _horoMesSel : meses[0];
+  const filas=horoResumenMes(mes);
+  const conLectura=filas.filter(f=>f.ini!=null);
+  const totalHoras=conLectura.reduce((s,f)=>s+f.horas,0);
+  const _n=v=>(v==null?'—':Number(v).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2}));
+  const _t=t=>t?(String(t).toLowerCase().startsWith('n')?'🌙':'☀️'):'';
+  const kpi=(t,v,c)=>'<div class="kpi-card"><div class="kpi-label">'+t+'</div>'+
+    '<div class="kpi-value" style="color:'+(c||'var(--text)')+'">'+v+'</div></div>';
+
+  cont.innerHTML=
+  '<div class="card" style="margin-bottom:14px">'+
+    '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">'+
+      '<div><div class="section-title" style="margin:0">⏱️ Horómetros por Equipo</div>'+
+      '<div style="font-size:12px;color:var(--text3);margin-top:4px">Lectura inicial del mes y lectura final del último reporte, equipo por equipo. Sale de los reportes del Compresorista: aquí no se teclea nada.</div></div>'+
+      '<select id="horo-mes" onchange="_horoMesSel=this.value;renderHorometrosMant()" style="margin-left:auto;background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:7px 12px;color:var(--text);font-size:13px;font-weight:600">'+
+        meses.map(m=>'<option value="'+m+'"'+(m===mes?' selected':'')+'>'+((typeof finNombreMes==='function')?finNombreMes(m):m)+'</option>').join('')+
+      '</select>'+
+    '</div></div>'+
+  '<div class="kpi-grid" style="margin-bottom:14px">'+
+    kpi('Equipos con lectura', conLectura.length+' de '+filas.length)+
+    kpi('Horas del mes', _n(totalHoras), 'var(--accent-light)')+
+    kpi('Sin reportar este mes', filas.length-conLectura.length, (filas.length-conLectura.length)?'#f87171':'var(--positive)')+
+    kpi('Con diferencia', filas.filter(f=>f.ini!=null&&Math.abs(f.dif)>0.5).length, filas.some(f=>f.ini!=null&&Math.abs(f.dif)>0.5)?'#f59e0b':'var(--positive)')+
+  '</div>'+
+  '<div class="card"><div class="table-wrap"><table style="width:100%">'+
+    '<thead><tr style="background:#1a2744;color:#fff">'+
+      '<th style="padding:8px 10px;text-align:left">Equipo</th>'+
+      '<th style="padding:8px 10px;text-align:right">Horómetro inicial</th>'+
+      '<th style="padding:8px 10px;text-align:left">Primer reporte</th>'+
+      '<th style="padding:8px 10px;text-align:right">Horómetro final</th>'+
+      '<th style="padding:8px 10px;text-align:left">Último reporte</th>'+
+      '<th style="padding:8px 10px;text-align:right">Horas del mes</th>'+
+      '<th style="padding:8px 10px;text-align:right">Suma de partes</th>'+
+      '<th style="padding:8px 10px;text-align:center">Estado</th>'+
+    '</tr></thead><tbody>'+
+    filas.map(function(f){
+      if(f.ini==null) return '<tr style="border-top:1px solid var(--border2);opacity:.6">'+
+        '<td style="padding:7px 10px;font-weight:700">'+escAttr(f.equipo)+'</td>'+
+        '<td colspan="6" style="padding:7px 10px;color:var(--text3);font-size:12px">Sin lecturas de horómetro este mes</td>'+
+        '<td style="padding:7px 10px;text-align:center">⚪</td></tr>';
+      const ok=Math.abs(f.dif)<=0.5;
+      return '<tr style="border-top:1px solid var(--border2)">'+
+        '<td style="padding:7px 10px;font-weight:700">'+escAttr(f.equipo)+'</td>'+
+        '<td style="padding:7px 10px;text-align:right;font-family:\'DM Mono\',monospace">'+_n(f.ini)+'</td>'+
+        '<td style="padding:7px 10px;font-size:11.5px;color:var(--text3)">'+escAttr(f.iniFecha)+' '+_t(f.iniTurno)+'</td>'+
+        '<td style="padding:7px 10px;text-align:right;font-family:\'DM Mono\',monospace;color:var(--accent-light);font-weight:700">'+_n(f.fin)+'</td>'+
+        '<td style="padding:7px 10px;font-size:11.5px;color:var(--text3)">'+escAttr(f.finFecha)+' '+_t(f.finTurno)+'</td>'+
+        '<td style="padding:7px 10px;text-align:right;font-weight:800">'+_n(f.horas)+'</td>'+
+        '<td style="padding:7px 10px;text-align:right;color:var(--text2)">'+_n(f.sumaHT)+'</td>'+
+        '<td style="padding:7px 10px;text-align:center" title="'+(ok?'La resta de lecturas cuadra con la suma de los partes'
+          :'Diferencia de '+_n(f.dif)+' h entre la resta de lecturas y la suma de los partes: falta un reporte o hay una lectura mal tecleada')+'">'+
+        (ok?'🟢':'🟠 '+_n(f.dif)+' h')+'</td></tr>';
+    }).join('')+
+    '</tbody></table></div>'+
+    '<div style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.6">'+
+      '<b>Horas del mes</b> = horómetro final − horómetro inicial. <b>Suma de partes</b> = las horas (HT) que reportó cada guardia. '+
+      'Cuando no coinciden por más de media hora, la fila sale en 🟠: casi siempre falta subir un reporte o hay una lectura mal tecleada.'+
+    '</div>'+
+  '</div>';
 }
 function renderCostosMant(){
   // Sumar costos por cada SALIDA de kit despachada (aprobada por Logística), agrupado por máquina.
