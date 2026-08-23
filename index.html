@@ -19666,6 +19666,7 @@ function horoResumenMes(mes){
 
   const eq={};
   const tocar=nombre=>{ const k=compEquipoNorm(nombre);
+    if(!horoEsCodificado(k)) return null;   // nombre no codificado: se corrige aparte, no se mezcla
     if(!eq[k]) eq[k]={equipo:k, ini:null, iniFecha:'', iniTurno:'', iniPrevio:false,
                       fin:null, finFecha:'', finTurno:'', sumaHT:0, lecturas:0};
     return eq[k]; };
@@ -19679,7 +19680,7 @@ function horoResumenMes(mes){
   antes.forEach(r=>{
     (r.horometros||[]).forEach(h=>{
       const L=lecturaDe(h); if(!L.cierre) return;
-      const e=tocar(h.equipo);
+      const e=tocar(h.equipo); if(!e) return;
       e.ini=L.cierre; e.iniFecha=r.fecha; e.iniTurno=r.turno||''; e.iniPrevio=true;
     });
   });
@@ -19689,7 +19690,7 @@ function horoResumenMes(mes){
     (r.horometros||[]).forEach(h=>{
       const L=lecturaDe(h); const ht=Number(h&&h.HT)||0;
       if(!L.cierre && ht<=0) return;
-      const e=tocar(h.equipo);
+      const e=tocar(h.equipo); if(!e) return;
       e.sumaHT+=ht;
       if(!L.cierre) return;
       e.lecturas++;
@@ -19713,6 +19714,50 @@ function horoResumenMes(mes){
     return {...e, horas, sumaHT:Math.round(e.sumaHT*100)/100, dif, invertido, atrasado,
             ultimoParteFecha:(ultimoParte?ultimoParte.fecha:'')};
   }).sort((a,b)=>b.horas-a.horas || a.equipo.localeCompare(b.equipo));
+}
+// Equipos válidos de NV 2820: los que están codificados. Cualquier otro nombre que aparezca en
+// un reporte viejo —"Grupo Electrógeno" a secas, por ejemplo— no es un equipo: es una lectura mal
+// rotulada, y mezclarla con las demás produce horas negativas. Se saca de la tabla y se lista
+// aparte para corregirla o borrarla.
+function horoEsCodificado(nombre){
+  const k=compEquipoNorm(nombre);
+  return (typeof COMP_HOROMETROS!=='undefined'?COMP_HOROMETROS:[]).indexOf(k)>=0;
+}
+// Lecturas con nombre no codificado, con su reporte de origen para poder corregirlas.
+function horoLecturasSueltas(mes){
+  const out=[];
+  (state.compresorista||[]).forEach(r=>{
+    if(!r||String(r.fecha||'').slice(0,7)!==mes) return;
+    (r.horometros||[]).forEach((h,i)=>{
+      const hi=Number(h&&h.HI)||0, hf=Number(h&&h.HF)||0, ht=Number(h&&h.HT)||0;
+      if(hi<=0&&hf<=0&&ht<=0) return;
+      if(horoEsCodificado(h.equipo)) return;
+      out.push({fecha:r.fecha, turno:r.turno||'', idx:i, equipo:h.equipo||'(sin nombre)', HI:hi, HF:hf, HT:ht});
+    });
+  });
+  return out.sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
+}
+function horoCorregirLectura(fecha,turno,idx){
+  const sel=document.getElementById('horo-fix-'+fecha+'-'+turno+'-'+idx);
+  const destino=sel?sel.value:'';
+  if(!destino){ showNotif('Elige a qué equipo corresponde','warn'); return; }
+  const r=(state.compresorista||[]).find(x=>x.fecha===fecha&&String(x.turno||'')===turno);
+  const h=r&&(r.horometros||[])[idx]; if(!h) return;
+  const antes=h.equipo;
+  h.equipo=destino; r._ts=Date.now();
+  compGuardarLocal();
+  renderHorometrosMant();
+  showNotif('✓ '+antes+' → '+destino+' ('+fecha+')');
+}
+function horoBorrarLectura(fecha,turno,idx){
+  const r=(state.compresorista||[]).find(x=>x.fecha===fecha&&String(x.turno||'')===turno);
+  const h=r&&(r.horometros||[])[idx]; if(!h) return;
+  if(!confirm('¿Quitar la lectura de "'+(h.equipo||'')+'" del reporte del '+fecha+' — '+turno+'?\n\n'+
+              'Solo se borra esa lectura de horómetro; el resto del reporte queda igual.')) return;
+  r.horometros.splice(idx,1); r._ts=Date.now();
+  compGuardarLocal();
+  renderHorometrosMant();
+  showNotif('🗑 Lectura eliminada del reporte');
 }
 let _horoMesSel=null;
 function renderHorometrosMant(){
@@ -19745,6 +19790,26 @@ function renderHorometrosMant(){
     kpi('Sin lectura al día', nAtrasados+(filas.length-conLectura.length), (nAtrasados+(filas.length-conLectura.length))?'#f87171':'var(--positive)')+
     kpi('Lecturas a revisar', nInvertidos, nInvertidos?'#f87171':'var(--positive)')+
   '</div>'+
+  (function(){
+    const sueltas=horoLecturasSueltas(mes);
+    if(!sueltas.length) return '';
+    const opts=(typeof COMP_HOROMETROS!=='undefined'?COMP_HOROMETROS:[]).map(function(m){return '<option value="'+escAttr(m)+'">'+escAttr(m)+'</option>';}).join('');
+    return '<div class="card" style="margin-bottom:14px;border-left:4px solid #f59e0b">'+
+      '<div class="section-title" style="margin-top:0;font-size:13px">⚠️ Lecturas con un equipo que no existe en NV 2820</div>'+
+      '<div style="font-size:11.5px;color:var(--text3);margin-bottom:10px">'+
+        'NV 2820 tiene dos grupos electrógenos codificados —MP-120 y MV 2321—; un "Grupo Electrógeno" a secas no es un equipo, '+
+        'y mezclar sus lecturas con las de otro produce horas negativas. Indica a qué equipo corresponde cada lectura, o quítala del reporte.</div>'+
+      sueltas.map(function(x){
+        return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:7px">'+
+          '<div style="min-width:210px"><b style="font-size:12.5px">'+escAttr(x.equipo)+'</b>'+
+            '<div style="font-size:11px;color:var(--text3)">'+escAttr(x.fecha)+' · '+escAttr(x.turno)+' · HI '+_n(x.HI)+' → HF '+_n(x.HF)+' ('+_n(x.HT)+' h)</div></div>'+
+          '<select id="horo-fix-'+escAttr(x.fecha)+'-'+escAttr(x.turno)+'-'+x.idx+'" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px">'+
+            '<option value="">— ¿A qué equipo corresponde? —</option>'+opts+'</select>'+
+          '<button class="btn btn-gold" style="padding:6px 14px;font-size:11.5px" onclick="horoCorregirLectura(\''+x.fecha+'\',\''+x.turno+'\','+x.idx+')">Asignar</button>'+
+          '<button class="btn btn-outline" style="padding:6px 12px;font-size:11.5px;color:#f87171;border-color:#f87171" onclick="horoBorrarLectura(\''+x.fecha+'\',\''+x.turno+'\','+x.idx+')">Quitar del reporte</button>'+
+        '</div>';
+      }).join('')+'</div>';
+  })()+
   '<div class="card"><div class="table-wrap"><table style="width:100%">'+
     '<thead><tr style="background:#1a2744;color:#fff">'+
       '<th style="padding:8px 10px;text-align:left">Equipo</th>'+
