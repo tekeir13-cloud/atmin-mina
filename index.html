@@ -25233,7 +25233,10 @@ function renderCompConsumoHora(per){
 }
 
 function renderTablaCompresorista() {
-  const data = state.compresorista;
+  // Lo último reportado va ARRIBA en todas las tablas: al abrir la pestaña se busca el turno
+  // recién cargado, no el del primer día del historial. Dentro del mismo día manda la noche,
+  // que es el turno que cierra la jornada.
+  const data = [...(state.compresorista||[])].sort((a,b)=>_horoOrden(b).localeCompare(_horoOrden(a)));
   if(!data.length) return;
   // explosivos: una columna por CADA frente de FRENTES
   const _frsT=(typeof FRENTES!=='undefined'?FRENTES:[]);
@@ -25274,7 +25277,7 @@ function renderTablaCompresorista() {
   document.getElementById('tbody-horometros').innerHTML = horoRows || '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sin datos</td></tr>';
   // observaciones / lista de reportes clicables (más reciente primero)
   let obsRows = '';
-  [...data].reverse().forEach(r => {
+  data.forEach(r => {
     const turnoIc = r.turno==='Día'?'☀️':'🌙';
     obsRows += `<tr onmouseover="this.style.background='var(--coal4)'" onmouseout="this.style.background=''">
       <td onclick="abrirReporteVisor('${r.fecha}','${r.turno}')" style="cursor:pointer;color:var(--accent-light);font-weight:600">${r.fecha}</td>
