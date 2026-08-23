@@ -19655,34 +19655,63 @@ function horoMesesDisponibles(){
 // sumadas de los partes (HT). Las dos formas de contar deberían coincidir: cuando no coinciden,
 // falta un reporte o alguien tecleó mal, y la pantalla lo señala.
 function horoResumenMes(mes){
-  const reps=(state.compresorista||[])
-    .filter(r=>r&&String(r.fecha||'').slice(0,7)===mes)
+  const todos=(state.compresorista||[])
+    .filter(r=>r&&r.fecha)
     .sort((a,b)=>_horoOrden(a).localeCompare(_horoOrden(b)));
+  const delMes=todos.filter(r=>String(r.fecha).slice(0,7)===mes);
+  const antes =todos.filter(r=>String(r.fecha).slice(0,7)<mes);
+  // Fecha del último reporte del compresorista en el mes: sirve para saber si un equipo dejó de
+  // reportarse antes de que terminara el mes.
+  const ultimoParte=delMes.length?delMes[delMes.length-1]:null;
+
   const eq={};
   const tocar=nombre=>{ const k=compEquipoNorm(nombre);
-    if(!eq[k]) eq[k]={equipo:k, ini:null, iniFecha:'', iniTurno:'', fin:null, finFecha:'', finTurno:'', sumaHT:0, lecturas:0};
+    if(!eq[k]) eq[k]={equipo:k, ini:null, iniFecha:'', iniTurno:'', iniPrevio:false,
+                      fin:null, finFecha:'', finTurno:'', sumaHT:0, lecturas:0};
     return eq[k]; };
-  reps.forEach(r=>{
+  // Una lectura vale si trae HI o HF; el HT solo suma horas, no fija lecturas.
+  const lecturaDe=h=>{ const hi=Number(h&&h.HI)||0, hf=Number(h&&h.HF)||0;
+    return {hi, hf, cierre:(hf>0?hf:(hi>0?hi:0)), apertura:(hi>0?hi:(hf>0?hf:0))}; };
+
+  // 1) ARRANQUE DEL MES: la última lectura del mes ANTERIOR es el horómetro con el que el equipo
+  //    empieza el mes. Si se usara la primera lectura del mes, un equipo que recién se reportó
+  //    el día 5 perdería todo lo trabajado del 1 al 5.
+  antes.forEach(r=>{
     (r.horometros||[]).forEach(h=>{
-      const hi=Number(h&&h.HI)||0, hf=Number(h&&h.HF)||0, ht=Number(h&&h.HT)||0;
-      if(hi<=0 && hf<=0 && ht<=0) return;              // equipo sin movimiento: no ensucia la tabla
+      const L=lecturaDe(h); if(!L.cierre) return;
+      const e=tocar(h.equipo);
+      e.ini=L.cierre; e.iniFecha=r.fecha; e.iniTurno=r.turno||''; e.iniPrevio=true;
+    });
+  });
+  // 2) EL MES: la primera lectura fija el arranque solo si no vino del mes anterior; la última
+  //    lectura manda como cierre.
+  delMes.forEach(r=>{
+    (r.horometros||[]).forEach(h=>{
+      const L=lecturaDe(h); const ht=Number(h&&h.HT)||0;
+      if(!L.cierre && ht<=0) return;
       const e=tocar(h.equipo);
       e.sumaHT+=ht;
-      if(hi>0 || hf>0){
-        e.lecturas++;
-        if(e.ini===null){ e.ini=(hi>0?hi:hf); e.iniFecha=r.fecha; e.iniTurno=r.turno||''; }
-        if(hf>0){ e.fin=hf; e.finFecha=r.fecha; e.finTurno=r.turno||''; }
-        else if(e.fin===null && hi>0){ e.fin=hi; e.finFecha=r.fecha; e.finTurno=r.turno||''; }
-      }
+      if(!L.cierre) return;
+      e.lecturas++;
+      if(e.ini===null){ e.ini=L.apertura; e.iniFecha=r.fecha; e.iniTurno=r.turno||''; e.iniPrevio=false; }
+      e.fin=L.cierre; e.finFecha=r.fecha; e.finTurno=r.turno||'';
     });
   });
   // Los equipos del catálogo salen siempre, aunque este mes no tengan lectura: que falte uno es
   // justamente lo que Mantenimiento necesita ver.
   (typeof COMP_HOROMETROS!=='undefined'?COMP_HOROMETROS:[]).forEach(m=>tocar(m));
+
   return Object.values(eq).map(e=>{
     const horas=(e.ini!=null&&e.fin!=null)?Math.round((e.fin-e.ini)*100)/100:0;
     const dif=Math.round((horas-e.sumaHT)*100)/100;
-    return {...e, horas, sumaHT:Math.round(e.sumaHT*100)/100, dif};
+    // Una lectura final menor que la inicial no es un dato, es un error: horómetro reseteado,
+    // dos máquinas distintas reportadas con el mismo nombre, o un número mal tecleado. No se
+    // suma a las horas del mes; se marca para que Mantenimiento lo corrija.
+    const invertido=(e.ini!=null&&e.fin!=null&&e.fin<e.ini);
+    // ¿Dejó de reportarse antes de que acabara el mes?
+    const atrasado=!!(ultimoParte && e.finFecha && e.finFecha<ultimoParte.fecha);
+    return {...e, horas, sumaHT:Math.round(e.sumaHT*100)/100, dif, invertido, atrasado,
+            ultimoParteFecha:(ultimoParte?ultimoParte.fecha:'')};
   }).sort((a,b)=>b.horas-a.horas || a.equipo.localeCompare(b.equipo));
 }
 let _horoMesSel=null;
@@ -19692,7 +19721,10 @@ function renderHorometrosMant(){
   const mes=_horoMesSel && meses.includes(_horoMesSel) ? _horoMesSel : meses[0];
   const filas=horoResumenMes(mes);
   const conLectura=filas.filter(f=>f.ini!=null);
-  const totalHoras=conLectura.reduce((s,f)=>s+f.horas,0);
+  // El total suma solo lo que es horas de verdad: una fila con la lectura invertida restaría.
+  const totalHoras=conLectura.filter(f=>!f.invertido).reduce((s,f)=>s+f.horas,0);
+  const nInvertidos=filas.filter(f=>f.invertido).length;
+  const nAtrasados=filas.filter(f=>f.ini!=null&&f.atrasado).length;
   const _n=v=>(v==null?'—':Number(v).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2}));
   const _t=t=>t?(String(t).toLowerCase().startsWith('n')?'🌙':'☀️'):'';
   const kpi=(t,v,c)=>'<div class="kpi-card"><div class="kpi-label">'+t+'</div>'+
@@ -19710,8 +19742,8 @@ function renderHorometrosMant(){
   '<div class="kpi-grid" style="margin-bottom:14px">'+
     kpi('Equipos con lectura', conLectura.length+' de '+filas.length)+
     kpi('Horas del mes', _n(totalHoras), 'var(--accent-light)')+
-    kpi('Sin reportar este mes', filas.length-conLectura.length, (filas.length-conLectura.length)?'#f87171':'var(--positive)')+
-    kpi('Con diferencia', filas.filter(f=>f.ini!=null&&Math.abs(f.dif)>0.5).length, filas.some(f=>f.ini!=null&&Math.abs(f.dif)>0.5)?'#f59e0b':'var(--positive)')+
+    kpi('Sin lectura al día', nAtrasados+(filas.length-conLectura.length), (nAtrasados+(filas.length-conLectura.length))?'#f87171':'var(--positive)')+
+    kpi('Lecturas a revisar', nInvertidos, nInvertidos?'#f87171':'var(--positive)')+
   '</div>'+
   '<div class="card"><div class="table-wrap"><table style="width:100%">'+
     '<thead><tr style="background:#1a2744;color:#fff">'+
@@ -19730,22 +19762,31 @@ function renderHorometrosMant(){
         '<td colspan="6" style="padding:7px 10px;color:var(--text3);font-size:12px">Sin lecturas de horómetro este mes</td>'+
         '<td style="padding:7px 10px;text-align:center">⚪</td></tr>';
       const ok=Math.abs(f.dif)<=0.5;
-      return '<tr style="border-top:1px solid var(--border2)">'+
+      const estado = f.invertido
+        ? '<span title="La lectura final es menor que la inicial: horómetro reseteado, dos máquinas con el mismo nombre o un número mal tecleado. No se cuenta en las horas del mes.">🔴 revisar</span>'
+        : (f.atrasado
+            ? '<span title="Este equipo dejó de reportar horómetro antes del último parte del mes ('+escAttr(f.ultimoParteFecha)+')">🔵 sin lectura al día</span>'
+            : (ok ? '🟢'
+                  : '<span title="Diferencia de '+_n(f.dif)+' h entre la resta de lecturas y la suma de los partes: falta un reporte o hay una lectura mal tecleada">🟠 '+_n(f.dif)+' h</span>'));
+      return '<tr style="border-top:1px solid var(--border2)'+(f.invertido?';background:rgba(248,113,113,.07)':'')+'">'+
         '<td style="padding:7px 10px;font-weight:700">'+escAttr(f.equipo)+'</td>'+
         '<td style="padding:7px 10px;text-align:right;font-family:\'DM Mono\',monospace">'+_n(f.ini)+'</td>'+
-        '<td style="padding:7px 10px;font-size:11.5px;color:var(--text3)">'+escAttr(f.iniFecha)+' '+_t(f.iniTurno)+'</td>'+
+        '<td style="padding:7px 10px;font-size:11.5px;color:var(--text3)">'+escAttr(f.iniFecha)+' '+_t(f.iniTurno)+
+          (f.iniPrevio?'<span style="font-size:9.5px;color:var(--text3);border:1px solid var(--border);border-radius:99px;padding:0 6px;margin-left:5px" title="Cierre del mes anterior: con ese horómetro empezó el mes">cierre anterior</span>':'')+'</td>'+
         '<td style="padding:7px 10px;text-align:right;font-family:\'DM Mono\',monospace;color:var(--accent-light);font-weight:700">'+_n(f.fin)+'</td>'+
-        '<td style="padding:7px 10px;font-size:11.5px;color:var(--text3)">'+escAttr(f.finFecha)+' '+_t(f.finTurno)+'</td>'+
-        '<td style="padding:7px 10px;text-align:right;font-weight:800">'+_n(f.horas)+'</td>'+
+        '<td style="padding:7px 10px;font-size:11.5px;color:'+(f.atrasado?'#60a5fa':'var(--text3)')+'">'+escAttr(f.finFecha)+' '+_t(f.finTurno)+'</td>'+
+        '<td style="padding:7px 10px;text-align:right;font-weight:800'+(f.invertido?';color:#f87171':'')+'">'+_n(f.horas)+'</td>'+
         '<td style="padding:7px 10px;text-align:right;color:var(--text2)">'+_n(f.sumaHT)+'</td>'+
-        '<td style="padding:7px 10px;text-align:center" title="'+(ok?'La resta de lecturas cuadra con la suma de los partes'
-          :'Diferencia de '+_n(f.dif)+' h entre la resta de lecturas y la suma de los partes: falta un reporte o hay una lectura mal tecleada')+'">'+
-        (ok?'🟢':'🟠 '+_n(f.dif)+' h')+'</td></tr>';
+        '<td style="padding:7px 10px;text-align:center">'+estado+'</td></tr>';
     }).join('')+
     '</tbody></table></div>'+
     '<div style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.6">'+
-      '<b>Horas del mes</b> = horómetro final − horómetro inicial. <b>Suma de partes</b> = las horas (HT) que reportó cada guardia. '+
-      'Cuando no coinciden por más de media hora, la fila sale en 🟠: casi siempre falta subir un reporte o hay una lectura mal tecleada.'+
+      '<b>Horómetro inicial</b> = el cierre del mes anterior; si el equipo no venía reportando, la primera lectura del mes. '+
+      '<b>Horómetro final</b> = la última lectura registrada en el mes. <b>Horas del mes</b> = final − inicial. '+
+      '<b>Suma de partes</b> = las horas (HT) que reportó cada guardia.<br>'+
+      '🟠 las dos formas de contar difieren por más de media hora: falta subir un reporte o hay una lectura mal tecleada. '+
+      '🔵 el equipo dejó de reportar horómetro antes del último parte del mes. '+
+      '🔴 la lectura final es menor que la inicial —horómetro reseteado, dos máquinas con el mismo nombre o un número mal tecleado—: esa fila no se cuenta en las horas del mes.'+
     '</div>'+
   '</div>';
 }
