@@ -24593,7 +24593,18 @@ function compCostoReporte(r){
 // Camuflado) y no hay forma de saber cuál era cuál, así que el consumo viejo se queda con su
 // nombre original en vez de atribuírselo a la cuatrimoto equivocada. Si se confirma la
 // equivalencia, se agregan aquí dos líneas y el histórico se agrupa solo.
-const COMP_EQUIPO_RENOM = {'Camioneta Blanca':'Camioneta Blanca THB-858'};
+/* Nombres viejos → nombre actual del equipo. Todo lo que ya está guardado en los reportes
+   conserva el nombre con el que se registró; este mapa hace que el histórico y lo nuevo se
+   sumen en el MISMO equipo, en vez de aparecer como dos máquinas distintas.
+     · "Grupo Electrógeno" a secas es el MV 2321 (no existe un grupo sin código).
+     · Las cuatrimotos C y N pasaron a llamarse por su color: Roja y Verde. */
+const COMP_EQUIPO_RENOM = {
+  'Camioneta Blanca'  : 'Camioneta Blanca THB-858',
+  'Grupo Electrógeno' : 'Grupo Electrógeno MV 2321',
+  'Grupo Electrogeno' : 'Grupo Electrógeno MV 2321',
+  'Cuatrimoto C'      : 'Cuatrimoto Roja',
+  'Cuatrimoto N'      : 'Cuatrimoto Verde',
+};
 function compEquipoNorm(eq){ return COMP_EQUIPO_RENOM[eq] || eq; }
 
 // Las dos camionetas consumen PETRÓLEO, no gasolina. Los reportes ya guardados conservan lo que
@@ -24932,7 +24943,7 @@ function mostrarResumenComp(r) {
   const costo = compCostoReporte(r);
   const fmt = v=>'S/ '+v.toFixed(2);
   const expHtml = r.explosivos.filter(e=>e.I||e.E||e.C).map(e=>`<span style="font-size:11px;background:var(--coal4);border:1px solid var(--border);border-radius:4px;padding:3px 8px;color:var(--text2)"><b style="color:var(--text)">${e.codigo}</b> I:${e.I} E:${e.E} C:${e.C} F:${e.F} <b style="color:var(--warn)">${fmt((e.C||0)*(COMP_PRECIOS_EXP[e.codigo]||0))}</b></span>`).join('');
-  const horoHtml = r.horometros.filter(h=>h.HT>0).map(h=>`<span style="font-size:11px;background:var(--coal4);border:1px solid var(--border);border-radius:4px;padding:3px 8px;color:var(--text2)"><b style="color:var(--text)">${h.equipo}</b> ${h.HT}h</span>`).join('');
+  const horoHtml = r.horometros.filter(h=>h.HT>0).map(h=>`<span style="font-size:11px;background:var(--coal4);border:1px solid var(--border);border-radius:4px;padding:3px 8px;color:var(--text2)"><b style="color:var(--text)">${compEquipoNorm(h.equipo)}</b> ${h.HT}h</span>`).join('');
   document.getElementById('comp-resumen').style.display = 'block';
   document.getElementById('comp-resumen').innerHTML = `
     <div class="card" style="border:1px solid var(--accent-border)">
@@ -25315,14 +25326,14 @@ function renderTablaCompresorista() {
   // petróleo/gasolina
   let petRows = '';
   data.forEach(r => {
-    r.petroleo.forEach(p => { if(p.gln) petRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${p.equipo}</td><td style="color:var(--warn)">Petróleo</td><td class="r">${p.gln}</td></tr>`; });
-    r.gasolina.forEach(g => { if(g.gln) petRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${g.equipo}</td><td style="color:var(--positive)">Gasolina</td><td class="r">${g.gln}</td></tr>`; });
+    r.petroleo.forEach(p => { if(p.gln) petRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${compEquipoNorm(p.equipo)}</td><td style="color:var(--warn)">Petróleo</td><td class="r">${p.gln}</td></tr>`; });
+    r.gasolina.forEach(g => { if(g.gln) petRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${compEquipoNorm(g.equipo)}</td><td style="color:var(--positive)">Gasolina</td><td class="r">${g.gln}</td></tr>`; });
   });
   document.getElementById('tbody-petroleo').innerHTML = petRows || '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">Sin datos</td></tr>';
   // horómetros
   let horoRows = '';
   data.forEach(r => r.horometros.forEach(h => {
-    if(h.HI||h.HF) horoRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${h.equipo}</td><td class="r">${h.HI}</td><td class="r">${h.HF}</td><td class="r" style="color:var(--accent-light)">${h.HT}</td></tr>`;
+    if(h.HI||h.HF) horoRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${compEquipoNorm(h.equipo)}</td><td class="r">${h.HI}</td><td class="r">${h.HF}</td><td class="r" style="color:var(--accent-light)">${h.HT}</td></tr>`;
   }));
   document.getElementById('tbody-horometros').innerHTML = horoRows || '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sin datos</td></tr>';
   // observaciones / lista de reportes clicables (más reciente primero)
@@ -25609,8 +25620,8 @@ function exportarCompresoristExcel() {
   // ── COMBUSTIBLE ──
   const fuelFilas=[];
   data.forEach(r=>{
-    r.petroleo.forEach(p=>{if(p.gln)fuelFilas.push([r.fecha,r.turno,p.equipo,'Petróleo',p.gln]);});
-    r.gasolina.forEach(g=>{if(g.gln)fuelFilas.push([r.fecha,r.turno,g.equipo,'Gasolina',g.gln]);});
+    r.petroleo.forEach(p=>{if(p.gln)fuelFilas.push([r.fecha,r.turno,compEquipoNorm(p.equipo),'Petróleo',p.gln]);});
+    r.gasolina.forEach(g=>{if(g.gln)fuelFilas.push([r.fecha,r.turno,compEquipoNorm(g.equipo),'Gasolina',g.gln]);});
   });
   fuelFilas.push(['TOTAL','','','Petróleo',+totPet.toFixed(1)]);
   fuelFilas.push(['TOTAL','','','Gasolina',+totGas.toFixed(1)]);
@@ -25620,7 +25631,7 @@ function exportarCompresoristExcel() {
 
   // ── HORÓMETROS ──
   const horoFilas=[];
-  data.forEach(r=>r.horometros.forEach(h=>{if(h.HI||h.HF)horoFilas.push([r.fecha,r.turno,h.equipo,h.HI,h.HF,h.HT]);}));
+  data.forEach(r=>r.horometros.forEach(h=>{if(h.HI||h.HF)horoFilas.push([r.fecha,r.turno,compEquipoNorm(h.equipo),h.HI,h.HF,h.HT]);}));
   horoFilas.push(['TOTAL','','','','',+totHoras.toFixed(1)]);
   XLSX.utils.book_append_sheet(wb, _xlHoja('HORÓMETROS — '+mesNombre+' '+ay, C_MORADO,
     ['Fecha','Turno','Equipo','HI','HF','HT'], horoFilas,
