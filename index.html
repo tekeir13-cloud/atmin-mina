@@ -8257,6 +8257,8 @@ function renderProductos(){
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
       <div style="font-size:16px;font-weight:700;color:var(--text)">📦 Maestro de Productos</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-outline" style="font-size:12px;border-color:#22c55e;color:#22c55e" onclick="descargarMaestroExcel()"
+          title="Descarga el maestro completo en Excel: todos los productos con su código, almacén, unidad y precio">📥 Descargar Excel</button>
         <button class="btn btn-outline" style="font-size:12px" onclick="abrirRecuperarPrecios()">🛟 Recuperar precios</button>
         <button class="btn btn-gold" style="font-size:12px" onclick="abrirModalProducto()">+ Nuevo Producto</button>
       </div>
@@ -8343,6 +8345,49 @@ function mpGuardarExplosivos(){
   });
   paramsSetExp(exp);
   showNotif('Precios de explosivos guardados','ok');
+}
+
+/* Descarga el maestro COMPLETO —no lo filtrado en pantalla—: la idea es tener el listado entero
+   para trabajarlo fuera del sistema. Va en tres hojas porque los precios de combustible y
+   explosivos viven aparte del maestro, pero se consultan junto con él. */
+function descargarMaestroExcel(){
+  if(typeof XLSX==='undefined'){ showNotif('Error: librería Excel no cargada','error'); return; }
+  const prods=((state.almacen&&state.almacen.productos)||[]).slice()
+    .sort((a,b)=>String(a.codigo||'').localeCompare(String(b.codigo||''),'es',{numeric:true}));
+  if(!prods.length){ showNotif('El maestro no tiene productos','warn'); return; }
+  const wb=XLSX.utils.book_new();
+
+  const filas=[['Código','Producto','Descripción','Almacén','Unidad','Precio S/']];
+  prods.forEach(p=>filas.push([p.codigo||'', p.nombre||'', p.descripcion||'',
+    (p.almacen==='Mantenimiento'?'Mantenimiento':'Insumos'), p.unidad||'', Number(p.precio)||0]));
+  const ws=XLSX.utils.aoa_to_sheet(filas);
+  ws['!cols']=[{wch:14},{wch:34},{wch:52},{wch:15},{wch:10},{wch:12}];
+  ws['!autofilter']={ref:'A1:F'+filas.length};
+  XLSX.utils.book_append_sheet(wb,ws,'Productos');
+
+  try{
+    const comb=paramsGetComb()||{};
+    const wc=XLSX.utils.aoa_to_sheet([['Combustible','Precio por galón S/'],
+      ['Petróleo Diesel B5', Number(comb.pet)||0], ['Gasolina 90', Number(comb.gas)||0]]);
+    wc['!cols']=[{wch:26},{wch:20}];
+    XLSX.utils.book_append_sheet(wb,wc,'Combustible');
+  }catch(e){}
+
+  try{
+    const exp=paramsGetExp()||{};
+    const fe=[['Código','Explosivo','Precio S/']];
+    (typeof COMP_EXPLOSIVOS!=='undefined'?COMP_EXPLOSIVOS:[]).forEach(c=>{
+      fe.push([c, (typeof COMP_EXPLO_LABEL!=='undefined'&&COMP_EXPLO_LABEL[c])||c,
+        Number(exp[c]!=null?exp[c]:(COMP_PRECIOS_EXP_DEFAULT[c]||0))||0]);
+    });
+    const we=XLSX.utils.aoa_to_sheet(fe);
+    we['!cols']=[{wch:16},{wch:44},{wch:12}];
+    XLSX.utils.book_append_sheet(wb,we,'Explosivos');
+  }catch(e){}
+
+  const hoy_=(typeof hoy==='function')?hoy():new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb,'maestro_productos_'+hoy_+'.xlsx');
+  showNotif('📥 Maestro descargado — '+prods.length+' productos','ok');
 }
 
 function descargarPlantillaMaestro(){
