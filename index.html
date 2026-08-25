@@ -19727,6 +19727,7 @@ function horoResumenMes(mes){
   //    el día 5 perdería todo lo trabajado del 1 al 5.
   antes.forEach(r=>{
     (r.horometros||[]).forEach(h=>{
+      if(!horoLecturaCuenta(h.equipo, r.fecha, r.turno)) return;
       const L=lecturaDe(h); if(!L.cierre) return;
       const e=tocar(h.equipo); if(!e) return;
       e.ini=L.cierre; e.iniFecha=r.fecha; e.iniTurno=r.turno||''; e.iniPrevio=true;
@@ -19736,6 +19737,7 @@ function horoResumenMes(mes){
   //    lectura manda como cierre.
   delMes.forEach(r=>{
     (r.horometros||[]).forEach(h=>{
+      if(!horoLecturaCuenta(h.equipo, r.fecha, r.turno)) return;
       const L=lecturaDe(h); const ht=Number(h&&h.HT)||0;
       if(!L.cierre && ht<=0) return;
       const e=tocar(h.equipo); if(!e) return;
@@ -19767,6 +19769,24 @@ function horoResumenMes(mes){
 // un reporte viejo —"Grupo Electrógeno" a secas, por ejemplo— no es un equipo: es una lectura mal
 // rotulada, y mezclarla con las demás produce horas negativas. Se saca de la tabla y se lista
 // aparte para corregirla o borrarla.
+/* ── LECTURA FIJA DE HORÓMETRO ──────────────────────────────────────────────────
+   Cuando un equipo tiene mal registrado su horómetro —el compresorista anotó en un grupo las
+   lecturas del otro— no se puede adivinar cuál corresponde a cuál. Aquí se fija la última lectura
+   BUENA del equipo: esa manda, y cualquier otra lectura que aparezca a su nombre en los reportes
+   se ignora para el control de horómetros (el reporte original NO se toca).
+   Solo afecta al equipo listado; los demás siguen exactamente con lo que reportaron. */
+const HORO_FIJOS = {
+  'Grupo Electrógeno MV 2321': { fecha:'2026-07-31', turno:'Noche', HI:6233.4, HF:6245.1 },
+};
+function horoFijo(equipo){ return HORO_FIJOS[compEquipoNorm(equipo)] || null; }
+// ¿Esta lectura de un reporte cuenta para el control de horómetros?
+// Para un equipo con lectura fija, solo cuenta la del día y turno fijados.
+function horoLecturaCuenta(equipo, fecha, turno){
+  const f=horoFijo(equipo);
+  if(!f) return true;
+  return String(fecha||'').slice(0,10)===f.fecha && String(turno||'')===f.turno;
+}
+
 // Equipos que salieron de NV 2820: sus lecturas viejas siguen guardadas en los reportes, pero ya
 // no se muestran ni piden corrección — no son parte del parque de la unidad.
 const COMP_EQUIPOS_RETIRADOS = ['Scoop DALI','Scoop Monte'];
@@ -25116,7 +25136,9 @@ function renderCompHistorial(){
 
   // ── Horómetros acumulados por equipo ──
   const horoEq={};
-  repMes.forEach(r=>(r.horometros||[]).forEach(h=>{ if(h.HT && compEquipoVigente(h.equipo)){ const e=compEquipoNorm(h.equipo); horoEq[e]=(horoEq[e]||0)+(Number(h.HT)||0); } }));
+  repMes.forEach(r=>(r.horometros||[]).forEach(h=>{
+    if(h.HT && compEquipoVigente(h.equipo) && horoLecturaCuenta(h.equipo, r.fecha, r.turno)){
+      const e=compEquipoNorm(h.equipo); horoEq[e]=(horoEq[e]||0)+(Number(h.HT)||0); } }));
   const horoList=Object.keys(horoEq).sort((a,b)=>horoEq[b]-horoEq[a]);
   const maxHoro=Math.max(1,...horoList.map(e=>horoEq[e]));
   const horoCard=horoList.length?`<div class="card">
@@ -25161,6 +25183,7 @@ function _hhDatos(per){
   reps.forEach(r=>{
     const f=String(r.fecha||'').slice(0,10); if(!f) return;
     (r.horometros||[]).forEach(h=>{ const ht=Number(h&&h.HT)||0; if(ht<=0) return;
+      if(!horoLecturaCuenta(h.equipo, r.fecha, r.turno)) return;   // lectura de otro grupo mal rotulada
       const o=dame(h.equipo); if(!o) return; o.horas+=ht; dia(o,f).horas+=ht; });
     // Solo PETRÓLEO: los equipos con horómetro son los que consumen petróleo. La gasolina va a
     // cuatrimotos y al trompo, que no llevan horómetro.
@@ -25349,6 +25372,9 @@ function renderTablaCompresorista() {
   // horómetros
   let horoRows = '';
   data.forEach(r => r.horometros.forEach(h => {
+    // Las lecturas descartadas por una lectura fija no se listan: se registraron en el grupo
+    // equivocado y verlas aquí solo confunde. El reporte original las conserva.
+    if(!horoLecturaCuenta(h.equipo, r.fecha, r.turno)) return;
     if(h.HI||h.HF) horoRows += `<tr><td>${r.fecha}</td><td>${r.turno}</td><td>${compEquipoNorm(h.equipo)}</td><td class="r">${h.HI}</td><td class="r">${h.HF}</td><td class="r" style="color:var(--accent-light)">${h.HT}</td></tr>`;
   }));
   document.getElementById('tbody-horometros').innerHTML = horoRows || '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sin datos</td></tr>';
