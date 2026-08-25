@@ -24606,6 +24606,19 @@ const COMP_EQUIPO_RENOM = {
   'Cuatrimoto N'      : 'Cuatrimoto Verde',
 };
 function compEquipoNorm(eq){ return COMP_EQUIPO_RENOM[eq] || eq; }
+/* ¿Este equipo sigue siendo del parque de NV 2820? Vigente = está en alguna de las tres listas
+   del formulario del compresorista (petróleo, gasolina, horómetros) y no está retirado.
+   Los reportes viejos guardan nombres que ya no existen —equipos que salieron, o un nombre suelto
+   mal escrito—; se conservan en el dato pero no ensucian los paneles ni las estadísticas. */
+function compEquipoVigente(eq){
+  const k=compEquipoNorm(eq);
+  if(typeof horoRetirado==='function' && horoRetirado(k)) return false;
+  const listas=[]
+    .concat(typeof COMP_PETROLEO!=='undefined'?COMP_PETROLEO:[])
+    .concat(typeof COMP_GASOLINA!=='undefined'?COMP_GASOLINA:[])
+    .concat(typeof COMP_HOROMETROS!=='undefined'?COMP_HOROMETROS:[]);
+  return listas.indexOf(k)>=0;
+}
 
 // Las dos camionetas consumen PETRÓLEO, no gasolina. Los reportes ya guardados conservan lo que
 // se registró en su momento (cada equipo se guarda por nombre dentro de petroleo[]/gasolina[]),
@@ -25080,8 +25093,8 @@ function renderCompHistorial(){
   // ── Consumo por equipos: combustible (gln + S/) ──
   const combEq={}; // equipo -> {pet, gas}
   repMes.forEach(r=>{
-    (r.petroleo||[]).forEach(p=>{ if(p.gln){ const e=compEquipoNorm(p.equipo); combEq[e]=combEq[e]||{pet:0,gas:0}; combEq[e].pet+=Number(p.gln)||0; } });
-    (r.gasolina||[]).forEach(p=>{ if(p.gln){ const e=compEquipoNorm(p.equipo); combEq[e]=combEq[e]||{pet:0,gas:0}; combEq[e].gas+=Number(p.gln)||0; } });
+    (r.petroleo||[]).forEach(p=>{ if(p.gln && compEquipoVigente(p.equipo)){ const e=compEquipoNorm(p.equipo); combEq[e]=combEq[e]||{pet:0,gas:0}; combEq[e].pet+=Number(p.gln)||0; } });
+    (r.gasolina||[]).forEach(p=>{ if(p.gln && compEquipoVigente(p.equipo)){ const e=compEquipoNorm(p.equipo); combEq[e]=combEq[e]||{pet:0,gas:0}; combEq[e].gas+=Number(p.gln)||0; } });
   });
   const eqList=Object.keys(combEq).sort((a,b)=>((combEq[b].pet+combEq[b].gas)-(combEq[a].pet+combEq[a].gas)));
   const maxGln=Math.max(1,...eqList.map(e=>combEq[e].pet+combEq[e].gas));
@@ -25103,7 +25116,7 @@ function renderCompHistorial(){
 
   // ── Horómetros acumulados por equipo ──
   const horoEq={};
-  repMes.forEach(r=>(r.horometros||[]).forEach(h=>{ if(h.HT){ const e=compEquipoNorm(h.equipo); horoEq[e]=(horoEq[e]||0)+(Number(h.HT)||0); } }));
+  repMes.forEach(r=>(r.horometros||[]).forEach(h=>{ if(h.HT && compEquipoVigente(h.equipo)){ const e=compEquipoNorm(h.equipo); horoEq[e]=(horoEq[e]||0)+(Number(h.HT)||0); } }));
   const horoList=Object.keys(horoEq).sort((a,b)=>horoEq[b]-horoEq[a]);
   const maxHoro=Math.max(1,...horoList.map(e=>horoEq[e]));
   const horoCard=horoList.length?`<div class="card">
@@ -25140,7 +25153,10 @@ function _hhDatos(per){
   const reps=(state.compresorista||[]).filter(r=>r && enVentana(r.fecha,per));
   const eq={};
   const dame=nombre=>{ const e=(typeof compEquipoNorm==='function')?compEquipoNorm(nombre):nombre;
-    if(!e) return null; if(!eq[e]) eq[e]={gln:0,horas:0,porDia:{}}; return eq[e]; };
+    if(!e) return null;
+    // Solo equipos vigentes del parque: los nombres de reportes viejos no arman una tarjeta.
+    if(typeof compEquipoVigente==='function' && !compEquipoVigente(nombre)) return null;
+    if(!eq[e]) eq[e]={gln:0,horas:0,porDia:{}}; return eq[e]; };
   const dia=(o,f)=>{ o.porDia[f]=o.porDia[f]||{gln:0,horas:0}; return o.porDia[f]; };
   reps.forEach(r=>{
     const f=String(r.fecha||'').slice(0,10); if(!f) return;
