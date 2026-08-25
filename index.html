@@ -7607,6 +7607,7 @@ else if(Number(prevAlm.productosTs||0)>Number(data.productosTs||0)){ a.productos
     case 'remanente_ingresos': if(Array.isArray(data)){ state.remanenteIngresos=M(data, state.remanenteIngresos||[]); setLS('atmin_remanente_ingresos', state.remanenteIngresos); } break;
     case 'servicios_terceros': if(Array.isArray(data)){ let loc=[]; try{loc=JSON.parse(localStorage.getItem('atmin_servicios_terceros')||'[]');}catch(e){} setLS('atmin_servicios_terceros', M(data, loc)); } break;
     case 'planilla_supervision': if(data&&typeof data==='object'){ setLS('atmin_planilla_supervision', data); } break;
+    case 'mb_labores':         if(Array.isArray(data)){ setLS('atmin_mb_labores', data); } break;
     case 'tarjeta_notas':      if(data&&typeof data==='object'){ setLS('atmin_tarjeta_notas', data);
                                  try{ if(document.getElementById('rrhh-tarjetas')&&typeof renderTarjetas==='function') renderTarjetas(); }catch(e){} } break;
     case 'almacen_histbackup': if(data&&typeof data==='object'){ setLS('atmin_almacen_histbackup', data); } break;
@@ -12710,6 +12711,28 @@ function mbGuardarParte(){
     showNotif('⚠ El parte está vacío','error'); return;
   }
   if(typeof bloqueadoPorCierre==='function' && bloqueadoPorCierre(fecha,'partes de Monte Bravo')) return;
+
+  // Aviso de sobregiro: si el parte saca más de lo que hay registrado, se dice ANTES de guardar.
+  // No se bloquea —a veces el acopio o el sub-almacén están atrasados y el consumo sí ocurrió—,
+  // pero nadie debería dejar un stock en negativo sin enterarse.
+  const excesos=[];
+  try{
+    const stockExp2=(typeof mbStock==='function')?mbStock():{};
+    const porProd={};
+    expSal.forEach(x=>{ porProd[x.producto]=(porProd[x.producto]||0)+x.totalUnidades; });
+    Object.keys(porProd).forEach(k=>{ const hay=Number(stockExp2[k])||0;
+      if(porProd[k]>hay) excesos.push('· '+k+': salen '+_mbN(porProd[k],2)+' y en el acopio hay '+_mbN(hay,2)); });
+    const stockMat={}; (typeof mbAlmacenStock==='function'?mbAlmacenStock():[]).forEach(r=>{ stockMat[r.codigo]=r.stock; });
+    const porMat={};
+    Object.values(consumoFrentes).forEach(items=>items.forEach(it=>{ porMat[it.codigo]=(porMat[it.codigo]||0)+it.cant; }));
+    Object.keys(porMat).forEach(k=>{ const hay=Number(stockMat[k])||0;
+      if(porMat[k]>hay) excesos.push('· '+k+': salen '+_mbN(porMat[k],2)+' y en el sub-almacén hay '+_mbN(hay,2)); });
+    const glnTot=pet.reduce((a,x)=>a+x.gln,0);
+    const tanque=(typeof mbCombSaldo==='function')?mbCombSaldo().saldo:0;
+    if(glnTot>tanque) excesos.push('· Petróleo: salen '+_mbN(glnTot)+' gln y en el tanque hay '+_mbN(tanque)+' gln');
+  }catch(e){}
+  if(excesos.length && !confirm('Este parte saca más de lo registrado:\n\n'+excesos.join('\n')+
+      '\n\nSe puede guardar igual —el stock quedará en negativo— pero conviene revisar los ingresos primero.\n\n¿Guardar de todos modos?')) return;
 
   const id=_mbId('MBC');
   mbEstado().partes.push({ id, _ts:Date.now(), unidad:'MB', fecha, turno,
@@ -28578,6 +28601,20 @@ async function _restaurarSnap(snap, exacto, etiqueta){
       const porPer={}; [...act, ...snap.historialPeriodos].forEach(h=>{ if(h&&h.periodo) porPer[h.periodo]=h; });
       if(exacto) histPeriodosSave(snap.historialPeriodos); else histPeriodosSave(Object.values(porPer));
     }
+    if(snap.montebravo && typeof mbEstado==='function'){
+      // Monte Bravo se repone entero en restauración exacta; si no, se unen las listas por id
+      // igual que el resto del sistema, para no borrar lo que otro equipo ya cargó.
+      const m=mbEstado(), src=snap.montebravo;
+      ['produccion','partes','liquidaciones','terceros'].forEach(k=>{
+        if(!Array.isArray(src[k])) return;
+        m[k]= exacto ? src[k] : U(m[k], src[k]);
+      });
+      try{ mbGuardar(); }catch(e){}
+    }
+    if(Array.isArray(snap.mbLabores) && typeof mbLaboresExtraSave==='function'){
+      const act=(typeof mbLaboresExtra==='function')?mbLaboresExtra():[];
+      mbLaboresExtraSave(exacto?snap.mbLabores:[...new Set(act.concat(snap.mbLabores))]);
+    }
     if(snap.tarjetaNotas && typeof tarjNotasSave==='function'){
       const act=tarjNotasLoad(), out=exacto?snap.tarjetaNotas:{...act};
       if(!exacto) Object.keys(snap.tarjetaNotas).forEach(pid=>{ out[pid]={...(snap.tarjetaNotas[pid]||{}), ...(act[pid]||{})}; });
@@ -29133,6 +29170,10 @@ function snapshotEstado(){
     serviciosTerceros:(typeof servCargar==='function'?servCargar():[]),
     finIngMaq:fim, mesesCerrados:state.mesesCerrados||[],
     planillaSupervision:(typeof planillaSupLoad==='function'?planillaSupLoad():{}),
+    // COPIA, no la referencia viva: el snapshot tiene que ser una foto. Con la referencia, vaciar
+    // una lista después de sacar el respaldo vaciaba también el respaldo, y al restaurar no volvía nada.
+    montebravo:(function(){ try{ return JSON.parse(JSON.stringify(mbEstado())); }catch(e){ return state.mb||{}; } })(),
+    mbLabores:(typeof mbLaboresExtra==='function'?mbLaboresExtra():[]),
     tarjetaNotas:(typeof tarjNotasLoad==='function'?tarjNotasLoad():{}),   // pendientes y anotaciones de las tarjetas de tareo
     // Faltaban en el respaldo, y son datos que el sistema sí muestra y sí guarda en la nube: una
     // copia que no los lleve no devuelve el sistema al estado en que estaba.
@@ -29789,6 +29830,8 @@ const _SYNC_MODULOS=[
   ['comb_gas', ()=>{try{return combCargar('gas');}catch(e){return null;}}],
   ['planilla_supervision', ()=>{try{return planillaSupLoad();}catch(e){return null;}}],
   ['tarjeta_notas', ()=>{try{return tarjNotasLoad();}catch(e){return null;}}],
+  ['montebravo', ()=>{try{return mbEstado();}catch(e){return null;}}],
+  ['mb_labores', ()=>{try{return mbLaboresExtra();}catch(e){return null;}}],
   ['remanente_salidas', ()=>state.remanenteSalidas],
   ['remanente_ingresos', ()=>state.remanenteIngresos],
   ['mant_kits', ()=>state.mantenimiento],
