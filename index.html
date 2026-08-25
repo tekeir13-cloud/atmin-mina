@@ -3498,6 +3498,9 @@ select option{background:var(--coal3);}
     <button class="mod-tab" onclick="modTab('mb','produccion',this)">⛏ Producción</button>
     <button class="mod-tab" onclick="modTab('mb','acopio',this)">💣 Acopio de Explosivo</button>
     <button class="mod-tab" onclick="modTab('mb','compresorista',this)">🔧 Compresorista</button>
+    <button class="mod-tab" onclick="modTab('mb','combustible',this)">⛽ Combustible</button>
+    <button class="mod-tab" onclick="modTab('mb','materiales',this)">📦 Sub-almacén</button>
+    <button class="mod-tab" onclick="modTab('mb','tareo',this)">🗓 Tareo</button>
     <button class="mod-tab" onclick="modTab('mb','planilla',this)">👷 Planilla</button>
     <button class="mod-tab" onclick="modTab('mb','liquidaciones',this)">🧾 Liquidaciones</button>
     <button class="mod-tab" onclick="modTab('mb','terceros',this)">🤝 Pagos a Terceros</button>
@@ -3562,6 +3565,30 @@ select option{background:var(--coal3);}
       <select id="mbf-comp" onchange="mbRenderPartes()" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px"></select>
     </div>
     <div id="mb-comp-wrap"></div>
+  </div>
+
+  <div class="mod-pane" style="display:none" id="mb-combustible">
+    <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <div class="section-title" style="margin:0">⛽ Tanque de Petróleo — Monte Bravo</div>
+      <div style="font-size:12px;color:var(--text3)">Entra lo que despacha 2820 · sale lo que se carga a las máquinas de la unidad</div>
+    </div>
+    <div id="mb-comb-wrap"></div>
+  </div>
+
+  <div class="mod-pane" style="display:none" id="mb-materiales">
+    <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <div class="section-title" style="margin:0">📦 Sub-almacén de Materiales — Monte Bravo</div>
+      <div style="font-size:12px;color:var(--text3)">Entra lo que Logística despacha a la unidad · sale lo que se consume en el parte del compresorista</div>
+    </div>
+    <div id="mb-mat-wrap"></div>
+  </div>
+
+  <div class="mod-pane" style="display:none" id="mb-tareo">
+    <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <div class="section-title" style="margin:0">🗓 Tareo — Monte Bravo</div>
+      <div style="font-size:12px;color:var(--text3)">El mismo tareo mensual de NV 2820, con la gente asignada a esta unidad</div>
+    </div>
+    <div id="mb-tareo-wrap"></div>
   </div>
 
   <div class="mod-pane" style="display:none" id="mb-planilla">
@@ -4082,6 +4109,7 @@ select option{background:var(--coal3);}
       <div class="form-group"><label>Entregado por</label><input type="text" id="sa-solicitante" placeholder="Ej: Juan Pérez"></div>
       <div class="form-group"><label>Destino / Nivel</label><select id="sa-destino" onchange="toggleOperarioSalida()">
         <option value="2820">NV2820 (subalmacén — confirma el Compresorista)</option>
+        <option value="MB">🏔️ Monte Bravo (subalmacén de la unidad)</option>
         <option value="operario">Entrega a Operario (consumo directo)</option>
       </select></div>
       <div class="form-group" id="sa-operario-wrap" style="display:none"><label>Operario que recibe <span style="color:var(--text3);font-size:10px">(personal activo)</span></label>
@@ -4162,7 +4190,7 @@ select option{background:var(--coal3);}
     <input type="hidden" id="es-id">
     <div class="form-grid">
       <div class="form-group"><label>Fecha</label><input type="date" id="es-fecha"></div>
-      <div class="form-group"><label>Destino / Nivel</label><select id="es-destino" onchange="toggleOperarioEditSalida()"><option value="2820">NV2820</option><option value="operario">Entrega a Operario</option><option value="2830">NV2830</option></select></div>
+      <div class="form-group"><label>Destino / Nivel</label><select id="es-destino" onchange="toggleOperarioEditSalida()"><option value="2820">NV2820</option><option value="MB">🏔️ Monte Bravo</option><option value="operario">Entrega a Operario</option><option value="2830">NV2830</option></select></div>
       <div class="form-group" id="es-operario-wrap" style="display:none"><label>Operario que recibe</label><select id="es-operario"><option value="">— Seleccionar operario —</option></select></div>
       <div class="form-group"><label>Almacén</label><select id="es-almacen"><option value="General">Insumos</option><option value="Mantenimiento">Mantenimiento</option></select></div>
       <div class="form-group"><label>Entregado por</label><input type="text" id="es-solicitante"></div>
@@ -4459,25 +4487,59 @@ select option{background:var(--coal3);}
 
 <!-- ════ MONTE BRAVO: PARTE DEL COMPRESORISTA ════ -->
 <div class="modal-overlay" id="modal-mb-parte" onclick="if(event.target===this)cerrarModal('modal-mb-parte')">
-  <div class="modal" style="width:min(680px,96vw);max-height:92vh;overflow-y:auto">
+  <div class="modal" style="width:min(760px,96vw);max-height:92vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div class="modal-title" style="margin-bottom:0">🔧 Parte del Compresorista — Monte Bravo</div>
       <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-mb-parte')">✕</button>
     </div>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:14px">El petróleo que se carga aquí es el gasto de combustible de Monte Bravo. Las horas sirven para el consumo por hora de cada equipo.</div>
+
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
       <div class="form-group" style="margin:0"><label>Fecha</label><input type="date" id="mbc-fecha"></div>
       <div class="form-group" style="margin:0"><label>Turno</label>
         <select id="mbc-turno"><option value="Día">Día</option><option value="Noche">Noche</option></select></div>
       <div class="form-group" style="margin:0"><label>Responsable</label><input type="text" id="mbc-nombre" placeholder="Nombre"></div>
     </div>
-    <div style="background:var(--coal4);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:12px">
-      <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px">Equipos de la unidad — petróleo despachado y horas trabajadas</div>
-      <div id="mbc-equipos"></div>
-      <div id="mbc-tot" style="font-size:11px;color:var(--text3);margin-top:8px"></div>
+
+    <!-- LABORES DE LA UNIDAD -->
+    <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-bottom:12px">
+      <div class="form-group" style="margin:0;flex:1;min-width:200px">
+        <label>Agregar labor <span style="color:var(--text3);font-size:10px">(si falta alguna en el parte)</span></label>
+        <input type="text" id="mbc-labor-nueva" placeholder="Ej: Galería 320 NE"></div>
+      <button class="btn btn-outline" style="padding:8px 14px;font-size:12px" onclick="mbParteAgregarLabor()">+ Agregar</button>
     </div>
-    <div class="form-group" style="margin:0 0 12px"><label>Observación <span style="color:var(--text3);font-size:10px">(opcional)</span></label>
-      <input type="text" id="mbc-obs" placeholder=""></div>
+
+    <!-- S1: EXPLOSIVOS POR LABOR -->
+    <div class="section-title" style="margin-bottom:6px">💥 Explosivos por labor</div>
+    <div style="font-size:10.5px;color:var(--text3);margin-bottom:6px">Sale del acopio de la unidad y es el gasto de explosivo de Monte Bravo. Monte Bravo no usa FANEL, por eso no aparece en la lista.</div>
+    <div class="table-wrap" style="margin-bottom:18px;overflow-x:auto;-webkit-overflow-scrolling:touch">
+      <table style="width:100%;min-width:max-content">
+        <thead><tr id="mbc-exp-head" style="font-size:10px;color:var(--text3)"><th style="text-align:left;padding:6px 8px">Explosivo</th><th style="padding:6px 8px;text-align:center">En acopio</th></tr></thead>
+        <tbody id="mbc-exp-body"></tbody>
+      </table>
+    </div>
+
+    <!-- S2: CONSUMO DE MATERIALES -->
+    <div class="section-title" style="margin-bottom:6px">📦 Consumo de materiales por labor</div>
+    <div style="font-size:10.5px;color:var(--text3);margin-bottom:8px">Sale del sub-almacén de Monte Bravo, con lo que Logística despachó a la unidad.</div>
+    <div id="mbc-cons-wrap" style="margin-bottom:18px"></div>
+
+    <!-- S3: PETRÓLEO -->
+    <div class="section-title" style="margin-bottom:6px">⛽ Petróleo despachado y horómetros</div>
+    <div style="font-size:10.5px;color:var(--text3);margin-bottom:8px">El petróleo sale del tanque de la unidad y es el gasto de combustible de Monte Bravo.</div>
+    <div class="table-wrap" style="margin-bottom:8px">
+      <table style="width:100%">
+        <thead><tr style="font-size:10px;color:var(--text3)"><th style="text-align:left;padding:6px 8px">Equipo</th>
+          <th style="padding:6px 8px;text-align:center">Petróleo (gln)</th><th style="padding:6px 8px;text-align:center">HI</th>
+          <th style="padding:6px 8px;text-align:center">HF</th><th style="padding:6px 8px;text-align:center;color:var(--accent-light)">HT (auto)</th></tr></thead>
+        <tbody id="mbc-equipos"></tbody>
+      </table>
+    </div>
+    <div id="mbc-tot" style="font-size:11px;color:var(--text3);margin-bottom:18px"></div>
+
+    <!-- S4: OBSERVACIONES -->
+    <div class="section-title" style="margin-bottom:6px">📝 Observaciones</div>
+    <textarea id="mbc-obs" rows="2" placeholder="Ej: se cambió manguera de la compresora…" style="width:100%;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:10px;font-size:12px;resize:vertical;margin-bottom:16px"></textarea>
+
     <div class="btn-row" style="margin-top:6px">
       <button class="btn btn-gold" onclick="mbGuardarParte()">✓ Guardar parte</button>
       <button class="btn btn-outline" onclick="cerrarModal('modal-mb-parte')">Cancelar</button>
@@ -5091,7 +5153,7 @@ const MODULE_PANES = {
   'mant': ['registro','costosmant','horometros'],
   'fin': ['dashboard','informe','costocentro'],
   'cmp': ['facturas','informe','presupuestos','balance'],
-  'mb': ['dashboard','produccion','acopio','compresorista','planilla','liquidaciones','terceros','estadisticas']
+  'mb': ['dashboard','produccion','acopio','compresorista','combustible','materiales','tareo','planilla','liquidaciones','terceros','estadisticas']
 };
 
 // Prefijo del módulo → id de su página. El prefijo de los panes ('log') NO es el id de la
@@ -5801,7 +5863,7 @@ function renderModPane(mod,pane){
   else if(k==='cmp-presupuestos')renderComprasPresupuestos();
   else if(k==='cmp-balance')renderComprasBalance();
   else if(k==='rrhh-planilla')renderPlanilla();
-  else if(k==='rrhh-tareomes')renderTareoMensual();
+  else if(k==='rrhh-tareomes')tareoMensualEn('rrhh-tareomes','');
   else if(k==='rrhh-tareas')renderTareas();
   else if(k==='rrhh-personal')renderPersonal();
   else if(k==='rrhh-tarjetas')renderTarjetas();
@@ -9317,7 +9379,7 @@ function prodKey(almacen,codigo,desc){
 // Sin esto, descripciones con comillas (p.ej. medidas en pulgadas: 1/2") rompen el atributo
 // y el <option> pierde su value real, impidiendo seleccionar el producto correcto.
 function escAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
-function nivelLabel(d){return d==='mantenimiento'?'Almacén Mantenimiento':d==='operario'?'Entrega a Operario':d?('NV'+d):'—';}
+function nivelLabel(d){return d==='mantenimiento'?'Almacén Mantenimiento':d==='operario'?'Entrega a Operario':d==='MB'?'🏔️ Monte Bravo':d?('NV'+d):'—';}
 
 // Stock = inventario inicial + ingresos - salidas (acumulado histórico, no por mes)
 // Resuelve el CÓDIGO de un movimiento desde el maestro cuando viene sin código: si hay UN solo
@@ -11317,7 +11379,7 @@ function exploStockActual(){
 // distingue rojo/verde), así que en un gráfico con los dos juntos no se sabe cuál es cuál.
 // Terceros pasa a rosa. Cada serie lleva además su icono y su etiqueta: el color nunca es lo
 // único que identifica una partida.
-const MB_COL={ planilla:'#3498db', combustible:'#f59e0b', explosivos:'#a855f7',
+const MB_COL={ planilla:'#3498db', combustible:'#f59e0b', explosivos:'#a855f7', materiales:'#9b59b6',
                terceros:'#ec4899', ingreso:'#22d3a5', costo:'#e67e22', metros:'#5b6ef5' };
 const MB_EQUIPOS = ['Motor Meba','Compresora Atlas XAS-186','Scoop H1 Yantai','Tractor Kubota'];
 
@@ -11379,6 +11441,7 @@ function mbDesglose(per){
     {key:'planilla',   label:'Planilla',      icon:'👷', color:MB_COL.planilla,    monto:mbCostoPlanilla(per)},
     {key:'combustible',label:'Combustible',   icon:'🛢️', color:MB_COL.combustible, monto:mbCostoCombustible(per)},
     {key:'explosivos', label:'Explosivos',    icon:'💥', color:MB_COL.explosivos,  monto:mbCostoExplosivo(per)},
+    {key:'materiales', label:'Materiales',    icon:'📦', color:MB_COL.materiales,   monto:mbCostoMateriales(per)},
     {key:'terceros',   label:'Pagos a terceros',icon:'🤝', color:MB_COL.terceros, monto:mbCostoTerceros(per)},
   ];
 }
@@ -11404,6 +11467,96 @@ function mbPeriodos(){
   m.liquidaciones.forEach(l=>{ if(l.periodo) set.add(l.periodo); });
   if(typeof periodoActual==='function') set.add(periodoActual());
   return [...set].filter(Boolean).sort().reverse();
+}
+
+/* ══ SUB-ALMACÉN DE MATERIALES DE MONTE BRAVO ═══════════════════════════════════
+   Entra lo que Logística despacha con destino "Monte Bravo" desde el almacén principal; sale lo
+   que el compresorista de Monte Bravo consume en los frentes de la unidad, en su parte.
+   El GASTO se reconoce al despachar —la misma regla que ya rige para 2820— y se carga a Monte
+   Bravo, no al dashboard principal. El stock de aquí es control de existencias, no otro gasto.
+   ══════════════════════════════════════════════════════════════════════════════ */
+function mbSalidasLogistica(){
+  return ((state.almacen&&state.almacen.salidas)||[]).filter(s=>String(s.destino)==='MB');
+}
+function mbAlmacenStock(){
+  const map={};
+  const prods=(state.almacen&&state.almacen.productos)||[];
+  const findProd=(cod,nom)=>prods.find(p=>String(p.codigo)===String(cod))
+                          ||prods.find(p=>(p.nombre||'').toLowerCase()===String(nom||'').toLowerCase());
+  const ensure=(cod,nombre,unidad)=>{
+    const k=String(cod||nombre||'').trim(); if(!k) return null;
+    if(!map[k]){ const mp=findProd(cod,nombre);
+      map[k]={codigo:k, nombre:(mp&&mp.nombre)||nombre||cod, unidad:(mp&&mp.unidad)||unidad||'UND',
+              precio:(mp&&Number(mp.precio))||0, ingreso:0, egreso:0, stock:0}; }
+    return map[k];
+  };
+  mbSalidasLogistica().forEach(s=>{
+    const r=ensure(s.codigo||s.producto, s.producto||s.descripcion||s.codigo, s.unidad);
+    if(r){ r.ingreso+=Number(s.cantidad)||0; if(!r.precio) r.precio=Number(s.precio)||0; }
+  });
+  mbEstado().partes.forEach(rep=>{
+    const items=Object.values(rep.consumoFrentes||{}).reduce((a,arr)=>a.concat(arr||[]),[]);
+    items.forEach(c=>{ const r=ensure(c.codigo||c.desc, c.desc||c.codigo, c.unidad);
+      if(r) r.egreso+=Number(c.cant)||0; });
+  });
+  Object.values(map).forEach(r=>r.stock=Math.round((r.ingreso-r.egreso)*1000)/1000);
+  return Object.values(map).sort((a,b)=>String(a.nombre).localeCompare(String(b.nombre)));
+}
+// Gasto de materiales de Monte Bravo: lo despachado del almacén principal hacia la unidad.
+function mbCostoMateriales(per){
+  return mbSalidasLogistica().filter(s=>_mbEnCiclo(s.fecha,per))
+    .reduce((a,s)=>a+(Number(s.importe||s.monto||s.costo)||0),0);
+}
+// Lo que Monte Bravo consumió de su sub-almacén, valorizado. No es gasto (ya se contó al
+// despachar): sirve para ver cuánto de lo enviado se está usando de verdad.
+function mbConsumoMateriales(per){
+  const precios={}; mbAlmacenStock().forEach(r=>{ precios[r.codigo]=r.precio; });
+  let t=0;
+  mbEstado().partes.filter(r=>_mbEnCiclo(r.fecha,per)).forEach(rep=>{
+    Object.values(rep.consumoFrentes||{}).reduce((a,arr)=>a.concat(arr||[]),[])
+      .forEach(c=>{ t+=(Number(c.cant)||0)*(Number(precios[c.codigo])||0); });
+  });
+  return t;
+}
+
+/* ══ TANQUE DE PETRÓLEO DE MONTE BRAVO ══════════════════════════════════════════
+   Entra lo que el compresorista de 2820 despacha a Monte Bravo en SU reporte (la línea
+   "Monte Bravo (envío al tanque)"); sale lo que el compresorista de Monte Bravo carga a sus
+   máquinas en su parte. El saldo es la resta.
+   No hay un dato nuevo que teclear ni un tercer sitio donde cuadrar: las dos puntas ya se
+   registran donde ocurren, y esto solo las junta.
+   ══════════════════════════════════════════════════════════════════════════════ */
+function mbCombIngresos(){
+  const out=[];
+  (state.compresorista||[]).forEach(r=>{
+    (r.petroleo||[]).forEach(p=>{
+      const g=Number(p&&p.gln)||0;
+      if(g>0 && esEnvioMB(p.equipo)) out.push({fecha:r.fecha, turno:r.turno||'', gln:g, quien:r.nombre||''});
+    });
+  });
+  return out.sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
+}
+function mbCombSalidas(){
+  const out=[];
+  mbEstado().partes.forEach(r=>{
+    (r.petroleo||[]).forEach(p=>{
+      const g=Number(p&&p.gln)||0;
+      if(g>0) out.push({fecha:r.fecha, turno:r.turno||'', equipo:p.equipo||'', gln:g, quien:r.nombre||''});
+    });
+  });
+  return out.sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
+}
+function mbCombSaldo(){
+  const ing=mbCombIngresos().reduce((s,r)=>s+r.gln,0);
+  const sal=mbCombSalidas().reduce((s,r)=>s+r.gln,0);
+  return { ingresos:Math.round(ing*100)/100, salidas:Math.round(sal*100)/100,
+           saldo:Math.round((ing-sal)*100)/100 };
+}
+// Lo mismo pero acotado a un ciclo, para el tablero.
+function mbCombCiclo(per){
+  const ing=mbCombIngresos().filter(r=>_mbEnCiclo(r.fecha,per)).reduce((s,r)=>s+r.gln,0);
+  const sal=mbCombSalidas().filter(r=>_mbEnCiclo(r.fecha,per)).reduce((s,r)=>s+r.gln,0);
+  return {ingresos:ing, salidas:sal};
 }
 
 const MB_ACOPIO_KEY='mbAcopio';
@@ -11450,6 +11603,9 @@ function mbRenderModulo(pane){
   if(pane==='acopio')        return mbRenderTab();
   if(pane==='produccion')    return mbRenderProd();
   if(pane==='compresorista') return mbRenderPartes();
+  if(pane==='combustible')   return mbRenderCombustible();
+  if(pane==='materiales')    return mbRenderMateriales();
+  if(pane==='tareo')         return mbRenderTareo();
   if(pane==='planilla')      return mbRenderPlanilla();
   if(pane==='liquidaciones') return mbRenderLiq();
   if(pane==='terceros')      return mbRenderTerceros();
@@ -11830,11 +11986,139 @@ function mbRenderPartes(){
       `<div style="min-width:0"><div style="font-weight:700;font-size:13px">${fmtF(r.fecha)} · <span style="color:var(--text3);font-weight:400">${r.turno||'—'}</span>${r.nombre?` · ${r.nombre}`:''}</div>
         <div style="font-size:12px;margin-top:4px">Petróleo: <strong style="color:#f59e0b">${_mbN(g)} gln</strong>${pp?` · ${_mbS(g*pp)}`:''} &nbsp;·&nbsp; Horas: <strong style="color:#a78bfa">${_mbN(h)} h</strong>${(g>0&&h>0)?` &nbsp;·&nbsp; <strong>${_mbN(g/h,2)} gal/h</strong>`:''}</div>
         <div>${det}${dh}</div>
+        ${(()=>{ // materiales y explosivos que salieron con este parte
+          const mats=Object.entries(r.consumoFrentes||{}).map(([lab,items])=>
+            (items||[]).map(it=>chip(`📦 ${lab}: ${it.desc||it.codigo} <b style="color:#9b59b6">${_mbN(it.cant,2)} ${it.unidad||''}</b>`)).join('')).join('');
+          const exps=mbAcopio().salidas.filter(x=>String(x.parte||'')===String(r.id))
+            .map(x=>chip(`💥 ${x.destino}: ${x.nombre||x.producto} <b style="color:#a855f7">${_mbN(x.totalUnidades,2)}</b>`)).join('');
+          return (mats||exps)?`<div>${exps}${mats}</div>`:'';
+        })()}
         ${r.obs?`<div style="font-size:11px;color:var(--text3);margin-top:4px">${r.obs}</div>`:''}</div>`,
       _mbBorrar('mbBorrarParte',r.id));}).join('');
 }
 
 // ── PLANILLA ──
+/* El tareo de Monte Bravo es EL MISMO tareo mensual de 2820: misma cuadrícula, mismos
+   marcadores, mismo arrastre y el mismo guardado. Lo único que cambia es a quién muestra —solo
+   la gente asignada a la unidad— y que aquí no hay planilla de supervisión: la liquidación de
+   Monte Bravo va por su propia pestaña. */
+function mbRenderTareo(){
+  const w=document.getElementById('mb-tareo-wrap'); if(!w) return;
+  const gente=mbPersonal().filter(p=>p.estado!=='baja'&&p.estado!=='inactivo');
+  if(!gente.length){
+    w.innerHTML=_mbVacio('Todavía no hay nadie asignado a Monte Bravo. Ve a la pestaña 👷 Planilla y pasa a su gente a esta unidad: recién ahí aparecerán aquí para tarearse.');
+    return;
+  }
+  if(typeof tareoMensualEn==='function') tareoMensualEn('mb-tareo-wrap','MB');
+}
+function mbRenderMateriales(){
+  const w=document.getElementById('mb-mat-wrap'); if(!w) return;
+  const stock=mbAlmacenStock();
+  const conStock=stock.filter(r=>r.stock>0);
+  const per=(typeof periodoActual==='function')?periodoActual():'';
+  const gasto=per?mbCostoMateriales(per):0;
+  const consumido=per?mbConsumoMateriales(per):0;
+  const valor=stock.reduce((a,r)=>a+r.stock*r.precio,0);
+  const env=mbSalidasLogistica().slice().sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
+
+  w.innerHTML=
+  _mbCards(
+    _mbCard('📦','Productos con stock', conStock.length, 'de '+stock.length+' recibidos','#3498db')+
+    _mbCard('💰','Valor en sub-almacén', _mbS0(valor), 'a precio del maestro','#22d3a5')+
+    _mbCard('🚚','Despachado del ciclo', _mbS0(gasto), 'gasto de materiales de la unidad','#9b59b6')+
+    _mbCard('⛏️','Consumido del ciclo', _mbS0(consumido), 'lo que bajó a los frentes','#e5b45b'))+
+  '<div class="card" style="margin-bottom:14px;padding:14px 16px">'+
+    '<div style="font-size:12px;color:var(--text2);line-height:1.7">'+
+      '<b>Cómo llega el material:</b> Logística registra la salida del almacén principal con destino '+
+      '<b>🏔️ Monte Bravo</b>. Ese despacho es el <b>gasto de materiales de Monte Bravo</b> —no del dashboard '+
+      'principal— y entra a este sub-almacén. El compresorista de la unidad le da salida hacia sus frentes '+
+      'desde su parte, y eso descuenta el stock de aquí.'+
+    '</div></div>'+
+  '<div class="card" style="margin-bottom:14px"><div class="section-title" style="margin-top:0;font-size:13px">📋 Existencias</div>'+
+    (stock.length?'<div class="table-wrap" style="max-height:420px;overflow:auto"><table style="width:100%;font-size:12px">'+
+      '<thead><tr style="background:#1a2744;color:#fff">'+
+        '<th style="padding:6px 10px;text-align:left">Código</th><th style="padding:6px 10px;text-align:left">Producto</th>'+
+        '<th style="padding:6px 10px;text-align:center">Unidad</th><th style="padding:6px 10px;text-align:right">Recibido</th>'+
+        '<th style="padding:6px 10px;text-align:right">Consumido</th><th style="padding:6px 10px;text-align:right">Stock</th>'+
+      '</tr></thead><tbody>'+
+      stock.map(function(r){ return '<tr style="border-top:1px solid var(--border2)">'+
+        '<td style="padding:6px 10px;font-family:\'DM Mono\',monospace;color:var(--text3)">'+escAttr(r.codigo)+'</td>'+
+        '<td style="padding:6px 10px">'+escAttr(r.nombre)+'</td>'+
+        '<td style="padding:6px 10px;text-align:center;color:var(--text3)">'+escAttr(r.unidad)+'</td>'+
+        '<td style="padding:6px 10px;text-align:right;color:var(--text2)">'+_mbN(r.ingreso,2)+'</td>'+
+        '<td style="padding:6px 10px;text-align:right;color:var(--text2)">'+_mbN(r.egreso,2)+'</td>'+
+        '<td style="padding:6px 10px;text-align:right;font-weight:800;color:'+(r.stock>0?'#22d3a5':'var(--text3)')+'">'+_mbN(r.stock,2)+'</td></tr>'; }).join('')+
+      '</tbody></table></div>'
+      :'<div style="color:var(--text3);font-size:12.5px;padding:10px 0">Todavía no se ha despachado material a Monte Bravo. Logística lo envía desde Almacén → Registrar salida, eligiendo el destino 🏔️ Monte Bravo.</div>')+
+  '</div>'+
+  '<div class="card"><div class="section-title" style="margin-top:0;font-size:13px">🚚 Despachos recibidos de Logística</div>'+
+    (env.length?'<div class="table-wrap" style="max-height:320px;overflow:auto"><table style="width:100%;font-size:12px">'+
+      '<thead><tr style="background:#1a2744;color:#fff"><th style="padding:6px 10px;text-align:left">Fecha</th>'+
+      '<th style="padding:6px 10px;text-align:left">Producto</th><th style="padding:6px 10px;text-align:right">Cantidad</th>'+
+      '<th style="padding:6px 10px;text-align:right">Importe</th><th style="padding:6px 10px;text-align:left">Entregó</th></tr></thead><tbody>'+
+      env.map(function(s2){ return '<tr style="border-top:1px solid var(--border2)">'+
+        '<td style="padding:6px 10px">'+escAttr(s2.fecha||'')+'</td>'+
+        '<td style="padding:6px 10px">'+escAttr(s2.producto||s2.descripcion||s2.codigo||'')+'</td>'+
+        '<td style="padding:6px 10px;text-align:right">'+_mbN(s2.cantidad,2)+' '+escAttr(s2.unidad||'')+'</td>'+
+        '<td style="padding:6px 10px;text-align:right;color:var(--text2)">'+_mbS(s2.importe||0)+'</td>'+
+        '<td style="padding:6px 10px;color:var(--text3)">'+escAttr(s2.solicitante||'—')+'</td></tr>'; }).join('')+
+      '</tbody></table></div>'
+      :'<div style="color:var(--text3);font-size:12.5px;padding:10px 0">Sin despachos registrados.</div>')+
+  '</div>';
+}
+function mbRenderCombustible(){
+  const w=document.getElementById('mb-comb-wrap'); if(!w) return;
+  const t=mbCombSaldo();
+  const ing=mbCombIngresos(), sal=mbCombSalidas();
+  const pPet=(typeof compGetPrecioPet==='function')?(Number(compGetPrecioPet())||0):0;
+  const per=(typeof periodoActual==='function')?periodoActual():'';
+  const c=per?mbCombCiclo(per):{ingresos:0,salidas:0};
+  const G=n=>(Number(n)||0).toLocaleString('es-PE',{maximumFractionDigits:1})+' gln';
+  // Alerta de saldo: no hay capacidad declarada del tanque, así que el semáforo mira el saldo
+  // contra lo que se consume en un ciclo, no contra un tope inventado.
+  const col = t.saldo<=0 ? '#f87171' : (t.saldo<50 ? '#f59e0b' : '#22d3a5');
+
+  w.innerHTML=
+  _mbCards(
+    _mbCard('🛢️','En el tanque', G(t.saldo), t.saldo<=0?'sin existencias':'saldo actual', col)+
+    _mbCard('⬇️','Recibido de 2820', G(t.ingresos), 'histórico acumulado','#3498db')+
+    _mbCard('⬆️','Cargado a máquinas', G(t.salidas), 'histórico acumulado','#a78bfa')+
+    _mbCard('💵','Gasto del ciclo', _mbS0(c.salidas*pPet), 'lo consumido, a '+_mbS(pPet)+'/gln','#e5b45b'))+
+  '<div class="card" style="margin-bottom:14px;padding:14px 16px">'+
+    '<div style="font-size:12px;color:var(--text2);line-height:1.7">'+
+      '<b>Cómo se llena este tanque:</b> el compresorista de NV 2820 registra los galones en la línea '+
+      '<b>"'+MB_ENVIO_PET+'"</b> de su reporte. Eso descuenta la cisterna de 2820 pero <b>no es gasto de 2820</b>. '+
+      'El gasto de Monte Bravo nace cuando su compresorista carga una máquina en su parte.'+
+    '</div></div>'+
+  '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px">'+
+    '<div class="card"><div class="section-title" style="margin-top:0;font-size:13px">⬇️ Ingresos — despachos de NV 2820</div>'+
+      (ing.length?'<div class="table-wrap" style="max-height:340px;overflow:auto"><table style="width:100%;font-size:12px">'+
+        '<thead><tr style="background:#1a2744;color:#fff"><th style="padding:6px 10px;text-align:left">Fecha</th>'+
+        '<th style="padding:6px 10px;text-align:left">Turno</th><th style="padding:6px 10px;text-align:left">Despachó</th>'+
+        '<th style="padding:6px 10px;text-align:right">Galones</th></tr></thead><tbody>'+
+        ing.map(function(r){ return '<tr style="border-top:1px solid var(--border2)">'+
+          '<td style="padding:6px 10px">'+escAttr(r.fecha)+'</td>'+
+          '<td style="padding:6px 10px;color:var(--text3)">'+escAttr(r.turno)+'</td>'+
+          '<td style="padding:6px 10px;color:var(--text3)">'+escAttr(r.quien||'—')+'</td>'+
+          '<td style="padding:6px 10px;text-align:right;font-weight:700;color:#3498db">'+G(r.gln)+'</td></tr>'; }).join('')+
+        '</tbody></table></div>'
+        :'<div style="color:var(--text3);font-size:12.5px;padding:10px 0">Todavía no hay despachos de 2820 hacia Monte Bravo.</div>')+
+    '</div>'+
+    '<div class="card"><div class="section-title" style="margin-top:0;font-size:13px">⬆️ Salidas — carga a las máquinas</div>'+
+      (sal.length?'<div class="table-wrap" style="max-height:340px;overflow:auto"><table style="width:100%;font-size:12px">'+
+        '<thead><tr style="background:#1a2744;color:#fff"><th style="padding:6px 10px;text-align:left">Fecha</th>'+
+        '<th style="padding:6px 10px;text-align:left">Equipo</th><th style="padding:6px 10px;text-align:right">Galones</th>'+
+        '<th style="padding:6px 10px;text-align:right">Costo</th></tr></thead><tbody>'+
+        sal.map(function(r){ return '<tr style="border-top:1px solid var(--border2)">'+
+          '<td style="padding:6px 10px">'+escAttr(r.fecha)+'</td>'+
+          '<td style="padding:6px 10px">'+escAttr(r.equipo)+'</td>'+
+          '<td style="padding:6px 10px;text-align:right;font-weight:700;color:#a78bfa">'+G(r.gln)+'</td>'+
+          '<td style="padding:6px 10px;text-align:right;color:var(--text2)">'+_mbS(r.gln*pPet)+'</td></tr>'; }).join('')+
+        '</tbody></table></div>'
+        :'<div style="color:var(--text3);font-size:12.5px;padding:10px 0">Todavía no se ha cargado combustible a ninguna máquina.</div>')+
+    '</div>'+
+  '</div>';
+}
 function mbRenderPlanilla(){
   const w=document.getElementById('mb-planilla-wrap'); if(!w) return;
   const mios=mbPersonal();
@@ -12208,7 +12492,19 @@ function _mbMergeLista(loc,nub){
   return (typeof tombHas==='function')?u.filter(r=>!(r&&r.id&&tombHas(r.id))):u;
 }
 function mbBorrarProd(id){ if(_mbBorrarDe('produccion',id,'este registro de producción')) mbRenderProd(); }
-function mbBorrarParte(id){ if(_mbBorrarDe('partes',id,'este parte')) mbRenderPartes(); }
+function mbBorrarParte(id){
+  if(!_mbBorrarDe('partes',id,'este parte')) return;
+  // Las salidas de explosivo que generó ese parte se van con él: si quedaran sueltas, el acopio
+  // seguiría descontado y el gasto de explosivo contaría un consumo que ya no existe.
+  const a=mbAcopio();
+  const quedan=a.salidas.filter(x=>String(x.parte||'')!==String(id));
+  if(quedan.length!==a.salidas.length){
+    a.salidas.filter(x=>String(x.parte||'')===String(id)).forEach(x=>{ try{ if(typeof tombAdd==='function') tombAdd(x.id); }catch(e){} });
+    a.salidas.length=0; quedan.forEach(x=>a.salidas.push(x));
+    try{ if(typeof almacenSave==='function') almacenSave(); }catch(e){}
+  }
+  mbRenderPartes();
+}
 function mbBorrarLiq(id){ if(_mbBorrarDe('liquidaciones',id,'esta liquidación')) mbRenderLiq(); }
 function mbBorrarTercero(id){ if(_mbBorrarDe('terceros',id,'este pago')) mbRenderTerceros(); }
 
@@ -12238,44 +12534,194 @@ function mbGuardarProd(){
 // ── Parte del compresorista ──
 // Una fila por equipo de la unidad. Se guardan solo las filas con algo cargado, pero el parte
 // muestra siempre los cuatro equipos para que no se olvide ninguno.
+/* ── PARTE DEL COMPRESORISTA DE MONTE BRAVO ────────────────────────────────────
+   Mismo formato que el de NV 2820, adaptado a la unidad:
+     · Explosivos por labor  → sale del ACOPIO de Monte Bravo (sin FANEL: aquí no se usan)
+     · Materiales por labor  → sale del SUB-ALMACÉN de la unidad
+     · Petróleo y horómetros → sale del TANQUE de la unidad
+   Cada sección descuenta de donde corresponde y el gasto queda en Monte Bravo, nunca en 2820.
+   ─────────────────────────────────────────────────────────────────────────── */
+// Explosivos que sí usa Monte Bravo: el catálogo base sin ningún FANEL.
+function mbExplosivos(){
+  return (typeof EXPLO_CATALOGO!=='undefined'?EXPLO_CATALOGO:[])
+    .filter(c=>String(c.id||'').indexOf('FANEL')<0);
+}
+// Labores de la unidad: las que ya aparecen en producción, en el acopio y en los partes. La lista
+// se arma de lo registrado —no hay un catálogo fijo— y desde el parte se puede agregar una nueva.
+const MB_LABORES_KEY='atmin_mb_labores';
+function mbLaboresExtra(){ try{ return JSON.parse(localStorage.getItem(MB_LABORES_KEY)||'[]')||[]; }catch(e){ return []; } }
+function mbLaboresExtraSave(a){ try{ localStorage.setItem(MB_LABORES_KEY,JSON.stringify(a||[])); }catch(e){}
+  try{ sbSyncModulo('mb_labores', a||[]); }catch(e){} }
+function mbLabores(){
+  const set=new Set();
+  const add=v=>{ const t=String(v||'').trim(); if(t) set.add(t); };
+  mbEstado().produccion.forEach(r=>add(r.labor));
+  mbEstado().partes.forEach(r=>Object.keys(r.consumoFrentes||{}).forEach(add));
+  mbAcopio().salidas.forEach(r=>add(r.destino||r.labor));
+  mbLaboresExtra().forEach(add);
+  const out=[...set];
+  return out.length?out.sort((a,b)=>a.localeCompare(b,'es')):['Frente principal'];
+}
+const _mbLbId=t=>'L'+String(t).replace(/[^A-Za-z0-9]/g,'_');
+
 function mbAbrirParte(){
   _mbG('mbc-fecha').value=hoy(); _mbG('mbc-turno').value='Día';
   _mbG('mbc-nombre').value=''; _mbG('mbc-obs').value='';
-  _mbG('mbc-equipos').innerHTML=MB_EQUIPOS.map((eq,i)=>`
-    <div style="display:grid;grid-template-columns:1fr 110px 110px;gap:8px;align-items:end;margin-bottom:7px">
-      <div style="font-size:12px;color:var(--text2);padding-bottom:8px">${eq}</div>
-      <div class="form-group" style="margin:0"><label style="font-size:10px">Petróleo (gln)</label>
-        <input type="number" id="mbc-gln-${i}" min="0" step="any" placeholder="0" oninput="mbCalcParte()"></div>
-      <div class="form-group" style="margin:0"><label style="font-size:10px">Horas (HT)</label>
-        <input type="number" id="mbc-ht-${i}" min="0" step="any" placeholder="0" oninput="mbCalcParte()"></div>
-    </div>`).join('');
-  mbCalcParte();
+  const ln=_mbG('mbc-labor-nueva'); if(ln) ln.value='';
+  mbParteRender();
   abrirModal('modal-mb-parte');
+}
+// Dibuja las tres secciones que dependen de las labores y del stock. Se llama al abrir y cada vez
+// que se agrega una labor, para no tener dos formas distintas de armar la misma pantalla.
+function mbParteRender(){
+  const labores=mbLabores();
+  const stockExp=(typeof mbStock==='function')?mbStock():{};
+
+  // ── Explosivos por labor ──
+  const head=_mbG('mbc-exp-head');
+  if(head) head.innerHTML='<th style="text-align:left;padding:6px 8px">Explosivo</th>'+
+    '<th style="padding:6px 8px;text-align:center">En acopio</th>'+
+    labores.map(l=>'<th style="padding:6px 8px;text-align:center;white-space:nowrap">'+escAttr(l)+'</th>').join('');
+  const body=_mbG('mbc-exp-body');
+  if(body) body.innerHTML=mbExplosivos().map(c=>{
+    const disp=Number(stockExp[c.id])||0;
+    return '<tr style="border-top:1px solid var(--border2)">'+
+      '<td style="padding:6px 8px;font-size:12px;color:var(--text)">'+escAttr(c.nombre)+
+        '<br><span style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--text3)">'+escAttr(c.id)+'</span></td>'+
+      '<td style="padding:6px 8px;text-align:center;font-size:11px;color:'+(disp>0?'#22d3a5':'var(--text3)')+'">'+_mbN(disp,2)+'</td>'+
+      labores.map(l=>'<td style="padding:4px 6px"><input type="number" min="0" step="any" id="mbce-'+c.id+'-'+_mbLbId(l)+'"'+
+        ' placeholder="0" style="width:100%;min-width:70px;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>').join('')+
+      '</tr>';
+  }).join('');
+
+  // ── Consumo de materiales por labor ──
+  const wrap=_mbG('mbc-cons-wrap');
+  if(wrap){
+    wrap.innerHTML=labores.map(l=>{
+      const rid='mbc-cons-'+_mbLbId(l);
+      return '<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">⛏ '+escAttr(l)+'</div>'+
+        '<div id="'+rid+'" style="margin-bottom:6px"></div>'+
+        '<button onclick="mbConsAgregar(\''+rid+'\')" style="font-size:11px;background:var(--coal4);border:1px dashed var(--border);color:var(--accent-light);padding:6px 14px;border-radius:4px;cursor:pointer;width:100%;margin-bottom:14px">+ Agregar ítem a '+escAttr(l)+'</button>';
+    }).join('');
+    labores.forEach(l=>mbConsAgregar('mbc-cons-'+_mbLbId(l)));
+  }
+
+  // ── Petróleo y horómetros ──
+  const eq=_mbG('mbc-equipos');
+  if(eq) eq.innerHTML=MB_EQUIPOS.map((e,i)=>
+    '<tr style="border-top:1px solid var(--border2)">'+
+      '<td style="padding:6px 8px;font-size:12px;color:var(--text)">'+escAttr(e)+'</td>'+
+      '<td style="padding:4px 6px"><input type="number" id="mbc-gln-'+i+'" min="0" step="any" placeholder="0" oninput="mbCalcParte()" style="width:100%;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>'+
+      '<td style="padding:4px 6px"><input type="number" id="mbc-hi-'+i+'" min="0" step="any" placeholder="0" oninput="mbCalcParte()" style="width:100%;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>'+
+      '<td style="padding:4px 6px"><input type="number" id="mbc-hf-'+i+'" min="0" step="any" placeholder="0" oninput="mbCalcParte()" style="width:100%;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>'+
+      '<td style="padding:6px 8px;text-align:center;font-family:\'DM Mono\',monospace;font-size:12px;color:var(--accent-light)" id="mbc-ht-'+i+'">—</td>'+
+    '</tr>').join('');
+  mbCalcParte();
+}
+function mbParteAgregarLabor(){
+  const el=_mbG('mbc-labor-nueva'); const t=(el&&el.value||'').trim();
+  if(!t){ showNotif('Escribe el nombre de la labor','warn'); return; }
+  if(mbLabores().some(l=>l.toLowerCase()===t.toLowerCase())){ showNotif('Esa labor ya está en el parte','warn'); return; }
+  const a=mbLaboresExtra(); a.push(t); mbLaboresExtraSave(a);
+  el.value=''; mbParteRender();
+  showNotif('✓ Labor agregada: '+t);
+}
+// Una fila de consumo de material: producto del sub-almacén + cantidad.
+function mbConsAgregar(rowsId){
+  const wrap=document.getElementById(rowsId); if(!wrap) return;
+  const stock=(typeof mbAlmacenStock==='function')?mbAlmacenStock().filter(p=>p.stock>0):[];
+  const opts=stock.length
+    ? stock.map(p=>'<option value="'+escAttr(p.codigo)+'" data-unidad="'+escAttr(p.unidad)+'" data-desc="'+escAttr(p.nombre)+'">'+
+        escAttr(p.codigo)+' · '+escAttr(p.nombre)+' (disp: '+_mbN(p.stock,2)+' '+escAttr(p.unidad)+')</option>').join('')
+    : '<option value="">Sin stock en el sub-almacén — Logística debe despachar a Monte Bravo</option>';
+  const row=document.createElement('div');
+  row.style.cssText='display:grid;grid-template-columns:1fr 90px 70px 30px;gap:6px;margin-bottom:6px';
+  row.innerHTML='<select class="mbc-cons-sel" onchange="mbConsSel(this)" style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 10px;font-size:12px">'+
+      '<option value="">— Material del sub-almacén —</option>'+opts+'</select>'+
+    '<input type="number" class="mbc-cons-cant" min="0" step="any" placeholder="Cant." style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 8px;font-size:12px;text-align:center">'+
+    '<input type="text" class="mbc-cons-unidad" placeholder="Und" style="background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:7px 8px;font-size:12px">'+
+    '<button onclick="this.parentElement.remove()" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);color:var(--negative);border-radius:4px;cursor:pointer;font-size:14px">×</button>';
+  wrap.appendChild(row);
+}
+function mbConsSel(sel){
+  const opt=sel.options[sel.selectedIndex];
+  const u=opt&&opt.getAttribute('data-unidad');
+  const inp=sel.parentElement.querySelector('.mbc-cons-unidad');
+  if(inp && u) inp.value=u;
 }
 function mbCalcParte(){
   let gl=0, hr=0;
-  MB_EQUIPOS.forEach((_,i)=>{ gl+=_mbNum('mbc-gln-'+i); hr+=_mbNum('mbc-ht-'+i); });
+  MB_EQUIPOS.forEach((_,i)=>{
+    gl+=_mbNum('mbc-gln-'+i);
+    const hi=_mbNum('mbc-hi-'+i), hf=_mbNum('mbc-hf-'+i);
+    const ht=(hf>0&&hf>=hi)?(hf-hi):0;
+    const cel=_mbG('mbc-ht-'+i); if(cel) cel.textContent=ht?_mbN(ht,2):'—';
+    hr+=ht;
+  });
   const pp=(typeof compGetPrecioPet==='function')?(Number(compGetPrecioPet())||0):0;
+  const saldo=(typeof mbCombSaldo==='function')?mbCombSaldo().saldo:0;
   const t=_mbG('mbc-tot'); if(!t) return;
+  const aviso=(gl>saldo)?' · <b style="color:#f87171">⚠ el tanque tiene '+_mbN(saldo)+' gln</b>':'';
   t.innerHTML = (gl||hr)
-    ? `Total: <b style="color:#f59e0b">${_mbN(gl)} gln</b>${pp?' · '+_mbS(gl*pp):''} · <b style="color:#a78bfa">${_mbN(hr)} h</b>`
-        + (gl>0&&hr>0?` · <b>${_mbN(gl/hr,2)} gal/h</b>`:'')
+    ? 'Total: <b style="color:#f59e0b">'+_mbN(gl)+' gln</b>'+(pp?' · '+_mbS(gl*pp):'')+' · <b style="color:#a78bfa">'+_mbN(hr)+' h</b>'
+        + (gl>0&&hr>0?' · <b>'+_mbN(gl/hr,2)+' gal/h</b>':'') + aviso
     : 'Carga el petróleo despachado y las horas de cada equipo.';
 }
 function mbGuardarParte(){
+  const labores=mbLabores();
+  const fecha=_mbVal('mbc-fecha')||hoy();
+  const turno=_mbVal('mbc-turno');
+
+  // Petróleo y horómetros
   const pet=[], hor=[];
   MB_EQUIPOS.forEach((eq,i)=>{
-    const g=_mbNum('mbc-gln-'+i), h=_mbNum('mbc-ht-'+i);
+    const g=_mbNum('mbc-gln-'+i), hi=_mbNum('mbc-hi-'+i), hf=_mbNum('mbc-hf-'+i);
+    const ht=(hf>0&&hf>=hi)?Math.round((hf-hi)*100)/100:0;
     if(g>0) pet.push({equipo:eq, gln:g});
-    if(h>0) hor.push({equipo:eq, HT:h});
+    if(hi>0||hf>0||ht>0) hor.push({equipo:eq, HI:hi, HF:hf, HT:ht});
   });
-  if(!pet.length && !hor.length){ showNotif('⚠ El parte está vacío','error'); return; }
-  mbEstado().partes.push({
-    id:_mbId('MBC'), _ts:Date.now(), unidad:'MB',
-    fecha:_mbVal('mbc-fecha')||hoy(), turno:_mbVal('mbc-turno'), nombre:_mbVal('mbc-nombre').trim(),
-    petroleo:pet, horometros:hor, obs:_mbVal('mbc-obs').trim()
+
+  // Consumo de materiales por labor
+  const consumoFrentes={};
+  labores.forEach(l=>{
+    const wrap=document.getElementById('mbc-cons-'+_mbLbId(l)); if(!wrap) return;
+    const items=[];
+    wrap.querySelectorAll('div').forEach(row=>{
+      const sel=row.querySelector('.mbc-cons-sel'); if(!sel) return;
+      const cant=parseFloat((row.querySelector('.mbc-cons-cant')||{}).value)||0;
+      const cod=sel.value; if(!cod||cant<=0) return;
+      const opt=sel.options[sel.selectedIndex];
+      items.push({codigo:cod, desc:(opt&&opt.getAttribute('data-desc'))||'', cant,
+                  unidad:((row.querySelector('.mbc-cons-unidad')||{}).value)||''});
+    });
+    if(items.length) consumoFrentes[l]=items;
   });
-  mbGuardar(); cerrarModal('modal-mb-parte'); mbRenderPartes();
+
+  // Explosivos por labor → salidas del acopio
+  const expSal=[];
+  mbExplosivos().forEach(c=>{
+    labores.forEach(l=>{
+      const v=parseFloat((document.getElementById('mbce-'+c.id+'-'+_mbLbId(l))||{}).value)||0;
+      if(v>0) expSal.push({producto:c.id, nombre:c.nombre, destino:l, totalUnidades:v});
+    });
+  });
+
+  if(!pet.length && !hor.length && !Object.keys(consumoFrentes).length && !expSal.length){
+    showNotif('⚠ El parte está vacío','error'); return;
+  }
+  if(typeof bloqueadoPorCierre==='function' && bloqueadoPorCierre(fecha,'partes de Monte Bravo')) return;
+
+  const id=_mbId('MBC');
+  mbEstado().partes.push({ id, _ts:Date.now(), unidad:'MB', fecha, turno,
+    nombre:_mbVal('mbc-nombre').trim(), petroleo:pet, horometros:hor, consumoFrentes,
+    obs:_mbVal('mbc-obs').trim() });
+  // Las salidas de explosivo se guardan en el ACOPIO —la única fuente del gasto de explosivo de
+  // la unidad— y quedan atadas a este parte para poder deshacerlas si se elimina.
+  expSal.forEach((x,i)=>mbAcopio().salidas.push({ id:id+'-E'+i, _ts:Date.now()+i, parte:id,
+    fecha, turno, producto:x.producto, nombre:x.nombre, destino:x.destino, totalUnidades:x.totalUnidades }));
+  mbGuardar();
+  try{ if(typeof almacenSave==='function') almacenSave(); }catch(e){}
+  cerrarModal('modal-mb-parte'); mbRenderPartes();
   showNotif('✓ Parte guardado');
 }
 
@@ -15774,6 +16220,19 @@ function tareoEditable(fecha){
   return false;
 }
 let _tareoUnidad='';   // '' = todas · 'NV2820' · 'MB'
+/* El MISMO tareo mensual se dibuja en dos sitios: la pestaña de RRHH y el módulo de Monte Bravo.
+   En vez de duplicar la cuadrícula —y con ella el arrastre, los marcadores y el guardado— se
+   cambia el contenedor donde se pinta y la unidad que filtra. Una sola cuadrícula, dos vistas:
+   si mañana se corrige algo del tareo, se corrige para las dos. */
+let _tareoContId='rrhh-tareomes';
+let _tareoUnidadFija=false;   // en Monte Bravo la unidad no se elige: siempre es la suya
+function _tareoCont(){ return document.getElementById(_tareoContId); }
+function tareoMensualEn(contId, unidad){
+  _tareoContId=contId||'rrhh-tareomes';
+  _tareoUnidadFija=!!unidad;
+  if(unidad!=null) _tareoUnidad=unidad;
+  renderTareoMensual();
+}
 function tareoMesSel(){ const s=document.getElementById('tareomes-sel'); return (s&&s.value)||hoy().slice(0,7); }
 function _tareoCell(tid,fecha){
   const t=(state.tareas||[]).find(t=>String(t.trabajadorId)===String(tid)&&t.fecha===fecha);
@@ -15800,7 +16259,7 @@ function _tareoActualizaResumen(tid,mes){
   set('tom', r.dlTomados||'—'); set('compr', r.comprados); set('pago', fmtS(pago));
 }
 function tareoGridSet(tid,fecha,val){
-  const cont=document.getElementById('rrhh-tareomes');
+  const cont=_tareoCont();
   if(!cont || cont.dataset.editing!=='true') return;
   if(!tareoEditable(fecha)) return;
   state.tareas=(state.tareas||[]).filter(t=>!(String(t.trabajadorId)===String(tid)&&t.fecha===fecha));
@@ -15822,7 +16281,7 @@ function tareoGridSet(tid,fecha,val){
 }
 
 function tareoGridShowModal(tid,fecha){
-  const cont=document.getElementById('rrhh-tareomes');
+  const cont=_tareoCont();
   if(!cont || cont.dataset.editing!=='true') return;
   if(!tareoEditable(fecha)) return;
   const cur=_tareoCell(tid,fecha);
@@ -15864,7 +16323,7 @@ function tareoGridShowModal(tid,fecha){
 let _tareoFill={activo:false,arrastro:false,val:null,tid:null,celdas:[]};
 function _tareoFillLimpia(celdas){ celdas.forEach(td=>{td.style.outline='';td.style.outlineOffset='';}); }
 function tareoFillDown(e,tid,fecha){
-  const cont=document.getElementById('rrhh-tareomes');
+  const cont=_tareoCont();
   if(!cont || cont.dataset.editing!=='true') return;
   if(e.button!==0) return;
   e.preventDefault();
@@ -15905,7 +16364,7 @@ function tareoMensualGuardar(mes){
   try{ guardarEstado(); }catch(e){}
   try{ tareasSave(); }catch(e){}
   showNotif('✓ Tareo mensual guardado correctamente');
-  document.getElementById('rrhh-tareomes').dataset.editing='false';
+  _tareoCont().dataset.editing='false';
   renderTareoMensual();
   // Mostrar opción de generar planilla
   setTimeout(()=>{
@@ -15946,7 +16405,7 @@ function tareoPago(tid,mes){
   return (r.tareas + r.dlTomados + r.comprados) * j;
 }
 function renderTareoMensual(){
-  const cont=document.getElementById('rrhh-tareomes'); if(!cont) return;
+  const cont=_tareoCont(); if(!cont) return;
   const isEditing=cont.dataset.editing==='true';
   const mes=tareoMesSel();
   const [y,mm]=mes.split('-').map(Number);
@@ -15986,20 +16445,20 @@ function renderTareoMensual(){
   cont.innerHTML=`
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">
       <div class="section-title" style="margin:0">🗓 Tareo Mensual — ${nombreMes} ${y}${_arch?' <span style="font-size:11px;color:#f59e0b;font-weight:700">🔒 ARCHIVADO</span>':''}</div>
-      <select id="tareomes-sel" onchange="document.getElementById('rrhh-tareomes').dataset.editing='false';renderTareoMensual()" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:13px;font-weight:600">
+      <select id="tareomes-sel" onchange="_tareoCont().dataset.editing='false';renderTareoMensual()" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:13px;font-weight:600">
         ${meses.map(m=>`<option value="${m}"${m===mes?' selected':''}>${_mesLabel(m)}${mesTareoArchivado(m)?' 🔒':''}</option>`).join('')}
       </select>
-      <select id="tareomes-unidad" onchange="_tareoUnidad=this.value;renderTareoMensual()" title="Muestra solo la gente de una unidad" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:13px;font-weight:600">
+      <select id="tareomes-unidad" onchange="_tareoUnidad=this.value;renderTareoMensual()" title="Muestra solo la gente de una unidad" style="${_tareoUnidadFija?'display:none;':''}background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:13px;font-weight:600">
         <option value=""${_uni===''?' selected':''}>🏗️ Todas las unidades</option>
         <option value="NV2820"${_uni==='NV2820'?' selected':''}>⛏️ NV 2820</option>
         <option value="MB"${_uni==='MB'?' selected':''}>🏔️ Monte Bravo</option>
       </select>
       <div style="display:flex;gap:8px;margin-left:auto">
         ${isEditing?`
-          <button class="btn btn-outline" onclick="document.getElementById('rrhh-tareomes').dataset.editing='false';renderTareoMensual()">Cancelar</button>
+          <button class="btn btn-outline" onclick="_tareoCont().dataset.editing='false';renderTareoMensual()">Cancelar</button>
           <button class="btn btn-gold" onclick="tareoMensualGuardar('${mes}')">💾 Guardar</button>
         `:(_puede?`
-          <button class="btn btn-gold" onclick="document.getElementById('rrhh-tareomes').dataset.editing='true';renderTareoMensual()">✏️ Editar${_arch?' (mes archivado)':''}</button>
+          <button class="btn btn-gold" onclick="_tareoCont().dataset.editing='true';renderTareoMensual()">✏️ Editar${_arch?' (mes archivado)':''}</button>
         `:`
           <span style="font-size:11px;color:#f59e0b;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.35);border-radius:8px;padding:7px 12px">🔒 Solo lectura — mes archivado</span>
         `)}
@@ -23524,7 +23983,18 @@ function finCostoOrdenes(mesYM){ return finFiltrarMes(state.ordenes||[],mesYM).f
 function finCostoCombustible(mesYM){
   let b=0;
   try{ ['pet','gas'].forEach(t=>{ (combCargar(t)||[]).filter(r=>_finEnPre(r.fecha,mesYM)).forEach(r=>{ b+=(r.cantidad||0)*(r.precio||0); }); }); }catch(e){}
-  return b;
+  // El petróleo que 2820 despacha a Monte Bravo se compra aquí pero se gasta allá: se resta del
+  // gasto de 2820 y aparece en el módulo de Monte Bravo cuando su compresorista carga una máquina.
+  // Sin esta resta el mismo galón se contaría dos veces, una en cada unidad.
+  try{
+    const pPet=(typeof compGetPrecioPet==='function')?(Number(compGetPrecioPet())||0):0;
+    let glnMB=0;
+    (state.compresorista||[]).filter(r=>_finEnPre(r.fecha,mesYM)).forEach(r=>{
+      (r.petroleo||[]).forEach(x=>{ if(esEnvioMB(x.equipo)) glnMB+=Number(x.gln)||0; });
+    });
+    b-=glnMB*pPet;
+  }catch(e){}
+  return Math.max(0,b);
 }
 // Planillas: tareo del mes (jornal × multiplicador)
 function finCostoPlanilla(mesYM){
@@ -23533,6 +24003,9 @@ function finCostoPlanilla(mesYM){
   const operarios=(state.tareas||[]).filter(t=>enMesTareo(t.fecha,mesYM)).reduce((s,t)=>{
     const p=(state.personal||[]).find(pp=>String(pp.id)===String(t.trabajadorId));
     if(p && typeof esSueldoReservado==='function' && esSueldoReservado(p.rol)) return s;
+    // La gente de Monte Bravo se paga con cargo a esa unidad: su tareo entra en el módulo de
+    // Monte Bravo, no en el costo operativo de 2820.
+    if(p && String(p.unidad||'')==='MB') return s;
     const j=(t.jornal!=null?t.jornal:(p?p.jornal:0))||0;
     return s+j*(t.mult||1);
   },0);
@@ -23574,7 +24047,11 @@ function finValorizacionMes(mesYM){
 function finAvanceMes(mesYM){ return Math.round(finFiltrarMes(state.perforacion||[],mesYM).reduce((s,r)=>s+(r.metros||r.avance||0),0)*10)/10; }
 // Gasto logístico = salidas de almacén general (aceros, EPP, repuestos…). Explosivos van aparte.
 // Excluye despachos a mantenimiento (destino 'mantenimiento'): esos ya se contabilizan en finCostoKits.
-function finCostoAlmacen(mesYM){ return finFiltrarMes((state.almacen&&state.almacen.salidas)||[],mesYM).filter(r=>String(r.destino)!=='mantenimiento').reduce((s,r)=>s+(r.importe||r.monto||r.costo||0),0); }
+// Excluye también lo despachado a MONTE BRAVO: ese material es gasto de esa unidad, no de 2820.
+// El dashboard principal reporta 2820; el módulo de Monte Bravo reporta lo suyo.
+function finCostoAlmacen(mesYM){ return finFiltrarMes((state.almacen&&state.almacen.salidas)||[],mesYM)
+  .filter(r=>String(r.destino)!=='mantenimiento' && String(r.destino)!=='MB')
+  .reduce((s,r)=>s+(r.importe||r.monto||r.costo||0),0); }
 function finCostoLogistica(mesYM){ return finCostoAlmacen(mesYM); }
 // Desglose de egresos operativos del mes — FÓRMULA ÚNICA usada por Dashboard, Finanzas y NIA.
 // Incluye explosivos. NO incluye Órdenes de Compra en el total: esas compras se reconocen como
@@ -24599,7 +25076,9 @@ function compCostoReporte(r){
   const efTotal = ef.reduce((s,e)=>s+compExpTotal(e)*(pExp[e.codigo]||0),0);
   const cExpCardex = r.explosivos.reduce((s,e)=>s+(e.C||0)*(pExp[e.codigo]||0),0);
   const cExp = efTotal > 0 ? efTotal : cExpCardex;
-  const cPet = r.petroleo.reduce((s,p)=>s+p.gln,0)*pPet;
+  // El envío a Monte Bravo sale de la cisterna pero no es gasto de 2820: se descuenta del stock
+  // y se carga a Monte Bravo cuando allá se consume.
+  const cPet = r.petroleo.filter(p=>!esEnvioMB(p.equipo)).reduce((s,p)=>s+p.gln,0)*pPet;
   const cGas = r.gasolina.reduce((s,g)=>s+g.gln,0)*pGas;
   const cAce = (r.aceros||[]).reduce((s,a)=>s+((a.rampa||0)+(a.galeria||0))*(pAce[a.codigo]||0),0);
   return {cExp, cPet, cGas, cAce, total:cExp+cPet+cGas+cAce};
@@ -24632,6 +25111,7 @@ function compEquipoNorm(eq){ return COMP_EQUIPO_RENOM[eq] || eq; }
    mal escrito—; se conservan en el dato pero no ensucian los paneles ni las estadísticas. */
 function compEquipoVigente(eq){
   const k=compEquipoNorm(eq);
+  if(esEnvioMB(k)) return false;      // el envío a Monte Bravo no es una máquina de 2820
   if(typeof horoRetirado==='function' && horoRetirado(k)) return false;
   const listas=[]
     .concat(typeof COMP_PETROLEO!=='undefined'?COMP_PETROLEO:[])
@@ -24643,7 +25123,14 @@ function compEquipoVigente(eq){
 // Las dos camionetas consumen PETRÓLEO, no gasolina. Los reportes ya guardados conservan lo que
 // se registró en su momento (cada equipo se guarda por nombre dentro de petroleo[]/gasolina[]),
 // así que el cambio aplica de aquí en adelante y no reescribe el histórico.
-const COMP_PETROLEO   = ['Grupo Electrógeno MP-120','Grupo Electrógeno MV 2321','Generador Meba','Compresora M135','Compresora M122','Scoop WJ-2','Scoop Epiroc','Dumper','Excavadora','Cargador Frontal','Camioneta Blanca THB-858','Camioneta Roja BRY-800'];
+/* El petróleo que 2820 manda a Monte Bravo se registra como una línea más de este cuadro, pero
+   NO es un equipo ni es gasto de 2820: sale de la cisterna de 2820 y entra al tanque de Monte
+   Bravo. El gasto recién nace cuando el compresorista de Monte Bravo carga una de sus máquinas.
+   Se trata aparte en tres sitios: el costo del reporte (no suma), las estadísticas por equipo
+   (no arma tarjeta) y el tanque de Monte Bravo (entra como ingreso). */
+const MB_ENVIO_PET = '🏔️ Monte Bravo (envío al tanque)';
+function esEnvioMB(eq){ return String(eq||'').indexOf('Monte Bravo')>=0; }
+const COMP_PETROLEO   = ['Grupo Electrógeno MP-120','Grupo Electrógeno MV 2321','Generador Meba','Compresora M135','Compresora M122','Scoop WJ-2','Scoop Epiroc','Dumper','Excavadora','Cargador Frontal','Camioneta Blanca THB-858','Camioneta Roja BRY-800', MB_ENVIO_PET];
 const COMP_GASOLINA   = ['Cuatrimoto Roja','Cuatrimoto Verde','Cuatrimoto Camuflado','Trompo de Construcción'];
 const COMP_HOROMETROS = ['Grupo Electrógeno MP-120','Grupo Electrógeno MV 2321','Compresora M135','Compresora M122','Scoop WJ-2','Scoop Epiroc','Dumper','Excavadora','Cargador Frontal'];
 
