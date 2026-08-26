@@ -2624,6 +2624,7 @@ select option{background:var(--coal3);}
   <!-- ── Resumen del día + avance + alertas (reconstruido, intuitivo) ── -->
   <div id="d-resumen-hoy"></div>
   <div id="d-avance-meta"></div>
+  <div id="d-explosivo-metro"></div>
   <div id="d-top-trabajadores"></div>
   <div id="d-stock-actual"></div>
   <div id="d-alertas-panel"></div>
@@ -6975,9 +6976,144 @@ function renderDashboard(){
   renderDashEjecutivo();
   renderDashResumenHoy();
   renderDashAvanceMeta();
+  renderDashExplosivoMetro();
   renderDashTopTrabajadores();
   renderDashStockActual();
   renderDashAlertas();
+}
+
+/* ══ COSTO DE EXPLOSIVO POR METRO Y POR DISPARO ═════════════════════════════════
+   De dónde sale cada cosa:
+     · Los METROS y los DISPAROS salen del Reporte del Jefe de Guardia: es el único sitio donde
+       cada disparo queda registrado uno por uno, con sus metros y el explosivo que se le cargó.
+     · El COSTO TOTAL del explosivo sale del Reporte del Compresorista, que es el que descuenta
+       del polvorín y ya alimenta el costo operativo. Es la cifra que manda.
+   Por eso el costo por metro se calcula con el gasto del compresorista dividido entre los metros
+   del jefe de guardia, y el costo por disparo con el explosivo que el propio disparo declara.
+   Las dos formas se comparan en pantalla: si difieren mucho, es que un reporte va atrasado.
+
+   CLASIFICACIÓN DEL DISPARO — dato del residente: 6 pies avanza 1.5 m y 8 pies avanza 2.0 m.
+   Como el avance real nunca cae exacto, se clasifica por rango alrededor de esos valores.
+   ══════════════════════════════════════════════════════════════════════════════ */
+const DISPARO_TIPOS={ '6':{label:"6 pies", metros:1.5, color:'#3498db'},
+                      '8':{label:"8 pies", metros:2.0, color:'#a855f7'} };
+function disparoClase(metros){
+  const m=Number(metros)||0;
+  if(m<=0) return null;
+  if(m<1.20) return 'corto';     // menos de 1.20 m: no es ni 6 pies
+  if(m<1.75) return '6';         // 1.20 – 1.74 → disparo de 6 pies (1.5 m)
+  if(m<2.40) return '8';         // 1.75 – 2.39 → disparo de 8 pies (2.0 m)
+  return 'largo';                // más de 2.40: cara libre, tajo o varios disparos juntos
+}
+// Recorre los disparos del Jefe de Guardia. `per` = ciclo (26→25); sin `per`, TODO el histórico.
+function disparosStats(per){
+  const pex=(typeof compGetPreciosExp==='function')?(compGetPreciosExp()||{}):{};
+  const vacio=()=>({n:0, metros:0, costo:0, tperf:0, tcarg:0});
+  const out={ total:vacio(), clases:{'6':vacio(),'8':vacio(),'corto':vacio(),'largo':vacio()} };
+  const enPer=f=>!per || ((typeof enVentana==='function')?enVentana(f,per):String(f||'').slice(0,7)===per);
+  (state.reportesGuardia||[]).forEach(r=>{
+    if(!r || !enPer(r.fecha)) return;
+    (typeof FRENTES!=='undefined'?FRENTES:[]).forEach(f=>{
+      const bloque=r[f.key]; if(!bloque || !Array.isArray(bloque.disparos)) return;
+      bloque.disparos.forEach(d=>{
+        const metros=Number(d&&d.metros)||0;
+        // El explosivo del disparo incluye el del desquiche: se cargó en el mismo disparo.
+        const masas=[].concat(d.masas||[], (d.desquiche&&d.desquiche.masas)||[]);
+        const costo=masas.reduce((a,m)=>a+(Number(m.cant)||0)*(Number(pex[m.id])||0),0);
+        const tperf=(Number(d.tperf)||0)+((d.desquiche&&Number(d.desquiche.tperf))||0);
+        const tcarg=(Number(d.tcarg)||0)+((d.desquiche&&Number(d.desquiche.tcarg))||0);
+        if(metros<=0 && costo<=0) return;
+        const cl=disparoClase(metros);
+        const acum=o=>{ o.n++; o.metros+=metros; o.costo+=costo; o.tperf+=tperf; o.tcarg+=tcarg; };
+        acum(out.total);
+        if(cl) acum(out.clases[cl]);
+      });
+    });
+  });
+  return out;
+}
+// Gasto de explosivo del compresorista en el ciclo (la cifra que manda para el costo).
+function explosivoGastoComp(per){
+  const enPer=f=>!per || ((typeof enVentana==='function')?enVentana(f,per):String(f||'').slice(0,7)===per);
+  return (state.compresorista||[]).filter(r=>r&&enPer(r.fecha))
+    .reduce((s,r)=>{ try{ return s+(compCostoReporte(r).cExp||0); }catch(e){ return s; } },0);
+}
+function renderDashExplosivoMetro(){
+  const cont=document.getElementById('d-explosivo-metro'); if(!cont) return;
+  const per=(typeof periodoActual==='function')?periodoActual():'';
+  const cic=disparosStats(per), his=disparosStats(null);
+  const gastoComp=explosivoGastoComp(per);
+  const S=n=>'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const S0=n=>'S/ '+Math.round(Number(n)||0).toLocaleString('es-PE');
+  const N=(n,d)=>(Number(n)||0).toLocaleString('es-PE',{maximumFractionDigits:(d==null?1:d)});
+
+  // Costo por metro: el gasto del compresorista sobre los metros disparados del ciclo.
+  const mCiclo = cic.total.metros, cCiclo = cic.total.costo;
+  const porMetroComp = mCiclo>0 ? gastoComp/mCiclo : 0;
+  const porMetroJG   = mCiclo>0 ? cCiclo/mCiclo : 0;
+  const dif = (porMetroComp>0 && porMetroJG>0) ? Math.abs(porMetroComp-porMetroJG)/porMetroComp*100 : 0;
+
+  const tarjeta=(t,v,sub,color)=>`<div style="background:var(--coal4);border:1px solid var(--border);border-radius:14px;padding:14px 16px">
+      <div style="font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:var(--text3)">${t}</div>
+      <div style="font-size:21px;font-weight:900;margin-top:3px;color:${color||'var(--text)'}">${v}</div>
+      <div style="font-size:10.5px;color:var(--text3);margin-top:3px">${sub}</div></div>`;
+
+  const filaClase=(k)=>{
+    const T=DISPARO_TIPOS[k], c=cic.clases[k], h=his.clases[k];
+    const prom = c.n>0 ? c.costo/c.n : 0;
+    const promH= h.n>0 ? h.costo/h.n : 0;
+    return `<tr style="border-top:1px solid var(--border2)">
+      <td style="padding:7px 10px;font-weight:700;color:${T.color}">${T.label}<div style="font-size:10px;color:var(--text3);font-weight:400">${T.metros} m por disparo</div></td>
+      <td style="padding:7px 10px;text-align:right">${c.n}</td>
+      <td style="padding:7px 10px;text-align:right">${N(c.metros,1)} m</td>
+      <td style="padding:7px 10px;text-align:right;font-weight:800;color:${T.color}">${prom?S(prom):'—'}</td>
+      <td style="padding:7px 10px;text-align:right;color:var(--text2)">${h.n}</td>
+      <td style="padding:7px 10px;text-align:right;color:var(--text2)">${promH?S(promH):'—'}</td></tr>`;
+  };
+  const otros=cic.clases.corto.n+cic.clases.largo.n;
+  const otrosH=his.clases.corto.n+his.clases.largo.n;
+
+  cont.innerHTML=`
+  <div style="background:var(--coal3);border:1px solid var(--border);border-radius:18px;padding:18px;margin-bottom:18px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="font-size:15px;font-weight:900;color:var(--gold-light);letter-spacing:.4px">💥 EXPLOSIVO POR METRO Y POR DISPARO</div>
+      <div style="font-size:11px;color:var(--text3)">Ciclo ${per||'—'} · metros y disparos del Jefe de Guardia · costo del Compresorista</div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px">
+      ${tarjeta('Costo de explosivo por metro', porMetroComp?S(porMetroComp):'—',
+                mCiclo>0?`${S0(gastoComp)} ÷ ${N(mCiclo,1)} m disparados`:'faltan metros disparados en el ciclo','var(--gold)')}
+      ${tarjeta('Disparo de 6 pies', cic.clases['6'].n?S(cic.clases['6'].costo/cic.clases['6'].n):'—',
+                `${cic.clases['6'].n} en el ciclo · ${his.clases['6'].n} en total`, DISPARO_TIPOS['6'].color)}
+      ${tarjeta('Disparo de 8 pies', cic.clases['8'].n?S(cic.clases['8'].costo/cic.clases['8'].n):'—',
+                `${cic.clases['8'].n} en el ciclo · ${his.clases['8'].n} en total`, DISPARO_TIPOS['8'].color)}
+      ${tarjeta('Disparos acumulados', his.total.n,
+                `${N(his.total.metros,1)} m · ${S0(his.total.costo)} de explosivo`,'#22d3a5')}
+    </div>
+    <div class="table-wrap"><table style="width:100%;font-size:12px">
+      <thead><tr style="background:#1a2744;color:#fff">
+        <th style="padding:7px 10px;text-align:left">Tipo de disparo</th>
+        <th style="padding:7px 10px;text-align:right">Disparos del ciclo</th>
+        <th style="padding:7px 10px;text-align:right">Metros</th>
+        <th style="padding:7px 10px;text-align:right">Costo promedio</th>
+        <th style="padding:7px 10px;text-align:right">Histórico</th>
+        <th style="padding:7px 10px;text-align:right">Costo prom. histórico</th>
+      </tr></thead><tbody>
+        ${filaClase('6')}${filaClase('8')}
+        ${(otros||otrosH)?`<tr style="border-top:1px solid var(--border2)">
+          <td style="padding:7px 10px;color:var(--text3)">Otros<div style="font-size:10px">menos de 1.20 m o más de 2.40 m</div></td>
+          <td style="padding:7px 10px;text-align:right">${otros}</td>
+          <td style="padding:7px 10px;text-align:right">${N(cic.clases.corto.metros+cic.clases.largo.metros,1)} m</td>
+          <td style="padding:7px 10px;text-align:right;color:var(--text3)">—</td>
+          <td style="padding:7px 10px;text-align:right;color:var(--text2)">${otrosH}</td>
+          <td style="padding:7px 10px;text-align:right;color:var(--text3)">—</td></tr>`:''}
+      </tbody></table></div>
+    <div style="font-size:10.5px;color:var(--text3);margin-top:10px;line-height:1.7">
+      El <b>costo por metro</b> usa el gasto de explosivo del Compresorista —el que descuenta del polvorín— dividido entre los metros disparados que reporta el Jefe de Guardia.
+      El <b>costo por disparo</b> usa el explosivo que cada disparo declara en el reporte de guardia, incluido el del desquiche.
+      ${dif>15?`<br><b style="color:#f59e0b">⚠ Las dos fuentes difieren ${N(dif,0)}%</b> (${S(porMetroComp)} vs ${S(porMetroJG)} por metro): probablemente falta cargar un reporte o el explosivo de los disparos está incompleto.`:''}
+      ${mCiclo<=0?'<br>Sin metros disparados en este ciclo todavía.':''}
+    </div>
+  </div>`;
 }
 
 // ── LOS TITANES DE TEMUAL ─────────────────────────────────────────────────────
