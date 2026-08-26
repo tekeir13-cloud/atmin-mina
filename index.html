@@ -2820,8 +2820,9 @@ select option{background:var(--coal3);}
 <!-- RRHH -->
 <div class="page" id="page-rrhh">
   <div class="mod-tabs">
-    <button class="mod-tab active" onclick="modTab('rrhh','planilla',this)">📋 Tareo Diario</button>
-    <button class="mod-tab" onclick="modTab('rrhh','tareomes',this)">🗓 Tareo Mensual</button>
+    <!-- El “Tareo Diario” ya no vive aquí: se tarea en Operaciones › Reporte Jefe de Guardia
+         (y en Monte Bravo › Tareo). Los dos alimentan esta misma pestaña de Tareo Mensual. -->
+    <button class="mod-tab active" onclick="modTab('rrhh','tareomes',this)">🗓 Tareo Mensual</button>
     <button class="mod-tab" onclick="modTab('rrhh','tareas',this)">📂 Historial &amp; Edición</button>
     <button class="mod-tab" onclick="modTab('rrhh','personal',this)">👥 Personal</button>
     <button class="mod-tab" onclick="modTab('rrhh','tarjetas',this)">🪪 Tarjetas de Tareo</button>
@@ -2830,8 +2831,10 @@ select option{background:var(--coal3);}
     <button class="mod-tab" onclick="modTab('rrhh','servicios',this)">🤝 Servicios Terceros</button>
   </div>
 
-  <div class="mod-pane" style="display:none" id="rrhh-tareomes"></div>
-  <div class="mod-pane active" style="display:block" id="rrhh-planilla">
+  <div class="mod-pane active" style="display:block" id="rrhh-tareomes"></div>
+  <!-- Panel de tareo diario: se MUEVE en el arranque a Operaciones › Reporte Jefe de Guardia
+       o a Monte Bravo › Tareo. Es un solo panel, montado donde se lo pide (tareoDiarioMontar). -->
+  <div style="display:none" id="rrhh-planilla">
     <div class="kpi-grid">
       <div class="kpi-card"><div class="kpi-label">Tareados Hoy</div><div class="kpi-value gold" id="rr-activo">—</div></div>
       <div class="kpi-card"><div class="kpi-label">Ausentes Hoy</div><div class="kpi-value red" id="rr-ausente">—</div></div>
@@ -3123,6 +3126,21 @@ select option{background:var(--coal3);}
     <div id="val-contenido"></div>
   </div>
   <div class="mod-pane" style="display:none" id="op-avance">
+    <!-- APARTADO DE TAREO — el jefe de guardia (o el capataz) tarea aquí mismo, junto con su
+         reporte, desde donde esté. Lo que registra cae en el Tareo Mensual de RRHH. -->
+    <div class="card" style="margin-bottom:18px;padding:0;overflow:hidden">
+      <button onclick="tareoApartadoToggle('op')" id="op-tareo-btn"
+        style="width:100%;display:flex;align-items:center;gap:10px;background:none;border:none;color:var(--text);
+               padding:14px 16px;cursor:pointer;font-family:inherit;text-align:left">
+        <span style="font-size:18px">🧑‍🏭</span>
+        <span style="flex:1">
+          <span style="display:block;font-weight:800;font-size:14px">Tareo del turno</span>
+          <span style="display:block;font-size:11.5px;color:var(--text3)">Registra aquí el tareo de tu guardia — se reporta solo al Tareo Mensual de RRHH</span>
+        </span>
+        <span id="op-tareo-cara" style="color:var(--text3);font-size:13px">▸ Abrir</span>
+      </button>
+      <div id="op-tareo-host" style="display:none;padding:0 16px 16px"></div>
+    </div>
     <!-- Solicitudes de Compra pendientes de aprobación Operaciones -->
     <div style="margin-bottom:18px">
       <div class="section-title" style="margin-top:0">🛒 Solicitudes de Compra — Pendientes de tu aprobación</div>
@@ -3588,6 +3606,21 @@ select option{background:var(--coal3);}
     <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px">
       <div class="section-title" style="margin:0">🗓 Tareo — Monte Bravo</div>
       <div style="font-size:12px;color:var(--text3)">El mismo tareo mensual de NV 2820, con la gente asignada a esta unidad</div>
+    </div>
+    <!-- Mismo apartado de tareo que el Reporte del Jefe de Guardia, pero para Monte Bravo:
+         es el MISMO panel, montado aquí y filtrado a la gente de esta unidad. -->
+    <div class="card" style="margin-bottom:18px;padding:0;overflow:hidden">
+      <button onclick="tareoApartadoToggle('mb')" id="mb-tareo-btn"
+        style="width:100%;display:flex;align-items:center;gap:10px;background:none;border:none;color:var(--text);
+               padding:14px 16px;cursor:pointer;font-family:inherit;text-align:left">
+        <span style="font-size:18px">🧑‍🏭</span>
+        <span style="flex:1">
+          <span style="display:block;font-weight:800;font-size:14px">Tareo del turno — Monte Bravo</span>
+          <span style="display:block;font-size:11.5px;color:var(--text3)">Solo el personal de Monte Bravo — se reporta al mismo Tareo Mensual de RRHH</span>
+        </span>
+        <span id="mb-tareo-cara" style="color:var(--text3);font-size:13px">▸ Abrir</span>
+      </button>
+      <div id="mb-tareo-host" style="display:none;padding:0 16px 16px"></div>
     </div>
     <div id="mb-tareo-wrap"></div>
   </div>
@@ -5149,7 +5182,9 @@ const MODULE_PANES = {
   // OJO: cada pane nuevo del módulo DEBE listarse aquí. modTab oculta los panes por esta lista,
   // así que uno ausente se queda visible encima del que acabas de abrir.
   'log': ['almacen','historial','inventario','solicitudcompra','productos','explosivos','stockremanente','subalmacen2820','solicitudmantlog','combustible','estadisticas'],
-  'rrhh': ['planilla','tareomes','tareas','personal','tarjetas','costorrhh','servicios','planillaint'],
+  // 'planilla' (tareo diario) ya no es un pane de RRHH: se monta dentro del Reporte del Jefe
+  // de Guardia y del módulo Monte Bravo, así que modTab no debe tocarlo.
+  'rrhh': ['tareomes','tareas','personal','tarjetas','costorrhh','servicios','planillaint'],
   'op': ['tablero','avance','solicitudes','vsproyectado','valorizaciones'],
   'mant': ['registro','costosmant','horometros'],
   'fin': ['dashboard','informe','costocentro'],
@@ -5241,7 +5276,10 @@ function esSueldoReservado(rol){const r=_normCargo(rol);return SUELDOS_RESERVADO
 // otro módulo. Solo Gerencia, Finanzas y Administración, que son quienes gestionan la planilla.
 // Se bloquea por la persona (dónde trabaja y qué cargo tiene), no por la pantalla: así el dato
 // no se escapa por una vista nueva que alguien agregue mañana sin acordarse de taparlo.
-const SUELDOS_VISIBLES_PARA=['gerente_general','jefe_finanzas','administrador'];
+// Solo Finanzas. Ni Gerencia ni Administración ven el sueldo del personal de supervisión:
+// el dato sale de la app por una sola puerta. La excepción es el propio trabajador, que ve
+// SU tarjeta —y su sueldo— en el enlace público /tareo, filtrado por el servidor.
+const SUELDOS_VISIBLES_PARA=['jefe_finanzas'];
 function puedeVerSueldos(){
   try{ return !!usuarioActivo && SUELDOS_VISIBLES_PARA.includes(usuarioActivo.rol); }catch(e){ return false; }
 }
@@ -5250,11 +5288,13 @@ function sueldoConfidencial(p){
   if(String(p.guardia||'').toUpperCase()==='SUPERFICIE') return true;   // todo superficie
   return esSueldoReservado(p.rol);                                       // y los cargos de staff
 }
+// ¿Hay que tapar el sueldo de esta persona para quien está mirando?
+function sueldoOculto(p){ return !!(p && sueldoConfidencial(p) && !puedeVerSueldos()); }
 // Texto a mostrar para el jornal de una persona: la cifra o el candado.
 function sueldoTxt(p, valor){
   const v=(valor!=null)?valor:(p&&p.jornal);
   if(p && sueldoConfidencial(p) && !puedeVerSueldos())
-    return '<span title="Sueldo confidencial — solo Gerencia, Finanzas y Administración" style="color:#94a3b8">🔒</span>';
+    return '<span title="Sueldo confidencial — solo Finanzas. Cada trabajador ve el suyo en su tarjeta de /tareo" style="color:#94a3b8">🔒</span>';
   return 'S/ '+((typeof fmtN==='function')?fmtN(Number(v)||0):(Number(v)||0));
 }
 function showNotif(msg,type){
@@ -5834,7 +5874,7 @@ function activarPrimerTab(mod, pane){
 function renderPage(page){
   if(page==='dashboard')renderDashboard();
   else if(page==='logistica'){activarPrimerTab('log','almacen');renderModPane('log','almacen');}
-  else if(page==='rrhh'){activarPrimerTab('rrhh','planilla');renderModPane('rrhh','planilla');}
+  else if(page==='rrhh'){activarPrimerTab('rrhh','tareomes');renderModPane('rrhh','tareomes');}
   else if(page==='operaciones'){activarPrimerTab('op','tablero');renderModPane('op','tablero');}
   else if(page==='mantenimiento'){activarPrimerTab('mant','registro');renderModPane('mant','registro');}
   else if(page==='finanzas'){activarPrimerTab('fin','dashboard');renderModPane('fin','dashboard');}
@@ -14901,6 +14941,45 @@ function poblarSelectJefes(selId, valorActual){
 }
 
 // Paso 0 → abrir asistente de configuración
+/* ── EL PANEL DE TAREO DIARIO ES UNO SOLO Y VIAJA ─────────────────────────────
+   Antes vivía en RRHH. Ahora se tarea donde se trabaja: en el Reporte del Jefe de Guardia
+   (NV 2820) y en Monte Bravo. En vez de duplicar la hoja —con su arrastre, sus marcadores y
+   su guardado— se MUEVE el mismo nodo al apartado que se abre, y se fija la unidad para que
+   el listado de personal solo muestre a la gente de esa operación.
+   Los dos apartados escriben en state.tareas: el Tareo Mensual de RRHH los ve a los dos. */
+let _tareoDiarioHost='';
+function tareoDiarioMontar(hostId, unidad){
+  const panel=document.getElementById('rrhh-planilla');
+  const host=document.getElementById(hostId);
+  if(!panel||!host) return;
+  if(panel.parentElement!==host) host.appendChild(panel);
+  panel.style.display='block';
+  _tareoDiarioHost=hostId;
+  const u=document.getElementById('tareo-ufiltro');
+  if(u && unidad!=null){
+    u.value=unidad;
+    // En Monte Bravo la unidad no se discute: se oculta el selector para que nadie la cambie.
+    const cont=u.closest('.form-group')||u.parentElement;
+    if(cont) cont.style.display=(unidad==='MB')?'none':'';
+  }
+  const niv=document.getElementById('tareo-nivel');
+  if(niv && unidad) niv.value=(unidad==='MB')?'Monte Bravo':'Nv 2820';
+  try{ renderPlanilla(); }catch(e){}
+  try{ if(typeof tareoFiltraGuardia==='function') tareoFiltraGuardia(); }catch(e){}
+}
+// Abre/cierra el apartado. Al abrirlo se trae el panel; al cerrarlo se queda donde está
+// (no hace falta devolverlo: el siguiente montaje se lo lleva).
+function tareoApartadoToggle(donde){
+  const host=document.getElementById(donde+'-tareo-host');
+  const cara=document.getElementById(donde+'-tareo-cara');
+  if(!host) return;
+  const abierto=host.style.display!=='none';
+  if(abierto){ host.style.display='none'; if(cara) cara.textContent='▸ Abrir'; return; }
+  host.style.display='block';
+  if(cara) cara.textContent='▾ Cerrar';
+  tareoDiarioMontar(donde+'-tareo-host', donde==='mb'?'MB':'NV2820');
+}
+
 function abrirSetupTareo(){
   initTareoFecha();
   const em=document.getElementById('tareo-exito-msg');if(em)em.style.display='none';
@@ -15499,7 +15578,8 @@ function tarjFotoHTML(p,tam){
   const ini=String((p&&p.nombre)||'').trim().split(/\s+/).map(x=>x[0]).slice(0,2).join('').toUpperCase();
   return '<div style="width:'+t+'px;height:'+t+'px;border-radius:'+Math.round(t/4)+'px;background:var(--coal5);color:var(--text2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:'+Math.round(t/2.6)+'px;flex-shrink:0;border:1px solid var(--border)">'+(ini||'—')+'</div>';
 }
-function _tarjS(n){ return 'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function _tarjSFmt(n){ return 'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function _tarjS(n){ return _tarjSFmt(n); }
 function _tarjMarca(v){ const m=TAREO_MARCAS.find(x=>x.v===v); return m?m.l:null; }
 function tarjGuardarPendientes(pid,mes){
   const tipo=(document.getElementById('tarj-tipo')||{}).value||'ninguno';
@@ -15524,6 +15604,10 @@ function tarjGuardarAnotacion(pid,mes){
 function tarjetaHTML(pid,mes){
   const p=(state.personal||[]).find(x=>String(x.id)===String(pid));
   if(!p) return '<div class="card" style="margin-bottom:14px;color:var(--text3)">Trabajador no encontrado.</div>';
+  // Dentro de la tarjeta, TODO importe pasa por aquí: si el sueldo de esta persona es de
+  // supervisión y quien mira no es Finanzas, la cifra se reemplaza por el candado. En el
+  // enlace público /tareo el propio trabajador sí ve la suya: ese filtro lo hace el servidor.
+  const _tarjS = n => sueldoOculto(p) ? '🔒' : _tarjSFmt(n);
   const b=tarjBandera(pid,mes), r=tareoResumen(pid,mes), pago=tareoPago(pid,mes);
   const nota=tarjNota(pid,mes);
   const jornal=Number(p.jornal)||0;
@@ -16368,15 +16452,42 @@ function mesTareoArchivado(mesYM){
 }
 function puedeEditarTareoMes(mesYM){
   if(!mesTareoArchivado(mesYM)) return true;
-  const rol=(typeof usuarioActivo!=='undefined'&&usuarioActivo&&usuarioActivo.rol)||'';
-  return rol==='gerente_general'||rol==='jefe_finanzas';
+  return rolFinanzasTareo();
 }
+// ── VENTANA DE EDICIÓN DEL TAREO DIARIO ──
+// El jefe de guardia (o el capataz) tarea desde donde esté y puede corregir lo que guardó,
+// pero solo hasta el SEGUNDO DÍA después de emitido el tareo: la hoja del 10 se edita el 10,
+// el 11 y el 12; el 13 ya está cerrada. Después de esa ventana el único que puede tocarla es
+// Finanzas, que es quien responde por el costo de planilla del mes.
+const TAREO_DIAS_EDICION = 2;
+function rolFinanzasTareo(){
+  const rol=(typeof usuarioActivo!=='undefined'&&usuarioActivo&&usuarioActivo.rol)||'';
+  return rol==='jefe_finanzas';
+}
+// Días transcurridos entre la fecha del tareo y hoy (ambas en horario local de la operación).
+function _diasDesde(fecha){
+  const f=String(fecha||'').slice(0,10);
+  if(f.length!==10) return 0;
+  const a=Date.UTC(+f.slice(0,4), +f.slice(5,7)-1, +f.slice(8,10));
+  const h=hoy().slice(0,10);
+  const b=Date.UTC(+h.slice(0,4), +h.slice(5,7)-1, +h.slice(8,10));
+  return Math.round((b-a)/86400000);
+}
+// ¿La hoja de esa fecha sigue dentro de la ventana de edición?
+function tareoEnVentana(fecha){ return _diasDesde(fecha) <= TAREO_DIAS_EDICION; }
 // Guarda de escritura: devuelve true si se puede tocar el tareo de esa fecha; si no, avisa.
 function tareoEditable(fecha){
   const m=String(fecha||'').slice(0,7);
-  if(puedeEditarTareoMes(m)) return true;
-  try{ showNotif('🔒 El tareo de '+m+' ya está archivado (mes cumplido). Solo Gerencia o Finanzas pueden corregirlo.','error'); }catch(e){}
-  return false;
+  if(rolFinanzasTareo()) return true;                       // Finanzas edita siempre
+  if(!puedeEditarTareoMes(m)){
+    try{ showNotif('🔒 El tareo de '+m+' ya está archivado (mes cumplido). Solo Finanzas puede corregirlo.','error'); }catch(e){}
+    return false;
+  }
+  if(!tareoEnVentana(fecha)){
+    try{ showNotif('🔒 El tareo del '+String(fecha).slice(0,10)+' se cerró: solo se puede editar hasta '+TAREO_DIAS_EDICION+' días después de emitido. Solo Finanzas puede corregirlo.','error'); }catch(e){}
+    return false;
+  }
+  return true;
 }
 let _tareoUnidad='';   // '' = todas · 'NV2820' · 'MB'
 /* El MISMO tareo mensual se dibuja en dos sitios: la pestaña de RRHH y el módulo de Monte Bravo.
@@ -16415,7 +16526,9 @@ function _tareoActualizaResumen(tid,mes){
   const r=tareoResumen(tid,mes), pago=(typeof tareoPago==='function')?tareoPago(tid,mes):0;
   const set=(campo,val)=>{ const el=document.querySelector('[data-ts="'+campo+'|'+tid+'"]'); if(el) el.textContent=val; };
   set('trab', r.diasTrab); set('tareas', r.tareas); set('gan', r.ganados);
-  set('tom', r.dlTomados||'—'); set('compr', r.comprados); set('pago', fmtS(pago));
+  set('tom', r.dlTomados||'—'); set('compr', r.comprados);
+  const _p=(state.personal||[]).find(x=>String(x.id)===String(tid));
+  set('pago', (typeof sueldoOculto==='function'&&sueldoOculto(_p))?'🔒':fmtS(pago));
 }
 function tareoGridSet(tid,fecha,val){
   const cont=_tareoCont();
@@ -16598,7 +16711,7 @@ function renderTareoMensual(){
       <td data-ts="gan|${p.id}" style="text-align:center;color:#60a5fa">${r.ganados}</td>
       <td data-ts="tom|${p.id}" style="text-align:center;color:#3b82f6">${r.dlTomados||'—'}</td>
       <td data-ts="compr|${p.id}" style="text-align:center;font-weight:800;color:#22d3a5">${r.comprados}</td>
-      <td data-ts="pago|${p.id}" style="text-align:right;font-family:'DM Mono',monospace;font-weight:800;color:var(--gold-light);padding-right:8px">${fmtS(pago)}</td>
+      <td data-ts="pago|${p.id}" style="text-align:right;font-family:'DM Mono',monospace;font-weight:800;color:var(--gold-light);padding-right:8px">${sueldoOculto(p)?'<span title="Sueldo de supervisión — solo Finanzas" style="color:#94a3b8">🔒</span>':fmtS(pago)}</td>
     </tr>`;
   }).join('');
   cont.innerHTML=`
@@ -17907,6 +18020,7 @@ function sincronizarPerforacionReportes(){
   state.perforacion=perf;
 }
 
+let _rgMes='';   // mes visible en la lista de reportes de jefe de guardia ('__todos' = archivo completo)
 function renderAvance(){
   reportesGuardiaLoad();
   if(typeof metasLoad==='function')metasLoad();
@@ -17969,9 +18083,27 @@ function renderAvance(){
   if(mf)mf.innerHTML=frentesVisibles(f=>sum(f.key,'metros',rgMes)>0).map(mesCard).join('');
 
   const wrap=document.getElementById('rg-lista');if(!wrap)return;
-  const lista=[...rg].sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')||(b.creadoEn||0)-(a.creadoEn||0));
-  if(!lista.length){wrap.innerHTML='<div class="card"><div class="empty-state">Sin reportes registrados. Genera el primero con el botón ➕.</div></div>';return;}
-  wrap.innerHTML=lista.map(r=>{
+  const todos=[...rg].sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')||(b.creadoEn||0)-(a.creadoEn||0));
+  if(!todos.length){wrap.innerHTML='<div class="card"><div class="empty-state">Sin reportes registrados. Genera el primero con el botón ➕.</div></div>';return;}
+  /* ── ARCHIVO POR MES ──
+     La lista mostraba TODOS los reportes desde el primer día de la obra: al bajar aparecían
+     los de julio mezclados con los de agosto. Ahora se ve el mes en curso y los meses
+     cumplidos quedan archivados, disponibles en el selector. */
+  const mesesRep=[...new Set(todos.map(r=>String(r.fecha||'').slice(0,7)).filter(m=>m.length===7))].sort().reverse();
+  const mesHoyCal=ts.slice(0,7);
+  if(!_rgMes || (_rgMes!=='__todos' && mesesRep.indexOf(_rgMes)<0)) _rgMes=mesesRep.indexOf(mesHoyCal)>=0?mesHoyCal:(mesesRep[0]||mesHoyCal);
+  const lista=(_rgMes==='__todos')?todos:todos.filter(r=>String(r.fecha||'').slice(0,7)===_rgMes);
+  const _mesRgLbl=m=>(typeof finNombreMes==='function')?finNombreMes(m):m;
+  const barra=`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <span style="font-size:12px;color:var(--text3)">Reportes de</span>
+      <select onchange="_rgMes=this.value;renderAvance()" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:13px;font-weight:600">
+        ${mesesRep.map(m=>`<option value="${m}"${m===_rgMes?' selected':''}>${_mesRgLbl(m)}${m<mesHoyCal?' 🔒 archivado':''} · ${todos.filter(r=>String(r.fecha||'').slice(0,7)===m).length}</option>`).join('')}
+        <option value="__todos"${_rgMes==='__todos'?' selected':''}>📂 Todos los meses</option>
+      </select>
+      ${(_rgMes!=='__todos'&&_rgMes<mesHoyCal)?'<span style="font-size:11.5px;color:#f59e0b">Mes cumplido — solo consulta</span>':''}
+    </div>`;
+  if(!lista.length){wrap.innerHTML=barra+'<div class="card"><div class="empty-state">Sin reportes en este mes.</div></div>';return;}
+  wrap.innerHTML=barra+lista.map(r=>{
     const b=r.brenda||{},c=r.crne||{};
     const mt=r1m(FRENTES.filter(f=>!f.tajo).reduce((s,f)=>s+((r[f.key]&&r[f.key].metros)||0),0)).toFixed(1);
     const cell=(lbl,val)=>`<div style="font-size:11px;color:var(--text3)">${lbl}</div><div style="font-size:13px;color:var(--text);font-weight:600">${val}</div>`;
