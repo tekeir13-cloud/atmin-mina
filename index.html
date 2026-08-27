@@ -4511,9 +4511,9 @@ select option{background:var(--coal3);}
     <!-- El tonelaje de Monte Bravo NO se pesa: se cuenta en sacos y se estima a razón de
          65 kg por saco. Por eso las toneladas aquí son un cálculo, no un dato que se digite. -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-      <div class="form-group" style="margin:0"><label>Sacos de ALTA ley</label>
+      <div class="form-group" style="margin:0"><label><span id="mbp-ico-alta"></span> Sacos de ALTA ley</label>
         <input type="number" id="mbp-alta" min="0" step="1" placeholder="0" oninput="mbCalcSacos()"></div>
-      <div class="form-group" style="margin:0"><label>Sacos de BAJA ley</label>
+      <div class="form-group" style="margin:0"><label><span id="mbp-ico-baja"></span> Sacos de BAJA ley</label>
         <input type="number" id="mbp-baja" min="0" step="1" placeholder="0" oninput="mbCalcSacos()"></div>
     </div>
     <div id="mbp-estimado" style="background:var(--coal4);border:1px solid var(--border);border-radius:8px;
@@ -12088,6 +12088,25 @@ function mbRenderTablero(){
 // ── Piezas compartidas por todas las pestañas del módulo ──
 // La misma tarjeta con icono del panel de Gerencia, para que Producción, Compresorista,
 // Liquidaciones y Terceros se lean igual que el Dashboard y no parezcan otro programa.
+/* Un saco dibujado, no un emoji: en la pestaña de producción hay que distinguir de un vistazo
+   los de ALTA ley (azules) de los de BAJA (amarillos), y dos medallas 🥇🥈 no dicen eso.
+   El color entra por parámetro para que el mismo dibujo sirva a los dos. */
+function _mbSaco(color, alto){
+  const h=Number(alto)||26, w=Math.round(h*24/28);
+  return '<svg viewBox="0 0 24 28" width="'+w+'" height="'+h+'" style="display:block;flex-shrink:0" aria-hidden="true">'+
+    // la tela recogida por encima del amarre, abierta como abanico
+    '<path d="M7.6 9.4 C8.3 6.6 6.8 3.6 5.1 1.5 8.5 3.4 15.5 3.4 18.9 1.5 17.2 3.6 15.7 6.6 16.4 9.4 Z" fill="'+color+'" opacity=".58"/>'+
+    // cuerpo: ancho y panzudo, como un saco lleno apoyado en el suelo
+    '<path d="M7.2 10.8 C5 13.6 2.7 18 2.7 21.8 2.7 24.9 4.7 26.6 8.1 26.6 H15.9 C19.3 26.6 21.3 24.9 21.3 21.8 21.3 18 19 13.6 16.8 10.8 Z" fill="'+color+'"/>'+
+    // la cuerda que lo amarra
+    '<rect x="6.4" y="9" width="11.2" height="2.6" rx="1.3" fill="'+color+'"/>'+
+    '<rect x="6.4" y="9" width="11.2" height="2.6" rx="1.3" fill="#000" opacity=".26"/>'+
+    // brillo, para que no se lea como una mancha plana
+    '<path d="M8.6 14.6 C6.8 17.4 6.2 21 6.8 23.8" stroke="#fff" stroke-opacity=".3" stroke-width="1.7" stroke-linecap="round" fill="none"/>'+
+    '</svg>';
+}
+const MB_SACO_ALTA='#3b82f6';   // alta ley → azul
+const MB_SACO_BAJA='#eab308';   // baja ley → amarillo
 function _mbCard(icon,label,valor,sub,col){
   return `<div style="background:var(--coal4);border:1px solid var(--border);border-radius:16px;padding:16px 18px;display:flex;align-items:center;gap:14px">
     <div style="width:46px;height:46px;border-radius:13px;background:${col}1a;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${icon}</div>
@@ -12131,8 +12150,8 @@ function mbRenderProd(){
   const cab=`<div style="font-size:11.5px;color:var(--text3);margin-bottom:12px">${_mbRotulo(per)}</div>`+
     _mbCards(
       _mbCard('⛏','Avance',_mbN(tm)+' m',rs.length+' registro'+(rs.length!==1?'s':''),'#5b6ef5')+
-      _mbCard('🥇','Sacos ALTA ley',_mbN(sAlta,0),sAlta?_mbN(sAlta*MB_KG_POR_SACO/1000,2)+' t estimadas':'sin sacos','#f59e0b')+
-      _mbCard('🥈','Sacos BAJA ley',_mbN(sBaja,0),sBaja?_mbN(sBaja*MB_KG_POR_SACO/1000,2)+' t estimadas':'sin sacos','#94a3b8')+
+      _mbCard(_mbSaco(MB_SACO_ALTA,26),'Sacos ALTA ley',_mbN(sAlta,0),sAlta?_mbN(sAlta*MB_KG_POR_SACO/1000,2)+' t estimadas':'sin sacos',MB_SACO_ALTA)+
+      _mbCard(_mbSaco(MB_SACO_BAJA,26),'Sacos BAJA ley',_mbN(sBaja,0),sBaja?_mbN(sBaja*MB_KG_POR_SACO/1000,2)+' t estimadas':'sin sacos',MB_SACO_BAJA)+
       _mbCard('🪨','Toneladas estimadas',_mbN(tt,2)+' t',(sAlta+sBaja)?_mbN(sAlta+sBaja,0)+' sacos × '+MB_KG_POR_SACO+' kg':labores.length+' labor'+(labores.length!==1?'es':''),'#c9a84c')+
       _mbCard('📏','Promedio por registro',rs.length?_mbN(tm/rs.length,2)+' m':'—',rs.length?_mbN(tt/rs.length,2)+' t por registro':'sin datos','#22d3a5'));
   if(!rs.length){
@@ -12144,7 +12163,9 @@ function mbRenderProd(){
     `<div><div style="font-weight:700;font-size:13px">${fmtF(r.fecha)} · <span style="color:var(--text3);font-weight:400">${r.turno||'—'}</span>
        ${r.labor?` · <span style="color:#60a5fa">${r.labor}</span>`:''}</div>
      <div style="font-size:12px;margin-top:4px">Avance: <strong style="color:#60a5fa">${_mbN(r.metros)} m</strong>
-       ${(Number(r.sacosAlta)||Number(r.sacosBaja))?` · Alta: <strong style="color:#f59e0b">${_mbN(r.sacosAlta||0,0)}</strong> · Baja: <strong style="color:#94a3b8">${_mbN(r.sacosBaja||0,0)}</strong> sacos`:''}
+       ${(Number(r.sacosAlta)||Number(r.sacosBaja))?`
+         · <span style="display:inline-flex;align-items:center;gap:3px;vertical-align:-3px">${_mbSaco(MB_SACO_ALTA,15)}<strong style="color:${MB_SACO_ALTA}">${_mbN(r.sacosAlta||0,0)}</strong></span>
+         · <span style="display:inline-flex;align-items:center;gap:3px;vertical-align:-3px">${_mbSaco(MB_SACO_BAJA,15)}<strong style="color:${MB_SACO_BAJA}">${_mbN(r.sacosBaja||0,0)}</strong></span> sacos`:''}
        · Toneladas: <strong style="color:#c9a84c">${_mbN(mbTonRegistro(r),2)} t</strong></div>
      ${r.obs?`<div style="font-size:11px;color:var(--text3);margin-top:3px">${r.obs}</div>`:''}</div>`,
     _mbBorrar('mbBorrarProd',r.id))).join('');
@@ -12735,10 +12756,18 @@ function mbTonRegistro(r){
 }
 function mbCalcSacos(){
   const a=_mbNum('mbp-alta'), b=_mbNum('mbp-baja');
+  const ia=_mbG('mbp-ico-alta'), ib=_mbG('mbp-ico-baja');
+  if(ia && !ia.innerHTML) ia.innerHTML='<span style="display:inline-block;vertical-align:-3px">'+_mbSaco(MB_SACO_ALTA,15)+'</span>';
+  if(ib && !ib.innerHTML) ib.innerHTML='<span style="display:inline-block;vertical-align:-3px">'+_mbSaco(MB_SACO_BAJA,15)+'</span>';
   const el=_mbG('mbp-estimado'); if(!el) return;
   const t=mbTonDeSacos(a,b), n=a+b;
-  el.innerHTML='Toneladas estimadas: <strong style="color:#c9a84c;font-size:14px">'+_mbN(t,2)+' t</strong>'+
-    (n>0?'<span style="margin-left:8px">· '+_mbN(n,0)+' saco'+(n!==1?'s':'')+' × '+MB_KG_POR_SACO+' kg</span>':'');
+  el.innerHTML='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
+    '<span style="display:inline-flex;align-items:center;gap:4px">'+_mbSaco(MB_SACO_ALTA,18)+
+      '<strong style="color:'+MB_SACO_ALTA+'">'+_mbN(a,0)+'</strong></span>'+
+    '<span style="display:inline-flex;align-items:center;gap:4px">'+_mbSaco(MB_SACO_BAJA,18)+
+      '<strong style="color:'+MB_SACO_BAJA+'">'+_mbN(b,0)+'</strong></span>'+
+    '<span style="margin-left:auto">Toneladas estimadas: <strong style="color:#c9a84c;font-size:15px">'+_mbN(t,2)+' t</strong>'+
+    (n>0?'<span style="margin-left:6px">· '+_mbN(n,0)+' × '+MB_KG_POR_SACO+' kg</span>':'')+'</span></div>';
 }
 function mbGuardarProd(){
   const metros=_mbNum('mbp-metros'), alta=_mbNum('mbp-alta'), baja=_mbNum('mbp-baja');
