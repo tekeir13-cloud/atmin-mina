@@ -4502,8 +4502,10 @@ select option{background:var(--coal3);}
       <div class="form-group" style="margin:0"><label>Turno</label>
         <select id="mbp-turno"><option value="Día">Día</option><option value="Noche">Noche</option></select></div>
     </div>
-    <div class="form-group" style="margin:0 0 12px"><label>Labor / frente <span style="color:var(--text3);font-size:10px">(opcional)</span></label>
-      <input type="text" id="mbp-labor" placeholder="Ej: Galería 320 NE"></div>
+    <!-- Antes era texto libre y cada quien escribía la labor a su manera, así que la producción
+         salía repartida entre nombres que eran el mismo frente. Ahora se elige de la lista. -->
+    <div class="form-group" style="margin:0 0 12px"><label>Labor / frente</label>
+      <select id="mbp-labor"></select></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <div class="form-group" style="margin:0"><label>Avance (metros)</label>
         <input type="number" id="mbp-metros" min="0" step="any" placeholder="0"></div>
@@ -12693,7 +12695,10 @@ const _mbNum=id=>Number(_mbVal(id))||0;
 // ── Producción ──
 function mbAbrirProd(){
   _mbG('mbp-fecha').value=hoy(); _mbG('mbp-turno').value='Día';
-  _mbG('mbp-labor').value=''; _mbG('mbp-metros').value=''; _mbG('mbp-ton').value=''; _mbG('mbp-obs').value='';
+  // La lista de labores es la misma del parte del compresorista: una sola fuente para los dos.
+  const sel=_mbG('mbp-labor');
+  if(sel) sel.innerHTML=mbLabores().map(l=>'<option value="'+escAttr(l)+'">'+escAttr(l)+'</option>').join('');
+  _mbG('mbp-metros').value=''; _mbG('mbp-ton').value=''; _mbG('mbp-obs').value='';
   abrirModal('modal-mb-prod');
 }
 function mbGuardarProd(){
@@ -12731,7 +12736,7 @@ function mbLaboresExtraSave(a){ try{ localStorage.setItem(MB_LABORES_KEY,JSON.st
   try{ sbSyncModulo('mb_labores', a||[]); }catch(e){} }
 // Los dos frentes de Monte Bravo salen SIEMPRE en el parte, aunque todavía no tengan movimiento:
 // son las labores de la unidad, no algo que haya que ir descubriendo de lo ya registrado.
-const MB_FRENTES_FIJOS = ['RAMPA ACOPIO','SN 5100 NW'];
+const MB_FRENTES_FIJOS = ['RAMPA ACOPIO'];
 function mbLabores(){
   const set=new Set();
   const add=v=>{ const t=String(v||'').trim(); if(t) set.add(t); };
