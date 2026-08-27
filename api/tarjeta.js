@@ -30,11 +30,42 @@ const MARCAS = {
 const COL_TAREA = { '1':'#16a34a','1.25':'#84cc16','1.5':'#d97706','1.75':'#f59e0b','2':'#dc2626',
                     '2.25':'#e11d48','2.5':'#ec4899','2.75':'#c026d3','3':'#8b5cf6' };
 
+// Pedido HTTPS sin depender de `fetch` global: en Node 16 no existe, y una función desplegada
+// sobre esa versión reventaba con "fetch is not defined" — que en pantalla se veía igual que
+// un problema de la nube. Con el módulo https funciona en cualquier versión de Node.
+const https = require('https');
+function pedirJSON(url, headers) {
+  return new Promise((resolve) => {
+    try {
+      const req = https.request(url, { method: 'GET', headers, timeout: 15000 }, (r) => {
+        let cuerpo = '';
+        r.setEncoding('utf8');
+        r.on('data', (c) => { cuerpo += c; });
+        r.on('end', () => {
+          if (r.statusCode < 200 || r.statusCode >= 300) {
+            return resolve({ ok: false, estado: r.statusCode, detalle: cuerpo.slice(0, 300) });
+          }
+          try { resolve({ ok: true, json: JSON.parse(cuerpo) }); }
+          catch (e) { resolve({ ok: false, estado: r.statusCode, detalle: 'respuesta ilegible' }); }
+        });
+      });
+      req.on('timeout', () => { req.destroy(); resolve({ ok: false, estado: 0, detalle: 'tiempo agotado' }); });
+      req.on('error', (e) => resolve({ ok: false, estado: 0, detalle: String(e && e.message || e).slice(0, 200) }));
+      req.end();
+    } catch (e) {
+      resolve({ ok: false, estado: 0, detalle: String(e && e.message || e).slice(0, 200) });
+    }
+  });
+}
+
+// Último error de lectura, para que el chequeo por GET pueda contarlo sin exponer datos.
+let _ultimoFallo = null;
+
 async function modulo(nombre) {
   const url = SB_URL + '/rest/v1/app_modulos?select=data&modulo=eq.' + encodeURIComponent(nombre) + '&limit=1';
-  const r = await fetch(url, { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY } });
-  if (!r.ok) return null;
-  const j = await r.json();
+  const r = await pedirJSON(url, { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, Accept: 'application/json' });
+  if (!r.ok) { _ultimoFallo = { modulo: nombre, estado: r.estado, detalle: r.detalle }; return null; }
+  const j = r.json;
   return (Array.isArray(j) && j.length) ? j[0].data : null;
 }
 
@@ -62,11 +93,12 @@ module.exports = async function handler(req, res) {
       const personalG = await modulo('personal');
       if (!Array.isArray(personalG)) {
         return res.status(200).json({ chequeo: 'ok', desplegado: true, nube: 'sin-lectura', mes: mesG,
+          node: process.version, fallo: _ultimoFallo,
           nota: 'La función corre, pero NO pudo leer la planilla de Supabase (cuota agotada, credenciales o permisos).' });
       }
       const tareasG = (await modulo('tareas')) || [];
       const activasG = personalG.filter(x => x && x.estado !== 'baja');
-      return res.status(200).json({ chequeo: 'ok', desplegado: true, nube: 'ok', mes: mesG,
+      return res.status(200).json({ chequeo: 'ok', desplegado: true, nube: 'ok', mes: mesG, node: process.version,
         personas: personalG.length, personasActivas: activasG.length,
         conDni: activasG.filter(x => String(x.dni || '').replace(/\D/g, '').length === 8).length,
         tareosDelMes: tareasG.filter(t => String((t && t.fecha) || '').slice(0, 7) === mesG).length,
