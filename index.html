@@ -4506,11 +4506,19 @@ select option{background:var(--coal3);}
          salía repartida entre nombres que eran el mismo frente. Ahora se elige de la lista. -->
     <div class="form-group" style="margin:0 0 12px"><label>Labor / frente</label>
       <select id="mbp-labor"></select></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-      <div class="form-group" style="margin:0"><label>Avance (metros)</label>
-        <input type="number" id="mbp-metros" min="0" step="any" placeholder="0"></div>
-      <div class="form-group" style="margin:0"><label>Toneladas producidas</label>
-        <input type="number" id="mbp-ton" min="0" step="any" placeholder="0"></div>
+    <div class="form-group" style="margin:0 0 12px"><label>Avance (metros)</label>
+      <input type="number" id="mbp-metros" min="0" step="any" placeholder="0"></div>
+    <!-- El tonelaje de Monte Bravo NO se pesa: se cuenta en sacos y se estima a razón de
+         65 kg por saco. Por eso las toneladas aquí son un cálculo, no un dato que se digite. -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <div class="form-group" style="margin:0"><label>Sacos de ALTA ley</label>
+        <input type="number" id="mbp-alta" min="0" step="1" placeholder="0" oninput="mbCalcSacos()"></div>
+      <div class="form-group" style="margin:0"><label>Sacos de BAJA ley</label>
+        <input type="number" id="mbp-baja" min="0" step="1" placeholder="0" oninput="mbCalcSacos()"></div>
+    </div>
+    <div id="mbp-estimado" style="background:var(--coal4);border:1px solid var(--border);border-radius:8px;
+         padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--text3)">
+      Toneladas estimadas: <strong style="color:#c9a84c;font-size:14px">0.00 t</strong>
     </div>
     <div class="form-group" style="margin:0 0 12px"><label>Observación <span style="color:var(--text3);font-size:10px">(opcional)</span></label>
       <input type="text" id="mbp-obs" placeholder=""></div>
@@ -11628,7 +11636,9 @@ function mbCostoTotal(per){ return mbDesglose(per).reduce((s,c)=>s+c.monto,0); }
 function mbProduccionCiclo(per){
   const rs=mbEstado().produccion.filter(r=>_mbEnCiclo(r.fecha,per));
   return { metros:rs.reduce((s,r)=>s+(Number(r.metros)||0),0),
-           toneladas:rs.reduce((s,r)=>s+(Number(r.toneladas)||0),0), n:rs.length };
+           toneladas:rs.reduce((s,r)=>s+mbTonRegistro(r),0),
+           sacosAlta:rs.reduce((s,r)=>s+(Number(r.sacosAlta)||0),0),
+           sacosBaja:rs.reduce((s,r)=>s+(Number(r.sacosBaja)||0),0), n:rs.length };
 }
 function mbIngresoCiclo(per){
   const ls=mbEstado().liquidaciones.filter(l=>String(l.periodo||'')===String(per));
@@ -11829,8 +11839,9 @@ function mbProdPorLabor(per){
   const map={};
   mbEstado().produccion.filter(r=>_mbEnCiclo(r.fecha,per)).forEach(r=>{
     const k=(r.labor||'').trim()||'Sin labor indicada';
-    if(!map[k]) map[k]={labor:k,metros:0,toneladas:0,n:0};
-    map[k].metros+=Number(r.metros)||0; map[k].toneladas+=Number(r.toneladas)||0; map[k].n++;
+    if(!map[k]) map[k]={labor:k,metros:0,toneladas:0,sacosAlta:0,sacosBaja:0,n:0};
+    map[k].metros+=Number(r.metros)||0; map[k].toneladas+=mbTonRegistro(r);
+    map[k].sacosAlta+=Number(r.sacosAlta)||0; map[k].sacosBaja+=Number(r.sacosBaja)||0; map[k].n++;
   });
   return Object.values(map).sort((a,b)=>b.metros-a.metros);
 }
@@ -12114,13 +12125,16 @@ function mbRenderProd(){
   const per=_mbCiclo('mbf-prod');
   const rs=mbEstado().produccion.filter(r=>!per||_mbEnCiclo(r.fecha,per))
     .sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
-  const tm=rs.reduce((s,r)=>s+(Number(r.metros)||0),0), tt=rs.reduce((s,r)=>s+(Number(r.toneladas)||0),0);
+  const tm=rs.reduce((s,r)=>s+(Number(r.metros)||0),0), tt=rs.reduce((s,r)=>s+mbTonRegistro(r),0);
+  const sAlta=rs.reduce((s,r)=>s+(Number(r.sacosAlta)||0),0), sBaja=rs.reduce((s,r)=>s+(Number(r.sacosBaja)||0),0);
   const labores=per?mbProdPorLabor(per):(()=>{const m={};rs.forEach(r=>{const k=(r.labor||'').trim()||'Sin labor indicada';m[k]=1;});return Object.keys(m).map(k=>({labor:k}));})();
   const cab=`<div style="font-size:11.5px;color:var(--text3);margin-bottom:12px">${_mbRotulo(per)}</div>`+
     _mbCards(
       _mbCard('⛏','Avance',_mbN(tm)+' m',rs.length+' registro'+(rs.length!==1?'s':''),'#5b6ef5')+
-      _mbCard('🪨','Toneladas',_mbN(tt)+' t',labores.length+' labor'+(labores.length!==1?'es':''),'#c9a84c')+
-      _mbCard('📏','Promedio por registro',rs.length?_mbN(tm/rs.length,2)+' m':'—',rs.length?_mbN(tt/rs.length)+' t por registro':'sin datos','#22d3a5'));
+      _mbCard('🥇','Sacos ALTA ley',_mbN(sAlta,0),sAlta?_mbN(sAlta*MB_KG_POR_SACO/1000,2)+' t estimadas':'sin sacos','#f59e0b')+
+      _mbCard('🥈','Sacos BAJA ley',_mbN(sBaja,0),sBaja?_mbN(sBaja*MB_KG_POR_SACO/1000,2)+' t estimadas':'sin sacos','#94a3b8')+
+      _mbCard('🪨','Toneladas estimadas',_mbN(tt,2)+' t',(sAlta+sBaja)?_mbN(sAlta+sBaja,0)+' sacos × '+MB_KG_POR_SACO+' kg':labores.length+' labor'+(labores.length!==1?'es':''),'#c9a84c')+
+      _mbCard('📏','Promedio por registro',rs.length?_mbN(tm/rs.length,2)+' m':'—',rs.length?_mbN(tt/rs.length,2)+' t por registro':'sin datos','#22d3a5'));
   if(!rs.length){
     w.innerHTML=cab+_mbVacio(per?'Sin producción registrada en este ciclo. Cambia de ciclo o usa «Registrar producción».'
                                 :'Sin producción registrada. Usa «Registrar producción» para el avance y las toneladas del día.');
@@ -12129,7 +12143,9 @@ function mbRenderProd(){
   w.innerHTML=cab+rs.map(r=>_mbFila(
     `<div><div style="font-weight:700;font-size:13px">${fmtF(r.fecha)} · <span style="color:var(--text3);font-weight:400">${r.turno||'—'}</span>
        ${r.labor?` · <span style="color:#60a5fa">${r.labor}</span>`:''}</div>
-     <div style="font-size:12px;margin-top:4px">Avance: <strong style="color:#60a5fa">${_mbN(r.metros)} m</strong> · Toneladas: <strong style="color:#c9a84c">${_mbN(r.toneladas)} t</strong></div>
+     <div style="font-size:12px;margin-top:4px">Avance: <strong style="color:#60a5fa">${_mbN(r.metros)} m</strong>
+       ${(Number(r.sacosAlta)||Number(r.sacosBaja))?` · Alta: <strong style="color:#f59e0b">${_mbN(r.sacosAlta||0,0)}</strong> · Baja: <strong style="color:#94a3b8">${_mbN(r.sacosBaja||0,0)}</strong> sacos`:''}
+       · Toneladas: <strong style="color:#c9a84c">${_mbN(mbTonRegistro(r),2)} t</strong></div>
      ${r.obs?`<div style="font-size:11px;color:var(--text3);margin-top:3px">${r.obs}</div>`:''}</div>`,
     _mbBorrar('mbBorrarProd',r.id))).join('');
 }
@@ -12698,16 +12714,41 @@ function mbAbrirProd(){
   // La lista de labores es la misma del parte del compresorista: una sola fuente para los dos.
   const sel=_mbG('mbp-labor');
   if(sel) sel.innerHTML=mbLabores().map(l=>'<option value="'+escAttr(l)+'">'+escAttr(l)+'</option>').join('');
-  _mbG('mbp-metros').value=''; _mbG('mbp-ton').value=''; _mbG('mbp-obs').value='';
+  _mbG('mbp-metros').value=''; _mbG('mbp-alta').value=''; _mbG('mbp-baja').value=''; _mbG('mbp-obs').value='';
+  mbCalcSacos();
   abrirModal('modal-mb-prod');
 }
+// ── SACOS → TONELADAS ─────────────────────────────────────────────────────────
+// En Monte Bravo el mineral no se pesa: se cuenta por sacos, y cada saco pesa unos 65 kg.
+// El tonelaje del módulo es, por lo tanto, una ESTIMACIÓN. Un solo sitio con el factor para
+// que el día que cambie la referencia se corrija aquí y valga para todo.
+const MB_KG_POR_SACO = 65;
+function mbTonDeSacos(alta, baja){
+  return ((Number(alta)||0)+(Number(baja)||0)) * MB_KG_POR_SACO / 1000;
+}
+// Las toneladas de un registro: las estimadas por sacos si los hay, y si no el tonelaje que
+// se digitó a mano (los registros viejos, de antes de que se contara por sacos).
+function mbTonRegistro(r){
+  if(!r) return 0;
+  const s=(Number(r.sacosAlta)||0)+(Number(r.sacosBaja)||0);
+  return s>0 ? mbTonDeSacos(r.sacosAlta, r.sacosBaja) : (Number(r.toneladas)||0);
+}
+function mbCalcSacos(){
+  const a=_mbNum('mbp-alta'), b=_mbNum('mbp-baja');
+  const el=_mbG('mbp-estimado'); if(!el) return;
+  const t=mbTonDeSacos(a,b), n=a+b;
+  el.innerHTML='Toneladas estimadas: <strong style="color:#c9a84c;font-size:14px">'+_mbN(t,2)+' t</strong>'+
+    (n>0?'<span style="margin-left:8px">· '+_mbN(n,0)+' saco'+(n!==1?'s':'')+' × '+MB_KG_POR_SACO+' kg</span>':'');
+}
 function mbGuardarProd(){
-  const metros=_mbNum('mbp-metros'), ton=_mbNum('mbp-ton');
-  if(metros<=0 && ton<=0){ showNotif('⚠ Registra al menos metros o toneladas','error'); return; }
+  const metros=_mbNum('mbp-metros'), alta=_mbNum('mbp-alta'), baja=_mbNum('mbp-baja');
+  const ton=mbTonDeSacos(alta,baja);
+  if(metros<=0 && alta<=0 && baja<=0){ showNotif('⚠ Registra al menos metros o sacos','error'); return; }
   mbEstado().produccion.push({
     id:_mbId('MBP'), _ts:Date.now(), unidad:'MB',
     fecha:_mbVal('mbp-fecha')||hoy(), turno:_mbVal('mbp-turno'),
-    labor:_mbVal('mbp-labor').trim(), metros, toneladas:ton, obs:_mbVal('mbp-obs').trim()
+    labor:_mbVal('mbp-labor').trim(), metros,
+    sacosAlta:alta, sacosBaja:baja, toneladas:ton, obs:_mbVal('mbp-obs').trim()
   });
   mbGuardar(); cerrarModal('modal-mb-prod'); mbRenderProd();
   showNotif('✓ Producción registrada');
