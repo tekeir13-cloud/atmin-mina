@@ -15794,6 +15794,8 @@ function tarjetaHTML(pid,mes){
     /* franja superior de color según la bandera */
     '<div style="height:46px;background:linear-gradient(135deg,'+b.color+' 0%,'+b.color+'66 100%);position:relative">'+
       '<div style="position:absolute;top:10px;right:12px;display:flex;gap:8px;align-items:center">'+
+        '<button onclick="tarjImprimir(\''+pid+'\',\''+mes+'\')" title="Imprimir la tarjeta con el pie de firmas (guardar como PDF)" '+
+          'style="background:rgba(0,0,0,.35);color:#fff;border:none;border-radius:999px;padding:4px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">🖨️ Imprimir</button>'+
         '<span style="background:rgba(0,0,0,.35);color:#fff;border-radius:999px;padding:4px 12px;font-size:11px;font-weight:700">'+b.icono+' '+b.txt+'</span>'+
       '</div>'+
       '<div style="position:absolute;top:10px;left:14px;color:rgba(255,255,255,.9);font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase">Tarjeta de tareo · '+mesTxt+'</div>'+
@@ -15819,6 +15821,110 @@ function tarjetaHTML(pid,mes){
     /* panel activo */
     '<div style="padding:14px 16px 18px">'+paneles[vista]+'</div>'+
   '</div>';
+}
+/* ── IMPRIMIR LA TARJETA (PDF) ─────────────────────────────────────────────────
+   La tarjeta de pantalla es oscura y con botones; en papel eso no sirve. Esta versión se
+   arma aparte, en blanco y para A4, con todo el mes en una hoja y el pie de firmas: el
+   trabajador firma al final y el administrador al costado, para que la conformidad del
+   tareo quede en físico.
+   Se imprime desde el navegador → "Guardar como PDF". */
+function tarjImprimir(pid, mes){
+  const p=(state.personal||[]).find(x=>String(x.id)===String(pid));
+  if(!p){ showNotif('Elige un trabajador primero','error'); return; }
+  const m=mes||tarjMesActual();
+  const oculto=(typeof sueldoOculto==='function')&&sueldoOculto(p);
+  const S=n=>oculto?'—':_tarjSFmt(n);
+  const r=tareoResumen(pid,m), pago=tareoPago(pid,m), nota=tarjNota(pid,m);
+  const prest=tarjPrestamo(pid,m), desc=tarjDescuento(pid,m), neto=pago-prest-desc;
+  const jornal=Number(p.jornal)||0;
+  const mesTxt=(typeof finNombreMes==='function')?finNombreMes(m):m;
+
+  const [aa,mm]=m.split('-').map(Number);
+  const nDias=new Date(aa,mm,0).getDate();
+  let filas='', nFilas=0;
+  for(let d=1;d<=nDias;d++){
+    const f=m+'-'+String(d).padStart(2,'0');
+    const v=_tareoCell(pid,f);
+    if(!v) continue;
+    const marca=_tarjMarca(v);
+    const mult=marca?((TAREO_MARCAS.find(x=>x.v===v)||{}).paga||0):(Number(v)||0);
+    nFilas++;
+    filas+='<tr><td>'+String(d).padStart(2,'0')+'</td>'+
+      '<td><b>'+v+'</b></td><td>'+(marca||'Tareo')+'</td>'+
+      '<td class="d">'+mult+'</td><td class="d">'+S(mult*jornal)+'</td></tr>';
+  }
+  // Quién firma al costado: el administrador que está en sesión, o el de la planilla.
+  const adminP=(state.personal||[]).find(x=>_normCargo(x.rol)==='administrador'&&x.estado!=='baja');
+  const admin=((typeof usuarioActivo!=='undefined'&&usuarioActivo&&usuarioActivo.rol==='administrador')?usuarioActivo.nombre:'')
+              ||(adminP&&adminP.nombre)||'Administración';
+
+  const kpi=(t,v)=>'<div class="k"><u>'+t+'</u><b>'+v+'</b></div>';
+  const html='<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Tarjeta de tareo — '+
+    escAttr(p.nombre||'')+' — '+escAttr(mesTxt)+'</title><style>'+
+    '@page{size:A4;margin:14mm 13mm}'+
+    '*{box-sizing:border-box}'+
+    'body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#111;font-size:11px}'+
+    '.enc{display:flex;align-items:center;gap:12px;border-bottom:2px solid #1a2744;padding-bottom:8px;margin-bottom:12px}'+
+    '.enc .foto{width:24mm;height:30mm;object-fit:cover;border:1px solid #999;flex-shrink:0}'+
+    '.enc .foto-ini{width:24mm;height:30mm;border:1px solid #999;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:800;color:#888;flex-shrink:0}'+
+    '.enc h1{margin:0;font-size:17px;letter-spacing:.5px}'+
+    '.enc .sub{font-size:11px;color:#555;margin-top:2px}'+
+    '.enc .marca{margin-left:auto;text-align:right;font-size:10px;color:#666;line-height:1.5}'+
+    '.enc .marca b{display:block;font-size:13px;color:#1a2744;letter-spacing:1px}'+
+    '.kpis{display:flex;gap:6px;margin-bottom:12px}'+
+    '.k{flex:1;border:1px solid #ccc;border-radius:4px;padding:5px 7px;text-align:center}'+
+    '.k u{display:block;text-decoration:none;font-size:8px;text-transform:uppercase;letter-spacing:.4px;color:#666}'+
+    '.k b{display:block;font-size:13px;margin-top:2px}'+
+    'h2{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:#555;margin:14px 0 5px;border-bottom:1px solid #ddd;padding-bottom:3px}'+
+    'table{width:100%;border-collapse:collapse}'+
+    'th{background:#1a2744;color:#fff;padding:4px 7px;text-align:left;font-size:10px}'+
+    'td{padding:3px 7px;border-bottom:1px solid #e2e2e2}'+
+    'td.d,th.d{text-align:right}'+
+    'tfoot td{font-weight:800;border-top:2px solid #1a2744;border-bottom:none}'+
+    '.nota{border:1px solid #ddd;border-radius:4px;padding:7px 9px;color:#333;white-space:pre-wrap;line-height:1.5}'+
+    // Pie de firmas: el trabajador al final y el administrador a su costado.
+    '.firmas{display:flex;gap:26mm;margin-top:16mm;page-break-inside:avoid}'+
+    '.fma{flex:1;text-align:center}'+
+    '.fma .linea{border-top:1px solid #111;margin-bottom:4px}'+
+    '.fma .rot{font-size:10px;font-weight:700;letter-spacing:.4px}'+
+    '.fma .det{font-size:9px;color:#666;margin-top:1px}'+
+    '.pie{margin-top:9mm;font-size:8.5px;color:#777;text-align:center;border-top:1px solid #eee;padding-top:5px}'+
+    '</style></head><body>'+
+    '<div class="enc">'+
+      (p.foto?'<img class="foto" src="'+escAttr(p.foto)+'">'
+             :'<div class="foto-ini">'+escAttr(String(p.nombre||'').trim().split(/\s+/).map(x=>x[0]).slice(0,2).join('').toUpperCase()||'—')+'</div>')+
+      '<div><h1>'+escAttr(p.nombre||'')+'</h1>'+
+        '<div class="sub">'+escAttr(p.rol||'—')+' · DNI '+escAttr(p.dni||'—')+
+          ' · Guardia '+escAttr(p.guardia||'—')+' · Jornal '+S(jornal)+'</div>'+
+        '<div class="sub"><b>Tarjeta de tareo · '+escAttr(mesTxt)+'</b></div></div>'+
+      '<div class="marca"><b>MUKICLOUD</b>Emitido '+((typeof fmtF==='function')?fmtF(hoy()):hoy())+'</div>'+
+    '</div>'+
+    '<div class="kpis">'+kpi('Días trab.',r.diasTrab)+kpi('Tareas',r.tareas)+kpi('D. libres',r.dlTomados)+
+      kpi('Faltas',r.faltas)+kpi('Ganado',S(pago))+kpi('Neto',S(neto))+'</div>'+
+    '<h2>Tareo de '+escAttr(mesTxt)+'</h2>'+
+    (nFilas?'<table><thead><tr><th>Día</th><th>Marca</th><th>Concepto</th><th class="d">Tareas</th><th class="d">Monto</th></tr></thead>'+
+      '<tbody>'+filas+'</tbody>'+
+      '<tfoot><tr><td colspan="3">Total '+escAttr(mesTxt)+'</td><td class="d">'+r.tareas+'</td><td class="d">'+S(pago)+'</td></tr></tfoot></table>'
+      :'<div class="nota">Sin tareos registrados en el mes.</div>')+
+    '<h2>Pendientes y neto</h2>'+
+    '<div class="kpis">'+kpi('Préstamo',S(prest))+kpi('Descuento',S(desc))+kpi('Neto a pagar',S(neto))+'</div>'+
+    ((nota.descTexto||'').trim()?'<div class="nota"><b>Detalle:</b> '+escAttr(nota.descTexto)+'</div>':'')+
+    ((nota.texto||'').trim()?'<h2>Anotaciones de RRHH</h2><div class="nota">'+escAttr(nota.texto)+'</div>':'')+
+    '<div class="firmas">'+
+      '<div class="fma"><div class="linea"></div><div class="rot">FIRMA DEL TRABAJADOR</div>'+
+        '<div class="det">'+escAttr(p.nombre||'')+' · DNI '+escAttr(p.dni||'—')+'</div></div>'+
+      '<div class="fma"><div class="linea"></div><div class="rot">ADMINISTRADOR</div>'+
+        '<div class="det">'+escAttr(admin)+'</div></div>'+
+    '</div>'+
+    '<div class="pie">Firmando esta tarjeta el trabajador da conformidad al tareo del mes. '+
+      'Cualquier observación se comunica a Recursos Humanos antes del cierre de planilla.</div>'+
+    '</body></html>';
+
+  const w=window.open('','_blank','width=900,height=700');
+  if(!w){ showNotif('El navegador bloqueó la ventana de impresión','error'); return; }
+  w.document.write(html); w.document.close();
+  // Esperar a que cargue la foto: sin esto la hoja sale con el hueco en blanco.
+  w.onload=function(){ setTimeout(function(){ try{ w.focus(); w.print(); }catch(e){} }, 250); };
 }
 function _tarjMini(t,v,c){
   return '<div style="background:var(--coal4);border:1px solid var(--border);border-radius:10px;padding:8px 10px;text-align:center">'+

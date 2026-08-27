@@ -55,6 +55,40 @@
         font-size:12.5px;color:var(--text2);line-height:1.5;white-space:pre-wrap}
   .otra{display:block;width:100%;margin-top:16px;background:none;border:1px solid var(--border);
         color:var(--text2);border-radius:10px;padding:11px;font-size:13px;cursor:pointer;font-family:inherit}
+  .imprimir{background:rgba(0,0,0,.35);color:#fff;border:none;border-radius:999px;
+        padding:4px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;
+        position:absolute;top:9px;right:12px}
+  .firmas,.conf{display:none}
+  /* Al imprimir manda el papel: fondo blanco, sin botones, y el pie de firmas visible.
+     El trabajador firma al final y el administrador al costado. */
+  @media print{
+    @page{size:A4;margin:14mm 13mm}
+    body{background:#fff;color:#111;padding:0;font-size:11px}
+    .wrap{max-width:none}
+    .marca div{color:#666}
+    .marca b,.marca b span{color:#1a2744}
+    .card{background:#fff;border:none;border-radius:0}
+    .franja{background:#fff !important;border-bottom:2px solid #1a2744;height:auto;padding-bottom:6px;margin-bottom:8px}
+    .franja .et{position:static;color:#1a2744;font-size:12px}
+    .franja .flag{background:#eee;color:#333;top:0}
+    .imprimir,.otra,.pie{display:none !important}
+    .mini{background:#fff;border:1px solid #ccc}
+    .mini u,.sec{color:#666}
+    .mini b,td,th{color:#111}
+    th{background:#1a2744 !important;color:#fff !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    td{border-bottom:1px solid #e2e2e2}
+    .chip{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .nota{background:#fff;border:1px solid #ddd;color:#333}
+    .foto{width:24mm;height:24mm}
+    .foto-ini{width:24mm;height:24mm;background:#fff;border:1px solid #999;color:#888;font-size:22px}
+    .firmas{display:flex;gap:26mm;margin-top:16mm;page-break-inside:avoid}
+    .fma{flex:1;text-align:center}
+    .fma .linea{border-top:1px solid #111;margin-bottom:4px}
+    .fma .rot{font-size:10px;font-weight:700;letter-spacing:.4px;color:#111}
+    .fma .det{font-size:9px;color:#666;margin-top:1px}
+    .conf{margin-top:9mm;font-size:8.5px;color:#777;text-align:center;
+          border-top:1px solid #eee;padding-top:5px;display:block}
+  }
 </style>
 </head>
 <body>
@@ -130,7 +164,8 @@ function pintar(d){
   '<div class="card">'+
     '<div class="franja" style="background:linear-gradient(135deg,'+b.color+' 0%,'+b.color+'66 100%)">'+
       '<span class="et">Tarjeta de tareo · '+esc(nombreMes(d.mes))+'</span>'+
-      '<span class="flag">'+b.icono+' '+esc(b.txt)+'</span></div>'+
+      '<button class="imprimir" onclick="window.print()">🖨️ Imprimir</button>'+
+      '<span class="flag" style="right:96px">'+b.icono+' '+esc(b.txt)+'</span></div>'+
     '<div style="text-align:center;margin-top:14px;padding:0 16px">'+
       '<div style="display:inline-block;border-radius:50%;padding:4px;background:var(--card);box-shadow:0 0 0 2px '+b.color+'">'+
         (t.foto ? '<img class="foto" src="'+esc(t.foto)+'" alt="">' : '<div class="foto-ini">'+(ini||'—')+'</div>')+'</div>'+
@@ -167,6 +202,15 @@ function pintar(d){
       (pen.detalle ? '<div class="nota" style="margin-top:9px"><b>Detalle:</b> '+esc(pen.detalle)+'</div>' : '')+
       (pen.anotacion ? '<div class="sec">Anotaciones de RRHH</div><div class="nota">'+esc(pen.anotacion)+'</div>' : '')+
 
+      // El pie de firmas solo aparece en el papel, no en la pantalla del celular.
+      '<div class="firmas">'+
+        '<div class="fma"><div class="linea"></div><div class="rot">FIRMA DEL TRABAJADOR</div>'+
+          '<div class="det">'+esc(t.nombre)+' · DNI '+esc(t.dni)+'</div></div>'+
+        '<div class="fma"><div class="linea"></div><div class="rot">ADMINISTRADOR</div>'+
+          '<div class="det">&nbsp;</div></div>'+
+      '</div>'+
+      '<div class="conf">Firmando esta tarjeta el trabajador da conformidad al tareo del mes. '+
+        'Cualquier observación se comunica a Recursos Humanos antes del cierre de planilla.</div>'+
       '<button class="otra" onclick="formulario()">Consultar otro DNI</button>'+
       '<div class="pie">Si algo no cuadra, avisa a Recursos Humanos.<br>Los tareos se actualizan conforme los registra tu jefe de guardia.</div>'+
     '</div>'+
