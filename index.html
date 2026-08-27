@@ -16540,9 +16540,13 @@ function puedeEditarTareoMes(mesYM){
 // el 11 y el 12; el 13 ya está cerrada. Después de esa ventana el único que puede tocarla es
 // Finanzas, que es quien responde por el costo de planilla del mes.
 const TAREO_DIAS_EDICION = 2;
+// Quién puede corregir un tareo fuera de la ventana de edición: Finanzas, que responde por el
+// costo de planilla, y Administración, que es quien consolida el tareo mensual con RRHH.
+// Lo que toquen aquí ES lo que tareó el jefe de guardia: no hay dos registros, hay uno solo.
+const TAREO_EDITORES=['jefe_finanzas','administrador'];
 function rolFinanzasTareo(){
   const rol=(typeof usuarioActivo!=='undefined'&&usuarioActivo&&usuarioActivo.rol)||'';
-  return rol==='jefe_finanzas';
+  return TAREO_EDITORES.indexOf(rol)>=0;
 }
 // Días transcurridos entre la fecha del tareo y hoy (ambas en horario local de la operación).
 function _diasDesde(fecha){
@@ -16555,16 +16559,74 @@ function _diasDesde(fecha){
 }
 // ¿La hoja de esa fecha sigue dentro de la ventana de edición?
 function tareoEnVentana(fecha){ return _diasDesde(fecha) <= TAREO_DIAS_EDICION; }
+/* ── HOJAS QUE TAREÓ EL JEFE DE GUARDIA EN EL MES ──────────────────────────────
+   Desde el Tareo Mensual se ve, hoja por hoja, lo que registró cada guardia: qué día, qué
+   turno, quién firmó y a quién tareó con qué marca. No es una copia: son las MISMAS tareas
+   de la cuadrícula, así que corregir una celda arriba cambia lo que se ve aquí, y al revés. */
+let _tareoHojaAbierta='';
+function tareoHojasMes(mesYM){
+  const m=String(mesYM||'').slice(0,7);
+  const hojas={};
+  (state.tareas||[]).forEach(t=>{
+    if(String(t.fecha||'').slice(0,7)!==m) return;
+    if(_tareoUnidad){
+      const p=(state.personal||[]).find(x=>String(x.id)===String(t.trabajadorId));
+      if(((p&&p.unidad)||'NV2820')!==_tareoUnidad) return;
+    }
+    const k=t.fecha+'__'+(t.turno||'DIA');
+    if(!hojas[k]) hojas[k]={key:k,fecha:t.fecha,turno:t.turno||'DIA',tareas:[]};
+    hojas[k].tareas.push(t);
+  });
+  // Quién firmó la hoja sale del reporte del jefe de guardia de ese día y turno.
+  const rg=(typeof state!=='undefined'&&state.reportesGuardia)||[];
+  Object.values(hojas).forEach(h=>{
+    const r=rg.find(x=>x.fecha===h.fecha && String(x.turno||'').toUpperCase().slice(0,1)===String(h.turno).toUpperCase().slice(0,1));
+    h.jefe=(r&&r.jefe)||'';
+  });
+  return Object.values(hojas).sort((a,b)=>b.fecha.localeCompare(a.fecha)||(a.turno<b.turno?-1:1));
+}
+function tareoHojaToggle(key){
+  _tareoHojaAbierta=(_tareoHojaAbierta===key)?'':key;
+  renderTareoMensual();
+}
+function tareoHojasMesHTML(mesYM){
+  const hojas=tareoHojasMes(mesYM);
+  if(!hojas.length) return '';
+  const nom=id=>{ const p=(state.personal||[]).find(x=>String(x.id)===String(id)); return p?p.nombre:'—'; };
+  const detalle=h=>'<div style="padding:8px 12px 12px;background:var(--coal5);border-top:1px solid var(--border)">'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:5px">'+
+    h.tareas.slice().sort((a,b)=>nom(a.trabajadorId).localeCompare(nom(b.trabajadorId),'es')).map(t=>{
+      const v=_tareoCell(t.trabajadorId,t.fecha);
+      return '<div style="display:flex;align-items:center;gap:7px;font-size:11.5px">'+
+        '<span style="display:inline-block;min-width:30px;text-align:center;background:'+_tareoColVal(v)+';color:#fff;font-weight:800;font-size:10px;border-radius:5px;padding:2px 5px">'+v+'</span>'+
+        '<span style="color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+nom(t.trabajadorId)+'</span></div>';
+    }).join('')+'</div></div>';
+  return '<div style="border:1px solid var(--border);border-radius:10px;margin-bottom:12px;overflow:hidden">'+
+    '<div style="padding:9px 12px;background:var(--coal4);font-size:11.5px;color:var(--text3)">'+
+      '📋 <b style="color:var(--text2)">'+hojas.length+' hoja'+(hojas.length!==1?'s':'')+'</b> tareada'+(hojas.length!==1?'s':'')+
+      ' en el mes por los jefes de guardia — haz clic en una para ver a quién tareó</div>'+
+    hojas.map(h=>{
+      const abierta=_tareoHojaAbierta===h.key;
+      return '<div style="border-top:1px solid var(--border)">'+
+        '<button onclick="tareoHojaToggle(\''+h.key+'\')" style="width:100%;display:flex;align-items:center;gap:10px;background:none;border:none;color:var(--text);padding:9px 12px;cursor:pointer;font-family:inherit;text-align:left;font-size:12px">'+
+          '<span style="color:var(--text3);font-size:11px">'+(abierta?'▾':'▸')+'</span>'+
+          '<b>'+((typeof fmtF==='function')?fmtF(h.fecha):h.fecha)+'</b>'+
+          '<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;background:'+(h.turno==='NOCHE'?'rgba(96,165,250,0.18);color:#60a5fa':'rgba(245,158,11,0.18);color:#f59e0b')+'">'+h.turno+'</span>'+
+          '<span style="color:var(--text3)">'+h.tareas.length+' trabajador'+(h.tareas.length!==1?'es':'')+'</span>'+
+          (h.jefe?'<span style="color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">· '+h.jefe+'</span>':'')+
+        '</button>'+(abierta?detalle(h):'')+'</div>';
+    }).join('')+'</div>';
+}
 // Guarda de escritura: devuelve true si se puede tocar el tareo de esa fecha; si no, avisa.
 function tareoEditable(fecha){
   const m=String(fecha||'').slice(0,7);
-  if(rolFinanzasTareo()) return true;                       // Finanzas edita siempre
+  if(rolFinanzasTareo()) return true;                       // Finanzas y Administración editan siempre
   if(!puedeEditarTareoMes(m)){
-    try{ showNotif('🔒 El tareo de '+m+' ya está archivado (mes cumplido). Solo Finanzas puede corregirlo.','error'); }catch(e){}
+    try{ showNotif('🔒 El tareo de '+m+' ya está archivado (mes cumplido). Solo Finanzas o Administración pueden corregirlo.','error'); }catch(e){}
     return false;
   }
   if(!tareoEnVentana(fecha)){
-    try{ showNotif('🔒 El tareo del '+String(fecha).slice(0,10)+' se cerró: solo se puede editar hasta '+TAREO_DIAS_EDICION+' días después de emitido. Solo Finanzas puede corregirlo.','error'); }catch(e){}
+    try{ showNotif('🔒 El tareo del '+String(fecha).slice(0,10)+' se cerró: solo se puede editar hasta '+TAREO_DIAS_EDICION+' días después de emitido. Solo Finanzas o Administración pueden corregirlo.','error'); }catch(e){}
     return false;
   }
   return true;
@@ -16614,10 +16676,16 @@ function tareoGridSet(tid,fecha,val){
   const cont=_tareoCont();
   if(!cont || cont.dataset.editing!=='true') return;
   if(!tareoEditable(fecha)) return;
+  // El turno de la hoja que dejó el jefe de guardia se CONSERVA: al corregir una celda desde
+  // la cuadrícula se reemplazaba la tarea sin él, y esa persona se salía de su hoja de Noche
+  // para aparecer en una de Día que nadie tareó. La corrección cambia la marca, no la hoja.
+  const previa=(state.tareas||[]).find(t=>String(t.trabajadorId)===String(tid)&&t.fecha===fecha);
+  const turnoPrevio=previa&&previa.turno;
   state.tareas=(state.tareas||[]).filter(t=>!(String(t.trabajadorId)===String(tid)&&t.fecha===fecha));
   const p=(state.personal||[]).find(x=>String(x.id)===String(tid));
   if(val!==''){
     const base={fecha,trabajadorId:tid,id:'T'+Date.now()+Math.random().toString(36).slice(2),_ts:Date.now(),jornal:p?p.jornal:0};
+    if(turnoPrevio) base.turno=turnoPrevio;
     const marca=tareoMarca(val);
     if(marca){
       state.tareas.push({...base, tipo:marca.tipo, codigo:marca.v, mult:marca.paga,
@@ -16817,8 +16885,9 @@ function renderTareoMensual(){
       </div>
     </div>
     ${_arch?`<div style="font-size:11px;color:#f59e0b;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:8px;padding:9px 12px;margin-bottom:10px">
-      🔒 ${nombreMes} ${y} ya se cumplió y quedó archivado${_puede?'. Como Gerencia/Finanzas puedes corregirlo, pero recuerda que su costo ya se cargó al ciclo.':'. Solo Gerencia o Finanzas pueden corregirlo.'}
+      🔒 ${nombreMes} ${y} ya se cumplió y quedó archivado${_puede?'. Como Finanzas/Administración puedes corregirlo, pero recuerda que su costo ya se cargó al ciclo.':'. Solo Finanzas o Administración pueden corregirlo.'}
     </div>`:''}
+    ${tareoHojasMesHTML(mes)}
     <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6">${isEditing?'<b style="color:var(--gold)">✏️ Modo edición activado</b> — Haz <b>clic en una celda</b> para elegir: <b style="color:#16a34a">1</b>, <b style="color:#84cc16">1.25</b>, <b style="color:#d97706">1.5</b>, <b style="color:#f59e0b">1.75</b>, <b style="color:#dc2626">2</b>, <b style="color:#e11d48">2.25</b>, <b style="color:#ec4899">2.5</b>, <b style="color:#c026d3">2.75</b>, <b style="color:#8b5cf6">3</b> (tareas del día) o un marcador: '+_tareoChipsMarcas()+'. Para copiar como en Excel: <b>mantén presionado y arrastra</b> sobre la fila (desde una celda vacía, el arrastre <b>borra</b> las casillas por donde pasa).<br>':'Lectura — haz clic en Editar para modificar.<br>'}<b>Trab</b>=días trabajados · <b>Tareas</b>=unidades de pago · <b>Gan</b>=libres ganados (trab÷2) · <b>Tom</b>=libres tomados (DL) · <b>Compr</b>=comprados (ganados−tomados). &nbsp;<b>Pago = (tareas + tomados + comprados) × jornal.</b><br>${_tareoLeyendaMarcas()}</div>
     <div class="table-wrap" style="max-height:72vh;overflow:auto;border:1px solid var(--border);border-radius:10px">
       <table style="border-collapse:collapse;font-size:11px;min-width:100%;table-layout:fixed;width:max-content">
