@@ -49,6 +49,33 @@ module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Cache-Control', 'no-store');
   if (req.method === 'OPTIONS') return res.status(200).end();
+
+  // ── CHEQUEO (GET) ──────────────────────────────────────────────────────────
+  // Abrir /api/tarjeta en el navegador contesta si la función está desplegada y si alcanza
+  // la nube, con CUÁNTA gente y cuántos tareos ve. Solo cuenta: ni un nombre, ni un DNI,
+  // ni un sueldo. Sirve para separar "no está desplegado" de "no lee Supabase" de
+  // "el DNI no está en la planilla", que en pantalla se parecen.
+  if (req.method === 'GET') {
+    const ahoraG = new Date(Date.now() - 5 * 3600 * 1000);
+    const mesG = ahoraG.toISOString().slice(0, 7);
+    try {
+      const personalG = await modulo('personal');
+      if (!Array.isArray(personalG)) {
+        return res.status(200).json({ chequeo: 'ok', desplegado: true, nube: 'sin-lectura', mes: mesG,
+          nota: 'La función corre, pero NO pudo leer la planilla de Supabase (cuota agotada, credenciales o permisos).' });
+      }
+      const tareasG = (await modulo('tareas')) || [];
+      const activasG = personalG.filter(x => x && x.estado !== 'baja');
+      return res.status(200).json({ chequeo: 'ok', desplegado: true, nube: 'ok', mes: mesG,
+        personas: personalG.length, personasActivas: activasG.length,
+        conDni: activasG.filter(x => String(x.dni || '').replace(/\D/g, '').length === 8).length,
+        tareosDelMes: tareasG.filter(t => String((t && t.fecha) || '').slice(0, 7) === mesG).length,
+        nota: 'Si personasActivas es 0 la planilla no llegó a la nube; si conDni es menor, hay fichas sin DNI de 8 dígitos.' });
+    } catch (e) {
+      return res.status(200).json({ chequeo: 'ok', desplegado: true, nube: 'error', mes: mesG, detalle: String(e && e.message || e).slice(0, 200) });
+    }
+  }
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'metodo' });
 
   try {
