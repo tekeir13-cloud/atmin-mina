@@ -24647,11 +24647,36 @@ function finMesVista(){
   return finMesActual();
 }
 function finCambiarMesVista(v){ _finMesSel=v||null; try{ renderFinDashboard(); }catch(e){} }
+/* Meses que ofrece el selector de Finanzas.
+   Antes solo salían los meses CON VALORIZACIÓN cargada, así que un mes que ya tenía gastos,
+   avance y tareos —pero cuya valorización aún no llega— desaparecía de la lista: se pasaba
+   de julio a septiembre como si agosto no existiera. Ahora la lista se arma de toda la
+   actividad y, además, se rellenan los huecos: entre el primer mes con movimiento y el mes
+   en curso no puede faltar ninguno, porque un mes sin datos igual hay que poder mirarlo. */
 function finMesesConDatos(){
   const set=new Set();
-  (state.valorizacionesLabor||[]).forEach(v=>{ if(v.mesNum&&v.anio) set.add(v.anio+'-'+String(v.mesNum).padStart(2,'0')); });
-  try{ set.add(finMesActual()); }catch(e){}
-  try{ set.add(finMesVista()); }catch(e){}
+  const add=m=>{ const s=String(m||'').slice(0,7); if(s.length===7) set.add(s); };
+  (state.valorizacionesLabor||[]).forEach(v=>{ if(v.mesNum&&v.anio) add(v.anio+'-'+String(v.mesNum).padStart(2,'0')); });
+  // Actividad de la operación: cada registro cae en el ciclo (26→25) que le corresponde.
+  const porFecha=f=>{ try{ return (typeof periodoDeFecha==='function')?periodoDeFecha(f):String(f||'').slice(0,7); }
+                      catch(e){ return String(f||'').slice(0,7); } };
+  (state.reportesGuardia||[]).forEach(r=>add(porFecha(r.fecha)));
+  (state.compresorista||[]).forEach(r=>add(porFecha(r.fecha)));
+  (state.tareas||[]).forEach(t=>add(porFecha(t.fecha)));
+  try{ add(finMesActual()); }catch(e){}
+  try{ add(finMesVista()); }catch(e){}
+  const meses=[...set].filter(Boolean).sort();
+  if(meses.length>1){
+    // Rellenar los huecos entre el primero y el último.
+    const fin=meses[meses.length-1];
+    let [a,m]=meses[0].split('-').map(Number);
+    while(true){
+      const k=a+'-'+String(m).padStart(2,'0');
+      set.add(k);
+      if(k>=fin) break;
+      m++; if(m>12){ m=1; a++; }
+    }
+  }
   return [...set].filter(Boolean).sort().reverse();
 }
 function renderFinDashboard(){
