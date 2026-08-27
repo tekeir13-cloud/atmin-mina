@@ -12718,10 +12718,10 @@ function mbGuardarProd(){
      · Petróleo y horómetros → sale del TANQUE de la unidad
    Cada sección descuenta de donde corresponde y el gasto queda en Monte Bravo, nunca en 2820.
    ─────────────────────────────────────────────────────────────────────────── */
-// Explosivos que sí usa Monte Bravo: el catálogo base sin ningún FANEL.
+// Explosivos del parte de Monte Bravo: el catálogo COMPLETO, igual que en NV 2820.
+// (Antes se filtraban los FANEL; ahora se listan todos y el compresorista llena lo que usa.)
 function mbExplosivos(){
-  return (typeof EXPLO_CATALOGO!=='undefined'?EXPLO_CATALOGO:[])
-    .filter(c=>String(c.id||'').indexOf('FANEL')<0);
+  return (typeof EXPLO_CATALOGO!=='undefined'?EXPLO_CATALOGO:[]);
 }
 // Labores de la unidad: las que ya aparecen en producción, en el acopio y en los partes. La lista
 // se arma de lo registrado —no hay un catálogo fijo— y desde el parte se puede agregar una nueva.
@@ -12729,15 +12729,20 @@ const MB_LABORES_KEY='atmin_mb_labores';
 function mbLaboresExtra(){ try{ return JSON.parse(localStorage.getItem(MB_LABORES_KEY)||'[]')||[]; }catch(e){ return []; } }
 function mbLaboresExtraSave(a){ try{ localStorage.setItem(MB_LABORES_KEY,JSON.stringify(a||[])); }catch(e){}
   try{ sbSyncModulo('mb_labores', a||[]); }catch(e){} }
+// Los dos frentes de Monte Bravo salen SIEMPRE en el parte, aunque todavía no tengan movimiento:
+// son las labores de la unidad, no algo que haya que ir descubriendo de lo ya registrado.
+const MB_FRENTES_FIJOS = ['RAMPA ACOPIO','SN 5100 NW'];
 function mbLabores(){
   const set=new Set();
   const add=v=>{ const t=String(v||'').trim(); if(t) set.add(t); };
+  MB_FRENTES_FIJOS.forEach(add);
   mbEstado().produccion.forEach(r=>add(r.labor));
   mbEstado().partes.forEach(r=>Object.keys(r.consumoFrentes||{}).forEach(add));
   mbAcopio().salidas.forEach(r=>add(r.destino||r.labor));
   mbLaboresExtra().forEach(add);
-  const out=[...set];
-  return out.length?out.sort((a,b)=>a.localeCompare(b,'es')):['Frente principal'];
+  // Los dos frentes fijos primero y en su orden; lo demás, alfabético detrás.
+  const extras=[...set].filter(l=>MB_FRENTES_FIJOS.indexOf(l)<0).sort((a,b)=>a.localeCompare(b,'es'));
+  return MB_FRENTES_FIJOS.concat(extras);
 }
 const _mbLbId=t=>'L'+String(t).replace(/[^A-Za-z0-9]/g,'_');
 
