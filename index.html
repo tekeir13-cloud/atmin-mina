@@ -4500,13 +4500,9 @@ select option{background:var(--coal3);}
     <!-- S0: PRODUCCIÓN DEL TURNO — antes se registraba en una pestaña aparte; ahora va aquí,
          en el mismo parte, porque lo reporta la misma persona en el mismo momento. -->
     <div class="section-title" style="margin-bottom:6px">⛏ Producción del turno</div>
-    <div style="font-size:10.5px;color:var(--text3);margin-bottom:8px">Avance y sacos de mineral. El tonelaje se estima a razón de 65 kg por saco.</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-      <div class="form-group" style="margin:0"><label>Labor / frente</label>
-        <select id="mbc-prod-labor"></select></div>
-      <div class="form-group" style="margin:0"><label>Avance (metros)</label>
-        <input type="number" id="mbc-prod-metros" min="0" step="any" placeholder="0"></div>
-    </div>
+    <div style="font-size:10.5px;color:var(--text3);margin-bottom:8px">Sacos de mineral del turno. El tonelaje se estima a razón de 65 kg por saco.</div>
+    <div class="form-group" style="margin:0 0 10px"><label>Labor / frente</label>
+      <select id="mbc-prod-labor"></select></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
       <div class="form-group" style="margin:0"><label><span id="mbc-ico-alta"></span> Sacos de ALTA ley</label>
         <input type="number" id="mbc-prod-alta" min="0" step="1" placeholder="0" oninput="mbCalcProdParte()"></div>
@@ -13055,7 +13051,7 @@ function mbCalcProdParte(){
 }
 function mbAbrirParte(){
   _mbDisparos=[];
-  ['mbc-prod-metros','mbc-prod-alta','mbc-prod-baja'].forEach(id=>{ const e=_mbG(id); if(e) e.value=''; });
+  ['mbc-prod-alta','mbc-prod-baja'].forEach(id=>{ const e=_mbG(id); if(e) e.value=''; });
   const ls=_mbG('mbc-prod-labor');
   if(ls) ls.innerHTML=mbLabores().map(l=>'<option value="'+escAttr(l)+'">'+escAttr(l)+'</option>').join('');
   mbCalcProdParte();
@@ -13216,7 +13212,7 @@ function mbGuardarParte(){
   })).filter(d=>d.items.length);
 
   if(!pet.length && !hor.length && !Object.keys(consumoFrentes).length && !expSal.length
-     && !(_mbNum('mbc-prod-metros')>0 || _mbNum('mbc-prod-alta')>0 || _mbNum('mbc-prod-baja')>0)){
+     && !(_mbNum('mbc-prod-alta')>0 || _mbNum('mbc-prod-baja')>0)){
     showNotif('⚠ El parte está vacío','error'); return;
   }
   if(typeof bloqueadoPorCierre==='function' && bloqueadoPorCierre(fecha,'partes de Monte Bravo')) return;
@@ -13247,15 +13243,15 @@ function mbGuardarParte(){
   // La producción del turno viaja con el parte, pero se guarda TAMBIÉN como registro de
   // producción —atado al parte por `parte`— para que el dashboard, las liquidaciones y las
   // estadísticas la sigan leyendo del mismo sitio de siempre. Al borrar el parte, se va con él.
-  const pMet=_mbNum('mbc-prod-metros'), pAlta=_mbNum('mbc-prod-alta'), pBaja=_mbNum('mbc-prod-baja');
-  if(pMet>0 || pAlta>0 || pBaja>0){
+  const pAlta=_mbNum('mbc-prod-alta'), pBaja=_mbNum('mbc-prod-baja');
+  if(pAlta>0 || pBaja>0){
     mbEstado().produccion.push({ id:id+'-P', _ts:Date.now(), unidad:'MB', parte:id, fecha, turno,
-      labor:_mbVal('mbc-prod-labor').trim()||(mbLabores()[0]||''), metros:pMet,
+      labor:_mbVal('mbc-prod-labor').trim()||(mbLabores()[0]||''),
       sacosAlta:pAlta, sacosBaja:pBaja, toneladas:mbTonDeSacos(pAlta,pBaja),
       obs:_mbVal('mbc-obs').trim() });
   }
   mbEstado().partes.push({ id, _ts:Date.now(), unidad:'MB', fecha, turno,
-    produccion:{ labor:_mbVal('mbc-prod-labor').trim(), metros:pMet, sacosAlta:pAlta, sacosBaja:pBaja,
+    produccion:{ labor:_mbVal('mbc-prod-labor').trim(), sacosAlta:pAlta, sacosBaja:pBaja,
                  toneladas:mbTonDeSacos(pAlta,pBaja) },
     nombre:_mbVal('mbc-nombre').trim(), petroleo:pet, horometros:hor, consumoFrentes,
     // Los disparos del turno con su costo, y los precios con que se valorizó: un precio que
