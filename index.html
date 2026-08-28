@@ -7770,6 +7770,10 @@ else if(Number(prevAlm.productosTs||0)>Number(data.productosTs||0)){ a.productos
     case 'mb_labores':         if(Array.isArray(data)){ setLS('atmin_mb_labores', data); } break;
     case 'tarjeta_notas':      if(data&&typeof data==='object'){ setLS('atmin_tarjeta_notas', data);
                                  try{ if(document.getElementById('rrhh-tarjetas')&&typeof renderTarjetas==='function') renderTarjetas(); }catch(e){} } break;
+    case 'personal_fotos':     if(data&&typeof data==='object'){
+                                 const act=(typeof pfLoad==='function')?pfLoad():{};
+                                 setLS(FOTOS_KEY, {...act, ...data});
+                                 try{ if(document.getElementById('rrhh-tarjetas')&&typeof renderTarjetas==='function') renderTarjetas(); }catch(e){} } break;
     case 'almacen_histbackup': if(data&&typeof data==='object'){ setLS('atmin_almacen_histbackup', data); } break;
     case 'params_precios': case 'adelantos': case 'meses_cerrados': case 'fin_config': case 'personal_jefe':
       if(typeof _cfgAplicar==='function'&&data&&typeof data==='object'){ _cfgAplicar(modulo,data); try{ localStorage.setItem('atmin_cfg_ts_'+modulo,String(Number(data._ts)||0)); }catch(e){} } break;
@@ -15919,7 +15923,8 @@ let _tarjSel=null, _tarjMes=null, _tarjBusca='', _tarjVista='tareo';
 function tarjMesActual(){ return _tarjMes || ((typeof hoy==='function')?hoy().slice(0,7):new Date().toISOString().slice(0,7)); }
 function tarjFotoHTML(p,tam){
   const t=tam||34;
-  if(p&&p.foto) return '<img src="'+escAttr(p.foto)+'" alt="" style="width:'+t+'px;height:'+t+'px;border-radius:'+Math.round(t/4)+'px;object-fit:cover;flex-shrink:0;border:1px solid var(--border)">';
+  const _f=personaFoto(p);
+  if(_f) return '<img src="'+escAttr(_f)+'" alt="" style="width:'+t+'px;height:'+t+'px;border-radius:'+Math.round(t/4)+'px;object-fit:cover;flex-shrink:0;border:1px solid var(--border)">';
   const ini=String((p&&p.nombre)||'').trim().split(/\s+/).map(x=>x[0]).slice(0,2).join('').toUpperCase();
   return '<div style="width:'+t+'px;height:'+t+'px;border-radius:'+Math.round(t/4)+'px;background:var(--coal5);color:var(--text2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:'+Math.round(t/2.6)+'px;flex-shrink:0;border:1px solid var(--border)">'+(ini||'—')+'</div>';
 }
@@ -16073,7 +16078,7 @@ function tarjetaHTML(pid,mes){
       '<div style="font-size:12px;color:'+b.color+';font-weight:700;margin-top:2px">'+escAttr(p.rol||'—')+'</div>'+
       '<div style="font-size:11px;color:var(--text3);margin-top:3px">DNI '+escAttr(p.dni||'—')+' · Guardia '+escAttr(p.guardia||'—')+' · Jornal '+_tarjS(jornal)+'</div>'+
       /* Solo se ofrece AGREGAR la foto: si el trabajador ya la tiene, la tarjeta no muestra nada. */
-      (p.foto?'':'<div style="margin-top:6px"><label style="font-size:10.5px;color:var(--text3);cursor:pointer">📷 Agregar foto'+
+      (personaFoto(p)?'':'<div style="margin-top:6px"><label style="font-size:10.5px;color:var(--text3);cursor:pointer">📷 Agregar foto'+
         '<input type="file" accept="image/*" style="display:none" onchange="tarjFotoSubir(\''+pid+'\',this)"></label></div>')+
     '</div>'+
     /* botonera */
@@ -16156,7 +16161,7 @@ function tarjImprimir(pid, mes){
     '.pie{margin-top:9mm;font-size:8.5px;color:#777;text-align:center;border-top:1px solid #eee;padding-top:5px}'+
     '</style></head><body>'+
     '<div class="enc">'+
-      (p.foto?'<img class="foto" src="'+escAttr(p.foto)+'">'
+      (personaFoto(p)?'<img class="foto" src="'+escAttr(personaFoto(p))+'">'
              :'<div class="foto-ini">'+escAttr(String(p.nombre||'').trim().split(/\s+/).map(x=>x[0]).slice(0,2).join('').toUpperCase()||'—')+'</div>')+
       '<div><h1>'+escAttr(p.nombre||'')+'</h1>'+
         '<div class="sub">'+escAttr(p.rol||'—')+' · DNI '+escAttr(p.dni||'—')+
@@ -16197,12 +16202,14 @@ function _tarjMini(t,v,c){
     '<div style="font-size:15.5px;font-weight:800;margin-top:2px;color:'+(c||'var(--text)')+'">'+v+'</div></div>';
 }
 function _tarjFotoRedonda(p,t){
-  if(p&&p.foto) return '<img src="'+escAttr(p.foto)+'" alt="" style="width:'+t+'px;height:'+t+'px;border-radius:50%;object-fit:cover;display:block">';
+  const _f=personaFoto(p);
+  if(_f) return '<img src="'+escAttr(_f)+'" alt="" style="width:'+t+'px;height:'+t+'px;border-radius:50%;object-fit:cover;display:block">';
   const ini=String((p&&p.nombre)||'').trim().split(/\s+/).map(x=>x[0]).slice(0,2).join('').toUpperCase();
   return '<div style="width:'+t+'px;height:'+t+'px;border-radius:50%;background:var(--coal5);color:var(--text2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:'+Math.round(t/2.8)+'px">'+(ini||'—')+'</div>';
 }
 function renderTarjetas(){
   const cont=document.getElementById('rrhh-tarjetas'); if(!cont) return;
+  pfAsegurarY(renderTarjetas);   // las fotos se piden aquí, no al abrir la app
   const q=_tarjBusca.trim().toUpperCase();
   const lista=(state.personal||[]).filter(p=>p.estado!=='baja')
     .filter(p=>!q || String(p.nombre||'').toUpperCase().includes(q) || String(p.dni||'').includes(q));
@@ -16245,6 +16252,7 @@ function renderTarjetas(){
 }
 
 function renderPersonal(){
+  pfAsegurarY(renderPersonal);
   try{ if(typeof personalOrdenar==='function') personalOrdenar(); }catch(e){}
   try{ poblarSelectCargos('p-rol'); }catch(e){}
   const activos=state.personal.filter(p=>p.estado!=='baja');
@@ -16471,13 +16479,87 @@ function pFotoElegir(input){
     if(pv) pv.innerHTML=_pFotoTmp?('<img src="'+escAttr(_pFotoTmp)+'" style="width:44px;height:44px;border-radius:10px;object-fit:cover;border:1px solid var(--border)">'):'';
   });
 }
+/* ── FOTOS DEL PERSONAL, EN SU PROPIO MÓDULO ───────────────────────────────────
+   Las fotos vivían DENTRO de `personal`, así que cada vez que un equipo abría la app se
+   descargaban las 63 aunque nadie fuera a mirarlas: 1,9 MB de los 2,4 MB que pesaba cada
+   carga. Eso es lo que se comió la cuota de egress.
+   Ahora viven aparte y se bajan cuando de verdad hacen falta —al abrir una ficha, la pestaña
+   de Tarjetas o al imprimir—. Es el mismo criterio que ya usa el almacén con sus imágenes.
+   Se siguen viendo en todos los sitios de siempre; lo único que cambia es cuándo viajan.  */
+const FOTOS_KEY='atmin_personal_fotos';
+let _fotosCargadas=false;          // ¿ya se pidió el módulo a la nube en esta sesión?
+let _fotosPidiendo=null;           // promesa en curso, para no pedirlo dos veces a la vez
+function pfLoad(){ try{ return JSON.parse(localStorage.getItem(FOTOS_KEY)||'{}')||{}; }catch(e){ return {}; } }
+function pfSave(mapa){
+  try{ localStorage.setItem(FOTOS_KEY, JSON.stringify(mapa||{})); }catch(e){}
+  try{ sbSyncModulo('personal_fotos', mapa||{}); }catch(e){}
+}
+// La foto de una persona. Acepta los registros VIEJOS que todavía la traen dentro (p.foto),
+// para que nada deje de verse mientras la migración termina de propagarse entre equipos.
+function personaFoto(p){
+  if(!p) return '';
+  if(p.foto) return p.foto;
+  try{ return pfLoad()[String(p.id)]||''; }catch(e){ return ''; }
+}
+function personaFotoSet(pid, dataUrl){
+  const m=pfLoad(); m[String(pid)]=dataUrl; pfSave(m);
+  // Si el registro traía la foto vieja adentro, se quita: si no, seguiría viajando con `personal`.
+  const p=(state.personal||[]).find(x=>String(x.id)===String(pid));
+  if(p && p.foto){ delete p.foto; p._ts=Date.now(); try{ personalSave(); }catch(e){} }
+}
+// Trae el módulo de fotos de la nube. Se llama al ENTRAR a una pantalla que las muestra,
+// no al abrir la app. Una sola vez por sesión.
+async function pfAsegurar(){
+  if(_fotosCargadas) return;
+  if(_fotosPidiendo) return _fotosPidiendo;
+  _fotosPidiendo=(async()=>{
+    try{
+      if(typeof sbLoadModulo==='function'){
+        const nube=await sbLoadModulo('personal_fotos');
+        if(nube && typeof nube==='object'){
+          // Unión: la nube manda, pero no se pierde una foto que este equipo acaba de sacar
+          // y todavía no subió.
+          const local=pfLoad(), unido={...local, ...nube};
+          try{ localStorage.setItem(FOTOS_KEY, JSON.stringify(unido)); }catch(e){}
+        }
+      }
+    }catch(e){}
+    _fotosCargadas=true;
+    return true;
+  })();
+  return _fotosPidiendo;
+}
+// Pide las fotos y, cuando llegan, vuelve a dibujar la pantalla que las necesita.
+function pfAsegurarY(redibujar){
+  if(_fotosCargadas) return;
+  pfAsegurar().then(()=>{ try{ if(typeof redibujar==='function') redibujar(); }catch(e){} });
+}
+/* MIGRACIÓN — se ejecuta una vez, cuando el módulo `personal` todavía trae fotos adentro.
+   Saca cada foto a su módulo, la verifica y recién entonces la quita del registro. Si algo no
+   cuadra, se deja como estaba: es preferible gastar cuota a perder una foto. */
+function pfMigrar(){
+  try{
+    const conFoto=(state.personal||[]).filter(p=>p&&typeof p.foto==='string'&&p.foto.indexOf('data:')===0);
+    if(!conFoto.length) return 0;
+    const mapa=pfLoad();
+    conFoto.forEach(p=>{ mapa[String(p.id)]=p.foto; });
+    // Verificar ANTES de borrar nada: todas tienen que haber quedado guardadas.
+    const faltan=conFoto.filter(p=>mapa[String(p.id)]!==p.foto);
+    if(faltan.length){ console.warn('fotos: migración incompleta, no se toca nada', faltan.length); return 0; }
+    pfSave(mapa);
+    conFoto.forEach(p=>{ delete p.foto; p._ts=Date.now(); });
+    try{ personalSave(); }catch(e){}
+    console.log('fotos: '+conFoto.length+' movidas a su propio módulo');
+    return conFoto.length;
+  }catch(e){ console.warn('fotos migración', e); return 0; }
+}
+
 function tarjFotoSubir(pid, input){
   _fotoLeer(input&&input.files&&input.files[0], function(d){
     if(!d) return;
     const p=(state.personal||[]).find(x=>String(x.id)===String(pid));
     if(!p) return;
-    p.foto=d; p._ts=Date.now();
-    personalSave();   // sincroniza el módulo 'personal' completo: la foto viaja con él
+    personaFotoSet(pid, d);   // va a su propio módulo, no dentro de 'personal'
     renderTarjetas();
     showNotif('📷 Foto actualizada');
   });
@@ -16604,13 +16686,13 @@ function abrirFichaTrabajador(pid){
 function _fichaFotoRender(p){
   const el=document.getElementById('ficha-foto'); if(!el) return;
   el.innerHTML='<div style="display:flex;align-items:center;gap:14px;background:var(--coal3);border:1px solid var(--border);border-radius:10px;padding:10px 12px">'+
-    (p.foto?'<img src="'+escAttr(p.foto)+'" style="width:70px;height:88px;object-fit:cover;border-radius:6px;border:1px solid var(--border)">'
+    (personaFoto(p)?'<img src="'+escAttr(personaFoto(p))+'" style="width:70px;height:88px;object-fit:cover;border-radius:6px;border:1px solid var(--border)">'
            :'<div style="width:70px;height:88px;border:1px dashed var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:9.5px;color:var(--text3);text-align:center;line-height:1.3">FOTO<br>4×3</div>')+
     '<div style="flex:1;min-width:0">'+
       '<div style="font-size:12px;font-weight:700;color:var(--text)">Foto del trabajador</div>'+
       '<div style="font-size:11px;color:var(--text3);margin-top:2px">Sale en la tarjeta de tareo y en la parte superior de la ficha impresa.</div>'+
       '<label class="btn btn-outline" style="display:inline-block;margin-top:8px;padding:6px 14px;font-size:11.5px;cursor:pointer">'+
-        (p.foto?'Cambiar foto':'📷 Agregar foto')+
+        (personaFoto(p)?'Cambiar foto':'📷 Agregar foto')+
         '<input type="file" accept="image/*" style="display:none" onchange="fichaFotoSubir(this)"></label>'+
     '</div></div>';
 }
@@ -16619,8 +16701,7 @@ function fichaFotoSubir(input){
   if(!p) return;
   _fotoLeer(input&&input.files&&input.files[0], function(d){
     if(!d) return;
-    p.foto=d; p._ts=Date.now();
-    try{ personalSave(); }catch(e){}
+    personaFotoSet(p.id, d);
     _fichaFotoRender(p);
     try{ if(document.getElementById('rrhh-tarjetas')&&typeof renderTarjetas==='function') renderTarjetas(); }catch(e){}
     showNotif('📷 Foto guardada');
@@ -16756,8 +16837,9 @@ function imprimirFichaTrabajador(pid){
   const nombre=[f.apPaterno,f.apMaterno,f.nombres].filter(Boolean).join(' ')||p.nombre||'';
   // La cabecera reserva SIEMPRE el recuadro de la foto arriba a la derecha: con foto la imprime,
   // y sin foto deja el espacio para pegar una física.
-  const cajaFoto=p.foto
-    ? `<img src="${escAttr(p.foto)}" class="fp-foto">`
+  const _fotoFicha=personaFoto(p);
+  const cajaFoto=_fotoFicha
+    ? `<img src="${escAttr(_fotoFicha)}" class="fp-foto">`
     : `<div class="fp-foto fp-foto-vacia">FOTO</div>`;
   // La foto va SOLO en la primera hoja.
   const enc=(t,conFoto)=>`<div class="fp-enc${conFoto?'':' fp-enc-simple'}">${conFoto?cajaFoto:''}
@@ -22814,6 +22896,8 @@ async function initSistema(){
   try{ aplicarPlanillaOficialAuto(); }catch(e){}
   // Los cambios de puesto se aplican aunque la planilla oficial ya se haya corrido antes.
   try{ aplicarCambiosCargo(); }catch(e){}
+  // Saca las fotos que todavía viajan dentro de `personal` a su propio módulo.
+  try{ pfMigrar(); }catch(e){}
   // Copia del día: la primera vez que se abre el sistema cada mañana.
   try{ puntoDiaGuardar(); }catch(e){}
   poblarSelects();
@@ -29580,6 +29664,12 @@ async function _restaurarSnap(snap, exacto, etiqueta){
       if(!exacto) Object.keys(snap.tarjetaNotas).forEach(pid=>{ out[pid]={...(snap.tarjetaNotas[pid]||{}), ...(act[pid]||{})}; });
       tarjNotasSave(out);
     }
+    if(snap.personalFotos && typeof pfSave==='function'){
+      const act=(typeof pfLoad==='function')?pfLoad():{};
+      // Al unir, la del respaldo no pisa una foto que este equipo tenga y el respaldo no.
+      pfSave(exacto?snap.personalFotos:{...snap.personalFotos, ...act});
+      _fotosCargadas=true;
+    }
     if(snap.precios && typeof paramsSet==='function'){ /* los precios se dejan como están salvo restauración exacta */ }
   }catch(e){ console.warn('restaurar extras',e); }
   try{ if(snap.remanenteIngresos && typeof remIngSave==='function') remIngSave(); }catch(e){}
@@ -30135,6 +30225,7 @@ function snapshotEstado(){
     montebravo:(function(){ try{ return JSON.parse(JSON.stringify(mbEstado())); }catch(e){ return state.mb||{}; } })(),
     mbLabores:(typeof mbLaboresExtra==='function'?mbLaboresExtra():[]),
     tarjetaNotas:(typeof tarjNotasLoad==='function'?tarjNotasLoad():{}),   // pendientes y anotaciones de las tarjetas de tareo
+    personalFotos:(typeof pfLoad==='function'?pfLoad():{}),               // las fotos, ahora en su propio módulo
     // Faltaban en el respaldo, y son datos que el sistema sí muestra y sí guarda en la nube: una
     // copia que no los lleve no devuelve el sistema al estado en que estaba.
     remanenteIngresos: state.remanenteIngresos||[],
@@ -30790,6 +30881,7 @@ const _SYNC_MODULOS=[
   ['comb_gas', ()=>{try{return combCargar('gas');}catch(e){return null;}}],
   ['planilla_supervision', ()=>{try{return planillaSupLoad();}catch(e){return null;}}],
   ['tarjeta_notas', ()=>{try{return tarjNotasLoad();}catch(e){return null;}}],
+  ['personal_fotos', ()=>{try{return pfLoad();}catch(e){return null;}}],
   ['montebravo', ()=>{try{return mbEstado();}catch(e){return null;}}],
   ['mb_labores', ()=>{try{return mbLaboresExtra();}catch(e){return null;}}],
   ['remanente_salidas', ()=>state.remanenteSalidas],

@@ -175,6 +175,14 @@ module.exports = async function handler(req, res) {
     const prestamo = Number(suyos[mes]) || 0;
     const descuento = Number(suyos[mes + '_desc']) || 0;
 
+    // La foto ya no viaja dentro de `personal`: vive en su propio módulo, y aquí se pide solo
+    // la de esta persona. Se acepta la vieja (p.foto) por si algún equipo aún no migró.
+    let foto = p.foto || '';
+    if (!foto) {
+      const fotos = (await modulo('personal_fotos')) || {};
+      foto = fotos[String(p.id)] || '';
+    }
+
     const notas = (await modulo('tarjeta_notas')) || {};
     const nota = ((notas[p.id] || {})[mes]) || {};
 
@@ -186,7 +194,7 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({
       ok: true, mes,
       trabajador: { nombre: p.nombre || '', dni: p.dni || '', cargo: p.rol || '',
-                    guardia: p.guardia || '', jornal, foto: p.foto || '' },
+                    guardia: p.guardia || '', jornal, foto },
       resumen: { diasTrab, tareas: Math.round(tareasNum * 100) / 100, dlTomados, faltas, pago,
                  neto: pago - prestamo - descuento },
       dias,
