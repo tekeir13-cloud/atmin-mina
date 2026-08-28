@@ -3581,9 +3581,15 @@ select option{background:var(--coal3);}
     <div class="card" style="margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
       <button class="btn btn-gold" style="font-size:13px;padding:9px 18px" onclick="mbAbrirParte()">➕ Nuevo parte</button>
       <label style="font-size:11px;color:var(--text3);margin-left:auto">Ciclo:</label>
-      <select id="mbf-comp" onchange="mbRenderPartes()" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px"></select>
+      <select id="mbf-comp" onchange="mbRenderComp()" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px"></select>
+    </div>
+    <!-- Sub-pestañas: la lista de partes y las estadísticas acumuladas de la unidad. -->
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <button class="btn" id="mbcs-partes" onclick="mbCompSub('partes')" style="font-size:12px;padding:7px 16px">📋 Partes</button>
+      <button class="btn btn-outline" id="mbcs-est" onclick="mbCompSub('est')" style="font-size:12px;padding:7px 16px">📈 Estadísticas</button>
     </div>
     <div id="mb-comp-wrap"></div>
+    <div id="mb-comp-est" style="display:none"></div>
   </div>
 
   <div class="mod-pane" style="display:none" id="mb-combustible">
@@ -11797,7 +11803,7 @@ function mbRenderAcopioResumen(){
 function mbRenderModulo(pane){
   if(pane==='acopio')        return mbRenderTab();
   if(pane==='produccion')    return mbRenderProd();
-  if(pane==='compresorista') return mbRenderPartes();
+  if(pane==='compresorista') return mbRenderComp();
   if(pane==='combustible')   return mbRenderCombustible();
   if(pane==='materiales')    return mbRenderMateriales();
   if(pane==='tareo')         return mbRenderTareo();
@@ -12178,51 +12184,203 @@ function mbRenderProd(){
 }
 
 // ── PARTES DEL COMPRESORISTA ──
+/* ── SUB-PESTAÑAS DEL COMPRESORISTA DE MONTE BRAVO ─────────────────────────────
+   La lista de partes y las estadísticas acumuladas de la unidad. Un solo sitio para saber
+   qué se reportó y cómo va sumando. */
+let _mbCompSub='partes';
+function mbCompSub(cual){
+  _mbCompSub=(cual==='est')?'est':'partes';
+  const on=(b,act)=>{ const e=document.getElementById(b); if(!e) return;
+    e.className='btn'+(act?'':' btn-outline'); };
+  on('mbcs-partes', _mbCompSub==='partes'); on('mbcs-est', _mbCompSub==='est');
+  const wp=document.getElementById('mb-comp-wrap'), we=document.getElementById('mb-comp-est');
+  if(wp) wp.style.display=(_mbCompSub==='partes')?'':'none';
+  if(we) we.style.display=(_mbCompSub==='est')?'':'none';
+  mbRenderComp();
+}
+function mbRenderComp(){
+  if(_mbCompSub==='est') mbRenderCompEst(); else mbRenderPartes();
+}
+
+// Qué reportó un parte, en números: galones, horas y costo de explosivo.
+function mbParteResumen(r){
+  const gln=(r.petroleo||[]).reduce((s,x)=>s+(Number(x.gln)||0),0);
+  const hrs=(r.horometros||[]).reduce((s,x)=>s+(Number(x.HT)||0),0);
+  const exp=Number(r.costoExplosivo)||0;
+  const disp=(r.disparos||[]).length;
+  return { gln, hrs, exp, disp };
+}
+let _mbParteAbierto='';
+function mbParteToggle(id){
+  _mbParteAbierto=(_mbParteAbierto===id)?'':id;
+  mbRenderPartes();
+}
+
 function mbRenderPartes(){
   const w=document.getElementById('mb-comp-wrap'); if(!w) return;
   const per=_mbCiclo('mbf-comp');
   const rs=mbEstado().partes.filter(r=>!per||_mbEnCiclo(r.fecha,per))
     .sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
   const pp=(typeof compGetPrecioPet==='function')?(Number(compGetPrecioPet())||0):0;
-  const gl=rs.reduce((s,r)=>s+(r.petroleo||[]).reduce((a,x)=>a+(Number(x.gln)||0),0),0);
-  const hr=rs.reduce((s,r)=>s+(r.horometros||[]).reduce((a,x)=>a+(Number(x.HT)||0),0),0);
+  const gl=rs.reduce((s,r)=>s+mbParteResumen(r).gln,0);
+  const hr=rs.reduce((s,r)=>s+mbParteResumen(r).hrs,0);
+  const ex=rs.reduce((s,r)=>s+mbParteResumen(r).exp,0);
   const cab=`<div style="font-size:11.5px;color:var(--text3);margin-bottom:12px">${_mbRotulo(per)}</div>`+
     _mbCards(
       _mbCard('🛢️','Petróleo',_mbN(gl)+' gln',pp?_mbS0(gl*pp)+' al precio vigente':'sin precio cargado','#f59e0b')+
       _mbCard('⏱','Horas de equipo',_mbN(hr)+' h',rs.length+' parte'+(rs.length!==1?'s':''),'#a78bfa')+
+      _mbCard('💥','Explosivo',_mbS0(ex),rs.reduce((s,r)=>s+mbParteResumen(r).disp,0)+' disparos en el ciclo','#f87171')+
       _mbCard('📊','Consumo por hora',hr>0?_mbN(gl/hr,2)+' gal/h':'—',hr>0?'galones ÷ horas reportadas':'faltan horas para calcularlo','#22d3a5'));
   if(!rs.length){
     w.innerHTML=cab+_mbVacio(per?'Sin partes en este ciclo. Cambia de ciclo o registra uno nuevo.'
-                                :'Sin partes registrados. El parte recoge el petróleo despachado y los horómetros de los cuatro equipos.');
+                                :'Sin partes registrados. El parte recoge el petróleo despachado y los horómetros de los equipos.');
     return;
   }
-  w.innerHTML=cab+rs.map(r=>{
-    const g=(r.petroleo||[]).reduce((s,x)=>s+(Number(x.gln)||0),0);
-    const h=(r.horometros||[]).reduce((s,x)=>s+(Number(x.HT)||0),0);
-    const chip=(txt)=>`<span style="font-size:11px;background:var(--coal4);border:1px solid var(--border);border-radius:4px;padding:2px 8px;margin-right:5px;display:inline-block;margin-top:4px">${txt}</span>`;
-    const det=(r.petroleo||[]).filter(x=>Number(x.gln)>0)
-      .map(x=>chip(`🛢 ${x.equipo} <b style="color:#f59e0b">${_mbN(x.gln)} gln</b>`)).join('');
-    const dh=(r.horometros||[]).filter(x=>Number(x.HT)>0)
-      .map(x=>chip(`⏱ ${x.equipo} <b style="color:#a78bfa">${_mbN(x.HT)} h</b>`)).join('');
-    return _mbFila(
-      `<div style="min-width:0"><div style="font-weight:700;font-size:13px">${fmtF(r.fecha)} · <span style="color:var(--text3);font-weight:400">${r.turno||'—'}</span>${r.nombre?` · ${r.nombre}`:''}</div>
-        <div style="font-size:12px;margin-top:4px">Petróleo: <strong style="color:#f59e0b">${_mbN(g)} gln</strong>${pp?` · ${_mbS(g*pp)}`:''} &nbsp;·&nbsp; Horas: <strong style="color:#a78bfa">${_mbN(h)} h</strong>${(g>0&&h>0)?` &nbsp;·&nbsp; <strong>${_mbN(g/h,2)} gal/h</strong>`:''}</div>
-        <div>${det}${dh}</div>
-        ${(()=>{ // materiales y explosivos que salieron con este parte
-          const mats=Object.entries(r.consumoFrentes||{}).map(([lab,items])=>
-            (items||[]).map(it=>chip(`📦 ${lab}: ${it.desc||it.codigo} <b style="color:#9b59b6">${_mbN(it.cant,2)} ${it.unidad||''}</b>`)).join('')).join('');
-          const exps=mbAcopio().salidas.filter(x=>String(x.parte||'')===String(r.id))
-            .map(x=>chip(`💥 ${x.disparo?('D'+x.disparo+' · '):''}${x.destino}: ${x.nombre||x.producto} <b style="color:#a855f7">${_mbN(x.totalUnidades,2)}</b>`)).join('');
-          return (mats||exps)?`<div>${exps}${mats}</div>`:'';
-        })()}
-        ${(r.disparos&&r.disparos.length)?`<div style="font-size:12px;margin-top:5px">💥 <strong>${r.disparos.length} disparo${r.disparos.length!==1?'s':''}</strong>
-          ${r.disparos.map(d=>`<span style="color:var(--text3);margin-left:7px">D${d.n}: <b style="color:#f59e0b">${_mbS(d.costo)}</b></span>`).join('')}
-          <span style="margin-left:8px;color:var(--text3)">· Explosivo del turno: <b style="color:#f59e0b">${_mbS(r.costoExplosivo||0)}</b></span>
-          ${(r.costoExplosivo>0&&r.disparos.length)?`<span style="margin-left:8px;color:var(--text3)">· Promedio: <b style="color:#f59e0b">${_mbS(r.costoExplosivo/r.disparos.length)}</b> por disparo</span>`:''}</div>`:''}
-        ${r.obs?`<div style="font-size:11px;color:var(--text3);margin-top:4px">${r.obs}</div>`:''}</div>`,
-      `<div style="display:flex;gap:6px;flex-wrap:wrap">`+
-      `<button onclick="mbParteWhatsApp('${r.id}')" style="padding:4px 9px;font-size:11px;background:rgba(37,211,102,0.15);color:#25d366;border:1px solid rgba(37,211,102,0.4);border-radius:4px;cursor:pointer">📲 WhatsApp</button>`+
-      _mbBorrar('mbBorrarParte',r.id)+`</div>`);}).join('');
+  const chip=(txt)=>`<span style="font-size:11px;background:var(--coal4);border:1px solid var(--border);border-radius:4px;padding:2px 8px;margin-right:5px;display:inline-block;margin-top:4px">${txt}</span>`;
+
+  w.innerHTML=cab+`<div style="font-size:11.5px;color:var(--text3);margin-bottom:8px">${rs.length} parte${rs.length!==1?'s':''} — haz clic en uno para ver su detalle</div>`+
+  rs.map(r=>{
+    const q=mbParteResumen(r);
+    const abierto=_mbParteAbierto===r.id;
+
+    /* ── Detalle, solo cuando está abierto ── */
+    let det='';
+    if(abierto){
+      const pet=(r.petroleo||[]).filter(x=>Number(x.gln)>0);
+      const hor=(r.horometros||[]).filter(x=>Number(x.HT)>0);
+      const exps=mbAcopio().salidas.filter(x=>String(x.parte||'')===String(r.id));
+      const mats=Object.entries(r.consumoFrentes||{});
+      const bloque=(titulo,cuerpo)=>cuerpo?`<div style="margin-top:12px">
+        <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--text3);font-weight:700;margin-bottom:6px">${titulo}</div>${cuerpo}</div>`:'';
+
+      // Gráficas del parte: barras comparando lo que consumió cada equipo y lo que costó
+      // cada disparo. Barras y no líneas: dentro de un turno se comparan cosas, no se ve
+      // una evolución.
+      const gPet=_mbBarras(pet.map(x=>({nombre:x.equipo, valor:Number(x.gln)||0,
+                    sub:pp?_mbS0((Number(x.gln)||0)*pp):''})), '#f59e0b', v=>_mbN(v,1)+' gln');
+      const gHor=_mbBarras(hor.map(x=>({nombre:x.equipo, valor:Number(x.HT)||0,
+                    sub:x.HI+'→'+x.HF+' h'})), '#a78bfa', v=>_mbN(v,1)+' h');
+      const gDis=(r.disparos||[]).length
+        ? _mbBarras((r.disparos||[]).map(d=>({nombre:'Disparo '+d.n+' · '+d.labor, valor:Number(d.costo)||0,
+            sub:(d.items||[]).length+' producto'+((d.items||[]).length!==1?'s':'')})), '#f87171', v=>_mbS(v))
+        : '';
+
+      det=`<div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px">
+          ${bloque('🛢️ Petróleo por equipo', gPet)}
+          ${bloque('⏱ Horas por equipo', gHor)}
+          ${bloque('💥 Costo por disparo', gDis)}
+        </div>
+        ${bloque('💥 Explosivo entregado', exps.length?exps.map(x=>chip(`${x.disparo?('D'+x.disparo+' · '):''}${x.destino}: ${x.nombre||x.producto} <b style="color:#a855f7">${_mbN(x.totalUnidades,2)}</b>`)).join(''):'')}
+        ${bloque('📦 Materiales', mats.length?mats.map(([lab,items])=>(items||[]).map(it=>chip(`${lab}: ${it.desc||it.codigo} <b style="color:#9b59b6">${_mbN(it.cant,2)} ${it.unidad||''}</b>`)).join('')).join(''):'')}
+        ${r.obs?`<div style="font-size:11.5px;color:var(--text3);margin-top:12px;border-left:2px solid var(--border);padding-left:9px">${r.obs}</div>`:''}
+      </div>`;
+    }
+
+    /* ── Cabecera resumida, siempre visible ── */
+    return `<div class="card" style="margin-bottom:8px;padding:12px 16px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+        <div onclick="mbParteToggle('${r.id}')" style="cursor:pointer;display:flex;align-items:flex-start;gap:10px;flex:1;min-width:0">
+          <span style="color:var(--text3);font-size:13px;margin-top:2px">${abierto?'▾':'▸'}</span>
+          <div style="min-width:0">
+            <div style="font-weight:700;font-size:13px">${fmtF(r.fecha)} · <span style="color:var(--text3);font-weight:400">${r.turno||'—'}</span>${r.nombre?` · ${r.nombre}`:''}</div>
+            <div style="font-size:12px;margin-top:4px;color:var(--text3)">
+              🛢️ <b style="color:#f59e0b">${_mbN(q.gln)} gln</b> &nbsp;·&nbsp;
+              ⏱ <b style="color:#a78bfa">${_mbN(q.hrs)} h</b> &nbsp;·&nbsp;
+              💥 <b style="color:#f87171">${_mbS(q.exp)}</b>${q.disp?` en ${q.disp} disparo${q.disp!==1?'s':''}`:''}
+              ${(q.gln>0&&q.hrs>0)?` &nbsp;·&nbsp; <b>${_mbN(q.gln/q.hrs,2)} gal/h</b>`:''}
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button onclick="mbParteWhatsApp('${r.id}')" style="padding:4px 9px;font-size:11px;background:rgba(37,211,102,0.15);color:#25d366;border:1px solid rgba(37,211,102,0.4);border-radius:4px;cursor:pointer">📲 WhatsApp</button>
+          ${_mbBorrar('mbBorrarParte',r.id)}
+        </div>
+      </div>${det}</div>`;
+  }).join('');
+}
+
+/* ── ESTADÍSTICAS DEL COMPRESORISTA ────────────────────────────────────────────
+   Cómo va SUMANDO la unidad parte a parte: las horas de cada equipo, el petróleo despachado
+   y el costo de explosivo. Son curvas acumuladas —cada punto arrastra todo lo anterior—, que
+   es como se mira el desgaste de una máquina y el gasto de una operación. */
+function mbSerieAcumulada(per){
+  const rs=mbEstado().partes.filter(r=>!per||_mbEnCiclo(r.fecha,per))
+    .sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||''))
+              || String(a.turno||'').localeCompare(String(b.turno||'')));
+  const equipos=[]; 
+  rs.forEach(r=>(r.horometros||[]).forEach(h=>{ if(Number(h.HT)>0 && equipos.indexOf(h.equipo)<0) equipos.push(h.equipo); }));
+  let aGln=0, aExp=0; const aHoras={}; equipos.forEach(e=>aHoras[e]=0);
+  const puntos=rs.map(r=>{
+    const q=mbParteResumen(r);
+    aGln+=q.gln; aExp+=q.exp;
+    (r.horometros||[]).forEach(h=>{ if(Number(h.HT)>0) aHoras[h.equipo]=(aHoras[h.equipo]||0)+Number(h.HT); });
+    return { etiqueta:((typeof fmtF==='function')?fmtF(r.fecha):r.fecha)+' · '+(r.turno||''),
+             corta:String(r.fecha||'').slice(8,10)+'/'+String(r.fecha||'').slice(5,7),
+             gln:Math.round(aGln*100)/100, exp:Math.round(aExp*100)/100,
+             horas:equipos.reduce((o,e)=>{o[e]=Math.round((aHoras[e]||0)*100)/100; return o;},{}) };
+  });
+  return { puntos, equipos, totales:{gln:aGln, exp:aExp, horas:aHoras, partes:rs.length} };
+}
+const MB_EQ_COLORES=['#a78bfa','#22d3a5','#60a5fa','#f472b6','#fbbf24','#34d399'];
+function mbRenderCompEst(){
+  const w=document.getElementById('mb-comp-est'); if(!w) return;
+  _mbDestruirCharts();
+  const per=_mbCiclo('mbf-comp');
+  const s=mbSerieAcumulada(per);
+  const pp=(typeof compGetPrecioPet==='function')?(Number(compGetPrecioPet())||0):0;
+  if(!s.puntos.length){
+    w.innerHTML=_mbVacio('Sin partes en este ciclo: todavía no hay nada que acumular.');
+    return;
+  }
+  const t=s.totales;
+  const bloque=(icono,titulo,expl,cifras,canvasId)=>`
+    <div class="card" style="margin-bottom:16px">
+      <div class="section-title" style="margin-top:0">${icono} ${titulo}</div>
+      <div style="font-size:11.5px;color:var(--text3);margin-bottom:12px">${expl}</div>
+      <div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:14px">${cifras}</div>
+      <div style="height:230px"><canvas id="${canvasId}"></canvas></div>
+    </div>`;
+
+  w.innerHTML=`<div style="font-size:11.5px;color:var(--text3);margin-bottom:12px">${_mbRotulo(per)} · ${t.partes} parte${t.partes!==1?'s':''} acumulado${t.partes!==1?'s':''}</div>`+
+    bloque('⏱','Horas por equipo','Cada línea es una máquina y muestra las horas que lleva acumuladas en el ciclo. Sale del horómetro de cada parte (HF − HI).',
+      s.equipos.map((e,i)=>_mbCifra(e, _mbN(t.horas[e],1)+' h', MB_EQ_COLORES[i%MB_EQ_COLORES.length])).join(''),
+      'mbce-horas')+
+    bloque('🛢️','Petróleo despachado','Galones que el compresorista fue cargando a las máquinas. Este es el gasto de combustible de Monte Bravo — el envío desde NV 2820 solo llena el tanque.',
+      _mbCifra('Acumulado', _mbN(t.gln,1)+' gln', '#f59e0b')+
+      (pp?_mbCifra('Al precio vigente', _mbS0(t.gln*pp), '#f59e0b'):'')+
+      _mbCifra('Promedio por parte', _mbN(t.gln/t.partes,1)+' gln'),
+      'mbce-petroleo')+
+    bloque('💥','Costo de explosivo','Lo que se lleva gastado en explosivo, disparo a disparo, valorizado con el precio de cada parte.',
+      _mbCifra('Acumulado', _mbS0(t.exp), '#f87171')+
+      _mbCifra('Promedio por parte', _mbS0(t.exp/t.partes)),
+      'mbce-explosivo');
+
+  const ejes=_mbEjeColor();
+  const base=(fmt)=>({ responsive:true, maintainAspectRatio:false,
+    interaction:{mode:'index',intersect:false},
+    plugins:{ legend:{display:false},
+      tooltip:{ callbacks:{ title:it=>s.puntos[it[0].dataIndex].etiqueta,
+                            label:it=>(it.dataset.label?it.dataset.label+': ':'')+fmt(it.raw) } } },
+    scales:{ x:{ ticks:{color:ejes,font:{size:10}}, grid:{display:false} },
+      y:{ beginAtZero:true, ticks:{color:ejes,font:{size:10},maxTicksLimit:6}, grid:{color:'rgba(128,128,128,0.14)'} } } });
+  const labels=s.puntos.map(p=>p.corta);
+  const linea=(id,datasets,fmt,leyenda)=>{
+    const cv=document.getElementById(id); if(!cv) return;
+    const o=base(fmt); o.plugins.legend={display:!!leyenda,position:'bottom',
+      labels:{color:ejes,font:{size:10},boxWidth:10,usePointStyle:true}};
+    const c=chartSeguro(cv.getContext('2d'),{type:'line',data:{labels,datasets},options:o});
+    if(c) _mbCharts.push(c);
+  };
+  linea('mbce-horas', s.equipos.map((e,i)=>{
+    const col=MB_EQ_COLORES[i%MB_EQ_COLORES.length];
+    return { label:e, data:s.puntos.map(p=>p.horas[e]||0), borderColor:col, backgroundColor:col+'22',
+             borderWidth:2, fill:false, tension:.3, pointRadius:3, pointBackgroundColor:col };
+  }), v=>_mbN(v,1)+' h', true);
+  linea('mbce-petroleo', [{ data:s.puntos.map(p=>p.gln), borderColor:'#f59e0b', backgroundColor:'#f59e0b22',
+    borderWidth:2, fill:true, tension:.3, pointRadius:3, pointBackgroundColor:'#f59e0b' }], v=>_mbN(v,1)+' gln');
+  linea('mbce-explosivo', [{ data:s.puntos.map(p=>p.exp), borderColor:'#f87171', backgroundColor:'#f8717122',
+    borderWidth:2, fill:true, tension:.3, pointRadius:3, pointBackgroundColor:'#f87171' }], v=>'S/ '+_mbN(v,2));
 }
 
 /* Enviar el parte por WhatsApp, igual que el reporte de NV 2820: se arma el texto, se copia al
@@ -12783,7 +12941,7 @@ function mbBorrarParte(id){
     a.salidas.length=0; quedan.forEach(x=>a.salidas.push(x));
     try{ if(typeof almacenSave==='function') almacenSave(); }catch(e){}
   }
-  mbRenderPartes();
+  mbRenderComp();
 }
 function mbBorrarLiq(id){ if(_mbBorrarDe('liquidaciones',id,'esta liquidación')) mbRenderLiq(); }
 function mbBorrarTercero(id){ if(_mbBorrarDe('terceros',id,'este pago')) mbRenderTerceros(); }
@@ -13147,7 +13305,7 @@ function mbGuardarParte(){
     disparo:x.disparo, totalUnidades:x.totalUnidades }));
   mbGuardar();
   try{ if(typeof almacenSave==='function') almacenSave(); }catch(e){}
-  cerrarModal('modal-mb-parte'); mbRenderPartes();
+  cerrarModal('modal-mb-parte'); mbRenderComp();
   showNotif('✓ Parte guardado');
 }
 
