@@ -18651,24 +18651,33 @@ function renderAvance(){
   const wrap=document.getElementById('rg-lista');if(!wrap)return;
   const todos=[...rg].sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')||(b.creadoEn||0)-(a.creadoEn||0));
   if(!todos.length){wrap.innerHTML='<div class="card"><div class="empty-state">Sin reportes registrados. Genera el primero con el botón ➕.</div></div>';return;}
-  /* ── ARCHIVO POR MES ──
-     La lista mostraba TODOS los reportes desde el primer día de la obra: al bajar aparecían
-     los de julio mezclados con los de agosto. Ahora se ve el mes en curso y los meses
-     cumplidos quedan archivados, disponibles en el selector. */
-  const mesesRep=[...new Set(todos.map(r=>String(r.fecha||'').slice(0,7)).filter(m=>m.length===7))].sort().reverse();
-  const mesHoyCal=ts.slice(0,7);
-  if(!_rgMes || (_rgMes!=='__todos' && mesesRep.indexOf(_rgMes)<0)) _rgMes=mesesRep.indexOf(mesHoyCal)>=0?mesHoyCal:(mesesRep[0]||mesHoyCal);
-  const lista=(_rgMes==='__todos')?todos:todos.filter(r=>String(r.fecha||'').slice(0,7)===_rgMes);
-  const _mesRgLbl=m=>(typeof finNombreMes==='function')?finNombreMes(m):m;
+  /* ── ARCHIVO POR CICLO ──
+     Los reportes se agrupan por el CICLO 26→25, no por mes de calendario: el reporte del 27 de
+     agosto pertenece al ciclo de septiembre, igual que en el resto de la app. Se ve el ciclo en
+     curso y los cumplidos quedan archivados, disponibles en el selector.
+     Antes esto se hacía con fecha.slice(0,7) y el ciclo de septiembre se leía como "agosto": se
+     mezclaban los reportes del cierre con los del ciclo nuevo. */
+  const _cicloDe=f=>{ try{ return (typeof periodoDeFecha==='function')?periodoDeFecha(f):String(f||'').slice(0,7); }
+                      catch(e){ return String(f||'').slice(0,7); } };
+  const ciclosRep=[...new Set(todos.map(r=>_cicloDe(r.fecha)).filter(m=>m&&m.length===7))].sort().reverse();
+  const cicloHoy=(typeof periodoActual==='function')?periodoActual():ts.slice(0,7);
+  if(!_rgMes || (_rgMes!=='__todos' && ciclosRep.indexOf(_rgMes)<0))
+    _rgMes=ciclosRep.indexOf(cicloHoy)>=0?cicloHoy:(ciclosRep[0]||cicloHoy);
+  const lista=(_rgMes==='__todos')?todos:todos.filter(r=>_cicloDe(r.fecha)===_rgMes);
+  const _cicloLbl=m=>{
+    const n=(typeof finNombreMes==='function')?finNombreMes(m):m;
+    try{ const v=ventanaMes(m); return n+' · '+v.ini.slice(8)+'/'+v.ini.slice(5,7)+'→'+v.fin.slice(8)+'/'+v.fin.slice(5,7); }
+    catch(e){ return n; }
+  };
   const barra=`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-      <span style="font-size:12px;color:var(--text3)">Reportes de</span>
+      <span style="font-size:12px;color:var(--text3)">Reportes del ciclo</span>
       <select onchange="_rgMes=this.value;renderAvance()" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:13px;font-weight:600">
-        ${mesesRep.map(m=>`<option value="${m}"${m===_rgMes?' selected':''}>${_mesRgLbl(m)}${m<mesHoyCal?' 🔒 archivado':''} · ${todos.filter(r=>String(r.fecha||'').slice(0,7)===m).length}</option>`).join('')}
-        <option value="__todos"${_rgMes==='__todos'?' selected':''}>📂 Todos los meses</option>
+        ${ciclosRep.map(m=>`<option value="${m}"${m===_rgMes?' selected':''}>${_cicloLbl(m)}${m<cicloHoy?' 🔒 archivado':''} · ${todos.filter(r=>_cicloDe(r.fecha)===m).length}</option>`).join('')}
+        <option value="__todos"${_rgMes==='__todos'?' selected':''}>📂 Todos los ciclos</option>
       </select>
-      ${(_rgMes!=='__todos'&&_rgMes<mesHoyCal)?'<span style="font-size:11.5px;color:#f59e0b">Mes cumplido — solo consulta</span>':''}
+      ${(_rgMes!=='__todos'&&_rgMes<cicloHoy)?'<span style="font-size:11.5px;color:#f59e0b">Ciclo cerrado — solo consulta</span>':''}
     </div>`;
-  if(!lista.length){wrap.innerHTML=barra+'<div class="card"><div class="empty-state">Sin reportes en este mes.</div></div>';return;}
+  if(!lista.length){wrap.innerHTML=barra+'<div class="card"><div class="empty-state">Sin reportes en este ciclo.</div></div>';return;}
   wrap.innerHTML=barra+lista.map(r=>{
     const b=r.brenda||{},c=r.crne||{};
     const mt=r1m(FRENTES.filter(f=>!f.tajo).reduce((s,f)=>s+((r[f.key]&&r[f.key].metros)||0),0)).toFixed(1);
