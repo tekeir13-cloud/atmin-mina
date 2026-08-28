@@ -11992,7 +11992,12 @@ function mbRenderTablero(){
     <div style="font-size:13px;font-weight:800;color:var(--text);margin:0 2px 11px">📆 Actividad del Ciclo</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
       ${card('⛏','Avance',_mbN(prod.metros)+' m',prod.n+' registro'+(prod.n!==1?'s':'')+' de producción','#5b6ef5')}
-      ${card('🪨','Toneladas',_mbN(prod.toneladas)+' t',labores.length+' labor'+(labores.length!==1?'es':''),'#c9a84c')}
+      ${card(_mbSaco(MB_SACO_ALTA,26),'Sacos alta ley',_mbN(prod.sacosAlta||0,0),
+             (prod.sacosAlta||0)?_mbN((prod.sacosAlta||0)*MB_KG_POR_SACO/1000,2)+' t estimadas':'sin sacos',MB_SACO_ALTA)}
+      ${card(_mbSaco(MB_SACO_BAJA,26),'Sacos baja ley',_mbN(prod.sacosBaja||0,0),
+             (prod.sacosBaja||0)?_mbN((prod.sacosBaja||0)*MB_KG_POR_SACO/1000,2)+' t estimadas':'sin sacos',MB_SACO_BAJA)}
+      ${card('🪨','Toneladas',_mbN(prod.toneladas,2)+' t',
+             ((prod.sacosAlta||0)+(prod.sacosBaja||0))?_mbN((prod.sacosAlta||0)+(prod.sacosBaja||0),0)+' sacos × '+MB_KG_POR_SACO+' kg':labores.length+' labor'+(labores.length!==1?'es':''),'#c9a84c')}
       ${card('🛢️','Petróleo',_mbN(glnTot)+' gln',hrTot>0?_mbN(glnTot/hrTot,2)+' gal/h en '+_mbN(hrTot)+' h':'sin horas reportadas','#f59e0b')}
       ${card('💥','Explosivo',S(mbCostoExplosivo(per)),`${movOut} salida${movOut!==1?'s':''} · ${movIn} ingreso${movIn!==1?'s':''} al acopio`,'#a855f7')}
       ${card('👷','Personal',gente,gente?'asignados a esta unidad':'nadie asignado todavía','#3498db')}
@@ -24388,13 +24393,17 @@ function _iaMB(){
 // Respuestas sobre Monte Bravo. Devuelve null si la pregunta no es de la unidad.
 function _iaRespuestaMB(q, fS){
   const has=(...ws)=>ws.some(w=>q.includes(w));
-  if(!has('monte bravo','montebravo',' monte',' mb ','de mb','rampa acopio')) return null;
+  // Los sacos y la ley del mineral SOLO existen en Monte Bravo: si preguntan por ellos, la
+  // respuesta es de esa unidad aunque no la nombren. NV 2820 no cuenta sacos.
+  const esMB=has('monte bravo','montebravo',' monte',' mb ','de mb','rampa acopio');
+  const soloMB=has('saco','alta ley','baja ley');
+  if(!esMB && !soloMB) return null;
   const d=_iaMB();
   const N=(v,dec)=>(Number(v)||0).toLocaleString('es-PE',{minimumFractionDigits:dec||0,maximumFractionDigits:dec||0});
   const ciclo=' (ciclo '+d.etiqueta+', 26→25)';
 
   // Sacos y toneladas
-  if(has('saco','tonelada','mineral','produccion','producción','ley')){
+  if(soloMB || has('saco','tonelada','mineral','produccion','producción','ley')){
     if(!d.sacos && !d.hoy.sacos) return `Señor Amador, Monte Bravo todavía no tiene sacos registrados en este ciclo. El compresorista los reporta en su parte, en la sección de producción del turno.`;
     return `Señor Amador, en Monte Bravo hoy se reportaron ${N(d.hoy.sacos)} sacos `+
       `(${N(d.hoy.sacosAlta)} de alta ley y ${N(d.hoy.sacosBaja)} de baja), que son ${N(d.hoy.toneladas,2)} toneladas estimadas. `+
