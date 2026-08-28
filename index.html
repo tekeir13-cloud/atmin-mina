@@ -24247,12 +24247,131 @@ function _iaRespuestaEquipo(q,fS){
   const nota=sinIng.length>0?` Aún faltan ingresos de: ${sinIng.map(e=>e.label).join(', ')}.`:'';
   return resumen+lista+'.'+nota+' Pregúnteme por un equipo específico para el desglose.';
 }
+/* ── MONTE BRAVO PARA LA IA ────────────────────────────────────────────────────
+   La asistente leía toda la operación de NV 2820 pero no sabía que Monte Bravo existe: se le
+   preguntaba por sus sacos o su petróleo y contestaba con las cifras de la otra unidad, que es
+   peor que no contestar. Aquí se juntan sus datos —del ciclo 26→25, igual que el resto— para
+   que pueda responder por la unidad correcta. */
+function _iaMB(){
+  const d={};
+  try{
+    const per=(typeof periodoActual==='function')?periodoActual():hoy().slice(0,7);
+    const hoyStr=hoy();
+    d.periodo=per;
+    d.etiqueta=(typeof finNombreMes==='function')?finNombreMes(per):per;
+    const prod=(typeof mbProduccionCiclo==='function')?mbProduccionCiclo(per):{};
+    d.sacosAlta=prod.sacosAlta||0; d.sacosBaja=prod.sacosBaja||0;
+    d.sacos=d.sacosAlta+d.sacosBaja;
+    d.toneladas=prod.toneladas||0; d.metros=prod.metros||0; d.nProd=prod.n||0;
+    // Producción de HOY (los dos turnos)
+    const pHoy=(mbEstado().produccion||[]).filter(r=>String(r.fecha||'').slice(0,10)===hoyStr);
+    d.hoy={ sacosAlta:pHoy.reduce((s,r)=>s+(Number(r.sacosAlta)||0),0),
+            sacosBaja:pHoy.reduce((s,r)=>s+(Number(r.sacosBaja)||0),0),
+            toneladas:pHoy.reduce((s,r)=>s+((typeof mbTonRegistro==='function')?mbTonRegistro(r):(Number(r.toneladas)||0)),0),
+            registros:pHoy.length };
+    d.hoy.sacos=d.hoy.sacosAlta+d.hoy.sacosBaja;
+    // Costos del ciclo
+    d.desglose=(typeof mbDesglose==='function')?mbDesglose(per):[];
+    d.costo=d.desglose.reduce((s,c)=>s+c.monto,0);
+    const dg=k=>{ const c=d.desglose.find(x=>x.key===k); return c?c.monto:0; };
+    d.planilla=dg('planilla'); d.combustible=dg('combustible'); d.explosivos=dg('explosivos');
+    d.materiales=dg('materiales'); d.terceros=dg('terceros');
+    d.ingreso=(typeof mbIngresoCiclo==='function')?mbIngresoCiclo(per):0;
+    d.util=d.ingreso-d.costo;
+    d.costoPorTon=d.toneladas>0?d.costo/d.toneladas:0;
+    d.costoPorSaco=d.sacos>0?d.costo/d.sacos:0;
+    // Combustible: tanque de la unidad
+    const cc=(typeof mbCombCiclo==='function')?mbCombCiclo(per):{ingresos:0,salidas:0};
+    d.glnRecibido=cc.ingresos||0; d.glnCargado=cc.salidas||0;
+    d.tanque=(typeof mbCombSaldo==='function')?(mbCombSaldo().saldo||0):0;
+    // Partes del compresorista
+    const partes=(mbEstado().partes||[]).filter(r=>(typeof _mbEnCiclo==='function')?_mbEnCiclo(r.fecha,per):true);
+    d.partes=partes.length;
+    d.partesHoy=partes.filter(r=>String(r.fecha||'').slice(0,10)===hoyStr).length;
+    d.horas=partes.reduce((s,r)=>s+(r.horometros||[]).reduce((a,x)=>a+(Number(x.HT)||0),0),0);
+    d.disparos=partes.reduce((s,r)=>s+((r.disparos||[]).length),0);
+    d.ultimoParte=partes.slice().sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')))[0]||null;
+    // Horas por equipo
+    d.porEquipo={};
+    partes.forEach(r=>(r.horometros||[]).forEach(h=>{ if(Number(h.HT)>0) d.porEquipo[h.equipo]=(d.porEquipo[h.equipo]||0)+Number(h.HT); }));
+    d.glnPorEquipo={};
+    partes.forEach(r=>(r.petroleo||[]).forEach(x=>{ if(Number(x.gln)>0) d.glnPorEquipo[x.equipo]=(d.glnPorEquipo[x.equipo]||0)+Number(x.gln); }));
+    // Gente de la unidad
+    d.gente=(typeof mbPersonal==='function')?mbPersonal().filter(p=>p.estado!=='baja').length:0;
+  }catch(e){ console.warn('iaMB',e); }
+  return d;
+}
+// Respuestas sobre Monte Bravo. Devuelve null si la pregunta no es de la unidad.
+function _iaRespuestaMB(q, fS){
+  const has=(...ws)=>ws.some(w=>q.includes(w));
+  if(!has('monte bravo','montebravo',' monte',' mb ','de mb','rampa acopio')) return null;
+  const d=_iaMB();
+  const N=(v,dec)=>(Number(v)||0).toLocaleString('es-PE',{minimumFractionDigits:dec||0,maximumFractionDigits:dec||0});
+  const ciclo=' (ciclo '+d.etiqueta+', 26→25)';
+
+  // Sacos y toneladas
+  if(has('saco','tonelada','mineral','produccion','producción','ley')){
+    if(!d.sacos && !d.hoy.sacos) return `Señor Amador, Monte Bravo todavía no tiene sacos registrados en este ciclo. El compresorista los reporta en su parte, en la sección de producción del turno.`;
+    return `Señor Amador, en Monte Bravo hoy se reportaron ${N(d.hoy.sacos)} sacos `+
+      `(${N(d.hoy.sacosAlta)} de alta ley y ${N(d.hoy.sacosBaja)} de baja), que son ${N(d.hoy.toneladas,2)} toneladas estimadas. `+
+      `En el ciclo van ${N(d.sacos)} sacos — ${N(d.sacosAlta)} alta y ${N(d.sacosBaja)} baja — equivalentes a ${N(d.toneladas,2)} t${ciclo}, `+
+      `a razón de ${MB_KG_POR_SACO} kg por saco. ${d.costoPorTon>0?`El costo operativo va en ${fS(d.costoPorTon)} por tonelada.`:''}`;
+  }
+  // Petróleo / combustible
+  if(has('petroleo','petróleo','combustibl','galon','galón','gln','tanque','diesel')){
+    return `Señor Amador, el tanque de Monte Bravo tiene ${N(d.tanque,1)} galones. `+
+      `En el ciclo recibió ${N(d.glnRecibido,1)} gln desde NV 2820 y el compresorista cargó ${N(d.glnCargado,1)} gln a las máquinas${ciclo}. `+
+      `Recuerde que el envío desde 2820 no es gasto de esa unidad: el gasto de Monte Bravo —${fS(d.combustible)}— ocurre cuando su compresorista carga las máquinas. `+
+      (Object.keys(d.glnPorEquipo).length?`Por equipo: ${Object.entries(d.glnPorEquipo).map(([k,v])=>`${k} ${N(v,1)} gln`).join(', ')}.`:'');
+  }
+  // Planilla
+  if(has('planilla','sueldo','jornal','tareo','trabajador','personal','gente')){
+    // La planilla se cuenta por MES CALENDARIO y se carga al ciclo: conviene decirlo, porque si
+    // no la cifra parece equivocada cuando el ciclo acaba de empezar y el mes todavía no.
+    return `Señor Amador, Monte Bravo tiene ${d.gente} persona${d.gente!==1?'s':''} registrada${d.gente!==1?'s':''} en la unidad. `+
+      `Su planilla va en ${fS(d.planilla)}: se cuenta por el mes calendario de ${d.etiqueta} —del 1 al último día— y ese gasto se carga al ciclo ${d.etiqueta} (26→25). `+
+      `Se tarea desde el apartado de tareo del módulo de Monte Bravo y reporta al mismo Tareo Mensual de Recursos Humanos, pero su liquidación es independiente.`;
+  }
+  // Explosivos y disparos
+  if(has('explosiv','disparo','voladura','emulnor','carmex')){
+    const prom=d.disparos>0?d.explosivos/d.disparos:0;
+    return `Señor Amador, el gasto de explosivo de Monte Bravo va en ${fS(d.explosivos)} en ${d.disparos} disparo${d.disparos!==1?'s':''}${ciclo}`+
+      `${prom>0?`, un promedio de ${fS(prom)} por disparo`:''}. El compresorista lo entrega disparo por disparo en su parte y sale del acopio de la unidad.`;
+  }
+  // Parte del compresorista
+  if(has('compresorista','parte','horometro','horómetro','hora','equipo','maquina','máquina')){
+    const u=d.ultimoParte;
+    const eq=Object.keys(d.porEquipo).length
+      ? ` Horas por equipo en el ciclo: ${Object.entries(d.porEquipo).map(([k,v])=>`${k} ${N(v,1)} h`).join(', ')}.` : '';
+    return `Señor Amador, Monte Bravo lleva ${d.partes} parte${d.partes!==1?'s':''} de compresorista${ciclo}`+
+      `${d.partesHoy?` (${d.partesHoy} hoy)`:''}, con ${N(d.horas,1)} horas de equipo y ${N(d.glnCargado,1)} galones cargados.`+
+      `${u?` El último es del ${(typeof fmtF==='function')?fmtF(u.fecha):u.fecha}, turno ${u.turno||'—'}${u.nombre?`, reportado por ${u.nombre}`:''}.`:''}${eq}`;
+  }
+  // Gasto operativo / costos / utilidad
+  if(has('gasto','costo','operativo','utilidad','ganancia','margen','ingreso','liquidac','cuanto','cuánto','resumen','como va','cómo va')){
+    const partidas=d.desglose.filter(c=>c.monto>0).map(c=>`${c.label} ${fS(c.monto)}`).join(', ');
+    return `Señor Amador, el gasto operativo de Monte Bravo va en ${fS(d.costo)}${ciclo}`+
+      `${partidas?`: ${partidas}`:''}. `+
+      `${d.ingreso>0?`Con una liquidación de ${fS(d.ingreso)}, el resultado es ${d.util>=0?'una utilidad':'una pérdida'} de ${fS(Math.abs(d.util))}.`:'Todavía no hay liquidación registrada en el ciclo.'} `+
+      `${d.toneladas>0?`Produjo ${N(d.toneladas,2)} t (${N(d.sacos)} sacos), o sea ${fS(d.costoPorTon)} por tonelada.`:''}`;
+  }
+  // Resumen general de la unidad
+  return `Señor Amador, Monte Bravo${ciclo}: ${N(d.sacos)} sacos (${N(d.toneladas,2)} t estimadas), `+
+    `gasto operativo ${fS(d.costo)} — planilla ${fS(d.planilla)}, combustible ${fS(d.combustible)}, explosivos ${fS(d.explosivos)} — `+
+    `${d.partes} parte${d.partes!==1?'s':''} de compresorista con ${N(d.horas,1)} horas de equipo, y ${N(d.tanque,1)} gln en el tanque. `+
+    `Pregúnteme por sus sacos, su petróleo, su planilla, sus disparos o su gasto operativo.`;
+}
+
 function _iaRespuestaLocal(texto){
   const m=_iaMetrics();
   const fS=v=>'S/ '+(Number(v)||0).toFixed(2);
   const q=(texto||'').toLowerCase();
   const has=(...ws)=>ws.some(w=>q.includes(w));
   const SR='Señor Amador,';
+
+  // ── Monte Bravo — se resuelve PRIMERO: si preguntan por su petróleo o sus equipos, la
+  // respuesta debe salir de esa unidad y no de NV 2820. ──
+  try{ const rmb=_iaRespuestaMB(q, fS); if(rmb) return rmb; }catch(e){}
 
   // ── Equipos (ganancia/gasto por equipo) — prioridad alta ──
   if(has('equipo','equipos','scoop','dumper','volquete','compresora','compresor','excavadora','cargador','maquina','máquina','flota','dali','monte','m135','m122','grupo','electr','generador','ganancia por','rentabilidad de')){
@@ -24437,7 +24556,7 @@ Pregúnteme con naturalidad, como si conversara con un gerente de operaciones.`;
   }
 
   // ── Detección off-topic ──
-  const mineroKw=['metro','avance','mina','minero','mineral','miner','explosion','explosiv','polvorin','polvorín','scoop','dumper','compresor','excavadora','cargador','grupo electr','cisterna','petroleo','petróleo','gasolina','combustibl','tareo','trabajador','personal','planilla','sueldo','jornal','almacen','almacén','stock','logistic','logística','costo','gasto','egreso','ingreso','factura','valoriza','utilidad','ganancia','margen','rentab','produccion','producción','perforac','disparo','voladura','frente','rampa','cortada','guardia','reporte','seguridad','accidente','incidente','mantenimiento','reparac','compra','pedido','solicitud','empresa','operacion','operación','mukicloud','poderosa','nia','resumen','cumplimiento','meta','programa','proyecci','proyecta','pronostic','pronóstic','predicci','estimad','recomend','alerta','kit','repuesto','cimbra','top','ranking','mejores'];
+  const mineroKw=['metro','avance','mina','minero','mineral','miner','explosion','explosiv','polvorin','polvorín','scoop','dumper','compresor','excavadora','cargador','grupo electr','cisterna','petroleo','petróleo','gasolina','combustibl','tareo','trabajador','personal','planilla','sueldo','jornal','almacen','almacén','stock','logistic','logística','costo','gasto','egreso','ingreso','factura','valoriza','utilidad','ganancia','margen','rentab','produccion','producción','perforac','disparo','voladura','frente','rampa','cortada','guardia','reporte','seguridad','accidente','incidente','mantenimiento','reparac','compra','pedido','solicitud','empresa','operacion','operación','mukicloud','poderosa','nia','resumen','cumplimiento','meta','programa','proyecci','proyecta','pronostic','pronóstic','predicci','estimad','recomend','alerta','kit','repuesto','cimbra','top','ranking','mejores','monte bravo','montebravo','saco','sacos','tonelada','acopio','rampa acopio','alta ley','baja ley'];
   const esMinero=mineroKw.some(k=>q.includes(k))||has('hola','buenos','buenas','saludos','quien eres','quién eres','como te llamas','cómo te llamas','que puedes','qué puedes','que sabes','qué sabes','ayuda');
   if(!esMinero && q.length>3) return '__OFFTOPIC__';
 
