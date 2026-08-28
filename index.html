@@ -4552,15 +4552,21 @@ select option{background:var(--coal3);}
       <button class="btn btn-outline" style="padding:8px 14px;font-size:12px" onclick="mbParteAgregarLabor()">+ Agregar</button>
     </div>
 
-    <!-- S1: EXPLOSIVOS POR LABOR -->
-    <div class="section-title" style="margin-bottom:6px">💥 Explosivos por labor</div>
-    <div style="font-size:10.5px;color:var(--text3);margin-bottom:6px">Sale del acopio de la unidad y es el gasto de explosivo de Monte Bravo. Monte Bravo no usa FANEL, por eso no aparece en la lista.</div>
-    <div class="table-wrap" style="margin-bottom:18px;overflow-x:auto;-webkit-overflow-scrolling:touch">
+    <!-- S1: EXPLOSIVOS POR DISPARO -->
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+      <div class="section-title" style="margin:0">💥 Explosivos por disparo</div>
+      <button class="btn btn-outline" style="padding:6px 12px;font-size:11px;margin-left:auto" onclick="mbDisparoAgregar()">+ Agregar disparo</button>
+    </div>
+    <div style="font-size:10.5px;color:var(--text3);margin-bottom:6px">Una columna por cada entrega del turno. Sale del acopio de la unidad y es el gasto de explosivo de Monte Bravo.</div>
+    <div class="table-wrap" style="margin-bottom:8px;overflow-x:auto;-webkit-overflow-scrolling:touch">
       <table style="width:100%;min-width:max-content">
         <thead><tr id="mbc-exp-head" style="font-size:10px;color:var(--text3)"><th style="text-align:left;padding:6px 8px">Explosivo</th><th style="padding:6px 8px;text-align:center">En acopio</th></tr></thead>
         <tbody id="mbc-exp-body"></tbody>
+        <tfoot id="mbc-exp-foot"></tfoot>
       </table>
     </div>
+    <div id="mbc-costo-turno" style="background:var(--coal4);border:1px solid var(--border);border-radius:8px;
+         padding:10px 12px;margin-bottom:18px;font-size:12px;color:var(--text3)"></div>
 
     <!-- S2: CONSUMO DE MATERIALES -->
     <div class="section-title" style="margin-bottom:6px">📦 Consumo de materiales por labor</div>
@@ -12206,11 +12212,69 @@ function mbRenderPartes(){
           const mats=Object.entries(r.consumoFrentes||{}).map(([lab,items])=>
             (items||[]).map(it=>chip(`📦 ${lab}: ${it.desc||it.codigo} <b style="color:#9b59b6">${_mbN(it.cant,2)} ${it.unidad||''}</b>`)).join('')).join('');
           const exps=mbAcopio().salidas.filter(x=>String(x.parte||'')===String(r.id))
-            .map(x=>chip(`💥 ${x.destino}: ${x.nombre||x.producto} <b style="color:#a855f7">${_mbN(x.totalUnidades,2)}</b>`)).join('');
+            .map(x=>chip(`💥 ${x.disparo?('D'+x.disparo+' · '):''}${x.destino}: ${x.nombre||x.producto} <b style="color:#a855f7">${_mbN(x.totalUnidades,2)}</b>`)).join('');
           return (mats||exps)?`<div>${exps}${mats}</div>`:'';
         })()}
+        ${(r.disparos&&r.disparos.length)?`<div style="font-size:12px;margin-top:5px">💥 <strong>${r.disparos.length} disparo${r.disparos.length!==1?'s':''}</strong>
+          ${r.disparos.map(d=>`<span style="color:var(--text3);margin-left:7px">D${d.n}: <b style="color:#f59e0b">${_mbS(d.costo)}</b></span>`).join('')}
+          <span style="margin-left:8px;color:var(--text3)">· Explosivo del turno: <b style="color:#f59e0b">${_mbS(r.costoExplosivo||0)}</b></span>
+          ${(r.costoExplosivo>0&&r.disparos.length)?`<span style="margin-left:8px;color:var(--text3)">· Promedio: <b style="color:#f59e0b">${_mbS(r.costoExplosivo/r.disparos.length)}</b> por disparo</span>`:''}</div>`:''}
         ${r.obs?`<div style="font-size:11px;color:var(--text3);margin-top:4px">${r.obs}</div>`:''}</div>`,
-      _mbBorrar('mbBorrarParte',r.id));}).join('');
+      `<div style="display:flex;gap:6px;flex-wrap:wrap">`+
+      `<button onclick="mbParteWhatsApp('${r.id}')" style="padding:4px 9px;font-size:11px;background:rgba(37,211,102,0.15);color:#25d366;border:1px solid rgba(37,211,102,0.4);border-radius:4px;cursor:pointer">📲 WhatsApp</button>`+
+      _mbBorrar('mbBorrarParte',r.id)+`</div>`);}).join('');
+}
+
+/* Enviar el parte por WhatsApp, igual que el reporte de NV 2820: se arma el texto, se copia al
+   portapapeles como respaldo y se abre WhatsApp para elegir el grupo. Lo que cambia es el
+   contenido — aquí van los disparos del turno con su costo, que es lo que se quiere mirar. */
+function mbParteWhatsApp(id){
+  const r=(mbEstado().partes||[]).find(x=>String(x.id)===String(id));
+  if(!r){ showNotif('No se encontró el parte','error'); return; }
+  const S=n=>'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const nom=cod=>{ const c=mbExplosivos().find(x=>x.id===cod); return c?c.nombre:cod; };
+  let t='';
+  t+='*PARTE DE COMPRESORISTA — MONTE BRAVO*\n';
+  t+='Fecha: '+r.fecha+' | Turno: '+(r.turno==='Noche'?'[NOCHE]':'[DIA]')+'\n';
+  if(r.nombre) t+='Compresorista: *'+r.nombre+'*\n';
+  t+='\n';
+  const ds=r.disparos||[];
+  if(ds.length){
+    t+='*DISPAROS DEL TURNO*\n';
+    ds.forEach(d=>{
+      t+='  Disparo '+d.n+' — '+d.labor+':  '+S(d.costo)+'\n';
+      (d.items||[]).forEach(it=>{ t+='     · '+nom(it.codigo)+': '+it.cant+'\n'; });
+    });
+    t+='  TOTAL EXPLOSIVO DEL TURNO: *'+S(r.costoExplosivo||0)+'*\n';
+    if(ds.length>1) t+='  Promedio por disparo: '+S((r.costoExplosivo||0)/ds.length)+'\n';
+    t+='\n';
+  }
+  const pet=(r.petroleo||[]).filter(x=>Number(x.gln)>0);
+  if(pet.length){
+    t+='*PETROLEO*\n';
+    pet.forEach(x=>{ t+='  '+x.equipo+': '+x.gln+' gln\n'; });
+    t+='  Total: '+pet.reduce((s,x)=>s+Number(x.gln||0),0)+' gln\n\n';
+  }
+  const hor=(r.horometros||[]).filter(x=>Number(x.HT)>0);
+  if(hor.length){
+    t+='*HOROMETROS*\n';
+    hor.forEach(x=>{ t+='  '+x.equipo+': '+x.HI+' a '+x.HF+'h ('+x.HT+'h)\n'; });
+    t+='\n';
+  }
+  const mats=Object.entries(r.consumoFrentes||{});
+  if(mats.length){
+    t+='*MATERIALES*\n';
+    mats.forEach(([lab,items])=>{ (items||[]).forEach(it=>{
+      t+='  '+lab+' · '+(it.desc||it.codigo)+': '+it.cant+' '+(it.unidad||'')+'\n'; }); });
+    t+='\n';
+  }
+  if(r.obs) t+='*OBSERVACIONES*\n'+r.obs+'\n';
+
+  const abrir=()=>window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank');
+  try{
+    navigator.clipboard.writeText(t).then(()=>{ showNotif('✅ Copiado — abriendo WhatsApp, elige el grupo','ok'); abrir(); })
+      .catch(()=>{ showNotif('✅ Abriendo WhatsApp, elige el grupo','ok'); abrir(); });
+  }catch(e){ abrir(); }
 }
 
 // ── PLANILLA ──
@@ -12821,7 +12885,71 @@ function mbLabores(){
 }
 const _mbLbId=t=>'L'+String(t).replace(/[^A-Za-z0-9]/g,'_');
 
+/* ── DISPAROS DEL TURNO ────────────────────────────────────────────────────────
+   El compresorista entrega explosivo disparo por disparo. Antes el parte sumaba todo el turno
+   en una sola columna por labor y no había forma de saber qué costó cada entrega. Ahora cada
+   disparo es su propia columna, con su labor, y el parte muestra el costo de cada uno y el
+   total del turno. Se valoriza con los mismos precios de explosivos del resto de la app. */
+let _mbDisparos=[];
+function mbDisparoAgregar(){
+  const labores=mbLabores();
+  // Se conserva lo ya escrito: se lee antes de redibujar y se vuelve a poner después.
+  const prev=mbLeerDisparos();
+  _mbDisparos.push({n:_mbDisparos.length+1, labor:labores[0]||'RAMPA ACOPIO'});
+  mbParteRender(); mbEscribirDisparos(prev);
+}
+function mbDisparoQuitar(i){
+  if(_mbDisparos.length<=1) return;
+  const prev=mbLeerDisparos();
+  prev.splice(i,1); _mbDisparos.splice(i,1);
+  mbParteRender(); mbEscribirDisparos(prev);
+}
+// Lee la cuadrícula: [{labor, items:{codigo:cant}}] por disparo.
+function mbLeerDisparos(){
+  return _mbDisparos.map((d,i)=>{
+    const items={};
+    mbExplosivos().forEach(c=>{
+      const v=parseFloat((document.getElementById('mbce-'+c.id+'-D'+i)||{}).value)||0;
+      if(v>0) items[c.id]=v;
+    });
+    return { labor:d.labor, items };
+  });
+}
+function mbEscribirDisparos(datos){
+  (datos||[]).forEach((d,i)=>{
+    if(!_mbDisparos[i]) return;
+    _mbDisparos[i].labor=d.labor||_mbDisparos[i].labor;
+    Object.keys(d.items||{}).forEach(cod=>{
+      const el=document.getElementById('mbce-'+cod+'-D'+i);
+      if(el) el.value=d.items[cod];
+    });
+  });
+  mbCalcDisparos();
+}
+// Cuánto cuesta cada disparo y cuánto el turno completo.
+function mbCostoDisparos(datos, precios){
+  const pExp=precios||((typeof compGetPreciosExp==='function')?compGetPreciosExp():{});
+  const porDisparo=(datos||[]).map(d=>Object.keys(d.items||{})
+    .reduce((s,cod)=>s+(d.items[cod]*(Number(pExp[cod])||0)),0));
+  return { porDisparo, total:porDisparo.reduce((s,x)=>s+x,0) };
+}
+function mbCalcDisparos(){
+  const datos=mbLeerDisparos();
+  const c=mbCostoDisparos(datos);
+  const foot=_mbG('mbc-exp-foot');
+  if(foot) foot.innerHTML='<tr style="border-top:2px solid var(--border)">'+
+    '<td colspan="2" style="padding:7px 8px;font-size:11px;font-weight:700;color:var(--text2)">Costo del disparo</td>'+
+    c.porDisparo.map(x=>'<td style="padding:7px 8px;text-align:center;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:800;color:'+(x>0?'#f59e0b':'var(--text3)')+'">'+_mbS(x)+'</td>').join('')+
+    '</tr>';
+  const caja=_mbG('mbc-costo-turno');
+  if(caja) caja.innerHTML='<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'+
+    '<span>💥 <b style="color:var(--text2)">'+c.porDisparo.length+' disparo'+(c.porDisparo.length!==1?'s':'')+'</b> en el turno</span>'+
+    c.porDisparo.map((x,i)=>'<span style="color:var(--text3)">D'+(i+1)+': <b style="color:#f59e0b">'+_mbS(x)+'</b></span>').join('')+
+    '<span style="margin-left:auto">Explosivo del turno: <b style="color:#f59e0b;font-size:15px">'+_mbS(c.total)+'</b></span></div>';
+  return c;
+}
 function mbAbrirParte(){
+  _mbDisparos=[];
   _mbG('mbc-fecha').value=hoy(); _mbG('mbc-turno').value='Día';
   _mbG('mbc-nombre').value=''; _mbG('mbc-obs').value='';
   const ln=_mbG('mbc-labor-nueva'); if(ln) ln.value='';
@@ -12834,11 +12962,18 @@ function mbParteRender(){
   const labores=mbLabores();
   const stockExp=(typeof mbStock==='function')?mbStock():{};
 
-  // ── Explosivos por labor ──
+  // ── Explosivos por DISPARO ──
+  // Una columna por entrega del turno: así se sabe qué costó cada disparo y no solo el total.
+  if(!_mbDisparos.length) _mbDisparos=[{n:1, labor:labores[0]||'RAMPA ACOPIO'}];
   const head=_mbG('mbc-exp-head');
   if(head) head.innerHTML='<th style="text-align:left;padding:6px 8px">Explosivo</th>'+
     '<th style="padding:6px 8px;text-align:center">En acopio</th>'+
-    labores.map(l=>'<th style="padding:6px 8px;text-align:center;white-space:nowrap">'+escAttr(l)+'</th>').join('');
+    _mbDisparos.map((d,i)=>'<th style="padding:6px 8px;text-align:center;white-space:nowrap">'+
+      '<div style="font-size:11px;color:var(--text2);font-weight:700">💥 Disparo '+(i+1)+
+        (_mbDisparos.length>1?' <span onclick="mbDisparoQuitar('+i+')" title="Quitar este disparo" style="cursor:pointer;color:var(--negative)">×</span>':'')+'</div>'+
+      '<select onchange="_mbDisparos['+i+'].labor=this.value" style="margin-top:3px;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:3px 6px;font-size:10px">'+
+        labores.map(l=>'<option value="'+escAttr(l)+'"'+(l===d.labor?' selected':'')+'>'+escAttr(l)+'</option>').join('')+
+      '</select></th>').join('');
   const body=_mbG('mbc-exp-body');
   if(body) body.innerHTML=mbExplosivos().map(c=>{
     const disp=Number(stockExp[c.id])||0;
@@ -12846,10 +12981,11 @@ function mbParteRender(){
       '<td style="padding:6px 8px;font-size:12px;color:var(--text)">'+escAttr(c.nombre)+
         '<br><span style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--text3)">'+escAttr(c.id)+'</span></td>'+
       '<td style="padding:6px 8px;text-align:center;font-size:11px;color:'+(disp>0?'#22d3a5':'var(--text3)')+'">'+_mbN(disp,2)+'</td>'+
-      labores.map(l=>'<td style="padding:4px 6px"><input type="number" min="0" step="any" id="mbce-'+c.id+'-'+_mbLbId(l)+'"'+
-        ' placeholder="0" style="width:100%;min-width:70px;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>').join('')+
+      _mbDisparos.map((d,i)=>'<td style="padding:4px 6px"><input type="number" min="0" step="any" id="mbce-'+c.id+'-D'+i+'"'+
+        ' oninput="mbCalcDisparos()" placeholder="0" style="width:100%;min-width:80px;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>').join('')+
       '</tr>';
   }).join('');
+  mbCalcDisparos();
 
   // ── Consumo de materiales por labor ──
   const wrap=_mbG('mbc-cons-wrap');
@@ -12954,14 +13090,21 @@ function mbGuardarParte(){
     if(items.length) consumoFrentes[l]=items;
   });
 
-  // Explosivos por labor → salidas del acopio
+  // Explosivos por DISPARO → salidas del acopio, cada una con el disparo al que pertenece
+  const disparosDatos=mbLeerDisparos();
+  const pExpSnap=(typeof compGetPreciosExp==='function')?compGetPreciosExp():{};
+  const costos=mbCostoDisparos(disparosDatos,pExpSnap);
   const expSal=[];
-  mbExplosivos().forEach(c=>{
-    labores.forEach(l=>{
-      const v=parseFloat((document.getElementById('mbce-'+c.id+'-'+_mbLbId(l))||{}).value)||0;
-      if(v>0) expSal.push({producto:c.id, nombre:c.nombre, destino:l, totalUnidades:v});
+  disparosDatos.forEach((d,i)=>{
+    Object.keys(d.items).forEach(cod=>{
+      const c=mbExplosivos().find(x=>x.id===cod)||{nombre:cod};
+      expSal.push({producto:cod, nombre:c.nombre, destino:d.labor, disparo:i+1, totalUnidades:d.items[cod]});
     });
   });
+  const disparos=disparosDatos.map((d,i)=>({
+    n:i+1, labor:d.labor, costo:Math.round(costos.porDisparo[i]*100)/100,
+    items:Object.keys(d.items).map(cod=>({codigo:cod, cant:d.items[cod]}))
+  })).filter(d=>d.items.length);
 
   if(!pet.length && !hor.length && !Object.keys(consumoFrentes).length && !expSal.length){
     showNotif('⚠ El parte está vacío','error'); return;
@@ -12993,11 +13136,15 @@ function mbGuardarParte(){
   const id=_mbId('MBC');
   mbEstado().partes.push({ id, _ts:Date.now(), unidad:'MB', fecha, turno,
     nombre:_mbVal('mbc-nombre').trim(), petroleo:pet, horometros:hor, consumoFrentes,
+    // Los disparos del turno con su costo, y los precios con que se valorizó: un precio que
+    // cambie mañana no debe reescribir lo que costó este turno.
+    disparos, costoExplosivo:Math.round(costos.total*100)/100, _precios:{explosivos:pExpSnap},
     obs:_mbVal('mbc-obs').trim() });
   // Las salidas de explosivo se guardan en el ACOPIO —la única fuente del gasto de explosivo de
   // la unidad— y quedan atadas a este parte para poder deshacerlas si se elimina.
   expSal.forEach((x,i)=>mbAcopio().salidas.push({ id:id+'-E'+i, _ts:Date.now()+i, parte:id,
-    fecha, turno, producto:x.producto, nombre:x.nombre, destino:x.destino, totalUnidades:x.totalUnidades }));
+    fecha, turno, producto:x.producto, nombre:x.nombre, destino:x.destino,
+    disparo:x.disparo, totalUnidades:x.totalUnidades }));
   mbGuardar();
   try{ if(typeof almacenSave==='function') almacenSave(); }catch(e){}
   cerrarModal('modal-mb-parte'); mbRenderPartes();
@@ -22305,6 +22452,8 @@ const ROLES_MODULOS = {
   compresorista:        ['logistica','compresorista','seguridad'],
   supervisor_materiales:['dashboard','logistica','operaciones','compresorista','seguridad','montebravo'],
   compras:              ['compras'],
+  // Monte Bravo trabaja aparte: su gente entra y solo ve su módulo. Nada de NV 2820.
+  monte_bravo:          ['montebravo'],
 };
 
 const ROL_LABELS = {
@@ -22316,6 +22465,7 @@ const ROL_LABELS = {
   jefe_guardia:        'Jefe de Guardia',
   ingeniero_residente: 'Ingeniero Residente',
   jefe_mantenimiento:  'Jefe de Mantenimiento',
+  monte_bravo:         'Monte Bravo',
   compresorista:       'Compresorista',
   supervisor_materiales:'Supervisor de Materiales',
   compras:             'Compras',
@@ -22333,6 +22483,7 @@ const ROL_COLORS = {
   compresorista:       '#5b6ef5',
   supervisor_materiales:'#0d9488',
   compras:             '#c2410c',
+  monte_bravo:         '#16a34a',
 };
 
 let usuarios = [
@@ -22348,6 +22499,9 @@ let usuarios = [
   { id:10, usuario:'comp2@temual.pe',        nombre:'Compresorista 2',      password:'Dbyvw853#',    rol:'compresorista',       activo:true, modulos:['compresorista','seguridad'] },
   { id:11, usuario:'supervisor@temual.pe',   nombre:'Supervisor de Materiales',password:'supervisor24',rol:'supervisor_materiales',activo:true },
   { id:12, usuario:'veronicahuaman@temual.pe',nombre:'Verónica Huamán',      password:'temual2026',    rol:'compras',             activo:true, modulos:['compras'] },
+  // ── Monte Bravo ── Solo ven su módulo: ni dashboard de 2820, ni logística, ni finanzas.
+  { id:13, usuario:'montebravo@temual.pe',   nombre:'Monte Bravo',          password:'Mbravo2026$',   rol:'monte_bravo',         activo:true, modulos:['montebravo'] },
+  { id:14, usuario:'compmb@temual.pe',       nombre:'Compresorista Monte Bravo', password:'Mbcomp386%', rol:'monte_bravo',        activo:true, modulos:['montebravo'] },
 ];
 
 let usuarioActivo = null;
