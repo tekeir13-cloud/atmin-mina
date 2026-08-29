@@ -3535,6 +3535,7 @@ select option{background:var(--coal3);}
   <div class="mod-tabs">
     <button class="mod-tab active" onclick="modTab('mb','dashboard',this)">📊 Dashboard</button>
     <button class="mod-tab" onclick="modTab('mb','acopio',this)">💣 Acopio de Explosivo</button>
+    <button class="mod-tab" onclick="modTab('mb','produccion',this)">⛏ Producción</button>
     <button class="mod-tab" onclick="modTab('mb','compresorista',this)">🔧 Compresorista</button>
     <button class="mod-tab" onclick="modTab('mb','combustible',this)">⛽ Combustible</button>
     <button class="mod-tab" onclick="modTab('mb','materiales',this)">📦 Sub-almacén</button>
@@ -3577,6 +3578,22 @@ select option{background:var(--coal3);}
       </div>
       <div id="mb-historial-wrap" style="display:none;margin-top:14px"></div>
     </div>
+  </div>
+
+  <!-- El reporte de PRODUCCIÓN va aparte del parte del compresorista: son dos reportes
+       distintos, cada uno con su pestaña. El del compresorista se manda por WhatsApp; este no
+       —la producción se mira aquí y en el dashboard, no se reparte por chat—. -->
+  <div class="mod-pane" style="display:none" id="mb-produccion">
+    <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <div class="section-title" style="margin:0">⛏ Reporte de Producción — Monte Bravo</div>
+      <div style="font-size:12px;color:var(--text3)">Sacos de alta y baja ley por labor y por turno</div>
+    </div>
+    <div class="card" style="margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-gold" style="font-size:13px;padding:9px 18px" onclick="mbAbrirProd()">➕ Registrar producción</button>
+      <label style="font-size:11px;color:var(--text3);margin-left:auto">Ciclo:</label>
+      <select id="mbf-prod" onchange="mbRenderProd()" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px"></select>
+    </div>
+    <div id="mb-prod-wrap"></div>
   </div>
 
   <div class="mod-pane" style="display:none" id="mb-compresorista">
@@ -4502,6 +4519,44 @@ select option{background:var(--coal3);}
 </div>
 
 <!-- ════ MONTE BRAVO: PRODUCCIÓN ════ -->
+<div class="modal-overlay" id="modal-mb-prod" onclick="if(event.target===this)cerrarModal('modal-mb-prod')">
+  <div class="modal" style="width:min(560px,96vw);max-height:92vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div class="modal-title" style="margin-bottom:0">⛏ Reporte de Producción — Monte Bravo</div>
+      <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-mb-prod')">✕</button>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px">Carga producida en el turno, por labor. El tonelaje se estima a razón de 65 kg por saco.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div class="form-group" style="margin:0"><label>Fecha</label><input type="date" id="mbp-fecha"></div>
+      <div class="form-group" style="margin:0"><label>Turno</label>
+        <select id="mbp-turno"><option value="Día">Día</option><option value="Noche">Noche</option></select></div>
+    </div>
+    <!-- La labor se elige de la lista —la misma del parte del compresorista— y no se escribe a
+         mano: en texto libre cada quien la nombraba a su manera y la producción salía repartida
+         entre nombres que eran el mismo frente. -->
+    <div class="form-group" style="margin:0 0 12px"><label>Labor / frente</label>
+      <select id="mbp-labor"></select></div>
+    <!-- El mineral de Monte Bravo NO se pesa: se cuenta en sacos y se estima a 65 kg cada uno.
+         Por eso las toneladas son un cálculo, no un dato que se digite. -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <div class="form-group" style="margin:0"><label><span id="mbp-ico-alta"></span> Sacos de ALTA ley</label>
+        <input type="number" id="mbp-alta" min="0" step="1" placeholder="0" oninput="mbCalcSacos()"></div>
+      <div class="form-group" style="margin:0"><label><span id="mbp-ico-baja"></span> Sacos de BAJA ley</label>
+        <input type="number" id="mbp-baja" min="0" step="1" placeholder="0" oninput="mbCalcSacos()"></div>
+    </div>
+    <div id="mbp-estimado" style="background:var(--coal4);border:1px solid var(--border);border-radius:8px;
+         padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--text3)">
+      Toneladas estimadas: <strong style="color:#c9a84c;font-size:14px">0.00 t</strong>
+    </div>
+    <div class="form-group" style="margin:0 0 12px"><label>Observación <span style="color:var(--text3);font-size:10px">(opcional)</span></label>
+      <input type="text" id="mbp-obs" placeholder=""></div>
+    <div class="btn-row" style="margin-top:6px">
+      <button class="btn btn-gold" onclick="mbGuardarProd()">✓ Guardar producción</button>
+      <button class="btn btn-outline" onclick="cerrarModal('modal-mb-prod')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ════ MONTE BRAVO: PARTE DEL COMPRESORISTA ════ -->
 <div class="modal-overlay" id="modal-mb-parte" onclick="if(event.target===this)cerrarModal('modal-mb-parte')">
   <div class="modal" style="width:min(760px,96vw);max-height:92vh;overflow-y:auto">
@@ -4517,20 +4572,8 @@ select option{background:var(--coal3);}
       <div class="form-group" style="margin:0"><label>Responsable</label><input type="text" id="mbc-nombre" placeholder="Nombre"></div>
     </div>
 
-    <!-- S0: PRODUCCIÓN DEL TURNO — antes se registraba en una pestaña aparte; ahora va aquí,
-         en el mismo parte, porque lo reporta la misma persona en el mismo momento. -->
-    <div class="section-title" style="margin-bottom:6px">⛏ Producción del turno</div>
-    <div style="font-size:10.5px;color:var(--text3);margin-bottom:8px">Sacos de mineral del turno. El tonelaje se estima a razón de 65 kg por saco.</div>
-    <div class="form-group" style="margin:0 0 10px"><label>Labor / frente</label>
-      <select id="mbc-prod-labor"></select></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-      <div class="form-group" style="margin:0"><label><span id="mbc-ico-alta"></span> Sacos de ALTA ley</label>
-        <input type="number" id="mbc-prod-alta" min="0" step="1" placeholder="0" oninput="mbCalcProdParte()"></div>
-      <div class="form-group" style="margin:0"><label><span id="mbc-ico-baja"></span> Sacos de BAJA ley</label>
-        <input type="number" id="mbc-prod-baja" min="0" step="1" placeholder="0" oninput="mbCalcProdParte()"></div>
-    </div>
-    <div id="mbc-prod-estimado" style="background:var(--coal4);border:1px solid var(--border);border-radius:8px;
-         padding:10px 12px;margin-bottom:18px;font-size:12px;color:var(--text3)"></div>
+    <!-- La producción del turno ya NO se llena aquí: tiene su propia pestaña ⛏ Producción.
+         Son dos reportes distintos y se registran por separado. -->
 
     <!-- LABORES DE LA UNIDAD -->
     <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-bottom:12px">
@@ -5120,7 +5163,8 @@ const PT={'dashboard':'Dashboard KPI','logistica':'Módulo Logística','rrhh':'R
 function mostrarAccesoDenegado(page){
   const nombres={dashboard:'Dashboard',logistica:'Logística',rrhh:'Recursos Humanos',
     operaciones:'Operaciones',mantenimiento:'Mantenimiento',finanzas:'Finanzas',
-    seguridad:'Seguridad',ia:'Asistente IA',reporte:'Reportes',compresorista:'Compresorista',compras:'Compras'};
+    seguridad:'Seguridad',ia:'Asistente IA',reporte:'Reportes',compresorista:'Compresorista',compras:'Compras',
+    montebravo:'Monte Bravo'};
   // Cambiar al page y mostrar overlay de acceso denegado
   window._currentPage = page;
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -5163,6 +5207,13 @@ function _vistaLeer(){
   }catch(e){ return null; }
 }
 function navigate(page){
+  // Monte Bravo va cerrado: solo su compresorista, el Gerente General y el Jefe de Finanzas.
+  // Se comprueba por ROL y no solo por la lista de módulos, para que ningún atajo —un enlace
+  // guardado, la última vista, un perfil viejo de la nube— abra el módulo por la puerta de atrás.
+  if(page==='montebravo' && usuarioActivo && typeof rolVeMonteBravo==='function'
+     && !rolVeMonteBravo(usuarioActivo.rol)){
+    mostrarAccesoDenegado(page); return;
+  }
   if(usuarioActivo && usuarioActivo.modulos && !usuarioActivo.modulos.includes(page)){
     mostrarAccesoDenegado(page); return;
   }
@@ -5193,7 +5244,7 @@ const MODULE_PANES = {
   'mant': ['registro','costosmant','horometros'],
   'fin': ['dashboard','informe','costocentro'],
   'cmp': ['facturas','informe','presupuestos','balance'],
-  'mb': ['dashboard','acopio','compresorista','combustible','materiales','tareo','planilla','liquidaciones','terceros','estadisticas']
+  'mb': ['dashboard','acopio','produccion','compresorista','combustible','materiales','tareo','planilla','liquidaciones','terceros','estadisticas']
 };
 
 // Prefijo del módulo → id de su página. El prefijo de los panes ('log') NO es el id de la
@@ -11788,6 +11839,7 @@ function mbRenderAcopioResumen(){
 // ═══════════ PANTALLAS DEL MÓDULO MONTE BRAVO ═══════════
 function mbRenderModulo(pane){
   if(pane==='acopio')        return mbRenderTab();
+  if(pane==='produccion')    return mbRenderProd();
   if(pane==='compresorista') return mbRenderComp();
   if(pane==='combustible')   return mbRenderCombustible();
   if(pane==='materiales')    return mbRenderMateriales();
@@ -12140,7 +12192,42 @@ const _mbRotulo=per=>{ if(!per) return 'Todos los ciclos registrados';
   const v=ventanaMes(per); const n=(typeof finNombreMes==='function')?finNombreMes(per):per;
   return `${n} · ciclo ${v.ini} → ${v.fin}`; };
 
-// ── PRODUCCIÓN ──
+/* ── REPORTE DE PRODUCCIÓN ─────────────────────────────────────────────────────
+   Va aparte del parte del compresorista —cada uno en su pestaña— porque son dos reportes
+   distintos: este dice cuánto mineral salió, el otro qué se gastó para sacarlo. Aquí no hay
+   botón de WhatsApp: la producción se mira en esta pantalla y en el dashboard. */
+function mbRenderProd(){
+  const w=document.getElementById('mb-prod-wrap'); if(!w) return;
+  const per=_mbCiclo('mbf-prod');
+  const rs=mbEstado().produccion.filter(r=>!per||_mbEnCiclo(r.fecha,per))
+    .sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
+  const tt=rs.reduce((s,r)=>s+mbTonRegistro(r),0);
+  const sAlta=rs.reduce((s,r)=>s+(Number(r.sacosAlta)||0),0), sBaja=rs.reduce((s,r)=>s+(Number(r.sacosBaja)||0),0);
+  const labores=new Set(); rs.forEach(r=>labores.add((r.labor||'').trim()||'Sin labor indicada'));
+  const cab=`<div style="font-size:11.5px;color:var(--text3);margin-bottom:12px">${_mbRotulo(per)}</div>`+
+    _mbCards(
+      _mbCard(_mbSaco(MB_SACO_ALTA,26),'Sacos ALTA ley',_mbN(sAlta,0),sAlta?_mbN(sAlta*MB_KG_POR_SACO/1000,2)+' t estimadas':'sin sacos',MB_SACO_ALTA)+
+      _mbCard(_mbSaco(MB_SACO_BAJA,26),'Sacos BAJA ley',_mbN(sBaja,0),sBaja?_mbN(sBaja*MB_KG_POR_SACO/1000,2)+' t estimadas':'sin sacos',MB_SACO_BAJA)+
+      _mbCard('🪨','Toneladas estimadas',_mbN(tt,2)+' t',(sAlta+sBaja)?_mbN(sAlta+sBaja,0)+' sacos × '+MB_KG_POR_SACO+' kg':labores.size+' labor'+(labores.size!==1?'es':''),'#c9a84c')+
+      _mbCard('📋','Reportes',_mbN(rs.length,0),rs.length?_mbN(tt/rs.length,2)+' t por reporte':'sin reportes','#22d3a5'));
+  if(!rs.length){
+    w.innerHTML=cab+_mbVacio(per?'Sin producción registrada en este ciclo. Cambia de ciclo o usa «Registrar producción».'
+                                :'Sin producción registrada. Usa «Registrar producción» para los sacos del turno.');
+    return;
+  }
+  w.innerHTML=cab+rs.map(r=>_mbFila(
+    `<div><div style="font-weight:700;font-size:13px">${fmtF(r.fecha)} · <span style="color:var(--text3);font-weight:400">${r.turno||'—'}</span>
+       ${r.labor?` · <span style="color:#60a5fa">${r.labor}</span>`:''}</div>
+     <div style="font-size:12px;margin-top:4px">
+       ${(Number(r.sacosAlta)||Number(r.sacosBaja))?`
+         <span style="display:inline-flex;align-items:center;gap:3px;vertical-align:-3px">${_mbSaco(MB_SACO_ALTA,15)}<strong style="color:${MB_SACO_ALTA}">${_mbN(r.sacosAlta||0,0)}</strong></span>
+         · <span style="display:inline-flex;align-items:center;gap:3px;vertical-align:-3px">${_mbSaco(MB_SACO_BAJA,15)}<strong style="color:${MB_SACO_BAJA}">${_mbN(r.sacosBaja||0,0)}</strong></span> sacos · `:''}
+       Toneladas: <strong style="color:#c9a84c">${_mbN(mbTonRegistro(r),2)} t</strong>
+       ${Number(r.metros)>0?` · Avance: <strong style="color:#5b6ef5">${_mbN(r.metros)} m</strong>`:''}</div>
+     ${r.obs?`<div style="font-size:11px;color:var(--text3);margin-top:3px">${r.obs}</div>`:''}</div>`,
+    _mbBorrar('mbBorrarProd',r.id))).join('');
+}
+
 // ── PARTES DEL COMPRESORISTA ──
 /* ── SUB-PESTAÑAS DEL COMPRESORISTA DE MONTE BRAVO ─────────────────────────────
    La lista de partes y las estadísticas acumuladas de la unidad. Un solo sitio para saber
@@ -12166,7 +12253,9 @@ function mbParteResumen(r){
   const hrs=(r.horometros||[]).reduce((s,x)=>s+(Number(x.HT)||0),0);
   const exp=Number(r.costoExplosivo)||0;
   const disp=(r.disparos||[]).length;
-  // La producción del turno: la del propio parte, o la del registro que se guardó con él.
+  // La producción solo aparece en los partes VIEJOS, de cuando se llenaba dentro del parte:
+  // la del propio parte o la del registro que se guardó atado a él. Los nuevos no la traen —se
+  // reporta en la pestaña ⛏ Producción—, así que estas cifras salen en cero.
   const p=r.produccion||((mbEstado().produccion||[]).find(x=>String(x.parte||'')===String(r.id)))||{};
   const alta=Number(p.sacosAlta)||0, baja=Number(p.sacosBaja)||0;
   return { gln, hrs, exp, disp, metros:Number(p.metros)||0, alta, baja, sacos:alta+baja,
@@ -12914,6 +13003,7 @@ function _mbMergeLista(loc,nub){
   const u=(typeof mergeById_ts==='function')?mergeById_ts(loc||[], nub||[]):[...(nub||[])];
   return (typeof tombHas==='function')?u.filter(r=>!(r&&r.id&&tombHas(r.id))):u;
 }
+function mbBorrarProd(id){ if(_mbBorrarDe('produccion',id,'este reporte de producción')) mbRenderProd(); }
 function mbBorrarParte(id){
   if(!_mbBorrarDe('partes',id,'este parte')) return;
   // Las salidas de explosivo que generó ese parte se van con él: si quedaran sueltas, el acopio
@@ -12925,8 +13015,9 @@ function mbBorrarParte(id){
     a.salidas.length=0; quedan.forEach(x=>a.salidas.push(x));
     try{ if(typeof almacenSave==='function') almacenSave(); }catch(e){}
   }
-  // Y la producción que se registró con ese parte también: si quedara suelta, el avance y el
-  // tonelaje seguirían contando un turno que ya se borró.
+  // Y la producción que un parte VIEJO registró con él también: si quedara suelta, el avance y
+  // el tonelaje seguirían contando un turno que ya se borró. Los reportes de producción propios
+  // no llevan `parte`, así que no los toca: esos se borran desde su pestaña.
   const prod=mbEstado().produccion||[];
   const quedanP=prod.filter(x=>String(x.parte||'')!==String(id));
   if(quedanP.length!==prod.length){
@@ -12945,6 +13036,45 @@ const _mbVal=id=>{ const e=_mbG(id); return e?e.value:''; };
 const _mbNum=id=>Number(_mbVal(id))||0;
 
 // ── Producción ──
+function mbAbrirProd(){
+  _mbG('mbp-fecha').value=hoy(); _mbG('mbp-turno').value='Día';
+  // La lista de labores es la misma del parte del compresorista: una sola fuente para los dos.
+  const sel=_mbG('mbp-labor');
+  if(sel) sel.innerHTML=mbLabores().map(l=>'<option value="'+escAttr(l)+'">'+escAttr(l)+'</option>').join('');
+  _mbG('mbp-alta').value=''; _mbG('mbp-baja').value=''; _mbG('mbp-obs').value='';
+  mbCalcSacos();
+  abrirModal('modal-mb-prod');
+}
+// Sacos y tonelaje estimado, a la vista mientras se llena el reporte.
+function mbCalcSacos(){
+  const a=_mbNum('mbp-alta'), b=_mbNum('mbp-baja');
+  const ia=_mbG('mbp-ico-alta'), ib=_mbG('mbp-ico-baja');
+  if(ia && !ia.innerHTML) ia.innerHTML='<span style="display:inline-block;vertical-align:-3px">'+_mbSaco(MB_SACO_ALTA,15)+'</span>';
+  if(ib && !ib.innerHTML) ib.innerHTML='<span style="display:inline-block;vertical-align:-3px">'+_mbSaco(MB_SACO_BAJA,15)+'</span>';
+  const el=_mbG('mbp-estimado'); if(!el) return;
+  const t=mbTonDeSacos(a,b), n=a+b;
+  el.innerHTML='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
+    '<span style="display:inline-flex;align-items:center;gap:4px">'+_mbSaco(MB_SACO_ALTA,18)+
+      '<strong style="color:'+MB_SACO_ALTA+'">'+_mbN(a,0)+'</strong></span>'+
+    '<span style="display:inline-flex;align-items:center;gap:4px">'+_mbSaco(MB_SACO_BAJA,18)+
+      '<strong style="color:'+MB_SACO_BAJA+'">'+_mbN(b,0)+'</strong></span>'+
+    '<span style="margin-left:auto">Toneladas estimadas: <strong style="color:#c9a84c;font-size:15px">'+_mbN(t,2)+' t</strong>'+
+    (n>0?'<span style="margin-left:6px">· '+_mbN(n,0)+' × '+MB_KG_POR_SACO+' kg</span>':'')+'</span></div>';
+}
+function mbGuardarProd(){
+  const alta=_mbNum('mbp-alta'), baja=_mbNum('mbp-baja');
+  if(alta<=0 && baja<=0){ showNotif('⚠ Registra los sacos del turno','error'); return; }
+  const fecha=_mbVal('mbp-fecha')||hoy();
+  if(typeof bloqueadoPorCierre==='function' && bloqueadoPorCierre(fecha,'la producción de Monte Bravo')) return;
+  mbEstado().produccion.push({
+    id:_mbId('MBP'), _ts:Date.now(), unidad:'MB',
+    fecha, turno:_mbVal('mbp-turno'),
+    labor:_mbVal('mbp-labor').trim()||(mbLabores()[0]||''),
+    sacosAlta:alta, sacosBaja:baja, toneladas:mbTonDeSacos(alta,baja), obs:_mbVal('mbp-obs').trim()
+  });
+  mbGuardar(); cerrarModal('modal-mb-prod'); mbRenderProd();
+  showNotif('✓ Producción registrada');
+}
 
 // ── Parte del compresorista ──
 // Una fila por equipo de la unidad. Se guardan solo las filas con algo cargado, pero el parte
@@ -13062,28 +13192,8 @@ function mbTonRegistro(r){
   const s=(Number(r.sacosAlta)||0)+(Number(r.sacosBaja)||0);
   return s>0 ? mbTonDeSacos(r.sacosAlta, r.sacosBaja) : (Number(r.toneladas)||0);
 }
-// Sacos y tonelaje estimado dentro del parte del compresorista.
-function mbCalcProdParte(){
-  const a=_mbNum('mbc-prod-alta'), b=_mbNum('mbc-prod-baja');
-  const ia=_mbG('mbc-ico-alta'), ib=_mbG('mbc-ico-baja');
-  if(ia && !ia.innerHTML) ia.innerHTML='<span style="display:inline-block;vertical-align:-3px">'+_mbSaco(MB_SACO_ALTA,15)+'</span>';
-  if(ib && !ib.innerHTML) ib.innerHTML='<span style="display:inline-block;vertical-align:-3px">'+_mbSaco(MB_SACO_BAJA,15)+'</span>';
-  const el=_mbG('mbc-prod-estimado'); if(!el) return;
-  const t=mbTonDeSacos(a,b), n=a+b;
-  el.innerHTML='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
-    '<span style="display:inline-flex;align-items:center;gap:4px">'+_mbSaco(MB_SACO_ALTA,18)+
-      '<strong style="color:'+MB_SACO_ALTA+'">'+_mbN(a,0)+'</strong></span>'+
-    '<span style="display:inline-flex;align-items:center;gap:4px">'+_mbSaco(MB_SACO_BAJA,18)+
-      '<strong style="color:'+MB_SACO_BAJA+'">'+_mbN(b,0)+'</strong></span>'+
-    '<span style="margin-left:auto">Toneladas estimadas: <strong style="color:#c9a84c;font-size:15px">'+_mbN(t,2)+' t</strong>'+
-    (n>0?'<span style="margin-left:6px">· '+_mbN(n,0)+' × '+MB_KG_POR_SACO+' kg</span>':'')+'</span></div>';
-}
 function mbAbrirParte(){
   _mbDisparos=[];
-  ['mbc-prod-alta','mbc-prod-baja'].forEach(id=>{ const e=_mbG(id); if(e) e.value=''; });
-  const ls=_mbG('mbc-prod-labor');
-  if(ls) ls.innerHTML=mbLabores().map(l=>'<option value="'+escAttr(l)+'">'+escAttr(l)+'</option>').join('');
-  mbCalcProdParte();
   _mbG('mbc-fecha').value=hoy(); _mbG('mbc-turno').value='Día';
   _mbG('mbc-nombre').value=''; _mbG('mbc-obs').value='';
   const ln=_mbG('mbc-labor-nueva'); if(ln) ln.value='';
@@ -13240,8 +13350,7 @@ function mbGuardarParte(){
     items:Object.keys(d.items).map(cod=>({codigo:cod, cant:d.items[cod]}))
   })).filter(d=>d.items.length);
 
-  if(!pet.length && !hor.length && !Object.keys(consumoFrentes).length && !expSal.length
-     && !(_mbNum('mbc-prod-alta')>0 || _mbNum('mbc-prod-baja')>0)){
+  if(!pet.length && !hor.length && !Object.keys(consumoFrentes).length && !expSal.length){
     showNotif('⚠ El parte está vacío','error'); return;
   }
   if(typeof bloqueadoPorCierre==='function' && bloqueadoPorCierre(fecha,'partes de Monte Bravo')) return;
@@ -13269,19 +13378,9 @@ function mbGuardarParte(){
       '\n\nSe puede guardar igual —el stock quedará en negativo— pero conviene revisar los ingresos primero.\n\n¿Guardar de todos modos?')) return;
 
   const id=_mbId('MBC');
-  // La producción del turno viaja con el parte, pero se guarda TAMBIÉN como registro de
-  // producción —atado al parte por `parte`— para que el dashboard, las liquidaciones y las
-  // estadísticas la sigan leyendo del mismo sitio de siempre. Al borrar el parte, se va con él.
-  const pAlta=_mbNum('mbc-prod-alta'), pBaja=_mbNum('mbc-prod-baja');
-  if(pAlta>0 || pBaja>0){
-    mbEstado().produccion.push({ id:id+'-P', _ts:Date.now(), unidad:'MB', parte:id, fecha, turno,
-      labor:_mbVal('mbc-prod-labor').trim()||(mbLabores()[0]||''),
-      sacosAlta:pAlta, sacosBaja:pBaja, toneladas:mbTonDeSacos(pAlta,pBaja),
-      obs:_mbVal('mbc-obs').trim() });
-  }
+  // La producción del turno ya NO viaja con el parte: se registra en su propia pestaña, con su
+  // propio reporte. Los partes viejos que la traen dentro se siguen mostrando tal cual.
   mbEstado().partes.push({ id, _ts:Date.now(), unidad:'MB', fecha, turno,
-    produccion:{ labor:_mbVal('mbc-prod-labor').trim(), sacosAlta:pAlta, sacosBaja:pBaja,
-                 toneladas:mbTonDeSacos(pAlta,pBaja) },
     nombre:_mbVal('mbc-nombre').trim(), petroleo:pet, horometros:hor, consumoFrentes,
     // Los disparos del turno con su costo, y los precios con que se valorizó: un precio que
     // cambie mañana no debe reescribir lo que costó este turno.
@@ -22674,19 +22773,29 @@ function renderGraficosReporte(modulo, ac, cos, ing, util){
 
 const TODOS_MODULOS = ['dashboard','logistica','rrhh','operaciones','mantenimiento','finanzas','seguridad','ia','reporte','compresorista','compras','montebravo'];
 
+/* ── QUIÉN VE MONTE BRAVO ──────────────────────────────────────────────────────
+   El módulo está CERRADO. Solo entran tres: el compresorista de la unidad —que es quien
+   reporta—, el Gerente General y el Jefe de Finanzas. Para todos los demás, incluidos los
+   compresoristas de NV 2820, está bloqueado: ellos ven lo de 2820 y nada más.
+   Esta lista manda sobre cualquier otra: aunque un usuario traiga 'montebravo' en sus módulos
+   —de la nube, de un perfil viejo o de los chips del administrador—, al iniciar sesión se le
+   quita si su rol no está aquí. */
+const MONTEBRAVO_ROLES = ['monte_bravo','gerente_general','jefe_finanzas'];
+function rolVeMonteBravo(rol){ return MONTEBRAVO_ROLES.indexOf(rol)>=0; }
+
 const ROLES_MODULOS = {
   gerente_general:      TODOS_MODULOS,
   jefe_finanzas:        TODOS_MODULOS,
-  jefe_operaciones:     ['logistica','operaciones','mantenimiento','compresorista','seguridad','montebravo'],
+  jefe_operaciones:     ['logistica','operaciones','mantenimiento','compresorista','seguridad'],
   logistico:            ['dashboard','logistica','seguridad','compras'],
   administrador:        ['rrhh','seguridad'],
   jefe_guardia:         ['operaciones','seguridad'],
-  ingeniero_residente:  ['operaciones','seguridad','montebravo'],
+  ingeniero_residente:  ['operaciones','seguridad'],
   jefe_mantenimiento:   ['mantenimiento','seguridad'],
   compresorista:        ['logistica','compresorista','seguridad'],
-  supervisor_materiales:['dashboard','logistica','operaciones','compresorista','seguridad','montebravo'],
+  supervisor_materiales:['dashboard','logistica','operaciones','compresorista','seguridad'],
   compras:              ['compras'],
-  // Monte Bravo trabaja aparte: su gente entra y solo ve su módulo. Nada de NV 2820.
+  // Monte Bravo trabaja aparte: su compresorista entra y solo ve su módulo. Nada de NV 2820.
   monte_bravo:          ['montebravo'],
 };
 
@@ -22733,8 +22842,11 @@ let usuarios = [
   { id:10, usuario:'comp2@temual.pe',        nombre:'Compresorista 2',      password:'Dbyvw853#',    rol:'compresorista',       activo:true, modulos:['compresorista','seguridad'] },
   { id:11, usuario:'supervisor@temual.pe',   nombre:'Supervisor de Materiales',password:'supervisor24',rol:'supervisor_materiales',activo:true },
   { id:12, usuario:'veronicahuaman@temual.pe',nombre:'Verónica Huamán',      password:'temual2026',    rol:'compras',             activo:true, modulos:['compras'] },
-  // ── Monte Bravo ── Solo ven su módulo: ni dashboard de 2820, ni logística, ni finanzas.
-  { id:13, usuario:'montebravo@temual.pe',   nombre:'Monte Bravo',          password:'Mbravo2026$',   rol:'monte_bravo',         activo:true, modulos:['montebravo'] },
+  // ── Monte Bravo ── Una sola cuenta de la unidad: la del compresorista, que es quien reporta.
+  // Solo ve su módulo: ni dashboard de 2820, ni logística, ni finanzas. La cuenta genérica de
+  // la unidad queda desactivada — el módulo es de su compresorista, del Gerente General y del
+  // Jefe de Finanzas, de nadie más.
+  { id:13, usuario:'montebravo@temual.pe',   nombre:'Monte Bravo',          password:'Mbravo2026$',   rol:'monte_bravo',         activo:false, modulos:['montebravo'] },
   { id:14, usuario:'compmb@temual.pe',       nombre:'Compresorista Monte Bravo', password:'Mbcomp386%', rol:'monte_bravo',        activo:true, modulos:['montebravo'] },
 ];
 
@@ -22780,6 +22892,11 @@ function iniciarSesion(user){
   if(user && !Array.isArray(user.modulos)){
     user.modulos = (ROLES_MODULOS[user.rol] || []).slice();
     if(!user.modulos.includes('seguridad')) user.modulos.push('seguridad');
+  }
+  // Monte Bravo va cerrado con llave: la lista de módulos del usuario —venga de donde venga—
+  // no alcanza para entrar si su rol no está entre los tres que pueden verlo.
+  if(user && Array.isArray(user.modulos) && !rolVeMonteBravo(user.rol)){
+    user.modulos = user.modulos.filter(m=>m!=='montebravo');
   }
   usuarioActivo = user;
   document.getElementById('login-screen').style.display = 'none';
@@ -22840,11 +22957,17 @@ if(_notifEl){
 }
 }
 
+// Módulos que no se anuncian a quien no puede abrirlos: en vez de aparecer atenuados con
+// candado, no aparecen. Monte Bravo es de la unidad y de la gerencia; para el resto no existe.
+const MODULOS_OCULTOS_SIN_PERMISO = ['montebravo'];
 function aplicarPermisosNavegacion(mods){
   // Todos los módulos visibles — los sin permiso aparecen atenuados con candado
   document.querySelectorAll('.nav-item').forEach(btn=>{
     const m = (btn.getAttribute('onclick')||'').match(/navigate\('([^']+)'\)/);
     if(!m) return;
+    if(MODULOS_OCULTOS_SIN_PERMISO.includes(m[1]) && !mods.includes(m[1])){
+      btn.style.display = 'none'; return;
+    }
     btn.style.display = '';
     if(mods.includes(m[1])){
       btn.style.opacity = '1';
@@ -24412,6 +24535,12 @@ function _iaMB(){
 }
 // Respuestas sobre Monte Bravo. Devuelve null si la pregunta no es de la unidad.
 function _iaRespuestaMB(q, fS){
+  // Monte Bravo está cerrado a quien no puede ver su módulo: la asistente tampoco cuenta sus
+  // cifras. Sin esto, el módulo quedaba bajo llave pero sus números se pedían por el chat.
+  try{
+    if(typeof usuarioActivo!=='undefined' && usuarioActivo && typeof rolVeMonteBravo==='function'
+       && !rolVeMonteBravo(usuarioActivo.rol)) return null;
+  }catch(e){}
   const has=(...ws)=>ws.some(w=>q.includes(w));
   // Los sacos y la ley del mineral SOLO existen en Monte Bravo: si preguntan por ellos, la
   // respuesta es de esa unidad aunque no la nombren. NV 2820 no cuenta sacos.
