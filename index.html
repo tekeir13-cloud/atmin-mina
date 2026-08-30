@@ -27980,6 +27980,8 @@ function cmpCalcMontos(origen){
   if(origen==='sin' && !isNaN(sin)){ g('cmpf-igv').value=r2(sin*CMP_IGV); g('cmpf-conigv').value=r2(sin*(1+CMP_IGV)); }
   else if(origen==='con' && !isNaN(con)){ const s=con/(1+CMP_IGV); g('cmpf-sinigv').value=r2(s); g('cmpf-igv').value=r2(con-s); }
   else if(origen==='igv' && !isNaN(igv)){ const s=igv/CMP_IGV; g('cmpf-sinigv').value=r2(s); g('cmpf-conigv').value=r2(s+igv); }
+  // El detalle compara su suma contra la base imponible: si cambian los montos, se revisa otra vez.
+  try{ if(typeof cmpItemsResumen==='function') cmpItemsResumen(); }catch(e){}
 }
 
 // ── MODAL FACTURA ──
@@ -28013,39 +28015,103 @@ function cmpAdjuntoHTML(dataUrl){
   if(cmpEsPdf(dataUrl)) return `<div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:10px 12px"><span style="font-size:20px">📄</span><span style="font-size:12px;color:var(--text2)">PDF de la factura adjunto</span><a href="${dataUrl}" target="_blank" style="margin-left:auto;font-size:11px;color:#60a5fa">Abrir</a></div>`;
   return `<div style="margin-bottom:10px"><img src="${dataUrl}" style="max-width:100%;max-height:170px;border-radius:8px;border:1px solid var(--border)"></div>`;
 }
-// Detalle línea por línea leído del documento. Se muestra para revisarlo antes de guardar.
+/* ── DETALLE LÍNEA POR LÍNEA ───────────────────────────────────────────────────
+   El lector acierta casi siempre, pero no siempre: una descripción cortada, una cantidad mal
+   leída, una línea que no salió. Antes esta tabla era de solo lectura y la única salida era
+   "Quitar detalle" y perderlo todo. Ahora cada celda se edita, se pueden agregar y borrar
+   líneas, y el importe se recalcula solo al cambiar cantidad o precio.
+   Nada se guarda hasta pulsar «Guardar Factura»: hasta entonces todo es corregible. */
+function cmpItemSet(i, campo, valor){
+  const it=_cmpItemsPend[i]; if(!it) return;
+  if(campo==='descripcion'||campo==='unidad'){ it[campo]=valor; return; }
+  const n=parseFloat(valor); it[campo]=isNaN(n)?'':n;
+  // Cantidad × precio unitario da el importe, salvo que el importe se haya escrito a mano.
+  if((campo==='cantidad'||campo==='precioUnit')){
+    const c=Number(it.cantidad)||0, pu=Number(it.precioUnit)||0;
+    if(c>0 && pu>0){
+      it.importe=Math.round(c*pu*100)/100;
+      const el=document.getElementById('cmpi-imp-'+i); if(el) el.value=it.importe;
+    }
+  }
+  cmpItemsResumen();
+}
+function cmpItemAgregar(){
+  _cmpItemsPend=Array.isArray(_cmpItemsPend)?_cmpItemsPend:[];
+  _cmpItemsPend.push({descripcion:'',cantidad:'',unidad:'',precioUnit:'',importe:''});
+  cmpRenderItems();
+  // El foco va a la línea nueva, para escribir de una.
+  setTimeout(()=>{ const el=document.getElementById('cmpi-desc-'+(_cmpItemsPend.length-1)); if(el) el.focus(); },30);
+}
+function cmpItemQuitar(i){ _cmpItemsPend.splice(i,1); cmpRenderItems(); }
+// Suma del detalle y su comparación con la base imponible. Se actualiza sin redibujar la tabla,
+// para no perder el cursor mientras se escribe.
+function cmpItemsResumen(){
+  const el=document.getElementById('cmpf-items-suma'); if(!el) return;
+  const sum=(_cmpItemsPend||[]).reduce((s,i)=>s+(Number(i.importe)||0),0);
+  const base=parseFloat((document.getElementById('cmpf-sinigv')||{}).value)||0;
+  let nota='';
+  if(base>0 && sum>0){
+    nota=(Math.abs(sum-base)<=0.05)
+      ? ' <span style="color:#22d3a5">✓ cuadra con el monto sin IGV</span>'
+      : ' <span style="color:#f59e0b">⚠ el monto sin IGV es '+cmpMoney(base)+' — revisa si falta alguna línea</span>';
+  }
+  el.innerHTML='Suma del detalle: <b style="color:var(--text2)">'+cmpMoney(sum)+'</b>'+nota+
+    (sum>0?' <button onclick="cmpItemsAlMonto()" style="margin-left:8px;background:none;border:1px solid var(--border);color:var(--text3);border-radius:5px;padding:2px 8px;font-size:10px;cursor:pointer">Usar como monto sin IGV</button>':'');
+}
+// Lleva la suma del detalle a los montos de arriba: útil cuando el lector se equivocó en el
+// total pero el detalle está bien.
+function cmpItemsAlMonto(){
+  const sum=(_cmpItemsPend||[]).reduce((s,i)=>s+(Number(i.importe)||0),0);
+  if(!(sum>0)) return;
+  const g=document.getElementById('cmpf-sinigv'); if(!g) return;
+  g.value=Math.round(sum*100)/100;
+  cmpCalcMontos('sin');
+  cmpItemsResumen();
+  showNotif('✓ Montos recalculados desde el detalle');
+}
 function cmpRenderItems(){
   const w=document.getElementById('cmpf-items'); if(!w) return;
   const its=_cmpItemsPend||[];
-  if(!its.length){ w.innerHTML=''; return; }
-  const sum=its.reduce((s,i)=>s+(Number(i.importe)||0),0);
+  const inp=(id,val,tipo,ancho,alin)=>'<input id="'+id+'" value="'+escAttr(val==null?'':val)+'"'+
+    (tipo==='n'?' type="number" step="any" min="0"':' type="text"')+
+    ' style="width:100%;'+(ancho?'min-width:'+ancho+';':'')+'background:var(--coal4);border:1px solid var(--border);'+
+    'color:var(--text);border-radius:4px;padding:4px 6px;font-size:11px;text-align:'+(alin||'left')+'">';
+  const filas=its.map((i,k)=>`<tr style="border-top:1px solid var(--border2)">
+      <td style="padding:3px 5px">${inp('cmpi-desc-'+k, i.descripcion, 't', '150px')}</td>
+      <td style="padding:3px 5px">${inp('cmpi-cant-'+k, i.cantidad, 'n', '58px', 'center')}</td>
+      <td style="padding:3px 5px">${inp('cmpi-und-'+k, i.unidad, 't', '54px', 'center')}</td>
+      <td style="padding:3px 5px">${inp('cmpi-pu-'+k, i.precioUnit, 'n', '68px', 'right')}</td>
+      <td style="padding:3px 5px">${inp('cmpi-imp-'+k, i.importe, 'n', '72px', 'right')}</td>
+      <td style="padding:3px 4px"><button onclick="cmpItemQuitar(${k})" title="Quitar esta línea"
+        style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:4px;cursor:pointer;font-size:12px;padding:2px 7px">×</button></td>
+    </tr>`).join('');
   w.innerHTML=`<div style="margin-bottom:10px">
     <div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">
-      📋 Detalle leído — ${its.length} línea${its.length!==1?'s':''}
-      <button onclick="_cmpItemsPend=[];cmpRenderItems()" style="margin-left:auto;background:none;border:none;color:#f87171;cursor:pointer;font-size:11px">Quitar detalle</button>
+      📋 Detalle${its.length?' — '+its.length+' línea'+(its.length!==1?'s':''):''}
+      <span style="margin-left:auto;display:flex;gap:6px">
+        <button onclick="cmpItemAgregar()" style="background:none;border:1px solid var(--border);color:var(--accent-light);border-radius:5px;padding:2px 9px;font-size:10.5px;cursor:pointer">+ Agregar línea</button>
+        ${its.length?`<button onclick="if(confirm('¿Quitar todo el detalle leído?')){_cmpItemsPend=[];cmpRenderItems();}" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:11px">Quitar todo</button>`:''}
+      </span>
     </div>
-    <div class="table-wrap" style="max-height:190px;overflow:auto;margin:0">
+    ${its.length?`<div style="font-size:10px;color:var(--text3);margin-bottom:5px">Corrige lo que el lector haya leído mal — al cambiar cantidad o precio, el importe se recalcula solo.</div>
+    <div class="table-wrap" style="max-height:210px;overflow:auto;margin:0">
       <table style="width:100%"><thead><tr style="font-size:9px;color:var(--text3)">
         <th style="padding:5px 7px">Descripción</th><th style="padding:5px 7px;text-align:center">Cant.</th>
         <th style="padding:5px 7px;text-align:center">U.M.</th><th style="padding:5px 7px;text-align:right">P.U.</th>
-        <th style="padding:5px 7px;text-align:right">Importe</th></tr></thead><tbody>
-      ${its.map(i=>`<tr style="border-top:1px solid var(--border2)">
-        <td style="padding:5px 7px;font-size:11px;white-space:normal">${i.descripcion||'—'}</td>
-        <td style="padding:5px 7px;font-size:11px;text-align:center">${i.cantidad||''}</td>
-        <td style="padding:5px 7px;font-size:11px;text-align:center">${i.unidad||''}</td>
-        <td style="padding:5px 7px;font-size:11px;text-align:right;font-family:'DM Mono',monospace">${i.precioUnit?cmpMoney(i.precioUnit):''}</td>
-        <td style="padding:5px 7px;font-size:11px;text-align:right;font-family:'DM Mono',monospace">${i.importe?cmpMoney(i.importe):''}</td></tr>`).join('')}
-      </tbody></table>
+        <th style="padding:5px 7px;text-align:right">Importe</th><th></th></tr></thead>
+        <tbody>${filas}</tbody></table>
     </div>
-    <div style="font-size:10px;color:var(--text3);margin-top:4px">Suma del detalle: <b style="color:var(--text2)">${cmpMoney(sum)}</b>${(()=>{
-      // Comparar contra la base imponible: si cuadran, el detalle se leyó completo.
-      const base=parseFloat((document.getElementById('cmpf-sinigv')||{}).value)||0;
-      if(base<=0||sum<=0) return '';
-      return (Math.abs(sum-base)<=0.05)
-        ? ' <span style="color:#22d3a5">✓ cuadra con el monto sin IGV</span>'
-        : ' <span style="color:#f59e0b">⚠ el monto sin IGV es '+cmpMoney(base)+' — revisa si falta alguna línea</span>';
-    })()}</div>
+    <div id="cmpf-items-suma" style="font-size:10px;color:var(--text3);margin-top:5px"></div>`
+    :'<div style="font-size:10.5px;color:var(--text3)">Sin detalle. Puedes agregar las líneas a mano si las necesitas.</div>'}
   </div>`;
+  // Los cambios se enganchan después de dibujar: así el HTML no lleva comillas escapadas dentro
+  // de cada `oninput`, que es donde se rompía con las descripciones que traen apóstrofos.
+  its.forEach((_,k)=>{
+    const at=(id,campo)=>{ const el=document.getElementById(id); if(el) el.addEventListener('input',()=>cmpItemSet(k,campo,el.value)); };
+    at('cmpi-desc-'+k,'descripcion'); at('cmpi-cant-'+k,'cantidad'); at('cmpi-und-'+k,'unidad');
+    at('cmpi-pu-'+k,'precioUnit');    at('cmpi-imp-'+k,'importe');
+  });
+  cmpItemsResumen();
 }
 function cmpGuardarFactura(){
   const g=id=>document.getElementById(id);
@@ -28665,7 +28731,8 @@ async function cmpLeerFoto(input){
     if(datos){
       av.style.background='rgba(34,211,165,0.12)'; av.style.border='1px solid rgba(34,211,165,0.4)'; av.style.color='#22d3a5';
       av.innerHTML='\u2713 Datos le\u00eddos del '+via+', <b>en esta computadora</b> \u2014 el documento no sale de aqu\u00ed ni se archiva.'
-        +' <b>Rev\u00edsalos antes de guardar.</b>'
+        +' <b>Todo es editable</b>: la fecha, el n\u00famero, el RUC, el proveedor, los montos y cada l\u00ednea del detalle.'
+        +' Nada se registra hasta que pulses <b>Guardar Factura</b>.'
         +(datos.montosCuadran===false?'<br>\u26a0 <b>Revisa los montos con cuidado</b>: no cuadran entre s\u00ed (base + IGV \u2260 total). Corr\u00edgelos antes de guardar.':'')
         +(provRecordado?'<br>\u2139 El QR no trae la raz\u00f3n social: se puso la que ya usaste para el RUC '+base.ruc+'.':'')
         +(faltaProv?'<br>\u2139 No se pudo leer la raz\u00f3n social: compl\u00e9tala abajo. Con el PDF sale sola.':'')
