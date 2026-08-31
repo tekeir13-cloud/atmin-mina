@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0d0f14">
+<meta name="robots" content="noindex">
+<title>Registro de trabajador · MukiCloud</title>
+<link rel="icon" href="icon-192.png">
+<style>
+  :root{
+    --bg:#0d0f14; --card:#151922; --card2:#1b2029; --border:#2a303c;
+    --text:#e8ecf3; --text2:#aab3c2; --text3:#7b8493; --gold:#e5b45b; --ok:#22c55e;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+       padding:18px 14px 60px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:560px;margin:0 auto}
+  .marca{text-align:center;margin-bottom:16px}
+  .marca b{font-size:19px;letter-spacing:1px}
+  .marca b span{color:var(--gold)}
+  .marca div{font-size:10.5px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin-top:2px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:14px}
+  label{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:5px}
+  input,select,textarea{width:100%;background:var(--card2);border:1px solid var(--border);border-radius:10px;
+        color:var(--text);padding:11px 12px;font-size:16px;font-family:inherit}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold)}
+  textarea{resize:vertical;min-height:64px}
+  .campo{margin-bottom:12px}
+  .dos{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media (max-width:420px){ .dos{grid-template-columns:1fr} }
+  button.principal{width:100%;background:var(--gold);color:#241a05;border:none;border-radius:10px;
+        padding:14px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit}
+  button.principal:disabled{opacity:.6;cursor:default}
+  .aviso{margin-top:12px;font-size:12.5px;color:#fca5a5;text-align:center;line-height:1.5}
+  .pie{margin-top:12px;font-size:11px;color:var(--text3);text-align:center;line-height:1.55}
+  .sec{border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden}
+  .sec>button{width:100%;display:flex;align-items:center;gap:10px;background:var(--card2);border:none;
+        color:var(--text);padding:13px 14px;cursor:pointer;font-family:inherit;text-align:left;font-size:13.5px;font-weight:700}
+  .sec>button .cara{margin-left:auto;color:var(--text3);font-size:12px;font-weight:400}
+  .sec .cuerpo{padding:14px;display:none}
+  .foto-caja{text-align:center;padding:6px 0 2px}
+  .foto-prev{width:132px;height:132px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 10px}
+  .foto-vacia{width:132px;height:132px;border-radius:50%;background:var(--card2);border:2px dashed var(--border);
+        color:var(--text3);display:flex;align-items:center;justify-content:center;font-size:38px;margin:0 auto 10px}
+  .foto-btn{display:inline-block;background:var(--card2);border:1px solid var(--border);color:var(--text2);
+        border-radius:999px;padding:9px 18px;font-size:13px;cursor:pointer}
+  .exito{text-align:center;padding:22px 6px}
+  .exito .tic{font-size:46px;margin-bottom:8px}
+  .exito h2{margin:0 0 6px;font-size:19px}
+  .exito p{margin:0 0 16px;font-size:13px;color:var(--text2);line-height:1.6}
+  .otra{display:block;width:100%;background:none;border:1px solid var(--border);
+        color:var(--text2);border-radius:10px;padding:12px;font-size:13.5px;cursor:pointer;font-family:inherit}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="marca"><b>MUKI<span>CLOUD</span></b><div>Registro de trabajador</div></div>
+  <div id="app"></div>
+</div>
+
+<script>
+/* Alta de personal desde el celular. Quien registra entra con la clave de Administración; el
+   trabajador queda creado en el sistema con su ficha y su foto, y Administración termina de
+   completarlo después desde RRHH › Personal.
+   NO hace falta llenar todo: con el nombre alcanza para crearlo. Lo que falte se ve en la
+   ficha como pendiente, que es mejor que perder el registro por un campo que nadie sabía. */
+const app=document.getElementById('app');
+const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+let CLAVE='';        // la de Administración, se guarda solo mientras dura la pantalla
+let FOTO='';         // dataURL de la foto tomada
+
+const FICHA_SECCIONES=[
+ {id:'personales', tit:'Datos Personales', campos:[
+   {k:'apPaterno',l:'Apellido Paterno',req:1},{k:'apMaterno',l:'Apellido Materno',req:1},{k:'nombres',l:'Nombres',req:1},
+   {k:'fechaNac',l:'Fecha de nacimiento',t:'fecha',req:1},
+   {k:'dni',l:'DNI',req:1},{k:'carneExt',l:'Carné de extranjería'},
+   {k:'grupoSanguineo',l:'Grupo sanguíneo',t:'sel',op:['','O+','O-','A+','A-','B+','B-','AB+','AB-']},
+   {k:'ruc',l:'N° RUC'},{k:'colegiatura',l:'N° de colegio (colegiatura)'},
+   {k:'estadoCivil',l:'Estado civil',t:'sel',op:['','Soltero (a)','Casado (a)','Conviviente (a)','Divorciado (a)','Viudo (a)'],req:1},
+   {k:'nacDepartamento',l:'Lugar de nacimiento — Departamento'},{k:'nacProvincia',l:'Provincia'},{k:'nacDistrito',l:'Distrito'},
+ ]},
+ {id:'domicilio', tit:'Domicilio Actual', campos:[
+   {k:'via',l:'Tipo de vía',t:'sel',op:['','Avenida','Calle','Jirón','Pasaje']},
+   {k:'viaNombre',l:'Nombre de la vía',req:1},{k:'urb',l:'Urb. o lugar'},
+   {k:'numero',l:'Número'},{k:'interior',l:'Interior'},
+   {k:'domDistrito',l:'Distrito',req:1},{k:'domProvincia',l:'Provincia'},{k:'domDepartamento',l:'Departamento'},
+   {k:'referencia',l:'Referencia',t:'area'},
+   {k:'telDomicilio',l:'Teléfono domicilio',t:'tel'},{k:'celular',l:'Teléfono celular',t:'tel',req:1},
+   {k:'email',l:'Correo electrónico',t:'email'},
+ ]},
+ {id:'essalud', tit:'EsSalud', campos:[
+   {k:'carneEssalud',l:'N° carné EsSalud (autogenerado)'},{k:'centroEssalud',l:'Centro de atención EsSalud'},
+ ]},
+ {id:'laboral', tit:'Datos Laborales', campos:[
+   {k:'fechaIngreso',l:'Fecha de ingreso',t:'fecha',req:1},
+   {k:'cargoActual',l:'Cargo actual',req:1},
+   {k:'modalidad',l:'Modalidad según contrato'},
+   {k:'condLaboral',l:'Condición laboral',t:'sel',op:['','Micro empresa','Pequeña empresa','D.Leg. 728','Régimen minero']},
+ ]},
+ {id:'conyuge', tit:'Datos del Cónyuge', campos:[
+   {k:'cyApPaterno',l:'Apellido paterno'},{k:'cyApMaterno',l:'Apellido materno'},{k:'cyNombres',l:'Nombres'},
+   {k:'cyFechaNac',l:'Fecha de nacimiento',t:'fecha'},{k:'cyOcupacion',l:'Ocupación'},{k:'cyLugarLabora',l:'Lugar donde labora'},
+ ]},
+ {id:'familiares', tit:'Padres e Hijos', filas:'fam', cols:[
+   {k:'nombres',l:'Apellidos y nombres'},{k:'parentesco',l:'Parentesco',t:'sel',op:['','Padre','Madre','Hijo (a)']},
+   {k:'fechaNac',l:'Fecha de nacimiento',t:'fecha'},{k:'vive',l:'Vive',t:'sel',op:['','Sí','No']},
+ ]},
+ {id:'emergencia', tit:'Notificar en caso de Emergencia', filas:'eme', min:2, cols:[
+   {k:'nombres',l:'Apellidos y nombres'},{k:'parentesco',l:'Parentesco'},{k:'contacto',l:'Dirección y teléfono'},
+ ]},
+ {id:'pension', tit:'Régimen Pensionario', campos:[
+   {k:'sistema',l:'Sistema',t:'sel',op:['','ONP — Ley N° 19990','AFP Profuturo','AFP Prima','AFP Integra','AFP Habitat'],req:1},
+   {k:'cuspp',l:'Carné (CUSPP)'},{k:'fechaAfiliacion',l:'Fecha de afiliación',t:'fecha'},{k:'docAfiliacion',l:'Documento de afiliación'},
+ ]},
+ {id:'basica', tit:'Educación Básica', campos:[
+   {k:'priCentro',l:'Primaria — centro de estudios'},
+   {k:'priEstado',l:'Primaria — completa/incompleta',t:'sel',op:['','Completa','Incompleta']},
+   {k:'priDesde',l:'Primaria — desde'},{k:'priHasta',l:'Primaria — hasta'},
+   {k:'secCentro',l:'Secundaria — centro de estudios'},
+   {k:'secEstado',l:'Secundaria — completa/incompleta',t:'sel',op:['','Completa','Incompleta']},
+   {k:'secDesde',l:'Secundaria — desde'},{k:'secHasta',l:'Secundaria — hasta'},
+ ]},
+ {id:'superior', tit:'Educación Superior', filas:'sup', cols:[
+   {k:'nivel',l:'Nivel',t:'sel',op:['','Instituto superior','Universitario','Maestría','Doctorado']},
+   {k:'centro',l:'Centro de estudios'},{k:'especialidad',l:'Especialidad'},
+   {k:'desde',l:'Desde'},{k:'hasta',l:'Hasta'},
+   {k:'estado',l:'Completa/Incompleta',t:'sel',op:['','Completa','Incompleta']},
+   {k:'grado',l:'Grado académico obtenido'},
+ ]},
+ {id:'idiomas', tit:'Idiomas y/o Dialecto', filas:'idi', cols:[
+   {k:'idioma',l:'Idioma o dialecto'},
+   {k:'lee',l:'Lee',t:'sel',op:['','Con facilidad','Sin facilidad']},
+   {k:'habla',l:'Habla',t:'sel',op:['','Con facilidad','Sin facilidad']},
+   {k:'escribe',l:'Escribe',t:'sel',op:['','Con facilidad','Sin facilidad']},
+ ]},
+ {id:'cuenta', tit:'Cuenta para Abono de Remuneraciones', campos:[
+   {k:'entidad',l:'Entidad financiera'},{k:'numeroCuenta',l:'Número de cuenta'},{k:'cci',l:'Código de cuenta interbancario (CCI)'},
+ ]},
+];
+
+/* ── PANTALLA 1: la clave ── */
+function pantallaClave(msg){
+  app.innerHTML=
+    '<div class="card">'+
+      '<div class="campo"><label>Clave de Administración</label>'+
+        '<input id="clave" type="password" placeholder="••••••••" autocomplete="current-password"></div>'+
+      '<button class="principal" id="entrar">Entrar</button>'+
+      (msg?'<div class="aviso">'+esc(msg)+'</div>':'')+
+      '<div class="pie">Esta pantalla es para dar de alta a un trabajador nuevo.<br>'+
+      'Pide la clave a Administración.</div>'+
+    '</div>';
+  document.getElementById('entrar').onclick=verificar;
+  document.getElementById('clave').addEventListener('keydown',e=>{ if(e.key==='Enter') verificar(); });
+  document.getElementById('clave').focus();
+}
+async function verificar(){
+  const c=(document.getElementById('clave').value||'').trim();
+  if(!c){ pantallaClave('Escribe la clave.'); return; }
+  const b=document.getElementById('entrar'); b.disabled=true; b.textContent='Comprobando…';
+  try{
+    const r=await fetch('/api/registro',{method:'POST',headers:{'Content-Type':'application/json'},
+                                         body:JSON.stringify({accion:'verificar', clave:c})});
+    const d=await r.json();
+    if(!d||!d.ok){ pantallaClave((d&&d.msg)||'No se pudo comprobar. Intenta de nuevo.'); return; }
+    CLAVE=c; formulario(d.cargos||[], d.frentes||[]);
+  }catch(e){ pantallaClave('Sin conexión. Intenta de nuevo cuando tengas señal.'); }
+}
+
+/* ── PANTALLA 2: la ficha ── */
+function campoHTML(c, pfx){
+  const id=(pfx||'f-')+c.k;
+  if(c.t==='sel') return '<div class="campo"><label>'+esc(c.l)+'</label><select id="'+id+'">'+
+    (c.op||[]).map(o=>'<option value="'+esc(o)+'">'+(o||'—')+'</option>').join('')+'</select></div>';
+  if(c.t==='area') return '<div class="campo"><label>'+esc(c.l)+'</label><textarea id="'+id+'"></textarea></div>';
+  const tipo=c.t==='fecha'?'date':(c.t==='tel'?'tel':(c.t==='email'?'email':'text'));
+  const extra=c.t==='tel'?' inputmode="numeric"':'';
+  return '<div class="campo"><label>'+esc(c.l)+'</label><input id="'+id+'" type="'+tipo+'"'+extra+'></div>';
+}
+function seccionHTML(sec, i){
+  let cuerpo='';
+  if(sec.filas){
+    const n=sec.min||1;
+    for(let k=0;k<n;k++){
+      cuerpo+='<div style="border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px">'+
+        '<div style="font-size:10px;color:var(--text3);margin-bottom:8px">'+(k+1)+'</div>'+
+        sec.cols.map(c=>campoHTML(c,'f-'+sec.filas+'-'+k+'-')).join('')+'</div>';
+    }
+  }else{
+    cuerpo=sec.campos.map(c=>campoHTML(c,'f-')).join('');
+  }
+  return '<div class="sec"><button onclick="plegar('+i+')">'+esc(sec.tit)+
+    '<span class="cara" id="cara-'+i+'">▸</span></button>'+
+    '<div class="cuerpo" id="cuerpo-'+i+'">'+cuerpo+'</div></div>';
+}
+function plegar(i){
+  const c=document.getElementById('cuerpo-'+i), f=document.getElementById('cara-'+i);
+  const abierto=c.style.display==='block';
+  c.style.display=abierto?'none':'block';
+  f.textContent=abierto?'▸':'▾';
+}
+function formulario(cargos, frentes){
+  app.innerHTML=
+    '<div class="card">'+
+      '<div class="foto-caja">'+
+        '<div id="foto-zona"><div class="foto-vacia">📷</div></div>'+
+        '<label class="foto-btn">📷 Tomar foto'+
+          '<input type="file" accept="image/*" capture="user" style="display:none" onchange="tomarFoto(this)"></label>'+
+        '<div style="font-size:10.5px;color:var(--text3);margin-top:8px">Opcional. Se puede agregar después.</div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="card">'+
+      '<div style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.55">'+
+        'Lo único indispensable es el <b style="color:var(--text2)">nombre</b>. Todo lo demás se puede completar después desde Administración.</div>'+
+      '<div class="campo"><label>Nombre completo *</label>'+
+        '<input id="b-nombre" type="text" placeholder="APELLIDOS Y NOMBRES" autocapitalize="characters"></div>'+
+      '<div class="dos">'+
+        '<div class="campo"><label>DNI</label><input id="b-dni" type="tel" inputmode="numeric" maxlength="8" placeholder="12345678"></div>'+
+        '<div class="campo"><label>Jornal diario (S/)</label><input id="b-jornal" type="number" step="0.01" min="0" placeholder="100"></div>'+
+      '</div>'+
+      '<div class="dos">'+
+        '<div class="campo"><label>Cargo / rol</label><select id="b-rol">'+
+          '<option value="">— Elegir —</option>'+cargos.map(c=>'<option>'+esc(c)+'</option>').join('')+'</select></div>'+
+        '<div class="campo"><label>Frente</label><select id="b-frente">'+
+          '<option value="">— Elegir —</option>'+frentes.map(f=>'<option value="'+esc(f.id)+'">'+esc(f.nombre)+'</option>').join('')+'</select></div>'+
+      '</div>'+
+      '<div class="dos">'+
+        '<div class="campo"><label>Guardia</label><select id="b-guardia">'+
+          '<option value="">— Elegir —</option><option value="dia">Día</option><option value="noche">Noche</option><option value="SUPERFICIE">Superficie</option></select></div>'+
+        '<div class="campo"><label>Fecha de ingreso</label><input id="b-ingreso" type="date"></div>'+
+      '</div>'+
+      '<div class="campo"><label>Unidad</label><select id="b-unidad">'+
+        '<option value="NV2820">NV 2820</option><option value="MB">Monte Bravo</option></select></div>'+
+    '</div>'+
+    '<div class="card">'+
+      '<div style="font-size:13px;font-weight:800;margin-bottom:10px">Ficha completa <span style="font-weight:400;font-size:11.5px;color:var(--text3)">— opcional, toca para abrir</span></div>'+
+      FICHA_SECCIONES.map((s,i)=>seccionHTML(s,i)).join('')+
+    '</div>'+
+    '<button class="principal" id="guardar">💾 Guardar trabajador</button>'+
+    '<div id="aviso"></div>'+
+    '<div class="pie">Al guardar, el trabajador queda creado en el sistema.<br>'+
+    'Administración puede completar o corregir su ficha desde RRHH › Personal.</div>';
+  const hoy=new Date(Date.now()-5*3600*1000).toISOString().slice(0,10);
+  document.getElementById('b-ingreso').value=hoy;
+  document.getElementById('guardar').onclick=guardar;
+  document.getElementById('b-nombre').focus();
+}
+
+/* La foto se achica aquí, en el celular: una foto de cámara pesa 3 MB y no tiene sentido
+   mandarla entera para verla a 132 px. Sale en 320 px, que es lo que muestra la tarjeta. */
+function tomarFoto(input){
+  const f=input&&input.files&&input.files[0]; if(!f) return;
+  const fr=new FileReader();
+  fr.onload=e=>{
+    const img=new Image();
+    img.onload=()=>{
+      const lado=Math.min(img.width,img.height);
+      const cv=document.createElement('canvas'); cv.width=320; cv.height=320;
+      const cx=cv.getContext('2d');
+      // Recorte cuadrado centrado: la tarjeta la muestra redonda.
+      cx.drawImage(img,(img.width-lado)/2,(img.height-lado)/2,lado,lado,0,0,320,320);
+      FOTO=cv.toDataURL('image/jpeg',0.82);
+      document.getElementById('foto-zona').innerHTML='<img class="foto-prev" src="'+FOTO+'" alt="">';
+    };
+    img.src=e.target.result;
+  };
+  fr.readAsDataURL(f);
+}
+
+function leerFicha(){
+  const f={};
+  FICHA_SECCIONES.forEach(sec=>{
+    if(sec.filas){
+      const arr=[]; let i=0;
+      while(document.getElementById('f-'+sec.filas+'-'+i+'-'+sec.cols[0].k)){
+        const fila={}; let algo=false;
+        sec.cols.forEach(c=>{ const v=(document.getElementById('f-'+sec.filas+'-'+i+'-'+c.k)||{}).value||'';
+          fila[c.k]=v.trim(); if(fila[c.k]) algo=true; });
+        if(algo) arr.push(fila);
+        i++;
+      }
+      if(arr.length) f[sec.filas]=arr;
+    }else{
+      sec.campos.forEach(c=>{ const el=document.getElementById('f-'+c.k);
+        if(el && String(el.value||'').trim()) f[c.k]=String(el.value).trim(); });
+    }
+  });
+  return f;
+}
+async function guardar(){
+  const v=id=>(document.getElementById(id)||{}).value||'';
+  const nombre=v('b-nombre').trim();
+  const av=document.getElementById('aviso');
+  if(!nombre){ av.innerHTML='<div class="aviso">Escribe al menos el nombre del trabajador.</div>';
+               document.getElementById('b-nombre').focus(); return; }
+  const b=document.getElementById('guardar'); b.disabled=true; b.textContent='Guardando…';
+  const ficha=leerFicha();
+  // Si la ficha trae los apellidos y el nombre de arriba quedó corto, se respeta el de arriba:
+  // es el que se ve en las listas y lo escribió quien está registrando.
+  const cuerpo={ accion:'crear', clave:CLAVE, foto:FOTO,
+    trabajador:{ nombre:nombre.toUpperCase(), dni:v('b-dni').replace(/\D/g,''),
+      rol:v('b-rol'), frente:v('b-frente'), guardia:v('b-guardia'),
+      jornal:parseFloat(v('b-jornal'))||0, fechaIngreso:v('b-ingreso'),
+      unidad:v('b-unidad')||'NV2820', ficha } };
+  try{
+    const r=await fetch('/api/registro',{method:'POST',headers:{'Content-Type':'application/json'},
+                                         body:JSON.stringify(cuerpo)});
+    const d=await r.json();
+    if(!d||!d.ok){ av.innerHTML='<div class="aviso">'+esc((d&&d.msg)||'No se pudo guardar. Intenta de nuevo.')+'</div>';
+                   b.disabled=false; b.textContent='💾 Guardar trabajador'; return; }
+    exito(d);
+  }catch(e){
+    av.innerHTML='<div class="aviso">Sin conexión. No se guardó — vuelve a intentar cuando tengas señal.</div>';
+    b.disabled=false; b.textContent='💾 Guardar trabajador';
+  }
+}
+function exito(d){
+  app.innerHTML='<div class="card exito">'+
+    '<div class="tic">✅</div>'+
+    '<h2>'+esc(d.nombre||'Trabajador')+' registrado</h2>'+
+    '<p>Ya está en el sistema'+(d.pendientes?', con <b>'+d.pendientes+'</b> dato'+(d.pendientes!==1?'s':'')+' de la ficha por completar':'')+'.<br>'+
+      'Administración puede terminarla desde RRHH › Personal.</p>'+
+    '<button class="otra" onclick="location.reload()">Registrar otro trabajador</button>'+
+    '</div>';
+  window.scrollTo(0,0);
+}
+
+pantallaClave();
+</script>
+</body>
+</html>
