@@ -4283,7 +4283,7 @@ select option{background:var(--coal3);}
     <div class="form-grid">
       <div class="form-group"><label>Código <span style="color:var(--text3);font-size:10px">(automático)</span></label><input type="text" id="prod-codigo" style="font-family:'DM Mono',monospace" placeholder="Se genera solo" title="Se genera automáticamente"></div>
       <div class="form-group"><label>Unidad</label><input type="text" id="prod-unidad" placeholder="PZA / KG / M / BOL"></div>
-      <div class="form-group"><label>Almacén</label><select id="prod-almacen"><option value="General">Insumos (Almacén General)</option><option value="Mantenimiento">Mantenimiento</option></select></div>
+      <div class="form-group"><label>Almacén</label><select id="prod-almacen"><option value="General">Insumos</option><option value="Mantenimiento">Mantenimiento</option></select></div>
       <div class="form-group" style="grid-column:1/-1"><label>Nombre del Producto</label><input type="text" id="prod-nombre" placeholder="Ej: CEMENTO GRIS ANTISALITRE PORTL. TIPO MS"></div>
       <div class="form-group" style="grid-column:1/-1"><label>Precio Unitario (S/)</label><input id="prod-precio" type="number" step="0.01" min="0" placeholder="0.00" style="width:140px"></div>
     </div>
@@ -10374,7 +10374,7 @@ function stockRepartoTxt(r){
   if(!r || !r.almacenes) return '';
   const ent=Object.entries(r.almacenes).filter(([,v])=>Math.abs(v)>0.0001);
   if(ent.length<2) return '';
-  return ent.map(([a,v])=>fmt3(v)+' en '+a).join(' · ');
+  return ent.map(([a,v])=>fmt3(v)+' en '+almLabel(a)).join(' · ');
 }
 function renderStockVigente(){
   const wrap=document.getElementById('stock-vigente-wrap');if(!wrap)return;
@@ -10431,7 +10431,7 @@ function renderStockVigente(){
     const reparto=r.unificado?stockRepartoTxt(r):'';
     const almBadge=r.unificado
       ? (reparto?'<span style="font-size:9px;background:rgba(139,92,246,0.18);color:#a78bfa;border-radius:4px;padding:1px 5px;margin-left:4px" title="'+escAttr(reparto)+'">2 ALMACENES</span>':'')
-      : (r.almacen==='Mantenimiento'?'<span style="font-size:9px;background:rgba(201,168,76,0.2);color:#d4b75e;border-radius:4px;padding:1px 5px;margin-left:4px">MANT</span>':'<span style="font-size:9px;background:rgba(96,165,250,0.2);color:#60a5fa;border-radius:4px;padding:1px 5px;margin-left:4px">GEN</span>');
+      : (r.almacen==='Mantenimiento'?'<span style="font-size:9px;background:rgba(201,168,76,0.2);color:#d4b75e;border-radius:4px;padding:1px 5px;margin-left:4px">MANT</span>':'<span style="font-size:9px;background:rgba(96,165,250,0.2);color:#60a5fa;border-radius:4px;padding:1px 5px;margin-left:4px">INSUMOS</span>');
     return `<div style="margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px">
         <div style="font-size:12px;font-weight:600;color:var(--text1)">${r.producto||r.descripcion.slice(0,35)}${almBadge}${r.codigo?`<span style="font-size:10px;color:var(--text3);font-weight:400;margin-left:6px">(${r.codigo})</span>`:''}</div>
@@ -10696,7 +10696,7 @@ function quitarItemSalida(idx){salidaCart.splice(idx,1);renderSalidaCart();}
 function renderSalidaCart(){
   const tb=document.getElementById('sa-cart-tbody');
   if(tb) tb.innerHTML=salidaCart.length?salidaCart.map((i,idx)=>`<tr>
-    <td><span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${i.almacen==='Mantenimiento'?'rgba(201,168,76,0.15);color:#d4b75e':'rgba(96,165,250,0.15);color:#60a5fa'}">${i.almacen}</span></td>
+    <td><span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${i.almacen==='Mantenimiento'?'rgba(201,168,76,0.15);color:#d4b75e':'rgba(96,165,250,0.15);color:#60a5fa'}">${almLabel(i.almacen)}</span></td>
     <td><strong>${i.producto||''}</strong><br><span style="font-size:10px;color:var(--text3)">${i.descripcion||''}</span></td>
     <td>${i.unidad}</td>
     <td><input type="number" min="0" step="any" value="${i.cantidad}" onchange="cambiarCantSalida(${idx},this.value)" style="width:70px;background:var(--coal4);border:1px solid var(--border);border-radius:5px;padding:3px 6px;color:var(--text);font-size:12px;text-align:center"></td>
@@ -10904,7 +10904,7 @@ function renderHistorialAlmacen(){
   const it=document.getElementById('alm-ingresos-tbody');
   if(it) it.innerHTML=ings.length?ingsV.map(i=>`<tr>
     <td>${fmtF(i.fecha)}</td><td>${i.vale||'—'}</td><td>${i.detalle||'—'}</td>
-    <td><span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${i.almacen==='Mantenimiento'?'rgba(201,168,76,0.15);color:#d4b75e':'rgba(96,165,250,0.15);color:#60a5fa'}">${i.almacen}</span></td>
+    <td><span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${i.almacen==='Mantenimiento'?'rgba(201,168,76,0.15);color:#d4b75e':'rgba(96,165,250,0.15);color:#60a5fa'}">${almLabel(i.almacen)}</span></td>
     <td><strong>${i.producto||''}</strong><br><span style="font-size:10px;color:var(--text3)">${i.descripcion||''}</span></td>
     <td>${i.unidad}</td><td>${fmt3(i.cantidad)}</td><td>${fmtS2(i.precio)}</td><td style="color:#60a5fa;font-weight:700">${fmtS2(i.total)}</td>
     <td style="white-space:nowrap"><button onclick="abrirEditarIngreso('${i.id}')" style="padding:4px 9px;font-size:11px;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.4);border-radius:6px;cursor:pointer;font-weight:600">✏</button>
@@ -10913,7 +10913,7 @@ function renderHistorialAlmacen(){
   const st=document.getElementById('alm-salidas-tbody');
   if(st) st.innerHTML=sals.length?salsV.map(s=>`<tr>
     <td>${fmtF(s.fecha)}</td><td><strong>${nivelLabel(s.destino)}</strong>${(String(s.destino)==='operario'&&s.operario)?`<br><span style="font-size:10px;color:#34d399">👤 ${s.operario}</span>`:''}</td>
-    <td><span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${s.almacen==='Mantenimiento'?'rgba(201,168,76,0.15);color:#d4b75e':'rgba(96,165,250,0.15);color:#60a5fa'}">${s.almacen}</span></td>
+    <td><span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${s.almacen==='Mantenimiento'?'rgba(201,168,76,0.15);color:#d4b75e':'rgba(96,165,250,0.15);color:#60a5fa'}">${almLabel(s.almacen)}</span></td>
     <td>${s.solicitante||'—'}</td><td>${s.maquina||'—'}</td>
     <td><strong>${s.producto||''}</strong><br><span style="font-size:10px;color:var(--text3)">${s.descripcion||''}</span></td>
     <td>${s.unidad}</td><td>${fmtS2(s.precio)}</td><td>${fmt3(s.cantidad)}</td><td style="color:#f87171;font-weight:700">${fmtS2(s.importe)}</td>
@@ -11241,7 +11241,7 @@ function renderInventario(){
     </div>`;
   const tb=g('inv-tbody');
   if(tb) tb.innerHTML=stock.length?stock.map(r=>`<tr style="${r.stock<=0?'opacity:0.5':''}">
-    <td><span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${r.almacen==='Mantenimiento'?'rgba(201,168,76,0.15);color:#d4b75e':'rgba(96,165,250,0.15);color:#60a5fa'}">${r.almacen}</span></td>
+    <td><span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${r.almacen==='Mantenimiento'?'rgba(201,168,76,0.15);color:#d4b75e':'rgba(96,165,250,0.15);color:#60a5fa'}">${almLabel(r.almacen)}</span></td>
     <td><strong>${r.producto||'—'}</strong></td><td style="font-size:11px;color:var(--text3)">${r.descripcion}</td>
     <td>${r.unidad}</td><td style="color:#60a5fa">${fmt3(r.ingreso)}</td><td style="color:#f87171">${fmt3(r.salida)}</td>
     <td style="font-weight:700;color:${r.stock>0?'var(--accent-light)':'#f87171'}">${fmt3(r.stock)}</td>
@@ -14581,7 +14581,7 @@ function renderAlertasStock(){
     return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:${bg};border:1px solid ${border};border-radius:8px;padding:10px 14px;margin-bottom:8px;flex-wrap:wrap">
       <div>
         <div style="font-weight:700;color:${color}">${r.producto||r.descripcion}${badge}</div>
-        <div style="font-size:11px;color:var(--text3)">${r.descripcion} · ${r.almacen} · Stock actual: <strong style="color:${color}">${fmt3(r.stock)} ${r.unidad}</strong></div>
+        <div style="font-size:11px;color:var(--text3)">${r.descripcion} · ${almLabel(r.almacen)} · Stock actual: <strong style="color:${color}">${fmt3(r.stock)} ${r.unidad}</strong></div>
       </div>
       <button class="btn btn-outline" style="font-size:11px;padding:5px 12px;border-color:${color};color:${color}" onclick="abrirModalSolicitudProd('${encodeURIComponent(r.descripcion)}','${r.unidad}')">📋 Solicitar</button>
     </div>`;
@@ -15004,7 +15004,7 @@ function renderCentroCostos(){
   const tb=document.getElementById('cc-tbody');
   if(tb) tb.innerHTML=sals.length?sals.slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')).map(s=>`<tr>
     <td>${fmtF(s.fecha)}</td><td><strong>${nivelLabel(s.destino)}</strong></td>
-    <td><span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${s.almacen==='Mantenimiento'?'rgba(201,168,76,0.15);color:#d4b75e':'rgba(96,165,250,0.15);color:#60a5fa'}">${s.almacen}</span></td>
+    <td><span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${s.almacen==='Mantenimiento'?'rgba(201,168,76,0.15);color:#d4b75e':'rgba(96,165,250,0.15);color:#60a5fa'}">${almLabel(s.almacen)}</span></td>
     <td>${s.solicitante||'—'}</td>
     <td>${s.maquina||'—'}</td><td><strong>${s.producto||'—'}</strong></td><td style="font-size:11px;color:var(--text3)">${s.descripcion}</td>
     <td>${s.unidad}</td><td>${fmtS2(s.precio)}</td><td>${fmt3(s.cantidad)}</td><td style="color:#f87171;font-weight:700">${fmtS2(s.importe)}</td></tr>`).join('')
