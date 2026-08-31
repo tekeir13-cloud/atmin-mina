@@ -10034,10 +10034,10 @@ function almacenAvisoHuerfanos(){
   el.innerHTML=`<div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.4);border-radius:10px;padding:11px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
     <span style="font-size:18px">⚠</span>
     <div style="flex:1;min-width:220px;font-size:12px;color:var(--text2)">
-      <b style="color:#f87171">${h.length} movimiento${h.length!==1?'s':''} de ${arts} artículo${arts!==1?'s':''} no se ven en el almacén</b>
-      porque su código ya no está en el maestro (se renumeró o se eliminó el producto). Están en el historial pero su stock no se cuenta.
+      <b style="color:#f87171">${h.length} movimiento${h.length!==1?'s':''} de ${arts} artículo${arts!==1?'s':''} no se ve${h.length!==1?'n':''} en el almacén</b>
+      porque su código ya no está en la pestaña Productos (se renumeró o se eliminó el producto). Su stock no se cuenta en ninguna parte.
     </div>
-    <button class="btn btn-outline" style="font-size:11px;padding:6px 14px;border-color:#f87171;color:#f87171" onclick="verHuerfanos()">Ver y recuperar</button>
+    <button class="btn btn-outline" style="font-size:11px;padding:6px 14px;border-color:#f87171;color:#f87171" onclick="verHuerfanos()">Revisar y resolver</button>
   </div>`;
 }
 // Sugiere el producto del maestro que MÁS se parece al nombre de un movimiento huérfano.
@@ -10101,6 +10101,7 @@ function verHuerfanos(){
       <td style="padding:8px;white-space:nowrap">
         <button class="btn btn-gold" style="font-size:11px;padding:5px 10px" onclick="recuperarHuerfano('${escAttr(gr.clave)}')">Asignar</button>
         <button class="btn btn-outline" style="font-size:11px;padding:5px 10px;border-color:#22d3a5;color:#22d3a5" onclick="crearEnMaestroHuerfano('${escAttr(gr.clave)}')" title="Da de alta el producto en el maestro con su propio código">+ Crear en maestro</button>
+        <button class="btn btn-outline" style="font-size:11px;padding:5px 10px;border-color:#f87171;color:#f87171" onclick="eliminarHuerfano('${escAttr(gr.clave)}')" title="Borra sus movimientos para siempre">🗑 Eliminar</button>
       </td>
     </tr>`).join('');
   const ov=document.createElement('div');
@@ -10108,8 +10109,14 @@ function verHuerfanos(){
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
   ov.onclick=e=>{ if(e.target===ov) ov.remove(); };
   ov.innerHTML=`<div class="card" style="max-width:min(880px,96vw);max-height:86vh;overflow:auto;padding:18px">
-    <div class="section-title" style="margin-top:0">⚠ Artículos que no se ven en el almacén</div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Su código ya no existe en el maestro, así que el stock no los cuenta. Elige a qué producto del catálogo corresponde cada uno y pulsa Recuperar: sus movimientos se reasignan y vuelven a aparecer con su stock. El historial no se toca.</div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div class="section-title" style="margin:0">⚠ Artículos que no se ven en el almacén</div>
+      <button class="btn btn-outline" style="margin-left:auto;font-size:11px;padding:6px 12px;border-color:#f87171;color:#f87171" onclick="eliminarHuerfanosTodos()">🗑 Eliminar todos</button>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin:8px 0 12px;line-height:1.65">
+      <b style="color:var(--text2)">La regla del almacén:</b> si un producto no está en la pestaña Productos, no tiene stock. Estos movimientos llevan un código que ya no existe en el maestro —se renumeró el producto o se eliminó—, así que su stock no se cuenta en ninguna parte.<br>
+      Tienes tres salidas por artículo: <b>Asignar</b> al producto del catálogo que le corresponde, <b>Crear en maestro</b> si de verdad falta darlo de alta, o <b>Eliminar</b> sus movimientos para siempre si ya no van.
+    </div>
     <div class="table-wrap" style="margin:0"><table style="width:100%">
       <thead><tr style="font-size:10px;color:var(--text3)"><th style="padding:7px 8px">Artículo</th><th style="padding:7px 8px;text-align:center">Movs.</th><th style="padding:7px 8px;text-align:right">Neto</th><th style="padding:7px 8px;width:280px">Producto del maestro</th><th style="padding:7px 8px"></th></tr></thead>
       <tbody>${filas}</tbody></table></div>
@@ -10193,6 +10200,61 @@ function crearEnMaestroHuerfano(clave){
   document.getElementById('huerfanos-modal')?.remove();
   showNotif('✓ '+altas+' producto'+(altas!==1?'s':'')+' dado'+(altas!==1?'s':'')+' de alta en el maestro'+(sellados?' · '+sellados+' movimientos actualizados':'')+' — ya aparecen con su stock');
   try{ almacenAvisoHuerfanos(); }catch(e){}
+}
+/* ── ELIMINAR HUÉRFANOS ────────────────────────────────────────────────────────
+   La regla manda: lo que no está en Productos no tiene stock. Cuando un artículo huérfano ya
+   no va —se eliminó el producto a propósito, o el movimiento fue un error— hay que poder
+   borrarlo del todo, no solo dejarlo escondido. Antes solo se podía recuperar, y quedaban
+   arrastrándose en el historial y en el aviso rojo para siempre.
+   El borrado deja lápida, así que se impone también en los demás equipos. */
+function _huerfanoToca(clave){
+  const esNom=String(clave).indexOf('N:')===0;
+  const objetivo=esNom?String(clave).slice(2):String(clave);
+  return x=>{
+    if(!x) return false;
+    const c=String(x.codigo||'').trim().toUpperCase();
+    if(esNom) return !c && String(x.producto||x.descripcion||'').trim().toUpperCase()===objetivo;
+    return c===objetivo;
+  };
+}
+function _huerfanoBorrar(clave){
+  const toca=_huerfanoToca(clave);
+  let n=0;
+  ['ingresos','salidas','inventarioInicial'].forEach(k=>{
+    const arr=state.almacen[k]||[];
+    const quedan=[];
+    arr.forEach(x=>{
+      if(toca(x)){ n++; try{ if(x.id!=null && typeof tombAdd==='function') tombAdd(x.id); }catch(e){} }
+      else quedan.push(x);
+    });
+    state.almacen[k]=quedan;
+  });
+  return n;
+}
+function eliminarHuerfano(clave){
+  const gr=(window._hfGrupos||{})[clave];
+  const nom=(gr&&gr.nombre)||'este artículo';
+  const cuantos=(gr&&gr.movs.length)||0;
+  if(!confirm('¿Eliminar definitivamente "'+nom+'"?\n\nSe borran sus '+cuantos+' movimiento(s) del almacén, también del historial. No se puede deshacer.\n\nSi lo que corresponde es asignarlo a un producto del catálogo, cancela y usa Asignar.')) return;
+  const n=_huerfanoBorrar(clave);
+  almacenSave();
+  try{ renderStockVigente(); }catch(e){}
+  try{ renderHistorialAlmacen(); }catch(e){}
+  document.getElementById('huerfanos-modal')?.remove();
+  showNotif('🗑 '+nom+' eliminado — '+n+' movimiento(s) borrados');
+  try{ if(almacenHuerfanos().length) verHuerfanos(); }catch(e){}
+}
+function eliminarHuerfanosTodos(){
+  const claves=Object.keys(window._hfGrupos||{});
+  if(!claves.length) return;
+  const movs=claves.reduce((a,k)=>a+((window._hfGrupos[k].movs||[]).length),0);
+  if(!confirm('¿Eliminar definitivamente los '+claves.length+' artículo(s) huérfanos?\n\nSe borran '+movs+' movimiento(s) del almacén y del historial. No se puede deshacer.\n\nRevisa antes si alguno corresponde a un producto del catálogo: eso se arregla con Asignar y no pierde el movimiento.')) return;
+  let n=0; claves.forEach(k=>{ n+=_huerfanoBorrar(k); });
+  almacenSave();
+  try{ renderStockVigente(); }catch(e){}
+  try{ renderHistorialAlmacen(); }catch(e){}
+  document.getElementById('huerfanos-modal')?.remove();
+  showNotif('🗑 '+claves.length+' artículo(s) eliminados — '+n+' movimiento(s) borrados');
 }
 function recuperarHuerfano(clave){
   const sel=document.getElementById('hf-'+clave);
