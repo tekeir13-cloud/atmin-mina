@@ -10313,12 +10313,21 @@ function exportarStockExcel(){
   const almFil=document.getElementById('stock-alm-fil')?.value||'';
   let stock=(typeof filtrarPorMaestro==='function'?filtrarPorMaestro(calcStock()):calcStock());
   if(almFil) stock=stock.filter(r=>r.almacen===almFil);
+  // El Excel sigue a la pantalla: sin filtro de almacén, una línea por producto con su total,
+  // y la columna Almacén dice dónde está repartido.
+  else if(typeof stockUnificado==='function') stock=stockUnificado(stock);
   stock=stock.slice().sort((a,b)=>(a.producto||a.descripcion||'').localeCompare(b.producto||b.descripcion||''));
   const almLbl=a=>a==='General'?'Insumos':a;
+  const almCol=r=>{
+    if(!r.unificado) return almLbl(r.almacen);
+    const ent=Object.entries(r.almacenes||{}).filter(([,v])=>Math.abs(v)>0.0001);
+    if(ent.length<=1) return almLbl((ent[0]&&ent[0][0])||r.almacen);
+    return ent.map(([a,v])=>almLbl(a)+' '+(Math.round(v*1000)/1000)).join(' · ');
+  };
   const filas=stock.map(r=>({
     'Código': r.codigo||'',
     'Producto': r.producto||r.descripcion||'',
-    'Almacén': almLbl(r.almacen),
+    'Almacén': almCol(r),
     'U.M.': r.unidad||'',
     'Existencia': Number(r.stock)||0,
     'Precio Unit.': Number(r.precio)||0,
@@ -10335,6 +10344,38 @@ function exportarStockExcel(){
   XLSX.writeFile(wb,f);
   showNotif('✓ Excel exportado: '+filas.length+' líneas ('+stock.length+' productos)');
 }
+/* ── UN PRODUCTO, UNA LÍNEA ────────────────────────────────────────────────────
+   El stock se calcula por almacén: el mismo código en General y en Mantenimiento son dos
+   filas. Eso está bien cuando se mira UN almacén, pero mirando "todos" es engañoso —el
+   maestro tiene un solo producto y en pantalla aparecían dos, con 4 y 3 unidades, cuando la
+   verdad es que hay 7 del mismo artículo repartidos en dos sitios.
+   Con "Todos los almacenes" se juntan por código y se dice dónde está cada parte. */
+function stockUnificado(filas){
+  const map={};
+  (filas||[]).forEach(r=>{
+    // Sin código, el nombre hace de clave: es lo único que permite reconocerlo.
+    const k=String(r.codigo||'').trim().toUpperCase() || ('D:'+String(r.descripcion||r.producto||'').trim().toUpperCase());
+    if(!map[k]){
+      map[k]={...r, almacenes:{}, unificado:true};
+      map[k].ingreso=0; map[k].salida=0; map[k].stock=0;
+    }
+    const u=map[k];
+    u.ingreso+=Number(r.ingreso)||0; u.salida+=Number(r.salida)||0; u.stock+=Number(r.stock)||0;
+    // El precio del maestro es el mismo para todos; si alguna fila viene sin él, se toma el que haya.
+    if(!u.precio && r.precio) u.precio=Number(r.precio)||0;
+    if(!u.producto && r.producto) u.producto=r.producto;
+    const a=r.almacen||'General';
+    u.almacenes[a]=(u.almacenes[a]||0)+(Number(r.stock)||0);
+  });
+  return Object.values(map);
+}
+// "4 en General · 3 en Mantenimiento" — solo cuando de verdad está en más de un sitio.
+function stockRepartoTxt(r){
+  if(!r || !r.almacenes) return '';
+  const ent=Object.entries(r.almacenes).filter(([,v])=>Math.abs(v)>0.0001);
+  if(ent.length<2) return '';
+  return ent.map(([a,v])=>fmt3(v)+' en '+a).join(' · ');
+}
 function renderStockVigente(){
   const wrap=document.getElementById('stock-vigente-wrap');if(!wrap)return;
   try{ almacenAvisoHuerfanos(); }catch(e){}
@@ -10345,6 +10386,8 @@ function renderStockVigente(){
 
   let stock=filtrarPorMaestro(calcStock());
   if(almFil) stock=stock.filter(r=>r.almacen===almFil);
+  // Sin filtro de almacén se ve el producto, no la copia que hay en cada sitio.
+  else stock=stockUnificado(stock);
   if(q) stock=stock.filter(r=>(r.producto||r.descripcion||'').toLowerCase().includes(q)||(r.descripcion||'').toLowerCase().includes(q)||String(r.codigo||'').toLowerCase().includes(q));
   if(soloCon) stock=stock.filter(r=>r.stock>0);
   stock.sort((a,b)=>b.stock-a.stock);
@@ -10385,7 +10428,10 @@ function renderStockVigente(){
   const bars=stock.slice(0,TOPE_BARRAS).map(r=>{
     const pct=Math.max(0,(r.stock/maxStock)*100);
     const color=r.stock>10?'#22c55e':r.stock>0?'#f59e0b':'#ef4444';
-    const almBadge=r.almacen==='Mantenimiento'?'<span style="font-size:9px;background:rgba(201,168,76,0.2);color:#d4b75e;border-radius:4px;padding:1px 5px;margin-left:4px">MANT</span>':'<span style="font-size:9px;background:rgba(96,165,250,0.2);color:#60a5fa;border-radius:4px;padding:1px 5px;margin-left:4px">GEN</span>';
+    const reparto=r.unificado?stockRepartoTxt(r):'';
+    const almBadge=r.unificado
+      ? (reparto?'<span style="font-size:9px;background:rgba(139,92,246,0.18);color:#a78bfa;border-radius:4px;padding:1px 5px;margin-left:4px" title="'+escAttr(reparto)+'">2 ALMACENES</span>':'')
+      : (r.almacen==='Mantenimiento'?'<span style="font-size:9px;background:rgba(201,168,76,0.2);color:#d4b75e;border-radius:4px;padding:1px 5px;margin-left:4px">MANT</span>':'<span style="font-size:9px;background:rgba(96,165,250,0.2);color:#60a5fa;border-radius:4px;padding:1px 5px;margin-left:4px">GEN</span>');
     return `<div style="margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px">
         <div style="font-size:12px;font-weight:600;color:var(--text1)">${r.producto||r.descripcion.slice(0,35)}${almBadge}${r.codigo?`<span style="font-size:10px;color:var(--text3);font-weight:400;margin-left:6px">(${r.codigo})</span>`:''}</div>
@@ -10394,7 +10440,7 @@ function renderStockVigente(){
       <div style="background:var(--coal4);border-radius:4px;height:8px;overflow:hidden">
         <div style="height:100%;width:${pct}%;background:${color};border-radius:4px;transition:width .3s"></div>
       </div>
-      <div style="font-size:10px;color:var(--text3);margin-top:2px">${r.descripcion.slice(0,60)}${r.descripcion.length>60?'…':''} · Valor: ${fmtS2(r.stock*r.precio)}</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:2px">${r.descripcion.slice(0,60)}${r.descripcion.length>60?'…':''} · Valor: ${fmtS2(r.stock*r.precio)}${reparto?' · <span style="color:#a78bfa">'+reparto+'</span>':''}</div>
     </div>`;
   }).join('');
 
