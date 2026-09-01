@@ -4435,6 +4435,7 @@ select option{background:var(--coal3);}
       <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-rem-salida')">✕</button>
     </div>
     <div style="font-size:11px;color:var(--text3);margin-bottom:14px">Movimiento de control de logística. Descuenta del Stock Remanente · No afecta NV3190.</div>
+    <div id="rem-aviso-vacio" style="display:none;font-size:11.5px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);color:#f59e0b;border-radius:8px;padding:10px 12px;margin-bottom:12px"></div>
     <div class="form-grid">
       <div class="form-group"><label>Explosivo</label><select id="rem-producto" onchange="remSalAutofill()"><option value="">— Seleccionar —</option></select><div id="rem-disp" style="font-size:10px;color:var(--text3);margin-top:3px">Disponible: —</div></div>
       <div class="form-group"><label>Cantidad</label><input type="number" id="rem-cantidad" min="0" step="any" placeholder="0"></div>
@@ -6434,18 +6435,34 @@ function abrirRemSalida(){
   try{ if(typeof remSalLoad==='function') remSalLoad(); }catch(e){}
   const g=id=>document.getElementById(id);
   const cat=(typeof EXPLO_CATALOGO!=='undefined')?EXPLO_CATALOGO:[];
+  // Se listan TODOS los del remanente, no solo los que tienen stock: con el filtro anterior, si
+  // nada tenía saldo el desplegable salía vacío y parecía que la pantalla no dejaba dar salida.
+  // Los que están en cero se ven, pero no se pueden elegir: así se entiende que falta ingresarlos.
   const sel=g('rem-producto');
+  const delRem=cat.filter(c=>exploVaARemanente(c.id));
+  const conStock=delRem.filter(c=>remDisponible(c.id)>0);
   if(sel) sel.innerHTML='<option value="">— Seleccionar —</option>'+
-    cat.filter(c=>exploVaARemanente(c.id) && remDisponible(c.id)>0).map(c=>`<option value="${c.id}">${c.nombre} — ${remLabelCajas(c.id,remDisponible(c.id))}</option>`).join('');
+    delRem.map(c=>{ const d=remDisponible(c.id);
+      return d>0 ? `<option value="${c.id}">${c.nombre} — ${remLabelCajas(c.id,d)}</option>`
+                 : `<option value="" disabled style="color:var(--text3)">${c.nombre} — sin stock</option>`;
+    }).join('');
+  const aviso=g('rem-aviso-vacio');
+  if(aviso){
+    aviso.style.display=conStock.length?'none':'block';
+    aviso.innerHTML='⚠ No hay stock de remanente de ningún explosivo. Antes de dar salida hay que registrar el ingreso con <b>📥 Ingresar</b>.';
+  }
   // Solicitante = Supervisores de Materiales
   const sup=(typeof remSupervisores==='function')?remSupervisores():[];
   const selS=g('rem-solicitante');
   if(selS) selS.innerHTML='<option value="">— Seleccionar —</option>'+sup.map(p=>`<option value="${p.nombre}">${p.nombre}</option>`).join('')+'<option value="__otro__">Otro…</option>';
+  // Sin supervisores registrados, se abre directamente el campo libre: si no, la única opción
+  // es "Otro…" y hay que descubrir sola que aparece un cuadro de texto al elegirla.
+  if(selS && !sup.length){ selS.value='__otro__'; }
   // Destino
   const selD=g('rem-destino');
   if(selD) selD.innerHTML=(typeof REM_DESTINOS!=='undefined'?REM_DESTINOS:['NV2820','Otro']).map(d=>`<option value="${d}">${d}</option>`).join('');
   g('rem-cantidad').value='';
-  const so=g('rem-solic-otro'); if(so){ so.value=''; so.style.display='none'; }
+  const so=g('rem-solic-otro'); if(so){ so.value=''; so.style.display=sup.length?'none':'block'; }
   const dOtro=g('rem-dest-otro'); if(dOtro){ dOtro.value=''; dOtro.style.display=(selD&&selD.value==='Otro')?'block':'none'; }
   g('rem-fecha').value=hoy();
   try{ const d=new Date(); g('rem-hora').value=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }catch(e){}
@@ -11374,7 +11391,7 @@ const FANEL3_PRECIOS=[4.73,4.76,4.76,4.85,4.83,4.85,4.86,4.95,5.01,4.99,4.98,4.9
 const FANEL3_CATALOGO=FANEL3_PRECIOS.map((precio,i)=>({
   id:'FANEL3_'+(i+1),
   nombre:'DETONADOR NO ELECTRICO FANEL 3 N° '+(i+1),
-  upCaja:FANEL3_UPCAJA, unidad:'und', precio, remanente:false
+  upCaja:FANEL3_UPCAJA, unidad:'und', precio
 }));
 // ── LAS DEMÁS MEDIDAS DE FANEL — los mismos 16 tipos, con el mismo precio ──
 // Se DERIVAN de los de 3 m en vez de copiarse: así el precio del N° 7 no puede quedarse desfasado
@@ -11384,7 +11401,7 @@ const FANEL3_CATALOGO=FANEL3_PRECIOS.map((precio,i)=>({
 const _fanelMedida=(idMedida,etiqueta)=>FANEL3_CATALOGO.map(c=>({
   id:c.id.replace('FANEL3_','FANEL'+idMedida+'_'),
   nombre:c.nombre.replace('FANEL 3','FANEL '+etiqueta),
-  upCaja:c.upCaja, unidad:c.unidad, precio:c.precio, remanente:false
+  upCaja:c.upCaja, unidad:c.unidad, precio:c.precio
 }));
 const FANEL42_CATALOGO =_fanelMedida('42','4.2');
 const FANEL240_CATALOGO=_fanelMedida('240','2.40');
@@ -11418,7 +11435,9 @@ const EXPLO_CATALOGO=[
   {id:'CORDON5G',nombre:'CORDON DETONANTE 5G',upCaja:750,unidad:'rollo',mPorRollo:750,precio:0.959},
   ...FANEL_TODOS,
 ];
-// ¿Este explosivo entra al Stock Remanente? Los FANEL no: remanente se queda como estaba.
+// ¿Este explosivo entra al Stock Remanente? Hoy entran TODOS —los FANEL también, que antes
+// quedaban fuera y no se podían ni ingresar ni despachar—. La marca `remanente:false` sigue
+// disponible por si algún producto tuviera que quedarse fuera más adelante.
 function exploVaARemanente(id){ const c=exploGetCat(id); return !c || c.remanente!==false; }
 // ¿Este explosivo se mide en METROS (y se agrupa en rollos) en vez de en unidades sueltas?
 // Antes esto se preguntaba comparando contra el id de la mecha en ~20 sitios, así que cualquier
@@ -11574,8 +11593,13 @@ function remStockActual(){
 // Destinos posibles de una salida de remanente (solo control). "Otro" habilita texto libre.
 const REM_DESTINOS=['NV2820','NV3190','Otro'];
 // Lista de Supervisores de Materiales (para el selector "Solicitante" de las salidas).
+/* Quién puede pedir una salida del remanente. Antes se exigía que el cargo dijera exactamente
+   "supervisor de materiales": en la planilla oficial varios figuran solo como "SUPERVISOR", así
+   que el desplegable salía vacío y no había a quién elegir —parecía que la pantalla no dejaba
+   dar salida—. Ahora vale cualquier cargo que contenga "supervisor". */
 function remSupervisores(){
-  return (state.personal||[]).filter(p=>String(p.rol||'').trim().toLowerCase()==='supervisor de materiales'&&p.estado!=='baja');
+  const esSup=r=>String(r||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes('supervisor');
+  return (state.personal||[]).filter(p=>p && esSup(p.rol) && p.estado!=='baja');
 }
 // Etiqueta cajas + unidades igual que NV3190 (mecha en metros + rollos).
 function remLabelCajas(id,q){
