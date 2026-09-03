@@ -5771,6 +5771,32 @@ async function cargarAlmacenCombustibleSB(){
         await sbSyncModulo('compresorista', cMerged);
       }
     }
+    /* ── MONTE BRAVO ──────────────────────────────────────────────────────────────
+       Faltaba en el arranque: el módulo SUBÍA a la nube y llegaba por tiempo real mientras la
+       app estaba abierta, pero un equipo que la abría de cero nunca lo descargaba. Por eso
+       Finanzas entraba y no veía la producción que Monte Bravo había registrado.
+       Se fusiona por id, igual que hace el tiempo real, así ninguna copia pisa a la otra. */
+    {
+      try{
+        const mbNube=await sbLoadModulo('montebravo');
+        if(mbNube && typeof mbNube==='object'){
+          const loc=mbEstado();
+          ['produccion','partes','liquidaciones','terceros'].forEach(k=>{
+            loc[k]=_mbMergeLista(loc[k]||[], mbNube[k]||[]);
+          });
+          try{ localStorage.setItem(MB_KEY, JSON.stringify(loc)); }catch(e){}
+        }
+      }catch(e){ console.warn('montebravo sync', e); }
+      // Las labores del parte, que viven en su propio módulo.
+      try{
+        const lbNube=await sbLoadModulo('mb_labores');
+        if(Array.isArray(lbNube) && lbNube.length){
+          const act=(typeof mbLaboresExtra==='function')?mbLaboresExtra():[];
+          const unido=[...new Set(act.concat(lbNube))];
+          try{ localStorage.setItem(MB_LABORES_KEY, JSON.stringify(unido)); }catch(e){}
+        }
+      }catch(e){}
+    }
     // ── FINANZAS: ingreso por máquina (manual) — vinculado al dashboard ──
     {
       const fimNube=await sbLoadModulo('fin_ing_maq');
@@ -13285,7 +13311,12 @@ function mbLaboresExtraSave(a){ try{ localStorage.setItem(MB_LABORES_KEY,JSON.st
   try{ sbSyncModulo('mb_labores', a||[]); }catch(e){} }
 // Los dos frentes de Monte Bravo salen SIEMPRE en el parte, aunque todavía no tengan movimiento:
 // son las labores de la unidad, no algo que haya que ir descubriendo de lo ya registrado.
-const MB_FRENTES_FIJOS = ['RAMPA ACOPIO'];
+// Las dos labores de Monte Bravo. Cada disparo se hace en una de ellas y hay que decir en cuál:
+// el explosivo y el avance se cargan a la labor que se elija.
+const MB_FRENTES_FIJOS = ['RAMPA ACOPIO','SUBNIVEL DE COMPAÑIA'];
+// Un color por labor, para que la columna se lea de un vistazo y no haya que ir leyendo el texto.
+const MB_LABOR_COL = { 'RAMPA ACOPIO':'#22d3a5', 'SUBNIVEL DE COMPAÑIA':'#60a5fa' };
+function mbLaborColor(l){ return MB_LABOR_COL[String(l||'').toUpperCase()] || '#a78bfa'; }
 function mbLabores(){
   const set=new Set();
   const add=v=>{ const t=String(v||'').trim(); if(t) set.add(t); };
@@ -13311,6 +13342,15 @@ function mbDisparoAgregar(){
   // Se conserva lo ya escrito: se lee antes de redibujar y se vuelve a poner después.
   const prev=mbLeerDisparos();
   _mbDisparos.push({n:_mbDisparos.length+1, labor:labores[0]||'RAMPA ACOPIO'});
+  mbParteRender(); mbEscribirDisparos(prev);
+}
+// Cambiar la labor de un disparo: se redibuja para que el color de la columna la acompañe,
+// conservando lo que ya se escribió.
+function mbDisparoLabor(i, valor){
+  if(!_mbDisparos[i]) return;
+  const prev=mbLeerDisparos();
+  _mbDisparos[i].labor=valor;
+  if(prev[i]) prev[i].labor=valor;
   mbParteRender(); mbEscribirDisparos(prev);
 }
 function mbDisparoQuitar(i){
@@ -13354,12 +13394,15 @@ function mbCalcDisparos(){
   const foot=_mbG('mbc-exp-foot');
   if(foot) foot.innerHTML='<tr style="border-top:2px solid var(--border)">'+
     '<td colspan="2" style="padding:7px 8px;font-size:11px;font-weight:700;color:var(--text2)">Costo del disparo</td>'+
-    c.porDisparo.map(x=>'<td style="padding:7px 8px;text-align:center;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:800;color:'+(x>0?'#f59e0b':'var(--text3)')+'">'+_mbS(x)+'</td>').join('')+
+    c.porDisparo.map((x,i)=>{ const lab=(_mbDisparos[i]||{}).labor||'';
+      return '<td style="padding:7px 8px;text-align:center;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:800;color:'+(x>0?'#f59e0b':'var(--text3)')+'">'+_mbS(x)+
+        '<div style="font-size:8.5px;font-family:inherit;font-weight:600;color:'+mbLaborColor(lab)+'">'+escAttr(lab)+'</div></td>'; }).join('')+
     '</tr>';
   const caja=_mbG('mbc-costo-turno');
   if(caja) caja.innerHTML='<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'+
     '<span>💥 <b style="color:var(--text2)">'+c.porDisparo.length+' disparo'+(c.porDisparo.length!==1?'s':'')+'</b> en el turno</span>'+
-    c.porDisparo.map((x,i)=>'<span style="color:var(--text3)">D'+(i+1)+': <b style="color:#f59e0b">'+_mbS(x)+'</b></span>').join('')+
+    c.porDisparo.map((x,i)=>{ const lab=(_mbDisparos[i]||{}).labor||'';
+      return '<span style="color:var(--text3)">D'+(i+1)+' <b style="color:'+mbLaborColor(lab)+'">'+escAttr(lab)+'</b>: <b style="color:#f59e0b">'+_mbS(x)+'</b></span>'; }).join('')+
     '<span style="margin-left:auto">Explosivo del turno: <b style="color:#f59e0b;font-size:15px">'+_mbS(c.total)+'</b></span></div>';
   return c;
 }
@@ -13398,12 +13441,16 @@ function mbParteRender(){
   const head=_mbG('mbc-exp-head');
   if(head) head.innerHTML='<th style="text-align:left;padding:6px 8px">Explosivo</th>'+
     '<th style="padding:6px 8px;text-align:center">En acopio</th>'+
-    _mbDisparos.map((d,i)=>'<th style="padding:6px 8px;text-align:center;white-space:nowrap">'+
-      '<div style="font-size:11px;color:var(--text2);font-weight:700">💥 Disparo '+(i+1)+
-        (_mbDisparos.length>1?' <span onclick="mbDisparoQuitar('+i+')" title="Quitar este disparo" style="cursor:pointer;color:var(--negative)">×</span>':'')+'</div>'+
-      '<select onchange="_mbDisparos['+i+'].labor=this.value" style="margin-top:3px;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:3px 6px;font-size:10px">'+
+    _mbDisparos.map((d,i)=>{
+      const col=mbLaborColor(d.labor);
+      return '<th style="padding:6px 8px;text-align:center;white-space:nowrap;border-top:3px solid '+col+'">'+
+      '<div style="font-size:11.5px;color:var(--text2);font-weight:800">💥 Disparo '+(i+1)+
+        (_mbDisparos.length>1?' <span onclick="mbDisparoQuitar('+i+')" title="Quitar este disparo" style="cursor:pointer;color:var(--negative);font-size:13px">×</span>':'')+'</div>'+
+      '<div style="font-size:8.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:3px 0 2px">¿Dónde se disparó?</div>'+
+      '<select onchange="mbDisparoLabor('+i+',this.value)" style="width:100%;min-width:150px;background:var(--coal4);border:1.5px solid '+col+';color:'+col+';font-weight:700;border-radius:6px;padding:5px 8px;font-size:11px">'+
         labores.map(l=>'<option value="'+escAttr(l)+'"'+(l===d.labor?' selected':'')+'>'+escAttr(l)+'</option>').join('')+
-      '</select></th>').join('');
+      '</select></th>';
+    }).join('');
   const body=_mbG('mbc-exp-body');
   if(body) body.innerHTML=mbExplosivos().map(c=>{
     const disp=Number(stockExp[c.id])||0;
