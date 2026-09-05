@@ -7216,46 +7216,93 @@ function fcSerieDiaria(key, dias){
              fc:Math.round(fc*100)/100, desvio, color, optimo:opt };
   });
 }
-/* Un gráfico por labor: barras = metros avanzados, línea = factor de carga, raya punteada = el
-   óptimo. Los dos ejes conviven porque la pregunta es justamente cómo se mueve uno con el otro. */
-function fcGraficoSVG(serie, titulo, colorBarra){
-  const W=760, H=210, ML=38, MR=44, MT=16, MB=28;
+/* Un solo gráfico, al modo del diagrama de avance de Excel: en el eje IZQUIERDO los metros
+   avanzados (barras, una por labor y día) y en el eje DERECHO el factor de carga (una línea por
+   labor, con su valor escrito encima). Las dos líneas se cruzan sobre las mismas barras, que es
+   justo lo que se quiere leer de un vistazo: qué día se cargó de más y qué avance dio.
+   Todo en SVG, sin librería, para que se vea aunque no haya señal. */
+function fcGraficoCruzadoSVG(series){
+  const n=(series[0]&&series[0].serie.length)||0;
+  const W=1180, H=330, ML=46, MR=56, MT=22, MB=42;
   const iw=W-ML-MR, ih=H-MT-MB;
-  const maxM=Math.max(1, ...serie.map(s=>s.metros))*1.15;
-  const opt=serie[0]?serie[0].optimo:0;
-  const maxF=Math.max(opt*1.4, ...serie.map(s=>s.fc))*1.05 || 1;
-  const n=serie.length||1;
-  const bw=Math.max(4, iw/n*0.6);
-  const x=i=>ML+iw*(i+0.5)/n;
+  const todosM=[], todosF=[];
+  series.forEach(S=>S.serie.forEach(s=>{ todosM.push(s.metros); if(s.fc>0) todosF.push(s.fc); }));
+  const maxM=Math.max(1,...todosM)*1.25;
+  // El eje del factor NO arranca en cero: si arrancara, las dos líneas quedarían pegadas arriba y
+  // no se vería el cruce. Se encuadra alrededor de los óptimos, que es donde está el juego.
+  const refs=todosF.concat(series.map(S=>S.optimo||0).filter(Boolean));
+  const fHi=Math.max(1,...refs), fLo=Math.min(...refs);
+  const holgura=Math.max((fHi-fLo)*0.25, fHi*0.06);
+  const maxF=fHi+holgura, minF=Math.max(0, fLo-holgura);
+  const paso=iw/Math.max(1,n);                      // ancho de la ranura de un día
+  const bw=Math.max(3, paso*0.34);                  // dos barras por día, lado a lado
+  const cx=i=>ML+paso*(i+0.5);
   const yM=v=>MT+ih-(v/maxM)*ih;
-  const yF=v=>MT+ih-(v/maxF)*ih;
-  const barras=serie.map((s,i)=>s.metros>0
-    ? '<rect x="'+(x(i)-bw/2).toFixed(1)+'" y="'+yM(s.metros).toFixed(1)+'" width="'+bw.toFixed(1)+
-      '" height="'+(MT+ih-yM(s.metros)).toFixed(1)+'" rx="2" fill="'+colorBarra+'" opacity=".45"><title>'+
-      s.dia+' · '+s.metros+' m</title></rect>' : '').join('');
-  const pts=serie.map((s,i)=>s.fc>0?(x(i).toFixed(1)+','+yF(s.fc).toFixed(1)):null).filter(Boolean);
-  const linea=pts.length>1?'<polyline points="'+pts.join(' ')+'" fill="none" stroke="var(--text2)" stroke-width="1.6" opacity=".55"/>':'';
-  const puntos=serie.map((s,i)=>s.fc>0
-    ? '<circle cx="'+x(i).toFixed(1)+'" cy="'+yF(s.fc).toFixed(1)+'" r="'+(n>20?3.6:4.5)+'" fill="'+s.color+'" stroke="var(--coal3)" stroke-width="1.1">'+
-      '<title>'+s.dia+' · '+s.fc.toFixed(2)+' kg/m'+(opt?' (óptimo '+opt+')':'')+'</title></circle>' : '').join('');
-  const yOpt=opt?yF(opt):0;
-  const rayaOpt=opt?'<line x1="'+ML+'" y1="'+yOpt.toFixed(1)+'" x2="'+(W-MR)+'" y2="'+yOpt.toFixed(1)+
-    '" stroke="#ef4444" stroke-width="1.2" stroke-dasharray="6 4" opacity=".85"/>'+
-    '<text x="'+(W-MR+4)+'" y="'+(yOpt+3.5).toFixed(1)+'" font-size="9" fill="#ef4444">'+opt+'</text>':'';
-  const paso=n<=16?1:(n<=24?2:3);
-  const etiquetas=serie.map((s,i)=>(i%paso===0 || i===n-1)
-    ? '<text x="'+x(i).toFixed(1)+'" y="'+(H-9)+'" font-size="8" fill="var(--text3)" text-anchor="middle">'+s.dia+'</text>':'').join('');
-  const ejeM='<text x="4" y="'+(MT+9)+'" font-size="8.5" fill="var(--text3)">'+maxM.toFixed(1)+' m</text>';
-  const ejeF='<text x="'+(W-MR+4)+'" y="'+(MT+9)+'" font-size="8.5" fill="var(--text3)">'+maxF.toFixed(1)+'</text>';
-  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block">'
-    +'<line x1="'+ML+'" y1="'+(MT+ih)+'" x2="'+(W-MR)+'" y2="'+(MT+ih)+'" stroke="var(--border)" stroke-width="1"/>'
-    +barras+rayaOpt+linea+puntos+etiquetas+ejeM+ejeF+'</svg>';
+  const yF=v=>MT+ih-((v-minF)/(maxF-minF||1))*ih;
+  const etq=n<=16?1:(n<=24?2:3);                    // cada cuántos días se escribe la fecha
+
+  // Rejilla horizontal con los dos ejes rotulados: metros a la izquierda, kg/m a la derecha.
+  let rejilla='';
+  for(let k=0;k<=4;k++){
+    const y=MT+ih-(ih*k/4);
+    rejilla+='<line x1="'+ML+'" y1="'+y.toFixed(1)+'" x2="'+(W-MR)+'" y2="'+y.toFixed(1)+
+      '" stroke="var(--border)" stroke-width="1" opacity="'+(k?'.35':'.9')+'"/>'
+      +'<text x="'+(ML-6)+'" y="'+(y+3.5).toFixed(1)+'" font-size="9" fill="var(--text3)" text-anchor="end">'+(maxM*k/4).toFixed(1)+'</text>'
+      +'<text x="'+(W-MR+6)+'" y="'+(y+3.5).toFixed(1)+'" font-size="9" fill="var(--text3)">'+(minF+(maxF-minF)*k/4).toFixed(1)+'</text>';
+  }
+
+  // Barras: la labor 0 a la izquierda del día, la labor 1 a la derecha.
+  let barras='';
+  series.forEach((S,j)=>{
+    const off=(j===0?-1:1)*bw*0.55;
+    S.serie.forEach((s,i)=>{
+      if(!(s.metros>0)) return;
+      const y=yM(s.metros), alto=MT+ih-y;
+      barras+='<rect x="'+(cx(i)+off-bw/2).toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bw.toFixed(1)+
+        '" height="'+alto.toFixed(1)+'" rx="1.5" fill="'+S.color+'" opacity=".62"><title>'+
+        S.nombre+' · '+s.dia+' · '+s.metros+' m</title></rect>';
+      if(alto>16 && n<=31) barras+='<text x="'+(cx(i)+off).toFixed(1)+'" y="'+(y-3).toFixed(1)+
+        '" font-size="7.5" fill="'+S.color+'" text-anchor="middle">'+s.metros.toFixed(1)+'</text>';
+    });
+  });
+
+  // Líneas de factor de carga: se dibujan por tramos, uniendo solo días con disparo.
+  let lineas='', puntos='', valores='', optimos='';
+  series.forEach((S,j)=>{
+    const pts=[];
+    S.serie.forEach((s,i)=>{ if(s.fc>0) pts.push({x:cx(i), y:yF(s.fc), s:s}); });
+    if(pts.length>1) lineas+='<polyline points="'+pts.map(p=>p.x.toFixed(1)+','+p.y.toFixed(1)).join(' ')+
+      '" fill="none" stroke="'+S.color+'" stroke-width="2.2" stroke-linejoin="round" opacity=".95"/>';
+    pts.forEach(p=>{
+      puntos+='<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="4" fill="'+p.s.color+
+        '" stroke="'+S.color+'" stroke-width="1.6"><title>'+S.nombre+' · '+p.s.dia+' · '+
+        p.s.fc.toFixed(2)+' kg/m (óptimo '+S.optimo+')</title></circle>';
+      valores+='<text x="'+p.x.toFixed(1)+'" y="'+(p.y-(j===0?8:-13)).toFixed(1)+
+        '" font-size="8" font-weight="700" fill="'+p.s.color+'" text-anchor="middle">'+p.s.fc.toFixed(1)+'</text>';
+    });
+    if(S.optimo){
+      const y=yF(S.optimo);
+      optimos+='<line x1="'+ML+'" y1="'+y.toFixed(1)+'" x2="'+(W-MR)+'" y2="'+y.toFixed(1)+
+        '" stroke="'+S.color+'" stroke-width="1.2" stroke-dasharray="7 5" opacity=".6"/>'
+        +'<text x="'+(W-MR-4)+'" y="'+(y-4).toFixed(1)+'" font-size="8.5" font-weight="700" fill="'+S.color+
+        '" text-anchor="end" opacity=".9">óptimo '+S.nombre+' '+S.optimo+'</text>';
+    }
+  });
+
+  const fechas=(series[0]?series[0].serie:[]).map((s,i)=>(i%etq===0||i===n-1)
+    ? '<text x="'+cx(i).toFixed(1)+'" y="'+(MT+ih+14)+'" font-size="8" fill="var(--text3)" text-anchor="middle">'+s.dia+'</text>':'').join('');
+  const rotulos='<text x="'+ML+'" y="'+(MT-8)+'" font-size="9" font-weight="700" fill="var(--text3)">METROS AVANZADOS (barras)</text>'
+    +'<text x="'+(W-MR)+'" y="'+(MT-8)+'" font-size="9" font-weight="700" fill="var(--text3)" text-anchor="end">FACTOR DE CARGA kg/m (líneas)</text>';
+  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;min-width:860px;height:auto;display:block">'
+    +rejilla+barras+optimos+lineas+puntos+valores+fechas+rotulos+'</svg>';
 }
 function renderDashVoladura(){
   const cont=document.getElementById('d-voladura'); if(!cont) return;
   const LAB=[{key:'brenda',nombre:'Rampa',color:'#60a5fa'},{key:'crne',nombre:'Cortada',color:'#34d399'}];
-  const bloques=LAB.map(L=>{
-    const serie=fcSerieDiaria(L.key,FC_DIAS);
+  const series=LAB.map(L=>({ key:L.key, nombre:L.nombre, color:L.color,
+                             optimo:fcOptimo(L.key), serie:fcSerieDiaria(L.key,FC_DIAS) }));
+  const bloques=LAB.map((L,j)=>{
+    const serie=series[j].serie;
     const conDato=serie.filter(s=>s.fc>0);
     const kg=serie.reduce((a,s)=>a+s.kg,0), m=serie.reduce((a,s)=>a+s.metros,0);
     const fcProm=m>0?kg/m:0;
@@ -7270,7 +7317,6 @@ function renderDashVoladura(){
         +'<div style="margin-left:auto;font-size:11px;color:var(--text3)">Factor promedio '
           +'<b style="color:'+colProm+';font-size:15px">'+(fcProm>0?fcProm.toFixed(2):'—')+'</b> kg/m</div>'
       +'</div>'
-      +fcGraficoSVG(serie, L.nombre, L.color)
       +'<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:10.5px;color:var(--text3);margin-top:8px">'
         +'<span>📏 <b style="color:'+L.color+'">'+m.toFixed(1)+' m</b> en '+FC_DIAS+' días</span>'
         +'<span>🗓 <b style="color:var(--text2)">'+conDato.length+'</b> día'+(conDato.length!==1?'s':'')+' con disparo</span>'
@@ -7286,12 +7332,20 @@ function renderDashVoladura(){
       +'<div style="font-size:15px;font-weight:900;color:var(--gold-light);letter-spacing:.4px">⚖️ FACTOR DE CARGA Y AVANCE — RAMPA Y CORTADA</div>'
       +'<div style="font-size:11px;color:var(--text3)">últimos '+FC_DIAS+' días, día por día</div>'
     +'</div>'
-    +'<div style="font-size:11px;color:var(--text3);margin-bottom:14px;line-height:1.6">'
-      +'Las <b style="color:var(--text2)">barras</b> son los metros avanzados cada día; los <b style="color:var(--text2)">puntos</b>, el factor de carga de ese día, '
-      +'y la <b style="color:#ef4444">raya roja</b>, el óptimo de la labor. '
-      +'<span style="color:#22c55e">Verde</span> cargó menos, <span style="color:#f59e0b">naranja</span> en el punto, <span style="color:#ef4444">rojo</span> cargó de más.'
+    +'<div style="font-size:11px;color:var(--text3);margin-bottom:12px;line-height:1.6">'
+      +'A la izquierda, los <b style="color:var(--text2)">metros avanzados</b> de cada día en barras; a la derecha, el '
+      +'<b style="color:var(--text2)">factor de carga</b> (kg/m) de ese mismo día en línea. Las dos labores se cruzan sobre el mismo eje de días, '
+      +'y la raya punteada de cada color marca su óptimo. '
+      +'<span style="color:#22c55e">Verde</span> cargó menos, <span style="color:#f59e0b">naranja</span> en el punto (±2%), <span style="color:#ef4444">rojo</span> cargó de más.'
     +'</div>'
-    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(560px,1fr));gap:14px">'+bloques+'</div>'
+    +'<div style="display:flex;gap:18px;flex-wrap:wrap;font-size:11px;margin-bottom:6px">'
+      +LAB.map((L,j)=>'<span style="display:inline-flex;align-items:center;gap:6px;color:var(--text2)">'
+        +'<span style="width:14px;height:9px;border-radius:2px;background:'+L.color+';opacity:.62"></span>metros '+L.nombre
+        +'<span style="width:16px;height:3px;border-radius:2px;background:'+L.color+';margin-left:8px"></span>factor '+L.nombre
+        +' <span style="color:var(--text3)">(óptimo '+fcOptimo(L.key)+')</span></span>').join('')
+    +'</div>'
+    +'<div class="table-wrap" style="overflow-x:auto">'+fcGraficoCruzadoSVG(series)+'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-top:14px">'+bloques+'</div>'
   +'</div>';
 }
 function renderDashExplosivoMetro(){
