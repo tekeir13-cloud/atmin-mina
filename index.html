@@ -20252,6 +20252,69 @@ function rgExploOptions(sel){
 function rgFmtN(n){return (typeof fmtN==='function')?fmtN(n):(Math.round((Number(n)||0)*100)/100);}
 // ¿El bloque de disparo pertenece a un tajo? Se resuelve por el prefijo del formulario.
 function _rgEsTajoPfx(pfx){ const f=FRENTES.find(x=>x.pfx===pfx); return !!(f&&f.tajo); }
+/* ── FACTOR DE CARGA ───────────────────────────────────────────────────────────
+   Kilos de explosivo por metro lineal avanzado. Es la medida de si se está cargando de más o
+   de menos: cargar de más quema plata y daña la caja; cargar de menos deja el disparo soplado.
+
+   El peso sale de las masas de EMULNOR, que es lo que carga el taladro —0.1786 kg cada una—.
+   Los accesorios (carmex, fanel, mecha, cordón) no se cuentan: son iniciación, no carga.
+
+   El ÓPTIMO se compara con una tolerancia de ±2%: dentro de esa franja el disparo está en su
+   punto (naranja); por debajo, se cargó menos (verde); por encima, se cargó de más (rojo). */
+const KG_POR_MASA = 0.1786;              // peso de una masa de emulnor
+const FC_TOLERANCIA = 0.02;              // ±2% alrededor del óptimo
+const FC_OPTIMO_KEY = 'atmin_fc_optimo';
+const FC_OPTIMO_DEF = 2.20;              // kg/m — se ajusta desde el reporte
+function fcOptimo(){
+  try{ const v=parseFloat(localStorage.getItem(FC_OPTIMO_KEY)); if(v>0) return v; }catch(e){}
+  return FC_OPTIMO_DEF;
+}
+function fcOptimoSet(v){
+  const n=parseFloat(v);
+  if(!(n>0)) return;
+  try{ localStorage.setItem(FC_OPTIMO_KEY, String(n)); }catch(e){}
+  try{ if(typeof configSync==='function') configSync('fc_optimo'); }catch(e){}
+}
+// ¿Esta masa aporta peso de carga? Solo el emulnor.
+function fcEsCarga(id){ return /^M\d/.test(String(id||'')); }
+// Kilos de explosivo de un disparo, incluido su desquiche —se cargó en el mismo tiro—.
+function fcKilos(d){
+  if(!d) return 0;
+  const suma=ms=>(ms||[]).reduce((a,m)=>a+(fcEsCarga(m.id)?(Number(m.cant)||0):0),0);
+  const masas=suma(d.masas)+suma(d.desquiche&&d.desquiche.masas);
+  return Math.round(masas*KG_POR_MASA*10000)/10000;
+}
+// Factor de carga de un disparo y su lectura contra el óptimo.
+function fcDisparo(d, optimo){
+  const opt=Number(optimo)||fcOptimo();
+  const kg=fcKilos(d), m=Number(d&&d.metros)||0;
+  if(!(m>0) || !(kg>0)) return { kg, metros:m, fc:0, estado:'sin', color:'var(--text3)', desvio:0, optimo:opt };
+  const fc=kg/m;
+  const desvio=(fc-opt)/opt;                       // + se cargó de más, − de menos
+  let estado='optimo', color='#f59e0b';            // dentro de ±2%
+  if(desvio >  FC_TOLERANCIA){ estado='alto'; color='#ef4444'; }
+  else if(desvio < -FC_TOLERANCIA){ estado='bajo'; color='#22c55e'; }
+  return { kg, metros:m, fc:Math.round(fc*1000)/1000, estado, color, desvio, optimo:opt };
+}
+const FC_TXT = { alto:'Cargó de más', bajo:'Cargó de menos', optimo:'En el óptimo', sin:'Sin datos' };
+// Barra que compara el factor del disparo contra el óptimo. El óptimo va marcado con una línea:
+// se ve de un golpe cuánto se pasó o cuánto faltó, sin leer un número.
+function fcBarraHTML(r, ancho){
+  if(r.estado==='sin') return '';
+  const tope=Math.max(r.fc, r.optimo)*1.35 || 1;
+  const pFc=Math.min(100, r.fc/tope*100), pOpt=Math.min(100, r.optimo/tope*100);
+  const pct=Math.round(r.desvio*1000)/10;
+  return '<div style="margin-top:6px'+(ancho?';width:100%':'')+'">'
+    +'<div style="position:relative;background:rgba(128,128,128,.16);border-radius:99px;height:11px;overflow:visible">'
+      +'<div style="width:'+pFc+'%;height:100%;background:'+r.color+';border-radius:99px;transition:width .4s"></div>'
+      +'<div title="Óptimo '+r.optimo.toFixed(2)+' kg/m" style="position:absolute;top:-3px;left:'+pOpt+'%;width:2px;height:17px;background:var(--text);opacity:.75"></div>'
+    +'</div>'
+    +'<div style="display:flex;justify-content:space-between;font-size:9.5px;color:var(--text3);margin-top:3px">'
+      +'<span style="color:'+r.color+';font-weight:700">'+FC_TXT[r.estado]+' · '+(pct>0?'+':'')+pct+'%</span>'
+      +'<span>óptimo '+r.optimo.toFixed(2)+' kg/m</span>'
+    +'</div></div>';
+}
+
 function rgAddDisparo(pfx,d){
   d=d||{};
   const wrap=document.getElementById('rg-'+pfx+'-disparos');if(!wrap)return;
