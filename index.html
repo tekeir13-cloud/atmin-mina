@@ -19265,7 +19265,9 @@ function guardarReporteGuardia(){
   FRENTES.forEach(f=>{
     const disp=rgGetDisparos(f.pfx);
     const t=rgComputeFrenteTotals(disp);
-    rep[f.key]={trabajos:(g(`rg-${f.pfx}-trabajos`)?.value||'').trim(),disparos:disp,metros:t.metros,sost:t.sost,cimbra:t.cimbra,perno:t.perno,malla:t.malla,tperf:t.tperf,tcarg:t.tcarg,masas:t.masas};
+    rep[f.key]={trabajos:(g(`rg-${f.pfx}-trabajos`)?.value||'').trim(),disparos:disp,metros:t.metros,
+      sost:t.sost,cimbra:t.cimbra,perno:t.perno,malla:t.malla,m2malla:t.m2malla,
+      tperf:t.tperf,tcarg:t.tcarg,kg:t.kg,masas:t.masas};
   });
   if(!state.reportesGuardia)state.reportesGuardia=[];
   const idx=state.reportesGuardia.findIndex(r=>r.id===rep.id);
@@ -20334,13 +20336,17 @@ function rgAddDisparo(pfx,d){
       +'</select></div>'
     +'</div>'
     +'<div class="rgd-cimbra" style="display:'+(d.sost==='cimbra'?'block':'none')+';margin-bottom:10px"><div class="form-group" style="margin:0"><label>N° de Cimbras</label><input type="number" class="rgd-ncimbra" min="0" step="1" value="'+(d.cimbra||'')+'" placeholder="0"></div></div>'
-    +'<div class="rgd-malla" style="display:'+(d.sost==='malla_perno'?'grid':'none')+';grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
-      +'<div class="form-group" style="margin:0"><label>N° de Pernos</label><input type="number" class="rgd-nperno" min="0" step="1" value="'+(d.perno||'')+'" placeholder="0"></div>'
-      +'<div class="form-group" style="margin:0"><label>N° de Mallas</label><input type="number" class="rgd-nmalla" min="0" step="1" value="'+(d.malla||'')+'" placeholder="0"></div>'
+    +'<div class="rgd-malla" style="display:'+(d.sost==='malla_perno'?'grid':'none')+';grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">'
+      +'<div class="form-group" style="margin:0"><label>N° de Pernos</label><input type="number" class="rgd-nperno" min="0" step="1" value="'+(d.perno||'')+'" placeholder="0" oninput="rgCalcTotales(\''+pfx+'\')"></div>'
+      +'<div class="form-group" style="margin:0"><label>N° de Mallas</label><input type="number" class="rgd-nmalla" min="0" step="1" value="'+(d.malla||'')+'" placeholder="0" oninput="rgCalcTotales(\''+pfx+'\')"></div>'
+      // El área es lo que se valoriza y lo que se compara entre labores; el número de mallas
+      // solo dice cuántas piezas se colocaron.
+      +'<div class="form-group" style="margin:0"><label>Malla (m²)</label><input type="number" class="rgd-m2malla" min="0" step="0.1" value="'+(d.m2malla||'')+'" placeholder="0.0" oninput="rgCalcTotales(\''+pfx+'\')"></div>'
     +'</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">'
       +'<div class="form-group" style="margin:0"><label>Taladros perforados</label><input type="number" class="rgd-tperf" min="0" step="1" value="'+(d.tperf||'')+'" placeholder="0" oninput="rgCalcTotales(\''+pfx+'\')"></div>'
       +'<div class="form-group" style="margin:0"><label>Taladros cargados</label><input type="number" class="rgd-tcarg" min="0" step="1" value="'+(d.tcarg||'')+'" placeholder="0" oninput="rgCalcTotales(\''+pfx+'\')"></div>'
+      +'<div class="form-group" style="margin:0"><label>Longitud taladro (m)</label><input type="number" class="rgd-ltaladro" min="0" step="0.01" value="'+(d.ltaladro||'')+'" placeholder="Ej: 1.80" oninput="rgCalcTotales(\''+pfx+'\')"></div>'
     +'</div>'
     +'<div style="background:var(--coal4);border-radius:8px;padding:10px">'
       +'<div style="font-size:11px;font-weight:700;color:#f87171;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">💣 Masas / Explosivos</div>'
@@ -20425,7 +20431,9 @@ function rgGetDisparos(pfx){
     const num=c=>parseFloat(q(c)?.value)||0;
     const readMasas=cont=>{const out=[];if(!cont)return out;cont.querySelectorAll('.rgd-masa-id').forEach(sel=>{const cant=parseFloat(sel.parentElement.querySelector('.rgd-masa-cant')?.value)||0;if(sel.value&&cant>0)out.push({id:sel.value,cant});});return out;};
     const masas=readMasas(disp.querySelector('.rgd-masas'));
-    const item={metros:num('.rgd-metros'),sost:q('.rgd-sost')?.value||'',cimbra:num('.rgd-ncimbra'),perno:num('.rgd-nperno'),malla:num('.rgd-nmalla'),tperf:num('.rgd-tperf'),tcarg:num('.rgd-tcarg'),masas,desquiche:null};
+    const item={metros:num('.rgd-metros'),sost:q('.rgd-sost')?.value||'',cimbra:num('.rgd-ncimbra'),
+      perno:num('.rgd-nperno'),malla:num('.rgd-nmalla'),m2malla:num('.rgd-m2malla'),
+      tperf:num('.rgd-tperf'),tcarg:num('.rgd-tcarg'),ltaladro:num('.rgd-ltaladro'),masas,desquiche:null};
     // Desquiche solo si el bloque está visible
     const dq=disp.querySelector('.rgd-desquiche');
     if(dq && dq.style.display!=='none'){
@@ -20436,11 +20444,12 @@ function rgGetDisparos(pfx){
   return arr;
 }
 function rgComputeFrenteTotals(disparos){
-  const t={metros:0,tperf:0,tcarg:0,cimbra:0,perno:0,malla:0,sost:'',masas:[]};
+  const t={metros:0,tperf:0,tcarg:0,cimbra:0,perno:0,malla:0,m2malla:0,kg:0,sost:'',masas:[]};
   const masaMap={};
   (disparos||[]).forEach(d=>{
     t.metros+=d.metros||0;t.tperf+=d.tperf||0;t.tcarg+=d.tcarg||0;
-    t.cimbra+=d.cimbra||0;t.perno+=d.perno||0;t.malla+=d.malla||0;
+    t.cimbra+=d.cimbra||0;t.perno+=d.perno||0;t.malla+=d.malla||0;t.m2malla+=d.m2malla||0;
+    try{ t.kg+=(typeof fcKilos==='function')?fcKilos(d):0; }catch(e){}
     if(d.sost&&!t.sost)t.sost=d.sost;
     (d.masas||[]).forEach(m=>{masaMap[m.id]=(masaMap[m.id]||0)+(m.cant||0);});
     // Desquiche adicional: suma taladros y explosivo (no aporta metros ni sostenimiento)
@@ -20462,29 +20471,62 @@ function rgLegacyDisparo(f){
 function rgCalcTotales(pfx){
   const disparos=rgGetDisparos(pfx);
   const t=rgComputeFrenteTotals(disparos);
+  // Cada disparo lleva su factor de carga en el título, con el semáforo contra el óptimo: se ve
+  // mientras se llena, que es cuando todavía se puede corregir el dato.
+  try{
+    document.querySelectorAll('#rg-'+pfx+'-disparos .rg-disparo').forEach((div,i)=>{
+      const r=fcDisparo(disparos[i]||{});
+      const tit=div.querySelector('.rg-disp-titulo'); if(!tit) return;
+      tit.innerHTML='💥 Disparo '+(i+1)+
+        (r.estado!=='sin'
+          ? ' <span style="float:right;font-weight:800;color:'+r.color+'">'+r.fc.toFixed(2)+' kg/m'+
+            '<span style="font-weight:600;font-size:10px;color:var(--text3)"> · '+r.kg.toFixed(2)+' kg</span></span>'
+          : '');
+      let barra=div.querySelector('.rgd-fc-barra');
+      if(!barra){ barra=document.createElement('div'); barra.className='rgd-fc-barra'; tit.parentNode.insertBefore(barra, tit.nextSibling); }
+      barra.innerHTML=fcBarraHTML(r);
+      barra.style.marginBottom=r.estado==='sin'?'0':'10px';
+    });
+  }catch(e){}
   const el=document.getElementById('rg-'+pfx+'-totales');if(!el)return;
   const expTxt=t.masas.length?t.masas.map(m=>exploNombre(m.id)+' ×'+rgFmtN(m.cant)).join(' · '):'—';
+  // Factor del frente entero: los kilos de todos sus disparos entre los metros de todos ellos.
+  const fcFrente=fcDisparo({metros:t.metros, masas:[{id:'M3000',cant:t.kg/KG_POR_MASA}]});
   el.innerHTML='<div style="background:var(--coal4);border:1px dashed var(--accent);border-radius:8px;padding:10px 12px">'
     +'<div style="font-size:11px;font-weight:800;color:var(--accent-light);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Σ Totales del frente · '+disparos.length+' disparo'+(disparos.length!==1?'s':'')+'</div>'
     +'<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text2)">'
       +'<span>📏 Avance: <strong style="color:#fbbf24">'+t.metros+' m</strong></span>'
       +'<span>🔩 Taladros: <strong style="color:var(--text)">'+t.tperf+'</strong> perf / <strong style="color:var(--text)">'+t.tcarg+'</strong> carg</span>'
+      +(t.m2malla>0||t.perno>0?'<span>🧱 Sostenimiento: <strong style="color:#22d3a5">'+rgFmtN(t.m2malla)+' m²</strong> de malla · <strong style="color:#22d3a5">'+t.perno+'</strong> pernos</span>':'')
+      +(fcFrente.estado!=='sin'?'<span>⚖️ Factor de carga: <strong style="color:'+fcFrente.color+'">'+fcFrente.fc.toFixed(2)+' kg/m</strong> <span style="color:var(--text3)">('+rgFmtN(t.kg)+' kg)</span></span>':'')
       +'<span>🧨 Explosivo: <strong style="color:#fbbf24">'+expTxt+'</strong></span>'
-    +'</div></div>';
+    +'</div>'
+    +(fcFrente.estado!=='sin'?fcBarraHTML(fcFrente,true):'')
+    +'</div>';
 }
 // Detalle de un frente en el Panel de Operaciones: lista de disparos + fila de totales
 function rgFrenteDetalleHTML(f,color,nombre){
   f=f||{};
   const disp=(f.disparos&&f.disparos.length)?f.disparos:[rgLegacyDisparo(f)];
-  const sostTxt=d=>d.sost==='cimbra'?('Cimbra '+(d.cimbra||0)):d.sost==='malla_perno'?('Malla '+(d.malla||0)+'/Perno '+(d.perno||0)):'—';
+  const sostTxt=d=>d.sost==='cimbra'?('Cimbra '+(d.cimbra||0))
+    :d.sost==='malla_perno'?('Malla '+(d.malla||0)+(d.m2malla?' ('+rgFmtN(d.m2malla)+' m²)':'')+' / Perno '+(d.perno||0)):'—';
   const masasTxt=ms=>{ms=(ms||[]).filter(m=>m.cant>0);return ms.length?ms.map(m=>exploNombre(m.id)+' ×'+rgFmtN(m.cant)).join(', '):'—';};
   const expTxt=d=>masasTxt(d.masas);
   const rows=disp.map((d,i)=>{
+    const fc=fcDisparo(d);
     let r='<tr>'
       +'<td style="padding:4px 6px;font-weight:700;color:'+color+'">D'+(i+1)+'</td>'
       +'<td style="padding:4px 6px;text-align:right">'+rgFmtN(d.metros||0)+' m</td>'
       +'<td style="padding:4px 6px">'+sostTxt(d)+'</td>'
-      +'<td style="padding:4px 6px;text-align:center">'+(d.tperf||0)+' / '+(d.tcarg||0)+'</td>'
+      +'<td style="padding:4px 6px;text-align:center">'+(d.tperf||0)+' / '+(d.tcarg||0)+(d.ltaladro?'<div style="font-size:9.5px;color:var(--text3)">'+rgFmtN(d.ltaladro)+' m c/u</div>':'')+'</td>'
+      // El factor de carga con su semáforo: el disparo se juzga aquí, no en una tabla aparte.
+      +'<td style="padding:4px 6px;min-width:150px">'
+        +(fc.estado!=='sin'
+          ? '<div style="font-weight:800;color:'+fc.color+'">'+fc.fc.toFixed(2)+' kg/m'
+            +'<span style="font-weight:500;font-size:9.5px;color:var(--text3)"> · '+fc.kg.toFixed(2)+' kg</span></div>'
+            +fcBarraHTML(fc)
+          : '<span style="color:var(--text3)">—</span>')
+      +'</td>'
       +'<td style="padding:4px 6px">'+expTxt(d)+'</td>'
     +'</tr>';
     if(d.desquiche){
@@ -20493,6 +20535,7 @@ function rgFrenteDetalleHTML(f,color,nombre){
         +'<td style="padding:2px 6px;text-align:right">—</td>'
         +'<td style="padding:2px 6px">—</td>'
         +'<td style="padding:2px 6px;text-align:center">'+(d.desquiche.tperf||0)+' / '+(d.desquiche.tcarg||0)+'</td>'
+        +'<td style="padding:2px 6px;font-size:9.5px">va en el factor del disparo</td>'
         +'<td style="padding:2px 6px">'+masasTxt(d.desquiche.masas)+'</td>'
       +'</tr>';
     }
@@ -20500,13 +20543,16 @@ function rgFrenteDetalleHTML(f,color,nombre){
   }).join('');
   const t=rgComputeFrenteTotals(disp);
   const totExp=(t.masas||[]).length?t.masas.map(m=>exploNombre(m.id)+' ×'+rgFmtN(m.cant)).join(', '):'—';
+  const fcTot=fcDisparo({metros:t.metros, masas:[{id:'M3000',cant:(t.kg||0)/KG_POR_MASA}]});
   return '<div style="border-left:3px solid '+color+';padding-left:10px">'
     +'<div style="font-size:12px;font-weight:700;color:'+color+';margin-bottom:6px">'+nombre+'</div>'
     +'<div style="font-size:12px;color:var(--text2);margin-bottom:8px;white-space:pre-wrap">'+(f.trabajos||'<span style="color:var(--text3)">Sin detalle de trabajos</span>')+'</div>'
     +'<div class="table-wrap"><table style="width:100%;font-size:11px;border-collapse:collapse">'
-      +'<thead><tr style="color:var(--text3);text-align:left;border-bottom:1px solid var(--border)"><th style="padding:4px 6px">Disparo</th><th style="padding:4px 6px;text-align:right">Metros</th><th style="padding:4px 6px">Sost.</th><th style="padding:4px 6px;text-align:center">Tal. P/C</th><th style="padding:4px 6px">Explosivo</th></tr></thead>'
+      +'<thead><tr style="color:var(--text3);text-align:left;border-bottom:1px solid var(--border)"><th style="padding:4px 6px">Disparo</th><th style="padding:4px 6px;text-align:right">Metros</th><th style="padding:4px 6px">Sost.</th><th style="padding:4px 6px;text-align:center">Tal. P/C</th><th style="padding:4px 6px">Factor de carga</th><th style="padding:4px 6px">Explosivo</th></tr></thead>'
       +'<tbody>'+rows+'</tbody>'
-      +'<tfoot><tr style="font-weight:800;border-top:1px solid var(--border);color:var(--text)"><td style="padding:5px 6px">Total</td><td style="padding:5px 6px;text-align:right;color:#fbbf24">'+t.metros+' m</td><td style="padding:5px 6px">—</td><td style="padding:5px 6px;text-align:center">'+t.tperf+' / '+t.tcarg+'</td><td style="padding:5px 6px;color:#fbbf24">'+totExp+'</td></tr></tfoot>'
+      +'<tfoot><tr style="font-weight:800;border-top:1px solid var(--border);color:var(--text)"><td style="padding:5px 6px">Total</td><td style="padding:5px 6px;text-align:right;color:#fbbf24">'+t.metros+' m</td><td style="padding:5px 6px">—</td><td style="padding:5px 6px;text-align:center">'+t.tperf+' / '+t.tcarg+'</td>'
+        +'<td style="padding:5px 6px;color:'+fcTot.color+'">'+(fcTot.estado!=='sin'?fcTot.fc.toFixed(2)+' kg/m':'—')+'</td>'
+        +'<td style="padding:5px 6px;color:#fbbf24">'+totExp+'</td></tr></tfoot>'
     +'</table></div>'
   +'</div>';
 }
