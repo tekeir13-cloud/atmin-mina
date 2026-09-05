@@ -19119,7 +19119,10 @@ function eqopDesdeGuardia(rep){
           equipo:eq.id, empresa:'TEMUAL', zona:'Nv 2820' };
       state.equiposOp.push(f);
     }
-    // La hoja ES lo que llenó el jefe de guardia: se vuelca completa, no solo el horómetro.
+    // Una hoja YA CORREGIDA bajo contraseña no se pisa: esa corrección es la cifra final, y volver
+    // a guardar el reporte del turno no puede deshacerla sin que nadie se entere.
+    if(f.corregida){ f.rgId=rep.id; return; }
+    // Fuera de ese caso, la hoja ES lo que llenó el jefe de guardia: se vuelca completa.
     f.hini=h.hini; f.hfin=h.hfin; f.rgId=rep.id;
     f.operador=h.operador||f.operador||'';
     f.dni=h.dni||f.dni||'';
@@ -19322,6 +19325,7 @@ function renderEquiposOp(){
         +'<span>'+eq.unidadCant+' <b style="color:var(--text2)">'+t.cant+'</b></span>'
         +'<span>🛢 <b style="color:var(--text2)">'+(f.petroleo||0)+'</b> gls</span>'
         +'<span style="color:'+(f.estado==='No Operativo'?'#f87171':'#22c55e')+'">● '+(f.estado||'Operativo')+'</span>'
+        +(f.corregida?'<span style="color:#fbbf24">🔓 corregida'+(f.corregida.por?' por '+f.corregida.por:'')+'</span>':'')
         +'</div>'
       : '<div style="font-size:11.5px;color:var(--text3);margin-top:8px">Sin datos todavía — el jefe de guardia aún no reportó este equipo en '
         +F+' · '+T+'. La hoja se llena sola cuando él guarde su reporte; puede imprimirse en blanco si hace falta.</div>';
@@ -19440,7 +19444,8 @@ function eqopVerFicha(f){
     +'<button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal(\'modal-equipo-op\')">✕</button>'
    +'</div>'
    +'<div style="font-size:11px;color:var(--text3);margin-bottom:14px">Formato '+eq.formato+' · '+e(f.zona||'Nv 2820')
-    +' · Se llena en el <b style="color:var(--text2)">Reporte del Jefe de Guardia</b>; aquí solo se consulta e imprime.</div>'
+    +' · Se llena en el <b style="color:var(--text2)">Reporte del Jefe de Guardia</b>; aquí solo se consulta e imprime.'
+    +(f.corregida?' <span style="color:#fbbf24">🔓 Corregida a mano'+(f.corregida.por?' por '+e(f.corregida.por):'')+'.</span>':'')+'</div>'
    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px">'
     +dato('Fecha',f.fecha)+dato('Turno',f.turno)+dato('Operador',f.operador)+dato('DNI',f.dni)
     +dato('Ingeniero / Jefe de guardia',f.ingeniero)
@@ -19468,10 +19473,128 @@ function eqopVerFicha(f){
      +'<b style="color:var(--text3);font-size:10.5px;text-transform:uppercase">Observaciones</b><br>'+e(f.obs)+'</div>':'')
    +'<div class="btn-row">'
     +'<button class="btn btn-gold" onclick="eqopImprimirFicha('+JSON.stringify(JSON.stringify(f))+')">🖨 Imprimir / PDF</button>'
+    +'<button class="btn btn-outline" onclick="eqopPedirClave('+JSON.stringify(JSON.stringify(f))+')">🔒 Editar</button>'
     +'<button class="btn btn-outline" onclick="cerrarModal(\'modal-equipo-op\')">Cerrar</button>'
    +'</div>';
   abrirModal('modal-equipo-op');
 }
+
+/* ── EDICIÓN FINAL BAJO CONTRASEÑA ──────────────────────────────────────────────
+   La hoja la llena el jefe de guardia y todos la ven; para CORREGIRLA hace falta la clave. Es una
+   corrección de cierre —el número que se firma y se archiva—, no algo que cada quien retoque. */
+const EQOP_CLAVE = 'Temual2026';
+let _eqopEdit='';
+function eqopPedirClave(fichaTxt){
+  const f=(typeof fichaTxt==='string')?JSON.parse(fichaTxt):fichaTxt; if(!f) return;
+  const c=prompt('Edición de la hoja de '+equipoMina(f.equipo).nombre+' — '+f.fecha+' · '+(f.turno||'')+
+                 '\n\nEsta hoja se llena sola con el reporte del jefe de guardia.\n'+
+                 'Escribe la contraseña para corregirla:');
+  if(c===null) return;
+  if(String(c).trim()!==EQOP_CLAVE){ showNotif('🔒 Contraseña incorrecta — la hoja no se modificó','error'); return; }
+  eqopLoad();
+  let real=f.id?(state.equiposOp||[]).find(x=>x.id===f.id):null;
+  if(!real){                     // hoja que aún no existía (equipo sin reportar ese turno)
+    real=Object.assign({}, f, { id:'EQ'+Date.now()+Math.random().toString(36).slice(2,6),
+                                items:(f.items&&f.items.length)?f.items:[eqopItemVacio()], _ts:Date.now() });
+    state.equiposOp.push(real); eqopSave();
+  }
+  if(!(real.items||[]).length) real.items=[eqopItemVacio()];
+  _eqopEdit=real.id;
+  eqopRenderEditor();
+}
+function eqopEnEdicion(){ return (state.equiposOp||[]).find(x=>x.id===_eqopEdit); }
+function eqopRenderEditor(){
+  const f=eqopEnEdicion(), body=document.getElementById('eqop-body'); if(!f||!body) return;
+  const eq=equipoMina(f.equipo), t=eqopTotales(f);
+  const esc=s=>String(s==null?'':s).replace(/"/g,'&quot;');
+  const labores=eqopLabores();
+  const inp=(campo,tipo,ph)=>'<input type="'+tipo+'" value="'+esc(f[campo])+'" placeholder="'+ph+'" '
+    +'oninput="eqopEdSet(\''+campo+'\',this.value)" style="width:100%">';
+  const optLab=v=>'<option value=""></option>'+labores.map(l=>'<option'+(v===l?' selected':'')+'>'+l+'</option>').join('');
+  const optAct=v=>'<option value=""></option>'+EQOP_ACT.map(a=>'<option value="'+a.c+'"'+(String(v)===a.c?' selected':'')+'>'+a.c+' · '+a.d+'</option>').join('');
+  const filas=(f.items||[]).map((it,i)=>{
+    const si=c=>'eqopEdItem('+i+',\''+c+'\',this.value)';
+    const td=h=>'<td style="padding:3px">'+h+'</td>';
+    return '<tr><td style="padding:3px;text-align:center;color:var(--text3);font-size:11px">'+(i+1)+'</td>'
+      +td('<select onchange="'+si('cod')+'" style="width:100%;font-size:11px">'+optAct(it.cod)+'</select>')
+      +td('<input value="'+esc(it.hi)+'" placeholder="00:00" oninput="'+si('hi')+'" style="width:100%;font-size:11px">')
+      +td('<input value="'+esc(it.hf)+'" placeholder="00:00" oninput="'+si('hf')+'" style="width:100%;font-size:11px">')
+      +'<td style="padding:3px;text-align:center;font-size:11px;color:var(--text3)">'+(eqopHorasItem(it)||'')+'</td>'
+      +td('<input type="number" step="0.01" min="0" value="'+esc(it.m)+'" oninput="'+si('m')+'" style="width:100%;font-size:11px">')
+      +td('<input type="number" step="0.01" min="0" value="'+esc(it.d)+'" oninput="'+si('d')+'" style="width:100%;font-size:11px">')
+      +td('<input type="number" step="1" min="0" value="'+esc(it.cant)+'" oninput="'+si('cant')+'" style="width:100%;font-size:11px">')
+      +td('<select onchange="'+si('oLabor')+'" style="width:100%;font-size:11px">'+optLab(it.oLabor)+'</select>')
+      +td('<input value="'+esc(it.oNv||'2820')+'" oninput="'+si('oNv')+'" style="width:52px;font-size:11px">')
+      +td('<select onchange="'+si('dLabor')+'" style="width:100%;font-size:11px">'+optLab(it.dLabor)+'</select>')
+      +td('<input value="'+esc(it.dNv||'2820')+'" oninput="'+si('dNv')+'" style="width:52px;font-size:11px">')
+      +'<td style="padding:3px"><button class="btn btn-outline" style="font-size:10px;padding:3px 7px;color:#f87171;border-color:#f87171" onclick="eqopEdItemQuitar('+i+')">✕</button></td></tr>';
+  }).join('');
+  body.innerHTML=
+   '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+    +'<div class="modal-title" style="margin-bottom:0;color:#fbbf24">🔓 Corrigiendo — '+eq.fig+' '+eq.nombre+'</div>'
+    +'<button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="eqopEdCerrar()">✕</button>'
+   +'</div>'
+   +'<div style="font-size:11px;color:#fbbf24;margin-bottom:12px">Corrección final de la hoja de '+f.fecha+' · '+(f.turno||'')
+    +'. Lo que guardes aquí manda sobre lo que trajo el reporte del jefe de guardia.</div>'
+   +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px">'
+    +'<div class="form-group" style="margin:0"><label>Fecha</label>'+inp('fecha','date','')+'</div>'
+    +'<div class="form-group" style="margin:0"><label>Turno</label><select onchange="eqopEdSet(\'turno\',this.value)" style="width:100%">'
+      +['Día','Noche'].map(x=>'<option'+(f.turno===x?' selected':'')+'>'+x+'</option>').join('')+'</select></div>'
+    +'<div class="form-group" style="margin:0"><label>Zona</label>'+inp('zona','text','Nv 2820')+'</div>'
+    +'<div class="form-group" style="margin:0"><label>Operador</label>'+inp('operador','text','')+'</div>'
+    +'<div class="form-group" style="margin:0"><label>DNI</label>'+inp('dni','text','')+'</div>'
+    +'<div class="form-group" style="margin:0"><label>Ingeniero a cargo</label>'+inp('ingeniero','text','')+'</div>'
+    +'<div class="form-group" style="margin:0"><label>Horómetro inicial</label>'+inp('hini','number','')+'</div>'
+    +'<div class="form-group" style="margin:0"><label>Horómetro final</label>'+inp('hfin','number','')+'</div>'
+   +'</div>'
+   +'<div class="table-wrap" style="overflow-x:auto;margin-bottom:8px"><table style="width:100%;min-width:900px;border-collapse:collapse;font-size:11px">'
+    +'<thead><tr style="color:var(--text3);text-align:left"><th style="padding:4px">#</th><th style="padding:4px">Código de actividad</th>'
+    +'<th style="padding:4px">Hr. inicial</th><th style="padding:4px">Hr. final</th><th style="padding:4px">Horas</th>'
+    +'<th style="padding:4px">M</th><th style="padding:4px">D</th><th style="padding:4px">'+eq.unidadCant+'</th>'
+    +'<th style="padding:4px">Origen labor</th><th style="padding:4px">Nv.</th><th style="padding:4px">Destino labor</th>'
+    +'<th style="padding:4px">Nv.</th><th></th></tr></thead><tbody>'+filas+'</tbody>'
+    +'<tfoot><tr style="border-top:1px solid var(--border);font-weight:800">'
+      +'<td colspan="4" style="padding:6px 4px;text-align:right;color:var(--text3)">TOTALES</td>'
+      +'<td style="padding:6px 4px">'+t.horas+'</td><td style="padding:6px 4px">'+t.m+'</td>'
+      +'<td style="padding:6px 4px">'+t.d+'</td><td style="padding:6px 4px">'+t.cant+'</td><td colspan="5"></td>'
+    +'</tr></tfoot></table></div>'
+   +'<button class="btn btn-outline" style="font-size:12px;padding:7px 14px;border-style:dashed;width:100%;margin-bottom:14px" onclick="eqopEdItemAgregar()">➕ Agregar ítem</button>'
+   +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:10px">'
+    +'<div class="form-group" style="margin:0"><label>Petróleo (gls)</label>'+inp('petroleo','number','')+'</div>'
+    +'<div class="form-group" style="margin:0"><label>Horas inoperativas</label>'+inp('hrsInop','number','')+'</div>'
+    +'<div class="form-group" style="margin:0"><label>Estado final</label><select onchange="eqopEdSet(\'estado\',this.value)" style="width:100%">'
+      +['Operativo','No Operativo'].map(x=>'<option'+(f.estado===x?' selected':'')+'>'+x+'</option>').join('')+'</select></div>'
+   +'</div>'
+   +'<div class="form-group"><label>Observaciones</label><textarea rows="2" oninput="eqopEdSet(\'obs\',this.value)" style="width:100%;resize:vertical">'
+    +String(f.obs||'')+'</textarea></div>'
+   +'<div class="btn-row">'
+    +'<button class="btn btn-gold" onclick="eqopEdGuardar()">💾 Guardar corrección</button>'
+    +'<button class="btn btn-outline" onclick="eqopEdCerrar()">Cancelar</button>'
+   +'</div>';
+}
+function eqopEdSet(campo,valor){ const f=eqopEnEdicion(); if(!f) return; f[campo]=valor; }
+function eqopEdItem(i,campo,valor){ const f=eqopEnEdicion(); if(!f||!f.items[i]) return; f.items[i][campo]=valor;
+  if(campo==='hi'||campo==='hf'||campo==='m'||campo==='d'||campo==='cant') eqopEdTotales(); }
+function eqopEdTotales(){
+  const f=eqopEnEdicion(); if(!f) return; const t=eqopTotales(f);
+  const tf=document.querySelector('#eqop-body tfoot tr');
+  if(tf) tf.innerHTML='<td colspan="4" style="padding:6px 4px;text-align:right;color:var(--text3)">TOTALES</td>'
+    +'<td style="padding:6px 4px">'+t.horas+'</td><td style="padding:6px 4px">'+t.m+'</td>'
+    +'<td style="padding:6px 4px">'+t.d+'</td><td style="padding:6px 4px">'+t.cant+'</td><td colspan="5"></td>';
+}
+function eqopEdItemAgregar(){ const f=eqopEnEdicion(); if(!f) return; (f.items=f.items||[]).push(eqopItemVacio()); eqopRenderEditor(); }
+function eqopEdItemQuitar(i){ const f=eqopEnEdicion(); if(!f) return; f.items.splice(i,1);
+  if(!f.items.length) f.items.push(eqopItemVacio()); eqopRenderEditor(); }
+function eqopEdGuardar(){
+  const f=eqopEnEdicion(); if(!f) return;
+  // Queda marcada como corregida: así se distingue de la que llegó tal cual del reporte.
+  f.corregida={ el:new Date().toISOString(), por:(typeof usuarioActivo!=='undefined'&&usuarioActivo&&usuarioActivo.nombre)||'' };
+  f._ts=Date.now();
+  eqopSave(); _eqopEdit='';
+  cerrarModal('modal-equipo-op'); renderEquiposOp();
+  showNotif('✓ Hoja corregida y guardada');
+}
+function eqopEdCerrar(){ _eqopEdit=''; cerrarModal('modal-equipo-op'); renderEquiposOp(); }
 function eqopImprimir(id){
   const f=(state.equiposOp||[]).find(x=>x.id===id); if(!f) return;
   eqopImprimirFicha(f);
