@@ -19046,9 +19046,16 @@ function reportesGuardiaLoad(){try{const d=localStorage.getItem(RG_KEY);if(d)sta
    termina de llenar en Operaciones › Reportes de Equipo y se imprime.
    Una ficha por equipo y por turno: el scoop y cada dumper llevan su propia hoja. */
 const EQUIPOS_MINA = [
-  { id:'SCOOP_WJ2', nombre:'Scoop WJ-2',  tipo:'scoop',  fig:'🚜', formato:'YA-FOR-OT-002', unidadCant:'# Cucharas' },
-  { id:'DUMPER6',   nombre:'Dumper 6tn',  tipo:'dumper', fig:'🚛', formato:'YA-FOR-OT-014', unidadCant:'# Viajes' },
-  { id:'DUMPER12',  nombre:'Dumper 12tn', tipo:'dumper', fig:'🚛', formato:'YA-FOR-OT-014', unidadCant:'# Viajes' },
+  // En el formato del SCOOP, las columnas M y D son el «# de cucharas» de mineral y de desmonte;
+  // en el del DUMPER son la «extracción» de mineral y desmonte, y los viajes van en su propia
+  // columna. Los viajes se piden también en el scoop: es lo que carga al dumper, y sin ese dato
+  // no se puede cruzar lo que el scoop cargó contra lo que el dumper sacó.
+  { id:'SCOOP_WJ2', nombre:'Scoop WJ-2',  tipo:'scoop',  fig:'🚜', formato:'YA-FOR-OT-002',
+    grupoMD:'# Cucharas', labM:'Cuchar. M', labD:'Cuchar. D', viajes:false, unidadCant:'', totalMD:'Cucharas totales' },
+  { id:'DUMPER6',   nombre:'Dumper 6tn',  tipo:'dumper', fig:'🚛', formato:'YA-FOR-OT-014',
+    grupoMD:'Extracción', labM:'Extrac. M', labD:'Extrac. D', viajes:true, unidadCant:'# Viajes', totalMD:'Extracción total' },
+  { id:'DUMPER12',  nombre:'Dumper 12tn', tipo:'dumper', fig:'🚛', formato:'YA-FOR-OT-014',
+    grupoMD:'Extracción', labM:'Extrac. M', labD:'Extrac. D', viajes:true, unidadCant:'# Viajes', totalMD:'Extracción total' },
 ];
 function equipoMina(id){ return EQUIPOS_MINA.find(e=>e.id===id) || EQUIPOS_MINA[0]; }
 // Códigos de actividad del formato (versión 2, la que está en uso).
@@ -19146,10 +19153,15 @@ function _rgEqBlanco(){ return { hini:'', hfin:'', operador:'', dni:'', items:[e
                                  petroleo:'', hrsInop:'', estado:'Operativo', obs:'' }; }
 function rgEquiposRender(datos){
   _rgEq={};
+  const fch=(document.getElementById('rg-fecha')||{}).value||hoy();
+  const trn=(document.getElementById('rg-turno')||{}).value||'Día';
+  try{ eqopLoad(); }catch(e){}
   EQUIPOS_MINA.forEach(eq=>{
     const v=(datos||{})[eq.id]||{};
     const b=_rgEqBlanco();
     _rgEq[eq.id]=Object.assign(b, v, { items:(v.items&&v.items.length)?v.items.map(i=>Object.assign(eqopItemVacio(),i)):b.items });
+    // El horómetro final del turno anterior es el inicial de este: se propone solo.
+    if(!_rgEq[eq.id].hini){ try{ _rgEq[eq.id].hini=eqopUltimoHorometro(eq.id,fch,trn); }catch(e){} }
   });
   _rgEqAbierto='';
   rgEquiposPintar();
@@ -19164,8 +19176,8 @@ function rgEquiposPintar(){
     const t=eqopTotales(v);
     const abierto=_rgEqAbierto===eq.id;
     const llenos=(v.items||[]).filter(i=>i.cod||i.hi||i.cant).length;
-    const resumen='⏱ '+(v.hini||'—')+' → '+(v.hfin||'—')+' · 📋 '+llenos+' ítem'+(llenos!==1?'s':'')
-      +' · ⛏ M '+t.m+' / D '+t.d+' · '+eq.unidadCant+' '+t.cant;
+    const resumen='⏱ '+(v.hini||'—')+' → '+(v.hfin||'—')+' · '+t.hm+' · 📋 '+llenos+' ítem'+(llenos!==1?'s':'')
+      +' · '+eq.labM+' '+t.m+' / '+eq.labD+' '+t.d+(eq.viajes?' · '+eq.unidadCant+' '+t.cant:'');
     const set=(campo)=>'rgEqSet(\''+eq.id+'\',\''+campo+'\',this.value)';
     const inp=(campo,tipo,ph)=>'<input type="'+tipo+'" value="'+esc(v[campo])+'" placeholder="'+ph+'" oninput="'+set(campo)+'" style="width:100%">';
     const optLab=x=>'<option value=""></option>'+labores.map(l=>'<option'+(x===l?' selected':'')+'>'+l+'</option>').join('');
@@ -19175,12 +19187,12 @@ function rgEquiposPintar(){
       const td=h=>'<td style="padding:3px">'+h+'</td>';
       return '<tr><td style="padding:3px;text-align:center;color:var(--text3);font-size:11px">'+(i+1)+'</td>'
         +td('<select onchange="'+si('cod')+'" style="width:100%;font-size:11px">'+optAct(it.cod)+'</select>')
-        +td('<input value="'+esc(it.hi)+'" placeholder="00:00" oninput="'+si('hi')+'" style="width:100%;font-size:11px">')
-        +td('<input value="'+esc(it.hf)+'" placeholder="00:00" oninput="'+si('hf')+'" style="width:100%;font-size:11px">')
-        +'<td style="padding:3px;text-align:center;font-size:11px;color:var(--text3)">'+(eqopHorasItem(it)||'')+'</td>'
+        +td('<input value="'+esc(it.hi)+'" placeholder="00:00" oninput="'+si('hi')+'" style="width:100%;font-size:11px'+(_rgEqMalaHora(it.hi)?';border-color:#ef4444;color:#f87171':'')+'">')
+        +td('<input value="'+esc(it.hf)+'" placeholder="00:00" oninput="'+si('hf')+'" style="width:100%;font-size:11px'+(_rgEqMalaHora(it.hf)?';border-color:#ef4444;color:#f87171':'')+'">')
+        +'<td style="padding:3px;text-align:center;font-size:11px;color:var(--text3)">'+eqopHM(eqopHorasItem(it))+'</td>'
         +td('<input type="number" step="0.01" min="0" value="'+esc(it.m)+'" oninput="'+si('m')+'" style="width:100%;font-size:11px">')
         +td('<input type="number" step="0.01" min="0" value="'+esc(it.d)+'" oninput="'+si('d')+'" style="width:100%;font-size:11px">')
-        +td('<input type="number" step="1" min="0" value="'+esc(it.cant)+'" oninput="'+si('cant')+'" style="width:100%;font-size:11px">')
+        +(eq.viajes?td('<input type="number" step="1" min="0" value="'+esc(it.cant)+'" oninput="'+si('cant')+'" style="width:100%;font-size:11px">'):'')
         +td('<select onchange="'+si('oLabor')+'" style="width:100%;font-size:11px">'+optLab(it.oLabor)+'</select>')
         +td('<input value="'+esc(it.oNv||'2820')+'" oninput="'+si('oNv')+'" style="width:52px;font-size:11px">')
         +td('<select onchange="'+si('dLabor')+'" style="width:100%;font-size:11px">'+optLab(it.dLabor)+'</select>')
@@ -19198,14 +19210,15 @@ function rgEquiposPintar(){
       +'<div class="table-wrap" style="overflow-x:auto"><table style="width:100%;min-width:880px;border-collapse:collapse;font-size:11px">'
         +'<thead><tr style="color:var(--text3);text-align:left"><th style="padding:4px">#</th><th style="padding:4px">Código de actividad</th>'
         +'<th style="padding:4px">Hr. inicial</th><th style="padding:4px">Hr. final</th><th style="padding:4px">Horas</th>'
-        +'<th style="padding:4px">M</th><th style="padding:4px">D</th><th style="padding:4px">'+eq.unidadCant+'</th>'
+        +'<th style="padding:4px">'+eq.labM+'</th><th style="padding:4px">'+eq.labD+'</th>'
+        +(eq.viajes?'<th style="padding:4px">'+eq.unidadCant+'</th>':'')
         +'<th style="padding:4px">Origen labor</th><th style="padding:4px">Nv.</th><th style="padding:4px">Destino labor</th>'
         +'<th style="padding:4px">Nv.</th><th></th></tr></thead><tbody>'+filas+'</tbody>'
         +'<tfoot><tr style="border-top:1px solid var(--border);font-weight:800">'
           +'<td colspan="4" style="padding:6px 4px;text-align:right;color:var(--text3)">TOTALES</td>'
-          +'<td style="padding:6px 4px">'+t.horas+'</td><td style="padding:6px 4px">'+t.m+'</td>'
-          +'<td style="padding:6px 4px">'+t.d+'</td><td style="padding:6px 4px">'+t.cant+'</td><td colspan="5"></td>'
-        +'</tr></tfoot></table></div>'
+          +'<td style="padding:6px 4px">'+t.hm+'</td><td style="padding:6px 4px">'+t.m+'</td>'
+          +'<td style="padding:6px 4px">'+t.d+'</td>'+(eq.viajes?'<td style="padding:6px 4px">'+t.cant+'</td>':'')
+          +'<td colspan="5"></td></tr></tfoot></table></div>'
       +'<button class="btn btn-outline" style="font-size:11.5px;padding:6px 12px;border-style:dashed;width:100%;margin:8px 0 10px" onclick="rgEqItemAgregar(\''+eq.id+'\')">➕ Agregar ítem</button>'
       +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">'
         +'<div class="form-group" style="margin:0"><label>Petróleo (gls)</label>'+inp('petroleo','number','')+'</div>'
@@ -19245,14 +19258,25 @@ function rgEqTotales(eqId){
   const t=eqopTotales(v), eq=equipoMina(eqId);
   const tf=document.querySelector('#rg-equipos tfoot tr');
   if(tf && _rgEqAbierto===eqId) tf.innerHTML='<td colspan="4" style="padding:6px 4px;text-align:right;color:var(--text3)">TOTALES</td>'
-    +'<td style="padding:6px 4px">'+t.horas+'</td><td style="padding:6px 4px">'+t.m+'</td>'
-    +'<td style="padding:6px 4px">'+t.d+'</td><td style="padding:6px 4px">'+t.cant+'</td><td colspan="5"></td>';
+    +'<td style="padding:6px 4px">'+t.hm+'</td><td style="padding:6px 4px">'+t.m+'</td>'
+    +'<td style="padding:6px 4px">'+t.d+'</td>'+(eq.viajes?'<td style="padding:6px 4px">'+t.cant+'</td>':'')+'<td colspan="5"></td>';
 }
-function rgEqItemAgregar(eqId){ const v=_rgEq[eqId]; if(!v) return; (v.items=v.items||[]).push(eqopItemVacio()); rgEquiposPintar(); }
+function rgEqItemAgregar(eqId){
+  const v=_rgEq[eqId]; if(!v) return;
+  const it=eqopItemVacio();
+  // La hora final de un ítem es la inicial del siguiente: el turno es continuo, no tiene huecos.
+  const ult=(v.items||[])[ (v.items||[]).length-1 ];
+  if(ult && eqopHoraValida(ult.hf)!=null) it.hi=String(ult.hf).trim();
+  (v.items=v.items||[]).push(it); rgEquiposPintar();
+}
 function rgEqItemQuitar(eqId,i){ const v=_rgEq[eqId]; if(!v) return; v.items.splice(i,1);
   if(!v.items.length) v.items.push(eqopItemVacio()); rgEquiposPintar(); }
+function _rgEqMalaHora(t){ return !!String(t||'').trim() && eqopHoraValida(t)===null; }
 function rgEquiposAviso(){
   const av=document.getElementById('rg-eq-aviso'); if(!av) return;
+  const horas=EQUIPOS_MINA.filter(eq=>((_rgEq[eq.id]||{}).items||[]).some(i=>_rgEqMalaHora(i.hi)||_rgEqMalaHora(i.hf))).map(eq=>eq.nombre);
+  if(horas.length){ av.innerHTML='<span style="color:#f87171">⚠ Hay horas imposibles (deben ir entre 00:00 y 23:59) en: '
+    +horas.join(', ')+'</span>'; return; }
   const malos=EQUIPOS_MINA.filter(eq=>{ const v=_rgEq[eq.id]||{}; const a=Number(v.hini)||0,b=Number(v.hfin)||0;
     return a&&b&&b<a; }).map(eq=>eq.nombre);
   av.innerHTML = malos.length
@@ -19271,18 +19295,45 @@ function rgEquiposLeer(){
   });
   return d;
 }
+// Hora del reloj: solo 00:00–23:59. Antes se aceptaba «25:10» y salía un turno de tres horas que
+// nadie trabajó; ahora una hora imposible no suma y se marca en rojo en la casilla.
+function eqopHoraValida(t){
+  const m=String(t||'').trim().match(/^(\d{1,2}):?(\d{2})$/);
+  if(!m) return null;
+  const h=Number(m[1]), mi=Number(m[2]);
+  if(h>23||mi>59) return null;
+  return h+mi/60;
+}
 function eqopHorasItem(it){
-  const p=t=>{ const m=String(t||'').match(/^(\d{1,2}):?(\d{2})?$/); return m?(Number(m[1])+(Number(m[2]||0)/60)):null; };
-  const a=p(it.hi), b=p(it.hf); if(a==null||b==null) return 0;
-  let h=b-a; if(h<0) h+=24; return Math.round(h*100)/100;
+  const a=eqopHoraValida(it.hi), b=eqopHoraValida(it.hf);
+  if(a==null||b==null) return 0;
+  let h=b-a; if(h<0) h+=24;             // el ítem cruza la medianoche
+  return Math.round(h*100)/100;
+}
+// Las horas se leen en horas y minutos, que es como se reportan: 3.75 no dice nada, 3h 45min sí.
+function eqopHM(dec){
+  const d=Number(dec)||0;
+  if(!d) return '—';
+  const total=Math.round(d*60), h=Math.floor(total/60), m=total%60;
+  return (h?h+'h ':'')+(m||!h?m+'min':'').trim() || '0min';
 }
 function eqopTotales(f){
   const it=f.items||[];
   const num=v=>Number(v)||0;
-  return { horas:Math.round(it.reduce((a,i)=>a+eqopHorasItem(i),0)*100)/100,
-           m:it.reduce((a,i)=>a+num(i.m),0), d:it.reduce((a,i)=>a+num(i.d),0),
-           cant:it.reduce((a,i)=>a+num(i.cant),0),
-           horometro:(Number(f.hfin)||0)-(Number(f.hini)||0) };
+  const horas=Math.round(it.reduce((a,i)=>a+eqopHorasItem(i),0)*100)/100;
+  const m=it.reduce((a,i)=>a+num(i.m),0), d=it.reduce((a,i)=>a+num(i.d),0);
+  return { horas, hm:eqopHM(horas), minutos:Math.round(horas*60),
+           m, d, md:Math.round((m+d)*100)/100,       // cucharas totales en el scoop
+           cant:it.reduce((a,i)=>a+num(i.cant),0),   // viajes
+           horometro:Math.round(((Number(f.hfin)||0)-(Number(f.hini)||0))*100)/100 };
+}
+// El horómetro final de la última hoja de un equipo es el inicial de la siguiente: se propone solo
+// y así no hay saltos en la lectura de la máquina.
+function eqopUltimoHorometro(equipoId, fecha, turno){
+  const previas=(state.equiposOp||[]).filter(f=>f.equipo===equipoId && Number(f.hfin)>0
+      && (f.fecha<fecha || (f.fecha===fecha && (f.turno||'')!==turno)))
+    .sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
+  return previas.length ? String(previas[0].hfin) : '';
 }
 // ── Pestaña Operaciones › Reportes de Equipo ──────────────────────────────────────
 let _eqopFiltro={ equipo:'', mes:'', fecha:'', turno:'Día' };
@@ -19321,8 +19372,10 @@ function renderEquiposOp(){
       ? '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--text3);margin-top:8px">'
         +'<span>⏱ Horómetro <b style="color:var(--text2)">'+(f.hini||'—')+' → '+(f.hfin||'—')+'</b>'+(t.horometro>0?' ('+t.horometro.toFixed(1)+' h)':'')+'</span>'
         +'<span>📋 <b style="color:var(--text2)">'+llenos+'</b> ítem'+(llenos!==1?'s':'')+'</span>'
-        +'<span>⛏ Mineral <b style="color:var(--text2)">'+t.m+'</b> · Desmonte <b style="color:var(--text2)">'+t.d+'</b></span>'
-        +'<span>'+eq.unidadCant+' <b style="color:var(--text2)">'+t.cant+'</b></span>'
+        +'<span>⏱ <b style="color:var(--text2)">'+t.hm+'</b> trabajadas</span>'
+        +'<span>⛏ '+eq.labM+' <b style="color:var(--text2)">'+t.m+'</b> · '+eq.labD+' <b style="color:var(--text2)">'+t.d+'</b>'
+          +' <span style="color:var(--text3)">('+eq.totalMD.toLowerCase()+' '+t.md+')</span></span>'
+        +(eq.viajes?'<span>'+eq.unidadCant+' <b style="color:var(--text2)">'+t.cant+'</b></span>':'')
         +'<span>🛢 <b style="color:var(--text2)">'+(f.petroleo||0)+'</b> gls</span>'
         +'<span style="color:'+(f.estado==='No Operativo'?'#f87171':'#22c55e')+'">● '+(f.estado||'Operativo')+'</span>'
         +(f.corregida?'<span style="color:#fbbf24">🔓 corregida'+(f.corregida.por?' por '+f.corregida.por:'')+'</span>':'')
@@ -19362,7 +19415,8 @@ function renderEquiposOp(){
     return '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 10px;border-bottom:1px solid var(--border)">'
       +'<span style="font-size:12px;font-weight:700">'+eq.fig+' '+eq.nombre+'</span>'
       +'<span style="font-size:11px;color:var(--text3)">'+f.fecha+' · '+(f.turno||'—')+' · '+(f.operador||'sin operador')+'</span>'
-      +'<span style="font-size:11px;color:var(--text3)">⛏ M '+t.m+' / D '+t.d+' · '+eq.unidadCant+' '+t.cant+'</span>'
+      +'<span style="font-size:11px;color:var(--text3)">⏱ '+t.hm+' · '+eq.labM+' '+t.m+' / '+eq.labD+' '+t.d
+        +(eq.viajes?' · '+eq.unidadCant+' '+t.cant:'')+'</span>'
       +'<span style="margin-left:auto;display:flex;gap:6px">'
         +'<button class="btn btn-outline" style="font-size:10.5px;padding:5px 10px" onclick="eqopVer(\''+f.id+'\')">👁</button>'
         +'<button class="btn btn-outline" style="font-size:10.5px;padding:5px 10px" onclick="eqopImprimir(\''+f.id+'\')">🖨</button>'
@@ -19425,9 +19479,9 @@ function eqopVerFicha(f){
     '<tr><td style="padding:5px 4px;text-align:center;color:var(--text3)">'+(i+1)+'</td>'
     +'<td style="padding:5px 4px">'+e(it.cod)+'</td><td style="padding:5px 4px">'+e(eqopActTxt(it.cod))+'</td>'
     +'<td style="padding:5px 4px;text-align:center">'+e(it.hi)+'</td><td style="padding:5px 4px;text-align:center">'+e(it.hf)+'</td>'
-    +'<td style="padding:5px 4px;text-align:center;color:var(--text3)">'+(eqopHorasItem(it)||'')+'</td>'
+    +'<td style="padding:5px 4px;text-align:center;color:var(--text3)">'+eqopHM(eqopHorasItem(it))+'</td>'
     +'<td style="padding:5px 4px;text-align:center">'+e(it.m)+'</td><td style="padding:5px 4px;text-align:center">'+e(it.d)+'</td>'
-    +'<td style="padding:5px 4px;text-align:center">'+e(it.cant)+'</td>'
+    +(eq.viajes?'<td style="padding:5px 4px;text-align:center">'+e(it.cant)+'</td>':'')
     +'<td style="padding:5px 4px">'+e(it.oLabor)+(it.oNv?' <span style="color:var(--text3)">Nv '+e(it.oNv)+'</span>':'')+'</td>'
     +'<td style="padding:5px 4px">'+e(it.dLabor)+(it.dNv?' <span style="color:var(--text3)">Nv '+e(it.dNv)+'</span>':'')+'</td></tr>').join('');
   let ov=document.getElementById('modal-equipo-op');
@@ -19450,19 +19504,23 @@ function eqopVerFicha(f){
     +dato('Fecha',f.fecha)+dato('Turno',f.turno)+dato('Operador',f.operador)+dato('DNI',f.dni)
     +dato('Ingeniero / Jefe de guardia',f.ingeniero)
     +dato('Horómetro inicial',f.hini)+dato('Horómetro final',f.hfin)
-    +dato('Horas de horómetro',t.horometro>0?t.horometro.toFixed(1):'')
+    +dato('Horas de horómetro',t.horometro>0?eqopHM(t.horometro):'')
+    +dato('Horas trabajadas',t.horas>0?t.hm:'')
+    +dato(eq.totalMD,t.md||'')
+    +(eq.viajes?dato(eq.unidadCant,t.cant||''):'')
    +'</div>'
    +(filas
      ? '<div class="table-wrap" style="overflow-x:auto"><table style="width:100%;min-width:880px;border-collapse:collapse;font-size:11.5px">'
        +'<thead><tr style="color:var(--text3);text-align:left"><th style="padding:5px 4px">#</th><th style="padding:5px 4px">Cód.</th>'
        +'<th style="padding:5px 4px">Actividad</th><th style="padding:5px 4px">Hr. ini.</th><th style="padding:5px 4px">Hr. fin</th>'
-       +'<th style="padding:5px 4px">Horas</th><th style="padding:5px 4px">M</th><th style="padding:5px 4px">D</th>'
-       +'<th style="padding:5px 4px">'+eq.unidadCant+'</th><th style="padding:5px 4px">Origen</th><th style="padding:5px 4px">Destino</th></tr></thead>'
+       +'<th style="padding:5px 4px">Horas</th><th style="padding:5px 4px">'+eq.labM+'</th><th style="padding:5px 4px">'+eq.labD+'</th>'
+       +(eq.viajes?'<th style="padding:5px 4px">'+eq.unidadCant+'</th>':'')+'<th style="padding:5px 4px">Origen</th><th style="padding:5px 4px">Destino</th></tr></thead>'
        +'<tbody>'+filas+'</tbody>'
        +'<tfoot><tr style="border-top:1px solid var(--border);font-weight:800">'
          +'<td colspan="5" style="padding:7px 4px;text-align:right;color:var(--text3)">TOTALES</td>'
-         +'<td style="padding:7px 4px;text-align:center">'+t.horas+'</td><td style="padding:7px 4px;text-align:center">'+t.m+'</td>'
-         +'<td style="padding:7px 4px;text-align:center">'+t.d+'</td><td style="padding:7px 4px;text-align:center">'+t.cant+'</td>'
+         +'<td style="padding:7px 4px;text-align:center">'+t.hm+'</td><td style="padding:7px 4px;text-align:center">'+t.m+'</td>'
+         +'<td style="padding:7px 4px;text-align:center">'+t.d+'</td>'
+         +(eq.viajes?'<td style="padding:7px 4px;text-align:center">'+t.cant+'</td>':'')
          +'<td colspan="2"></td></tr></tfoot></table></div>'
      : '<div class="card" style="text-align:center;color:var(--text3);padding:22px;font-size:12px">'
        +'Esta hoja todavía no tiene ítems. Los llena el jefe de guardia en su reporte del turno.</div>')
@@ -19517,12 +19575,12 @@ function eqopRenderEditor(){
     const td=h=>'<td style="padding:3px">'+h+'</td>';
     return '<tr><td style="padding:3px;text-align:center;color:var(--text3);font-size:11px">'+(i+1)+'</td>'
       +td('<select onchange="'+si('cod')+'" style="width:100%;font-size:11px">'+optAct(it.cod)+'</select>')
-      +td('<input value="'+esc(it.hi)+'" placeholder="00:00" oninput="'+si('hi')+'" style="width:100%;font-size:11px">')
-      +td('<input value="'+esc(it.hf)+'" placeholder="00:00" oninput="'+si('hf')+'" style="width:100%;font-size:11px">')
-      +'<td style="padding:3px;text-align:center;font-size:11px;color:var(--text3)">'+(eqopHorasItem(it)||'')+'</td>'
+      +td('<input value="'+esc(it.hi)+'" placeholder="00:00" oninput="'+si('hi')+'" style="width:100%;font-size:11px'+(_rgEqMalaHora(it.hi)?';border-color:#ef4444;color:#f87171':'')+'">')
+      +td('<input value="'+esc(it.hf)+'" placeholder="00:00" oninput="'+si('hf')+'" style="width:100%;font-size:11px'+(_rgEqMalaHora(it.hf)?';border-color:#ef4444;color:#f87171':'')+'">')
+      +'<td style="padding:3px;text-align:center;font-size:11px;color:var(--text3)">'+eqopHM(eqopHorasItem(it))+'</td>'
       +td('<input type="number" step="0.01" min="0" value="'+esc(it.m)+'" oninput="'+si('m')+'" style="width:100%;font-size:11px">')
       +td('<input type="number" step="0.01" min="0" value="'+esc(it.d)+'" oninput="'+si('d')+'" style="width:100%;font-size:11px">')
-      +td('<input type="number" step="1" min="0" value="'+esc(it.cant)+'" oninput="'+si('cant')+'" style="width:100%;font-size:11px">')
+      +(eq.viajes?td('<input type="number" step="1" min="0" value="'+esc(it.cant)+'" oninput="'+si('cant')+'" style="width:100%;font-size:11px">'):'')
       +td('<select onchange="'+si('oLabor')+'" style="width:100%;font-size:11px">'+optLab(it.oLabor)+'</select>')
       +td('<input value="'+esc(it.oNv||'2820')+'" oninput="'+si('oNv')+'" style="width:52px;font-size:11px">')
       +td('<select onchange="'+si('dLabor')+'" style="width:100%;font-size:11px">'+optLab(it.dLabor)+'</select>')
@@ -19550,14 +19608,15 @@ function eqopRenderEditor(){
    +'<div class="table-wrap" style="overflow-x:auto;margin-bottom:8px"><table style="width:100%;min-width:900px;border-collapse:collapse;font-size:11px">'
     +'<thead><tr style="color:var(--text3);text-align:left"><th style="padding:4px">#</th><th style="padding:4px">Código de actividad</th>'
     +'<th style="padding:4px">Hr. inicial</th><th style="padding:4px">Hr. final</th><th style="padding:4px">Horas</th>'
-    +'<th style="padding:4px">M</th><th style="padding:4px">D</th><th style="padding:4px">'+eq.unidadCant+'</th>'
+    +'<th style="padding:4px">'+eq.labM+'</th><th style="padding:4px">'+eq.labD+'</th>'
+    +(eq.viajes?'<th style="padding:4px">'+eq.unidadCant+'</th>':'')
     +'<th style="padding:4px">Origen labor</th><th style="padding:4px">Nv.</th><th style="padding:4px">Destino labor</th>'
     +'<th style="padding:4px">Nv.</th><th></th></tr></thead><tbody>'+filas+'</tbody>'
     +'<tfoot><tr style="border-top:1px solid var(--border);font-weight:800">'
       +'<td colspan="4" style="padding:6px 4px;text-align:right;color:var(--text3)">TOTALES</td>'
-      +'<td style="padding:6px 4px">'+t.horas+'</td><td style="padding:6px 4px">'+t.m+'</td>'
-      +'<td style="padding:6px 4px">'+t.d+'</td><td style="padding:6px 4px">'+t.cant+'</td><td colspan="5"></td>'
-    +'</tr></tfoot></table></div>'
+      +'<td style="padding:6px 4px">'+t.hm+'</td><td style="padding:6px 4px">'+t.m+'</td>'
+      +'<td style="padding:6px 4px">'+t.d+'</td>'+(eq.viajes?'<td style="padding:6px 4px">'+t.cant+'</td>':'')
+      +'<td colspan="5"></td></tr></tfoot></table></div>'
    +'<button class="btn btn-outline" style="font-size:12px;padding:7px 14px;border-style:dashed;width:100%;margin-bottom:14px" onclick="eqopEdItemAgregar()">➕ Agregar ítem</button>'
    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:10px">'
     +'<div class="form-group" style="margin:0"><label>Petróleo (gls)</label>'+inp('petroleo','number','')+'</div>'
@@ -19577,12 +19636,18 @@ function eqopEdItem(i,campo,valor){ const f=eqopEnEdicion(); if(!f||!f.items[i])
   if(campo==='hi'||campo==='hf'||campo==='m'||campo==='d'||campo==='cant') eqopEdTotales(); }
 function eqopEdTotales(){
   const f=eqopEnEdicion(); if(!f) return; const t=eqopTotales(f);
-  const tf=document.querySelector('#eqop-body tfoot tr');
+  const tf=document.querySelector('#eqop-body tfoot tr'), eq=equipoMina(f.equipo);
   if(tf) tf.innerHTML='<td colspan="4" style="padding:6px 4px;text-align:right;color:var(--text3)">TOTALES</td>'
-    +'<td style="padding:6px 4px">'+t.horas+'</td><td style="padding:6px 4px">'+t.m+'</td>'
-    +'<td style="padding:6px 4px">'+t.d+'</td><td style="padding:6px 4px">'+t.cant+'</td><td colspan="5"></td>';
+    +'<td style="padding:6px 4px">'+t.hm+'</td><td style="padding:6px 4px">'+t.m+'</td>'
+    +'<td style="padding:6px 4px">'+t.d+'</td>'+(eq.viajes?'<td style="padding:6px 4px">'+t.cant+'</td>':'')+'<td colspan="5"></td>';
 }
-function eqopEdItemAgregar(){ const f=eqopEnEdicion(); if(!f) return; (f.items=f.items||[]).push(eqopItemVacio()); eqopRenderEditor(); }
+function eqopEdItemAgregar(){
+  const f=eqopEnEdicion(); if(!f) return;
+  const it=eqopItemVacio();
+  const ult=(f.items||[])[(f.items||[]).length-1];
+  if(ult && eqopHoraValida(ult.hf)!=null) it.hi=String(ult.hf).trim();   // sigue donde terminó el anterior
+  (f.items=f.items||[]).push(it); eqopRenderEditor();
+}
 function eqopEdItemQuitar(i){ const f=eqopEnEdicion(); if(!f) return; f.items.splice(i,1);
   if(!f.items.length) f.items.push(eqopItemVacio()); eqopRenderEditor(); }
 function eqopEdGuardar(){
@@ -19604,7 +19669,8 @@ function eqopImprimirFicha(ficha){
   const eq=equipoMina(f.equipo), t=eqopTotales(f);
   const e=s=>String(s==null?'':s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
   const filas=(f.items||[]).map((it,i)=>'<tr><td>'+(i+1)+'</td><td>'+e(it.cod)+'</td><td class="l">'+e(eqopActTxt(it.cod))+'</td>'
-    +'<td>'+e(it.hi)+'</td><td>'+e(it.hf)+'</td><td>'+e(it.m)+'</td><td>'+e(it.d)+'</td><td>'+e(it.cant)+'</td>'
+    +'<td>'+e(it.hi)+'</td><td>'+e(it.hf)+'</td><td>'+eqopHM(eqopHorasItem(it))+'</td>'
+    +'<td>'+e(it.m)+'</td><td>'+e(it.d)+'</td>'+(eq.viajes?'<td>'+e(it.cant)+'</td>':'')
     +'<td class="l">'+e(it.oLabor)+'</td><td>'+e(it.oNv)+'</td><td class="l">'+e(it.dLabor)+'</td><td>'+e(it.dNv)+'</td></tr>').join('');
   const html='<!doctype html><html lang="es"><head><meta charset="utf-8"><title>'+e(eq.nombre)+' '+e(f.fecha)+'</title><style>'
    +'body{font-family:Arial,Helvetica,sans-serif;color:#000;margin:14px;font-size:11px}'
@@ -19623,14 +19689,18 @@ function eqopImprimirFicha(ficha){
      +'<td><b>Horómetro D. Inicial:</b> '+e(f.hini)+'</td><td><b>Horómetro D. Final:</b> '+e(f.hfin)+'</td></tr>'
      +'<tr><td><b>Operador:</b> '+e(f.operador)+'</td><td><b>DNI:</b> '+e(f.dni)+'</td>'
      +'<td colspan="2"><b>Ingeniero a cargo:</b> '+e(f.ingeniero)+'</td></tr></table><br>'
-   +'<table><thead><tr><th>Ítem</th><th>Código</th><th>Actividad</th><th>Hr. inicial</th><th>Hr. final</th>'
-     +'<th>M</th><th>D</th><th>'+e(eq.unidadCant)+'</th><th>Origen — labor</th><th>Nv.</th><th>Destino — labor</th><th>Nv.</th></tr></thead>'
+   +'<table><thead><tr><th>Ítem</th><th>Código</th><th>Actividad</th><th>Hr. inicial</th><th>Hr. final</th><th>Horas</th>'
+     +'<th>'+e(eq.labM)+'</th><th>'+e(eq.labD)+'</th>'+(eq.viajes?'<th>'+e(eq.unidadCant)+'</th>':'')
+     +'<th>Origen — labor</th><th>Nv.</th><th>Destino — labor</th><th>Nv.</th></tr></thead>'
      +'<tbody>'+filas+'</tbody>'
-     +'<tfoot><tr><th colspan="5">TOTALES</th><th>'+t.m+'</th><th>'+t.d+'</th><th>'+t.cant+'</th><th colspan="4"></th></tr></tfoot></table>'
+     +'<tfoot><tr><th colspan="5">TOTALES</th><th>'+t.hm+'</th><th>'+t.m+'</th><th>'+t.d+'</th>'
+     +(eq.viajes?'<th>'+t.cant+'</th>':'')+'<th colspan="4"></th></tr></tfoot></table>'
    +'<table class="cab" style="margin-top:8px"><tr><td><b>Consumo de petróleo (gls):</b> '+e(f.petroleo)+'</td>'
      +'<td><b>Hrs. inoperativas:</b> '+e(f.hrsInop)+'</td>'
-     +'<td><b>'+(eq.tipo==='scoop'?'#Cuchar. T. mineral':'#Viajes T. mineral')+':</b> '+t.m+'</td>'
-     +'<td><b>'+(eq.tipo==='scoop'?'#Cuchar. T. desmonte':'#Viajes T. desmonte')+':</b> '+t.d+'</td>'
+     +'<td><b>'+(eq.tipo==='scoop'?'#Cuchar. T. mineral':'Extracción T. mineral')+':</b> '+t.m+'</td>'
+     +'<td><b>'+(eq.tipo==='scoop'?'#Cuchar. T. desmonte':'Extracción T. desmonte')+':</b> '+t.d+'</td>'
+     +(eq.viajes?'<td><b>Total de viajes:</b> '+t.cant+'</td>':'')
+     +'<td><b>Horas trabajadas:</b> '+t.hm+'</td>'
      +'<td><b>Estado final:</b> '+e(f.estado||'Operativo')+'</td></tr>'
      +'<tr><td colspan="5"><b>Observaciones:</b> '+e(f.obs)+'</td></tr></table>'
    +'<div class="firmas"><div>Firma del Operador</div><div>Firma del Ing. a cargo</div><div>V°B° Productividad</div></div>'
@@ -19970,14 +20040,32 @@ function editarReporteGuardia(id){
 }
 
 function eliminarReporteGuardia(id){
-  if(!confirm('¿Eliminar este reporte de guardia?'))return;
+  // Las hojas de equipo nacen de este reporte: si el reporte se va, se van con él. Quedarse con
+  // hojas huérfanas —sobre todo tras una prueba— dejaría horómetros y cucharas de un turno que ya
+  // no existe. Se avisa cuántas, y las CORREGIDAS a mano se respetan: esas ya son cifra propia.
+  try{ eqopLoad(); }catch(e){}
+  const ligadas=(state.equiposOp||[]).filter(f=>f.rgId===id);
+  const corregidas=ligadas.filter(f=>f.corregida);
+  const aBorrar=ligadas.filter(f=>!f.corregida);
+  const extra=aBorrar.length
+    ? '\n\nSe eliminarán también '+aBorrar.length+' hoja'+(aBorrar.length!==1?'s':'')+' de equipo de ese turno.'
+      +(corregidas.length?'\nSe conservarán '+corregidas.length+' corregida'+(corregidas.length!==1?'s':'')+' a mano.':'')
+    : (corregidas.length?'\n\nSus '+corregidas.length+' hoja(s) de equipo fueron corregidas a mano y se conservarán.':'');
+  if(!confirm('¿Eliminar este reporte de guardia?'+extra))return;
   if(typeof tombAdd==='function')tombAdd(id);
   state.reportesGuardia=(state.reportesGuardia||[]).filter(r=>r.id!==id);
   // También limpia la perforación derivada de este reporte antes de refrescar tableros
   state.perforacion=(state.perforacion||[]).filter(p=>p._rg!==id);
+  if(aBorrar.length){
+    aBorrar.forEach(f=>{ if(typeof tombAdd==='function') tombAdd(f.id); });
+    const fuera=new Set(aBorrar.map(f=>f.id));
+    state.equiposOp=(state.equiposOp||[]).filter(f=>!fuera.has(f.id));
+    eqopSave();
+    try{ renderEquiposOp(); }catch(e){}
+  }
   reportesGuardiaSave();renderAvance();
   if(typeof refrescarVistasGuardia==='function') refrescarVistasGuardia();
-  showNotif('✓ Reporte eliminado');
+  showNotif('✓ Reporte eliminado'+(aBorrar.length?' con '+aBorrar.length+' hoja'+(aBorrar.length!==1?'s':'')+' de equipo':''));
 }
 
 function rgToggleSost(pfx){
