@@ -6931,6 +6931,22 @@ function ejecCambiarMes(delta){
   // (acumulado del mes, avance vs meta, top de trabajadores) se quedaba en el ciclo vigente.
   if(typeof renderDashboard==='function') renderDashboard(); else renderDashEjecutivo();
 }
+/* Cuando el mes en pantalla no tiene valorización, decir dónde SÍ hay: casi siempre el ingreso
+   "desaparecido" es que se está mirando otro mes, o que la valorización quedó subida sin mes
+   reconocido en su título. */
+function _ejecPistaValorizacion(mes){
+  const lista=state.valorizacionesLabor||[];
+  if(!lista.length) return 'Sin valorización subida para este mes.';
+  const conMes=lista.filter(v=>v.mesNum&&v.anio)
+    .sort((a,b)=>(b.anio*100+b.mesNum)-(a.anio*100+a.mesNum));
+  const sinMes=lista.filter(v=>!(v.mesNum&&v.anio));
+  let t='Sin valorización para este mes.';
+  if(conMes.length) t+=' Hay subida'+(conMes.length>1?'s':'')+' la de <b>'
+    +conMes.slice(0,3).map(v=>v.periodo||((VAL_MESES[v.mesNum-1]||'')+' '+v.anio)).join('</b>, <b>')+'</b>.';
+  if(sinMes.length) t+=' ⚠ '+sinMes.length+' valorización'+(sinMes.length>1?'es':'')
+    +' sin mes reconocido — ábrela en Operaciones › Valorizaciones y asígnale su mes.';
+  return t;
+}
 function renderDashEjecutivo(){
   const cont=document.getElementById('d-ejecutivo');
   if(!cont)return;
@@ -6945,8 +6961,13 @@ function renderDashEjecutivo(){
   // Si el periodo está CERRADO se muestran sus cifras congeladas, no un recálculo: un mes
   // cerrado no puede cambiar de importe porque alguien corrigió un tareo o un precio después.
   const _cong=(typeof finCongelado==='function')?finCongelado(mes):null;
-  const val=_cong?{total:_cong.valorizacion,descuento:0}
-    :((typeof finValorizacionMes==='function')?finValorizacionMes(mes):{total:0,descuento:0});
+  const _valReal=(typeof finValorizacionMes==='function')?finValorizacionMes(mes):{total:0,descuento:0};
+  // Un periodo se cierra muchas veces ANTES de que llegue la valorización del cliente, y entonces
+  // queda congelado un ingreso de 0. Ese cero no es una cifra oficial: es que todavía no había
+  // valorización. Si después se sube, manda la subida — pero solo en ese caso; cualquier otra
+  // cifra congelada se respeta, que para eso se cerró el periodo.
+  const _congSinIngreso = !!_cong && !(Number(_cong.valorizacion)>0) && _valReal.total>0;
+  const val=(_cong && !_congSinIngreso)?{total:_cong.valorizacion,descuento:0}:_valReal;
   const desglose=_cong?(_cong.desglose||[])
     :((typeof finDesgloseGastos==='function')?finDesgloseGastos(mes):[]);
   const costoTot=_cong?_cong.gasto:desglose.reduce((s,c)=>s+c.monto,0);
@@ -7084,7 +7105,8 @@ function renderDashEjecutivo(){
       <div style="position:absolute;top:-20px;right:-20px;width:90px;height:90px;background:rgba(255,255,255,.06);border-radius:50%"></div>
       <div style="font-size:10.5px;color:#6ee7b7;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:6px">📥 Ganado en el Período</div>
       <div style="font-size:33px;font-weight:900;color:#fff;letter-spacing:-1.5px;line-height:1">${S(val.total)}</div>
-      <div style="margin-top:8px;font-size:11px;color:#a7f3d0">Valorización neta del mes</div>
+      <div style="margin-top:8px;font-size:11px;color:#a7f3d0">Valorización neta del mes${_congSinIngreso?' · se cerró sin valorización, se muestra la subida después':''}</div>
+      ${val.total>0?'':`<div style="margin-top:6px;font-size:10.5px;color:#fde68a;line-height:1.5">${_ejecPistaValorizacion(mes)}</div>`}
     </div>
     <div style="background:linear-gradient(135deg,#7c2d12,#9a3412);border-radius:18px;padding:20px;position:relative;overflow:hidden;box-shadow:0 8px 28px rgba(234,88,12,.18)">
       <div style="position:absolute;top:-20px;right:-20px;width:90px;height:90px;background:rgba(255,255,255,.06);border-radius:50%"></div>
@@ -26134,10 +26156,24 @@ function finCostoExplosivos(mesYM){
   return b;
 }
 function finValorizacionMes(mesYM){
-  const v=(state.valorizacionesLabor||[]).find(v=>{
+  const lista=state.valorizacionesLabor||[];
+  let v=lista.find(v=>{
     const my=(v.anio&&v.mesNum)?`${v.anio}-${String(v.mesNum).padStart(2,'0')}`:null;
     return my===mesYM;
   });
+  // Rescate: una valorización cuyo mes no se pudo leer del Excel queda sin mesNum/anio y su
+  // ingreso no aparecía en ningún lado, aunque estuviera subida. Se la busca por el nombre del
+  // mes y el año en su título o periodo ("VALORIZACIÓN JULIO 2026").
+  if(!v && /^\d{4}-\d{2}$/.test(String(mesYM||''))){
+    const [anio,mm]=String(mesYM).split('-');
+    const nom=(VAL_MESES[Number(mm)-1]||'').toUpperCase();
+    const alt=nom==='SEPTIEMBRE'?'SETIEMBRE':nom;
+    v=lista.find(x=>{
+      if(x.mesNum&&x.anio) return false;                  // esa ya se comparó arriba
+      const t=((x.titulo||'')+' '+(x.periodo||'')).toUpperCase();
+      return t.includes(anio) && (t.includes(nom)||t.includes(alt));
+    });
+  }
   if(v) return {total:v.total||0,descuento:v.descuento||0,rubros:v.rubros||[]};
   return {total:0,descuento:0,rubros:[]};
 }
