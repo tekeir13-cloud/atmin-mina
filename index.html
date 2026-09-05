@@ -7285,7 +7285,15 @@ function fcGraficoCruzadoSVG(series){
   series.forEach(S=>S.serie.forEach(s=>{ todosM.push(s.metros); if(s.fc>0) todosF.push(s.fc); }));
   const maxM=Math.max(1,...todosM)*1.3;
   series.forEach(S=>{ let a=0; S.acum=S.serie.map(s=>{ a+=s.metros; return Math.round(a*100)/100; }); });
-  const maxA=Math.max(1,...series.map(S=>S.acum[S.acum.length-1]||0))*1.08;
+  // La recta que sube es UNA sola: lo producido cada día entre las dos labores, sumado y llevado
+  // día a día. Antes eran dos punteadas por frente y no se apreciaba ninguna.
+  const totalDia=[], acumTotal=[];
+  let _a=0;
+  for(let i=0;i<n;i++){
+    const td=series.reduce((x,S)=>x+(S.serie[i]?S.serie[i].metros:0),0);
+    totalDia.push(Math.round(td*100)/100); _a+=td; acumTotal.push(Math.round(_a*100)/100);
+  }
+  const maxA=Math.max(1, acumTotal[acumTotal.length-1]||0)*1.06;
   // El eje del factor no arranca en cero: si arrancara, las dos rectas del factor quedarían
   // pegadas y no se vería ni el óptimo ni el día que se desvía.
   const refs=todosF.concat(series.map(S=>S.optimo||0).filter(Boolean));
@@ -7308,7 +7316,7 @@ function fcGraficoCruzadoSVG(series){
       '" stroke="var(--border)" stroke-width="1" opacity="'+(k?'.35':'.9')+'"/>'
       +'<text x="'+(ML-6)+'" y="'+(y+3.5).toFixed(1)+'" font-size="9" fill="var(--text3)" text-anchor="end">'+(maxM*k/4).toFixed(1)+'</text>'
       +'<text x="'+ejeF+'" y="'+(y+3.5).toFixed(1)+'" font-size="9" fill="#fbbf24" opacity=".85">'+(minF+(maxF-minF)*k/4).toFixed(1)+'</text>'
-      +'<text x="'+ejeA+'" y="'+(y+3.5).toFixed(1)+'" font-size="9" fill="var(--text3)">'+(maxA*k/4).toFixed(0)+'</text>';
+      +'<text x="'+ejeA+'" y="'+(y+3.5).toFixed(1)+'" font-size="9" fill="#fbbf24" opacity=".8">'+(maxA*k/4).toFixed(0)+'</text>';
   }
 
   // Barras: metros del día. El frente 0 a la izquierda de la ranura, el 1 a la derecha.
@@ -7326,7 +7334,7 @@ function fcGraficoCruzadoSVG(series){
     });
   });
 
-  let lineasFC='', puntosFC='', valoresFC='', optimos='', lineasAcum='', puntosAcum='', etiqAcum='';
+  let lineasFC='', puntosFC='', valoresFC='', optimos='';
   series.forEach((S,j)=>{
     // ── Recta horizontal: factor de carga del día ──
     const pf=[];
@@ -7347,37 +7355,50 @@ function fcGraficoCruzadoSVG(series){
         +'<text x="'+(W-MR-4)+'" y="'+(y-4).toFixed(1)+'" font-size="8.5" font-weight="700" fill="'+S.color+
         '" text-anchor="end" opacity=".9">óptimo '+S.nombre+' '+S.optimo+'</text>';
     }
-    // ── Recta ascendente: avance acumulado ──
-    const pa=S.serie.map((s,i)=>({x:cx(i), y:yA(S.acum[i]), acum:S.acum[i], s:s}));
-    if(pa.length>1) lineasAcum+='<polyline points="'+pa.map(p=>p.x.toFixed(1)+','+p.y.toFixed(1)).join(' ')+
-      '" fill="none" stroke="'+S.color+'" stroke-width="2.6" stroke-dasharray="9 4" stroke-linejoin="round" opacity=".9"/>';
-    pa.forEach((p,i)=>{
-      if(i%etq===0 || i===pa.length-1)
-        puntosAcum+='<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="2.6" fill="'+S.color+'" opacity=".9">'
-          +'<title>'+S.nombre+' · '+p.s.dia+' · acumulado '+p.acum+' m</title></circle>';
-    });
-    const ult=pa[pa.length-1];
-    if(ult) etiqAcum+='<text x="'+(ult.x-4).toFixed(1)+'" y="'+(ult.y-(j===0?8:-14)).toFixed(1)+
-      '" font-size="10" font-weight="800" fill="'+S.color+'" text-anchor="end">'+ult.acum.toFixed(1)+' m acum.</text>';
   });
+
+  /* ── LA RECTA QUE SUBE: metros producidos en el día, acumulados ──
+     Una sola línea, gruesa y dorada, que corta el plano de lado a lado. Cada día lleva su punto,
+     y ese punto se puede clicar para abrir el reporte de esa fecha. */
+  const ACUM_COL='#fbbf24';
+  const pa=acumTotal.map((v,i)=>({ x:cx(i), y:yA(v), acum:v, dia:series[0].serie[i].dia, fecha:series[0].serie[i].fecha, hoyM:totalDia[i] }));
+  let lineaAcum = pa.length>1
+    ? '<polyline points="'+pa.map(p=>p.x.toFixed(1)+','+p.y.toFixed(1)).join(' ')+
+      '" fill="none" stroke="'+ACUM_COL+'" stroke-width="3.4" stroke-linejoin="round" stroke-linecap="round"/>' : '';
+  let puntosAcum='', etiqAcum='';
+  pa.forEach((p,i)=>{
+    const sel=_fcDiaSel===p.fecha;
+    puntosAcum+='<circle class="fc-punto" cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="'+(sel?6:4.2)+'" '
+      +'fill="'+(sel?'#fff':ACUM_COL)+'" stroke="var(--coal3)" stroke-width="1.6" style="cursor:pointer" '
+      +'onclick="fcVerDia(\''+p.fecha+'\')"><title>'+p.dia+' — producido en el día: '+p.hoyM.toFixed(2)
+      +' m (las dos labores)\nAcumulado: '+p.acum.toFixed(2)+' m\nClic para ver el reporte del día</title></circle>';
+    // El valor del día se escribe cada tantos días para que la recta siga legible.
+    if(p.hoyM>0 && (i%etq===0 || i===pa.length-1))
+      etiqAcum+='<text x="'+p.x.toFixed(1)+'" y="'+(p.y-9).toFixed(1)+'" font-size="8" font-weight="700" fill="'
+        +ACUM_COL+'" text-anchor="middle" opacity=".9">'+p.hoyM.toFixed(1)+'</text>';
+  });
+  const ultAcum=pa[pa.length-1];
+  if(ultAcum) etiqAcum+='<text x="'+(ultAcum.x-6).toFixed(1)+'" y="'+(ultAcum.y-20).toFixed(1)+
+    '" font-size="11" font-weight="800" fill="'+ACUM_COL+'" text-anchor="end">'+ultAcum.acum.toFixed(1)+' m acumulados</text>';
 
   const fechas=(series[0]?series[0].serie:[]).map((s,i)=>(i%etq===0||i===n-1)
     ? '<text x="'+cx(i).toFixed(1)+'" y="'+(MT+ih+14)+'" font-size="8" fill="var(--text3)" text-anchor="middle">'+s.dia+'</text>':'').join('');
   const rotulos='<text x="'+ML+'" y="'+(MT-16)+'" font-size="9" font-weight="700" fill="var(--text3)">METROS DEL DÍA (barras)</text>'
     +'<text x="'+ejeF+'" y="'+(MT-16)+'" font-size="9" font-weight="700" fill="#fbbf24" opacity=".9">kg/m</text>'
-    +'<text x="'+ejeA+'" y="'+(MT-16)+'" font-size="9" font-weight="700" fill="var(--text3)">m acum.</text>'
-    +'<text x="'+(ML+iw/2)+'" y="'+(MT-16)+'" font-size="9" fill="var(--text3)" text-anchor="middle">línea llena = factor de carga del día · línea punteada = avance acumulado · clic en un día para ver su reporte</text>';
+    +'<text x="'+ejeA+'" y="'+(MT-16)+'" font-size="9" font-weight="700" fill="#fbbf24" opacity=".9">m acum.</text>'
+    +'<text x="'+(ML+iw/2)+'" y="'+(MT-16)+'" font-size="9" fill="var(--text3)" text-anchor="middle">línea de color = factor de carga del día · línea dorada = metros producidos acumulados · clic en un punto para ver el reporte del día</text>';
   // Franja invisible por día, encima de todo: da un blanco cómodo para el clic (y para el dedo en
   // el celular), sin depender de acertarle a un punto de 4 px.
   const zonas=(series[0]?series[0].serie:[]).map((s,i)=>{
     const det=series.map(S=>S.nombre+': '+S.serie[i].metros+' m'
-      +(S.serie[i].fc>0?' · '+S.serie[i].fc.toFixed(2)+' kg/m':'')+' · acum. '+S.acum[i]+' m').join('  |  ');
+      +(S.serie[i].fc>0?' · '+S.serie[i].fc.toFixed(2)+' kg/m':'')).join('  |  ')
+      +'  ||  producido del día: '+totalDia[i].toFixed(2)+' m · acumulado: '+acumTotal[i].toFixed(2)+' m';
     return '<rect class="fc-dia'+(_fcDiaSel===s.fecha?' fc-dia-sel':'')+'" x="'+(ML+paso*i).toFixed(1)+'" y="'+MT+'" width="'+paso.toFixed(1)+'" height="'+ih+'" '
       +'fill="'+(_fcDiaSel===s.fecha?'rgba(251,191,36,.14)':'transparent')+'" style="cursor:pointer" '
       +'onclick="fcVerDia(\''+s.fecha+'\')"><title>'+s.dia+' — '+det+'\nClic para ver el reporte del día</title></rect>';
   }).join('');
   return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;min-width:900px;height:auto;display:block">'
-    +rejilla+barras+optimos+lineasAcum+puntosAcum+lineasFC+puntosFC+valoresFC+etiqAcum+fechas+rotulos+zonas+'</svg>';
+    +rejilla+barras+optimos+lineaAcum+lineasFC+valoresFC+puntosFC+zonas+puntosAcum+etiqAcum+fechas+rotulos+'</svg>';
 }
 /* Día seleccionado en el gráfico. Al hacer clic se abre debajo el detalle de ESE día: qué
    reportó cada jefe de guardia, disparo por disparo, con sus kilos y su factor. */
@@ -7481,16 +7502,18 @@ function renderDashVoladura(){
     +'<div style="font-size:11px;color:var(--text3);margin-bottom:12px;line-height:1.6">'
       +'Las <b style="color:var(--text2)">barras</b> son los metros de cada día por labor. La <b style="color:var(--text2)">línea llena</b> es el '
       +'<b style="color:var(--text2)">factor de carga diario</b> (kg/m, eje derecho): va horizontal porque ronda su óptimo, y se nota el día que se sale. '
-      +'La <b style="color:var(--text2)">línea punteada</b> es el <b style="color:var(--text2)">avance acumulado</b> del mes (m, eje del extremo derecho): sube día a día '
-      +'y se cruza con la de la otra labor cuando una le pasa a la otra. '
+      +'La <b style="color:#fbbf24">línea dorada</b> es lo <b style="color:#fbbf24">producido cada día entre las dos labores, acumulado</b> '
+      +'(m, eje del extremo derecho): sube y corta el plano, y cada día lleva su punto — <b style="color:var(--text2)">haz clic en él</b> para ver el reporte de esa fecha. '
       +'<span style="color:#22c55e">Verde</span> cargó menos, <span style="color:#f59e0b">naranja</span> en el punto (±2%), <span style="color:#ef4444">rojo</span> cargó de más.'
     +'</div>'
     +'<div style="display:flex;gap:18px;flex-wrap:wrap;font-size:11px;margin-bottom:6px">'
       +LAB.map((L,j)=>'<span style="display:inline-flex;align-items:center;gap:6px;color:var(--text2)">'
         +'<span style="width:14px;height:9px;border-radius:2px;background:'+L.color+';opacity:.55"></span>metros del día '+L.nombre
         +'<span style="width:16px;height:3px;border-radius:2px;background:'+L.color+';margin-left:8px"></span>factor '+L.nombre
-        +'<span style="width:16px;height:0;border-top:3px dashed '+L.color+';margin-left:8px"></span>acumulado '+L.nombre
         +' <span style="color:var(--text3)">(óptimo '+fcOptimo(L.key)+')</span></span>').join('')
+      +'<span style="display:inline-flex;align-items:center;gap:6px;color:var(--text2)">'
+        +'<span style="width:18px;height:3px;border-radius:2px;background:#fbbf24"></span>'
+        +'<span style="width:8px;height:8px;border-radius:50%;background:#fbbf24"></span>metros producidos acumulados (las dos labores)</span>'
     +'</div>'
     +'<div class="table-wrap" style="overflow-x:auto">'+fcGraficoCruzadoSVG(series)+'</div>'
     +'<div id="d-voladura-dia">'+fcDetalleDiaHTML(_fcDiaSel)+'</div>'
