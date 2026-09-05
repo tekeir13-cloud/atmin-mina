@@ -2645,6 +2645,9 @@ select option{background:var(--coal3);}
   <div id="d-resumen-hoy"></div>
   <div id="d-avance-meta"></div>
   <div id="d-explosivo-metro"></div>
+  <!-- Bloque adicional: solo Rampa y Cortada, las dos labores con óptimo de carga. El avance de
+       TODAS las labores se sigue viendo arriba, como siempre; esto no lo reemplaza. -->
+  <div id="d-voladura"></div>
   <div id="d-top-trabajadores"></div>
   <div id="d-stock-actual"></div>
   <div id="d-alertas-panel"></div>
@@ -7120,6 +7123,7 @@ function renderDashboard(){
   renderDashResumenHoy();
   renderDashAvanceMeta();
   renderDashExplosivoMetro();
+  try{ renderDashVoladura(); }catch(e){ console.warn('voladura',e); }
   renderDashTopTrabajadores();
   renderDashStockActual();
   renderDashAlertas();
@@ -7180,6 +7184,112 @@ function explosivoGastoComp(per){
   const enPer=f=>!per || ((typeof enVentana==='function')?enVentana(f,per):String(f||'').slice(0,7)===per);
   return (state.compresorista||[]).filter(r=>r&&enPer(r.fecha))
     .reduce((s,r)=>{ try{ return s+(compCostoReporte(r).cExp||0); }catch(e){ return s; } },0);
+}
+/* ── VOLADURA: FACTOR DE CARGA Y AVANCE, DÍA A DÍA ─────────────────────────────
+   Solo Rampa y Cortada, que son las dos labores con óptimo definido. Cruza en un mismo gráfico
+   lo que se cargó (kg/m) contra lo que se avanzó (m): así se ve si un día de mucho avance vino
+   con sobrecarga, o si bajar la carga costó metros.
+   Se dibuja en SVG, sin librería: el dato tiene que verse aunque la mina esté sin señal. */
+function fcSerieDiaria(key, dias){
+  const N=dias||14;
+  const hoyStr=hoy();
+  const dd=n=>{ const t=new Date(hoyStr+'T12:00:00'); t.setDate(t.getDate()-n); return t.toISOString().slice(0,10); };
+  const fechas=[]; for(let i=N-1;i>=0;i--) fechas.push(dd(i));
+  const porDia={}; fechas.forEach(f=>porDia[f]={kg:0, metros:0});
+  (state.reportesGuardia||[]).forEach(r=>{
+    const f=String(r&&r.fecha||'').slice(0,10);
+    if(!porDia[f]) return;
+    const bloque=r[key]; if(!bloque) return;
+    const disp=(bloque.disparos&&bloque.disparos.length)?bloque.disparos:[];
+    disp.forEach(d=>{ porDia[f].kg+=fcKilos(d); porDia[f].metros+=Number(d.metros)||0; });
+    if(!disp.length){ porDia[f].metros+=Number(bloque.metros)||0; porDia[f].kg+=Number(bloque.kg)||0; }
+  });
+  const opt=fcOptimo(key);
+  return fechas.map(f=>{
+    const d=porDia[f];
+    const fc=d.metros>0?d.kg/d.metros:0;
+    const desvio=(opt&&fc>0)?((fc-opt)/opt):0;
+    let color='var(--text3)';
+    if(fc>0&&opt){ color = desvio>FC_TOLERANCIA?'#ef4444' : (desvio<-FC_TOLERANCIA?'#22c55e':'#f59e0b'); }
+    return { fecha:f, dia:f.slice(8,10)+'/'+f.slice(5,7), kg:d.kg, metros:Math.round(d.metros*100)/100,
+             fc:Math.round(fc*100)/100, desvio, color, optimo:opt };
+  });
+}
+/* Un gráfico por labor: barras = metros avanzados, línea = factor de carga, raya punteada = el
+   óptimo. Los dos ejes conviven porque la pregunta es justamente cómo se mueve uno con el otro. */
+function fcGraficoSVG(serie, titulo, colorBarra){
+  const W=560, H=190, ML=38, MR=42, MT=16, MB=26;
+  const iw=W-ML-MR, ih=H-MT-MB;
+  const maxM=Math.max(1, ...serie.map(s=>s.metros))*1.15;
+  const opt=serie[0]?serie[0].optimo:0;
+  const maxF=Math.max(opt*1.4, ...serie.map(s=>s.fc))*1.05 || 1;
+  const n=serie.length||1;
+  const bw=Math.max(6, iw/n*0.55);
+  const x=i=>ML+iw*(i+0.5)/n;
+  const yM=v=>MT+ih-(v/maxM)*ih;
+  const yF=v=>MT+ih-(v/maxF)*ih;
+  const barras=serie.map((s,i)=>s.metros>0
+    ? '<rect x="'+(x(i)-bw/2).toFixed(1)+'" y="'+yM(s.metros).toFixed(1)+'" width="'+bw.toFixed(1)+
+      '" height="'+(MT+ih-yM(s.metros)).toFixed(1)+'" rx="2" fill="'+colorBarra+'" opacity=".45"><title>'+
+      s.dia+' · '+s.metros+' m</title></rect>' : '').join('');
+  const pts=serie.map((s,i)=>s.fc>0?(x(i).toFixed(1)+','+yF(s.fc).toFixed(1)):null).filter(Boolean);
+  const linea=pts.length>1?'<polyline points="'+pts.join(' ')+'" fill="none" stroke="var(--text2)" stroke-width="1.6" opacity=".55"/>':'';
+  const puntos=serie.map((s,i)=>s.fc>0
+    ? '<circle cx="'+x(i).toFixed(1)+'" cy="'+yF(s.fc).toFixed(1)+'" r="4.5" fill="'+s.color+'" stroke="var(--coal3)" stroke-width="1.2">'+
+      '<title>'+s.dia+' · '+s.fc.toFixed(2)+' kg/m'+(opt?' (óptimo '+opt+')':'')+'</title></circle>' : '').join('');
+  const yOpt=opt?yF(opt):0;
+  const rayaOpt=opt?'<line x1="'+ML+'" y1="'+yOpt.toFixed(1)+'" x2="'+(W-MR)+'" y2="'+yOpt.toFixed(1)+
+    '" stroke="#ef4444" stroke-width="1.2" stroke-dasharray="6 4" opacity=".85"/>'+
+    '<text x="'+(W-MR+4)+'" y="'+(yOpt+3.5).toFixed(1)+'" font-size="9" fill="#ef4444">'+opt+'</text>':'';
+  const etiquetas=serie.map((s,i)=>(n<=16||i%2===0)
+    ? '<text x="'+x(i).toFixed(1)+'" y="'+(H-8)+'" font-size="8.5" fill="var(--text3)" text-anchor="middle">'+s.dia+'</text>':'').join('');
+  const ejeM='<text x="4" y="'+(MT+9)+'" font-size="8.5" fill="var(--text3)">'+maxM.toFixed(1)+' m</text>';
+  const ejeF='<text x="'+(W-MR+4)+'" y="'+(MT+9)+'" font-size="8.5" fill="var(--text3)">'+maxF.toFixed(1)+'</text>';
+  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block">'
+    +'<line x1="'+ML+'" y1="'+(MT+ih)+'" x2="'+(W-MR)+'" y2="'+(MT+ih)+'" stroke="var(--border)" stroke-width="1"/>'
+    +barras+rayaOpt+linea+puntos+etiquetas+ejeM+ejeF+'</svg>';
+}
+function renderDashVoladura(){
+  const cont=document.getElementById('d-voladura'); if(!cont) return;
+  const LAB=[{key:'brenda',nombre:'Rampa',color:'#60a5fa'},{key:'crne',nombre:'Cortada',color:'#34d399'}];
+  const bloques=LAB.map(L=>{
+    const serie=fcSerieDiaria(L.key,14);
+    const conDato=serie.filter(s=>s.fc>0);
+    const kg=serie.reduce((a,s)=>a+s.kg,0), m=serie.reduce((a,s)=>a+s.metros,0);
+    const fcProm=m>0?kg/m:0;
+    const opt=fcOptimo(L.key);
+    const desv=opt&&fcProm>0?((fcProm-opt)/opt):0;
+    const colProm=fcProm>0&&opt?(desv>FC_TOLERANCIA?'#ef4444':(desv<-FC_TOLERANCIA?'#22c55e':'#f59e0b')):'var(--text3)';
+    const cuenta=e=>conDato.filter(s=>{const d=(s.fc-opt)/opt; return e==='alto'?d>FC_TOLERANCIA:(e==='bajo'?d<-FC_TOLERANCIA:Math.abs(d)<=FC_TOLERANCIA);}).length;
+    return '<div style="background:var(--coal4);border:1px solid var(--border);border-radius:14px;padding:14px 16px">'
+      +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
+        +'<div style="font-size:13px;font-weight:800;color:'+L.color+'">'+L.nombre+'</div>'
+        +'<div style="font-size:11px;color:var(--text3)">óptimo '+opt+' kg/m · tolerancia ±2%</div>'
+        +'<div style="margin-left:auto;font-size:11px;color:var(--text3)">Factor promedio '
+          +'<b style="color:'+colProm+';font-size:15px">'+(fcProm>0?fcProm.toFixed(2):'—')+'</b> kg/m</div>'
+      +'</div>'
+      +fcGraficoSVG(serie, L.nombre, L.color)
+      +'<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:10.5px;color:var(--text3);margin-top:8px">'
+        +'<span>📏 <b style="color:'+L.color+'">'+m.toFixed(1)+' m</b> en 14 días</span>'
+        +'<span>⚖️ <b style="color:var(--text2)">'+kg.toFixed(1)+' kg</b> de explosivo</span>'
+        +'<span style="color:#22c55e">● '+cuenta('bajo')+' bajo</span>'
+        +'<span style="color:#f59e0b">● '+cuenta('optimo')+' en punto</span>'
+        +'<span style="color:#ef4444">● '+cuenta('alto')+' sobre</span>'
+      +'</div></div>';
+  }).join('');
+  cont.innerHTML=
+  '<div style="background:var(--coal3);border:1px solid var(--border);border-radius:18px;padding:18px;margin-bottom:18px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px">'
+      +'<div style="font-size:15px;font-weight:900;color:var(--gold-light);letter-spacing:.4px">⚖️ FACTOR DE CARGA Y AVANCE — RAMPA Y CORTADA</div>'
+      +'<div style="font-size:11px;color:var(--text3)">últimos 14 días</div>'
+    +'</div>'
+    +'<div style="font-size:11px;color:var(--text3);margin-bottom:14px;line-height:1.6">'
+      +'Las <b style="color:var(--text2)">barras</b> son los metros avanzados cada día; los <b style="color:var(--text2)">puntos</b>, el factor de carga de ese día, '
+      +'y la <b style="color:#ef4444">raya roja</b>, el óptimo de la labor. '
+      +'<span style="color:#22c55e">Verde</span> cargó menos, <span style="color:#f59e0b">naranja</span> en el punto, <span style="color:#ef4444">rojo</span> cargó de más.'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:14px">'+bloques+'</div>'
+  +'</div>';
 }
 function renderDashExplosivoMetro(){
   const cont=document.getElementById('d-explosivo-metro'); if(!cont) return;
@@ -19082,7 +19192,7 @@ function renderAvance(){
         </div>
       </div>
       <div id="${rgid}" class="two-col" style="display:none;margin-top:12px">
-        ${FRENTES.filter(fc=>fc.activo!==false||r[fc.key]).map(fc=>rgFrenteDetalleHTML(r[fc.key],fc.color,fc.emoji+' '+fc.nombre)).join('')}
+        ${FRENTES.filter(fc=>fc.activo!==false||r[fc.key]).map(fc=>rgFrenteDetalleHTML(r[fc.key],fc.color,fc.emoji+' '+fc.nombre,fc.key)).join('')}
       </div>
     </div>`;
   }).join('');
@@ -20265,17 +20375,16 @@ function _rgEsTajoPfx(pfx){ const f=FRENTES.find(x=>x.pfx===pfx); return !!(f&&f
    punto (naranja); por debajo, se cargó menos (verde); por encima, se cargó de más (rojo). */
 const KG_POR_MASA = 0.1786;              // peso de una masa de emulnor
 const FC_TOLERANCIA = 0.02;              // ±2% alrededor del óptimo
-const FC_OPTIMO_KEY = 'atmin_fc_optimo';
-const FC_OPTIMO_DEF = 2.20;              // kg/m — se ajusta desde el reporte
-function fcOptimo(){
-  try{ const v=parseFloat(localStorage.getItem(FC_OPTIMO_KEY)); if(v>0) return v; }catch(e){}
-  return FC_OPTIMO_DEF;
-}
-function fcOptimoSet(v){
-  const n=parseFloat(v);
-  if(!(n>0)) return;
-  try{ localStorage.setItem(FC_OPTIMO_KEY, String(n)); }catch(e){}
-  try{ if(typeof configSync==='function') configSync('fc_optimo'); }catch(e){}
+// Solo estas dos labores se controlan por factor de carga, cada una con su óptimo. Las demás se
+// reportan igual pero no se juzgan: sin óptimo no hay contra qué comparar, y un semáforo
+// inventado es peor que ninguno.
+const FC_OPTIMOS = { brenda:27.5, crne:23.6 };
+function fcSeControla(key){ return Object.prototype.hasOwnProperty.call(FC_OPTIMOS, String(key||'')); }
+function fcOptimo(key){ return FC_OPTIMOS[String(key||'')] || 0; }
+// De qué labor es un prefijo del formulario (br → brenda, cr → crne).
+function fcKeyDePfx(pfx){
+  const f=(typeof FRENTES!=='undefined'?FRENTES:[]).find(x=>x.pfx===pfx);
+  return f?f.key:'';
 }
 // ¿Esta masa aporta peso de carga? Solo el emulnor.
 function fcEsCarga(id){ return /^M\d/.test(String(id||'')); }
@@ -20286,11 +20395,11 @@ function fcKilos(d){
   const masas=suma(d.masas)+suma(d.desquiche&&d.desquiche.masas);
   return Math.round(masas*KG_POR_MASA*10000)/10000;
 }
-// Factor de carga de un disparo y su lectura contra el óptimo.
-function fcDisparo(d, optimo){
-  const opt=Number(optimo)||fcOptimo();
+// Factor de carga de un disparo y su lectura contra el óptimo de SU labor.
+function fcDisparo(d, key){
+  const opt=fcOptimo(key);
   const kg=fcKilos(d), m=Number(d&&d.metros)||0;
-  if(!(m>0) || !(kg>0)) return { kg, metros:m, fc:0, estado:'sin', color:'var(--text3)', desvio:0, optimo:opt };
+  if(!opt || !(m>0) || !(kg>0)) return { kg, metros:m, fc:(m>0&&kg>0?Math.round(kg/m*1000)/1000:0), estado:'sin', color:'var(--text3)', desvio:0, optimo:opt };
   const fc=kg/m;
   const desvio=(fc-opt)/opt;                       // + se cargó de más, − de menos
   let estado='optimo', color='#f59e0b';            // dentro de ±2%
@@ -20475,7 +20584,7 @@ function rgCalcTotales(pfx){
   // mientras se llena, que es cuando todavía se puede corregir el dato.
   try{
     document.querySelectorAll('#rg-'+pfx+'-disparos .rg-disparo').forEach((div,i)=>{
-      const r=fcDisparo(disparos[i]||{});
+      const r=fcDisparo(disparos[i]||{}, fcKeyDePfx(pfx));
       const tit=div.querySelector('.rg-disp-titulo'); if(!tit) return;
       tit.innerHTML='💥 Disparo '+(i+1)+
         (r.estado!=='sin'
@@ -20491,7 +20600,7 @@ function rgCalcTotales(pfx){
   const el=document.getElementById('rg-'+pfx+'-totales');if(!el)return;
   const expTxt=t.masas.length?t.masas.map(m=>exploNombre(m.id)+' ×'+rgFmtN(m.cant)).join(' · '):'—';
   // Factor del frente entero: los kilos de todos sus disparos entre los metros de todos ellos.
-  const fcFrente=fcDisparo({metros:t.metros, masas:[{id:'M3000',cant:t.kg/KG_POR_MASA}]});
+  const fcFrente=fcDisparo({metros:t.metros, masas:[{id:'M3000',cant:t.kg/KG_POR_MASA}]}, fcKeyDePfx(pfx));
   el.innerHTML='<div style="background:var(--coal4);border:1px dashed var(--accent);border-radius:8px;padding:10px 12px">'
     +'<div style="font-size:11px;font-weight:800;color:var(--accent-light);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Σ Totales del frente · '+disparos.length+' disparo'+(disparos.length!==1?'s':'')+'</div>'
     +'<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text2)">'
@@ -20505,15 +20614,17 @@ function rgCalcTotales(pfx){
     +'</div>';
 }
 // Detalle de un frente en el Panel de Operaciones: lista de disparos + fila de totales
-function rgFrenteDetalleHTML(f,color,nombre){
+function rgFrenteDetalleHTML(f,color,nombre,key){
   f=f||{};
+  // La labor a la que pertenece: define si su factor de carga se juzga y contra qué óptimo.
+  if(!key){ const fr=(typeof FRENTES!=='undefined'?FRENTES:[]).find(x=>x.nombre===String(nombre||'').replace(/^\S+\s/,'')); key=fr?fr.key:''; }
   const disp=(f.disparos&&f.disparos.length)?f.disparos:[rgLegacyDisparo(f)];
   const sostTxt=d=>d.sost==='cimbra'?('Cimbra '+(d.cimbra||0))
     :d.sost==='malla_perno'?('Malla '+(d.malla||0)+(d.m2malla?' ('+rgFmtN(d.m2malla)+' m²)':'')+' / Perno '+(d.perno||0)):'—';
   const masasTxt=ms=>{ms=(ms||[]).filter(m=>m.cant>0);return ms.length?ms.map(m=>exploNombre(m.id)+' ×'+rgFmtN(m.cant)).join(', '):'—';};
   const expTxt=d=>masasTxt(d.masas);
   const rows=disp.map((d,i)=>{
-    const fc=fcDisparo(d);
+    const fc=fcDisparo(d, key);
     let r='<tr>'
       +'<td style="padding:4px 6px;font-weight:700;color:'+color+'">D'+(i+1)+'</td>'
       +'<td style="padding:4px 6px;text-align:right">'+rgFmtN(d.metros||0)+' m</td>'
@@ -20543,7 +20654,7 @@ function rgFrenteDetalleHTML(f,color,nombre){
   }).join('');
   const t=rgComputeFrenteTotals(disp);
   const totExp=(t.masas||[]).length?t.masas.map(m=>exploNombre(m.id)+' ×'+rgFmtN(m.cant)).join(', '):'—';
-  const fcTot=fcDisparo({metros:t.metros, masas:[{id:'M3000',cant:(t.kg||0)/KG_POR_MASA}]});
+  const fcTot=fcDisparo({metros:t.metros, masas:[{id:'M3000',cant:(t.kg||0)/KG_POR_MASA}]}, key);
   return '<div style="border-left:3px solid '+color+';padding-left:10px">'
     +'<div style="font-size:12px;font-weight:700;color:'+color+';margin-bottom:6px">'+nombre+'</div>'
     +'<div style="font-size:12px;color:var(--text2);margin-bottom:8px;white-space:pre-wrap">'+(f.trabajos||'<span style="color:var(--text3)">Sin detalle de trabajos</span>')+'</div>'
