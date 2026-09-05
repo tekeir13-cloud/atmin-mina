@@ -21171,12 +21171,27 @@ function _rgEsTajoPfx(pfx){ const f=FRENTES.find(x=>x.pfx===pfx); return !!(f&&f
    Kilos de explosivo por metro lineal avanzado. Es la medida de si se está cargando de más o
    de menos: cargar de más quema plata y daña la caja; cargar de menos deja el disparo soplado.
 
-   El peso sale de las masas de EMULNOR, que es lo que carga el taladro —0.1786 kg cada una—.
+   El peso sale de las masas de EMULNOR, que es lo que carga el taladro, y cada tipo pesa lo suyo:
+   EMULNOR 1000 → 0.0946 kg, 3000 → 0.1096 kg, 5000 → 0.1157 kg por masa.
    Los accesorios (carmex, fanel, mecha, cordón) no se cuentan: son iniciación, no carga.
 
    El ÓPTIMO se compara con una tolerancia de ±2%: dentro de esa franja el disparo está en su
    punto (naranja); por debajo, se cargó menos (verde); por encima, se cargó de más (rojo). */
-const KG_POR_MASA = 0.1786;              // peso de una masa de emulnor
+// Peso de UNA masa, por tipo de emulnor: cada uno pesa distinto, así que contar masas sueltas y
+// multiplicarlas todas por el mismo número daba un factor de carga equivocado.
+const KG_POR_MASA_TIPO = {
+  M1000: 0.0946,   // EMULNOR 1000 1" × 7"
+  M3000: 0.1096,   // EMULNOR 3000 1" × 8"
+  M5000: 0.1157,   // EMULNOR 5000 1" × 8"
+};
+const KG_POR_MASA = KG_POR_MASA_TIPO.M3000;   // el de uso corriente, para lo que no diga el tipo
+function fcKgMasa(id){
+  const k=String(id||'').toUpperCase();
+  if(KG_POR_MASA_TIPO[k]!=null) return KG_POR_MASA_TIPO[k];
+  // Tolerante con el nombre: "EMULNOR 5000", "5000", "M5000" son el mismo producto.
+  const n=k.match(/(1000|3000|5000)/);
+  return n ? KG_POR_MASA_TIPO['M'+n[1]] : KG_POR_MASA;
+}
 const FC_TOLERANCIA = 0.02;              // ±2% alrededor del óptimo
 // Solo estas dos labores se controlan por factor de carga, cada una con su óptimo. Las demás se
 // reportan igual pero no se juzgan: sin óptimo no hay contra qué comparar, y un semáforo
@@ -21192,11 +21207,15 @@ function fcKeyDePfx(pfx){
 // ¿Esta masa aporta peso de carga? Solo el emulnor.
 function fcEsCarga(id){ return /^M\d/.test(String(id||'')); }
 // Kilos de explosivo de un disparo, incluido su desquiche —se cargó en el mismo tiro—.
+// Cada masa pesa según SU emulnor: 1000 → 0.0946 kg, 3000 → 0.1096 kg, 5000 → 0.1157 kg.
 function fcKilos(d){
   if(!d) return 0;
-  const suma=ms=>(ms||[]).reduce((a,m)=>a+(fcEsCarga(m.id)?(Number(m.cant)||0):0),0);
-  const masas=suma(d.masas)+suma(d.desquiche&&d.desquiche.masas);
-  return Math.round(masas*KG_POR_MASA*10000)/10000;
+  // Un disparo puede venir ya con sus kilos calculados (totales de frente, datos guardados):
+  // en ese caso mandan, no se vuelve a estimar a partir de masas que no están.
+  const suma=ms=>(ms||[]).reduce((a,m)=>a+(fcEsCarga(m.id)?((Number(m.cant)||0)*fcKgMasa(m.id)):0),0);
+  const kg=suma(d.masas)+suma(d.desquiche&&d.desquiche.masas);
+  if(!kg && Number(d.kg)>0) return Math.round(Number(d.kg)*10000)/10000;
+  return Math.round(kg*10000)/10000;
 }
 // Factor de carga de un disparo y su lectura contra el óptimo de SU labor.
 function fcDisparo(d, key){
@@ -21403,7 +21422,7 @@ function rgCalcTotales(pfx){
   const el=document.getElementById('rg-'+pfx+'-totales');if(!el)return;
   const expTxt=t.masas.length?t.masas.map(m=>exploNombre(m.id)+' ×'+rgFmtN(m.cant)).join(' · '):'—';
   // Factor del frente entero: los kilos de todos sus disparos entre los metros de todos ellos.
-  const fcFrente=fcDisparo({metros:t.metros, masas:[{id:'M3000',cant:t.kg/KG_POR_MASA}]}, fcKeyDePfx(pfx));
+  const fcFrente=fcDisparo({metros:t.metros, kg:t.kg}, fcKeyDePfx(pfx));
   el.innerHTML='<div style="background:var(--coal4);border:1px dashed var(--accent);border-radius:8px;padding:10px 12px">'
     +'<div style="font-size:11px;font-weight:800;color:var(--accent-light);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Σ Totales del frente · '+disparos.length+' disparo'+(disparos.length!==1?'s':'')+'</div>'
     +'<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text2)">'
@@ -21457,7 +21476,7 @@ function rgFrenteDetalleHTML(f,color,nombre,key){
   }).join('');
   const t=rgComputeFrenteTotals(disp);
   const totExp=(t.masas||[]).length?t.masas.map(m=>exploNombre(m.id)+' ×'+rgFmtN(m.cant)).join(', '):'—';
-  const fcTot=fcDisparo({metros:t.metros, masas:[{id:'M3000',cant:(t.kg||0)/KG_POR_MASA}]}, key);
+  const fcTot=fcDisparo({metros:t.metros, kg:t.kg||0}, key);
   return '<div style="border-left:3px solid '+color+';padding-left:10px">'
     +'<div style="font-size:12px;font-weight:700;color:'+color+';margin-bottom:6px">'+nombre+'</div>'
     +'<div style="font-size:12px;color:var(--text2);margin-bottom:8px;white-space:pre-wrap">'+(f.trabajos||'<span style="color:var(--text3)">Sin detalle de trabajos</span>')+'</div>'
