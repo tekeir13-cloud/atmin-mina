@@ -19324,14 +19324,14 @@ function renderEquiposOp(){
         +'<span style="color:'+(f.estado==='No Operativo'?'#f87171':'#22c55e')+'">● '+(f.estado||'Operativo')+'</span>'
         +'</div>'
       : '<div style="font-size:11.5px;color:var(--text3);margin-top:8px">Sin datos todavía — el jefe de guardia aún no reportó este equipo en '
-        +F+' · '+T+'. También puedes llenarla aquí.</div>';
+        +F+' · '+T+'. La hoja se llena sola cuando él guarde su reporte; puede imprimirse en blanco si hace falta.</div>';
     return '<div class="card" style="padding:12px 14px;border-left:3px solid '+col+'">'
       +'<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
         +'<div style="font-size:13px;font-weight:800">'+eq.fig+' '+eq.nombre+'</div>'
         +'<div style="font-size:11.5px;color:var(--text3)">'+(f&&f.operador?f.operador:'sin operador')
           +(f&&f.ingeniero?' · Jefe: '+f.ingeniero:'')+'</div>'
         +'<div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">'
-          +'<button class="btn btn-outline" style="font-size:11px;padding:6px 12px" onclick="eqopAbrirDia(\''+eq.id+'\')">✏ '+(f?'Ver / completar':'Llenar')+'</button>'
+          +(f?'<button class="btn btn-outline" style="font-size:11px;padding:6px 12px" onclick="eqopVerDia(\''+eq.id+'\')">👁 Ver hoja</button>':'')
           +'<button class="btn btn-outline" style="font-size:11px;padding:6px 12px" onclick="eqopImprimirDia(\''+eq.id+'\')">🖨 Imprimir</button>'
         +'</div>'
       +'</div>'+cuerpo+'</div>';
@@ -19360,7 +19360,7 @@ function renderEquiposOp(){
       +'<span style="font-size:11px;color:var(--text3)">'+f.fecha+' · '+(f.turno||'—')+' · '+(f.operador||'sin operador')+'</span>'
       +'<span style="font-size:11px;color:var(--text3)">⛏ M '+t.m+' / D '+t.d+' · '+eq.unidadCant+' '+t.cant+'</span>'
       +'<span style="margin-left:auto;display:flex;gap:6px">'
-        +'<button class="btn btn-outline" style="font-size:10.5px;padding:5px 10px" onclick="eqopAbrir(\''+f.id+'\')">✏</button>'
+        +'<button class="btn btn-outline" style="font-size:10.5px;padding:5px 10px" onclick="eqopVer(\''+f.id+'\')">👁</button>'
         +'<button class="btn btn-outline" style="font-size:10.5px;padding:5px 10px" onclick="eqopImprimir(\''+f.id+'\')">🖨</button>'
         +'<button class="btn btn-outline" style="font-size:10.5px;padding:5px 10px;color:#f87171;border-color:#f87171" onclick="eqopEliminar(\''+f.id+'\')">🗑</button>'
       +'</span></div>';
@@ -19369,7 +19369,7 @@ function renderEquiposOp(){
   cont.innerHTML=
    '<div style="margin-bottom:6px"><div class="section-title" style="margin:0">🚜 Reportes de Equipo — Scoop y Dumpers</div>'
     +'<div style="font-size:12px;color:var(--text3);margin-top:4px">Reporte diario de operación · formatos YA-FOR-OT-002 (scoop) y YA-FOR-OT-014 (dumper). '
-    +'Las tres hojas se llenan con lo que reporta el jefe de guardia en su reporte diario; aquí se revisan y se imprimen. '
+    +'Las tres hojas se llenan solas con lo que reporta el jefe de guardia en su reporte diario; aquí solo se consultan y se imprimen. '
     +'Se agrupan por el ciclo 26→25, igual que el resto de la operación.</div></div>'
    +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0 14px">'
     +'<label style="font-size:12px;color:var(--text3)">Día</label>'
@@ -19386,21 +19386,18 @@ function renderEquiposOp(){
    +'</div>'
    +'<div class="card" style="padding:0;overflow:hidden">'+filasHist+'</div>';
 }
-// Hoja del día y turno en pantalla; se crea en el momento si el jefe de guardia aún no reportó.
-function eqopAsegurarDia(equipoId){
+/* Hoja del día y turno en pantalla. Si el jefe de guardia todavía no reportó ese equipo, se arma
+   una hoja en blanco SOLO para verla o imprimirla: no se guarda nada, porque la hoja nace de su
+   reporte, no de que alguien la abriera aquí. */
+function eqopHojaDia(equipoId){
   eqopLoad();
   const F=_eqopFiltro.fecha||hoy(), T=_eqopFiltro.turno||'Día';
-  let f=eqopFicha(F,T,equipoId);
-  if(!f){
-    f={ id:'EQ'+Date.now()+Math.random().toString(36).slice(2,6), fecha:F, turno:T, equipo:equipoId,
-        empresa:'TEMUAL', zona:'Nv 2820', operador:'', dni:'', ingeniero:'', hini:'', hfin:'',
-        items:[eqopItemVacio()], petroleo:'', hrsInop:'', obs:'', estado:'Operativo', _ts:Date.now() };
-    state.equiposOp.push(f); eqopSave();
-  }
-  return f;
+  return eqopFicha(F,T,equipoId) || { id:'', fecha:F, turno:T, equipo:equipoId, empresa:'TEMUAL',
+    zona:'Nv 2820', operador:'', dni:'', ingeniero:'', hini:'', hfin:'', items:[],
+    petroleo:'', hrsInop:'', obs:'', estado:'Operativo' };
 }
-function eqopAbrirDia(equipoId){ const f=eqopAsegurarDia(equipoId); renderEquiposOp(); eqopAbrir(f.id); }
-function eqopImprimirDia(equipoId){ const f=eqopAsegurarDia(equipoId); eqopImprimir(f.id); }
+function eqopVerDia(equipoId){ eqopVerFicha(eqopHojaDia(equipoId)); }
+function eqopImprimirDia(equipoId){ eqopImprimirFicha(eqopHojaDia(equipoId)); }
 function eqopEliminar(id){
   if(!confirm('¿Eliminar esta hoja de equipo?')) return;
   if(typeof tombAdd==='function') tombAdd(id);
@@ -19408,118 +19405,79 @@ function eqopEliminar(id){
   eqopSave(); renderEquiposOp(); showNotif('✓ Hoja eliminada');
 }
 // ── Ficha: el mismo formato del papel, campo por campo ──
-let _eqopEdit='';
-function eqopAbrir(id){
+/* La hoja NO se edita aquí: la llena el jefe de guardia en su reporte diario y esta pestaña la
+   muestra tal cual, para revisarla e imprimirla. Si algo está mal, se corrige en el reporte. */
+function eqopVer(id){
   eqopLoad();
   const f=(state.equiposOp||[]).find(x=>x.id===id); if(!f){ showNotif('⚠ Hoja no encontrada','error'); return; }
-  _eqopEdit=id;
+  eqopVerFicha(f);
+}
+function eqopVerFicha(f){
+  const eq=equipoMina(f.equipo), t=eqopTotales(f);
+  const e=s=>String(s==null?'':s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+  const dato=(l,v)=>'<div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">'+l+'</div>'
+    +'<div style="font-size:13px;color:var(--text);font-weight:600">'+(e(v)||'—')+'</div></div>';
+  const filas=(f.items||[]).filter(i=>i.cod||i.hi||i.cant||i.m||i.d).map((it,i)=>
+    '<tr><td style="padding:5px 4px;text-align:center;color:var(--text3)">'+(i+1)+'</td>'
+    +'<td style="padding:5px 4px">'+e(it.cod)+'</td><td style="padding:5px 4px">'+e(eqopActTxt(it.cod))+'</td>'
+    +'<td style="padding:5px 4px;text-align:center">'+e(it.hi)+'</td><td style="padding:5px 4px;text-align:center">'+e(it.hf)+'</td>'
+    +'<td style="padding:5px 4px;text-align:center;color:var(--text3)">'+(eqopHorasItem(it)||'')+'</td>'
+    +'<td style="padding:5px 4px;text-align:center">'+e(it.m)+'</td><td style="padding:5px 4px;text-align:center">'+e(it.d)+'</td>'
+    +'<td style="padding:5px 4px;text-align:center">'+e(it.cant)+'</td>'
+    +'<td style="padding:5px 4px">'+e(it.oLabor)+(it.oNv?' <span style="color:var(--text3)">Nv '+e(it.oNv)+'</span>':'')+'</td>'
+    +'<td style="padding:5px 4px">'+e(it.dLabor)+(it.dNv?' <span style="color:var(--text3)">Nv '+e(it.dNv)+'</span>':'')+'</td></tr>').join('');
   let ov=document.getElementById('modal-equipo-op');
   if(!ov){
     ov=document.createElement('div');
     ov.className='modal-overlay'; ov.id='modal-equipo-op';
-    ov.onclick=e=>{ if(e.target===ov) eqopCerrar(); };
+    ov.onclick=ev=>{ if(ev.target===ov) cerrarModal('modal-equipo-op'); };
     ov.innerHTML='<div class="modal" style="width:min(1080px,97vw);max-height:93vh;overflow-y:auto"><div id="eqop-body"></div></div>';
     document.body.appendChild(ov);
   }
-  eqopRenderFicha();
+  document.getElementById('eqop-body').innerHTML=
+   '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+    +'<div class="modal-title" style="margin-bottom:0;color:#fbbf24">'+eq.fig+' Reporte diario de operación — '+eq.nombre+'</div>'
+    +'<button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal(\'modal-equipo-op\')">✕</button>'
+   +'</div>'
+   +'<div style="font-size:11px;color:var(--text3);margin-bottom:14px">Formato '+eq.formato+' · '+e(f.zona||'Nv 2820')
+    +' · Se llena en el <b style="color:var(--text2)">Reporte del Jefe de Guardia</b>; aquí solo se consulta e imprime.</div>'
+   +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px">'
+    +dato('Fecha',f.fecha)+dato('Turno',f.turno)+dato('Operador',f.operador)+dato('DNI',f.dni)
+    +dato('Ingeniero / Jefe de guardia',f.ingeniero)
+    +dato('Horómetro inicial',f.hini)+dato('Horómetro final',f.hfin)
+    +dato('Horas de horómetro',t.horometro>0?t.horometro.toFixed(1):'')
+   +'</div>'
+   +(filas
+     ? '<div class="table-wrap" style="overflow-x:auto"><table style="width:100%;min-width:880px;border-collapse:collapse;font-size:11.5px">'
+       +'<thead><tr style="color:var(--text3);text-align:left"><th style="padding:5px 4px">#</th><th style="padding:5px 4px">Cód.</th>'
+       +'<th style="padding:5px 4px">Actividad</th><th style="padding:5px 4px">Hr. ini.</th><th style="padding:5px 4px">Hr. fin</th>'
+       +'<th style="padding:5px 4px">Horas</th><th style="padding:5px 4px">M</th><th style="padding:5px 4px">D</th>'
+       +'<th style="padding:5px 4px">'+eq.unidadCant+'</th><th style="padding:5px 4px">Origen</th><th style="padding:5px 4px">Destino</th></tr></thead>'
+       +'<tbody>'+filas+'</tbody>'
+       +'<tfoot><tr style="border-top:1px solid var(--border);font-weight:800">'
+         +'<td colspan="5" style="padding:7px 4px;text-align:right;color:var(--text3)">TOTALES</td>'
+         +'<td style="padding:7px 4px;text-align:center">'+t.horas+'</td><td style="padding:7px 4px;text-align:center">'+t.m+'</td>'
+         +'<td style="padding:7px 4px;text-align:center">'+t.d+'</td><td style="padding:7px 4px;text-align:center">'+t.cant+'</td>'
+         +'<td colspan="2"></td></tr></tfoot></table></div>'
+     : '<div class="card" style="text-align:center;color:var(--text3);padding:22px;font-size:12px">'
+       +'Esta hoja todavía no tiene ítems. Los llena el jefe de guardia en su reporte del turno.</div>')
+   +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:16px 0">'
+    +dato('Petróleo (gls)',f.petroleo)+dato('Horas inoperativas',f.hrsInop)+dato('Estado final',f.estado||'Operativo')
+   +'</div>'
+   +(f.obs?'<div style="font-size:12px;color:var(--text2);background:var(--coal4);border-radius:8px;padding:10px 12px;margin-bottom:12px">'
+     +'<b style="color:var(--text3);font-size:10.5px;text-transform:uppercase">Observaciones</b><br>'+e(f.obs)+'</div>':'')
+   +'<div class="btn-row">'
+    +'<button class="btn btn-gold" onclick="eqopImprimirFicha('+JSON.stringify(JSON.stringify(f))+')">🖨 Imprimir / PDF</button>'
+    +'<button class="btn btn-outline" onclick="cerrarModal(\'modal-equipo-op\')">Cerrar</button>'
+   +'</div>';
   abrirModal('modal-equipo-op');
 }
-function eqopCerrar(){ eqopGuardar(true); cerrarModal('modal-equipo-op'); _eqopEdit=''; renderEquiposOp(); }
-function eqopActual(){ return (state.equiposOp||[]).find(x=>x.id===_eqopEdit); }
-function eqopRenderFicha(){
-  const f=eqopActual(); const body=document.getElementById('eqop-body'); if(!f||!body) return;
-  const eq=equipoMina(f.equipo), t=eqopTotales(f);
-  const esc=s=>String(s==null?'':s).replace(/"/g,'&quot;');
-  const inp=(campo,tipo,ph,ancho)=>'<input type="'+tipo+'" value="'+esc(f[campo])+'" placeholder="'+ph+'" '
-    +'oninput="eqopSet(\''+campo+'\',this.value)" style="width:'+(ancho||'100%')+'">';
-  const optEq=EQUIPOS_MINA.map(e=>'<option value="'+e.id+'"'+(f.equipo===e.id?' selected':'')+'>'+e.fig+' '+e.nombre+'</option>').join('');
-  const labores=eqopLabores();
-  const optLab=v=>'<option value=""></option>'+labores.map(l=>'<option'+(v===l?' selected':'')+'>'+l+'</option>').join('');
-  const optAct=v=>'<option value=""></option>'+EQOP_ACT.map(a=>'<option value="'+a.c+'"'+(String(v)===a.c?' selected':'')+'>'
-      +a.c+' · '+a.d+'</option>').join('');
-  const filas=(f.items||[]).map((it,i)=>{
-    const set=(c)=>'eqopItemSet('+i+',\''+c+'\',this.value)';
-    const td=(h)=>'<td style="padding:3px">'+h+'</td>';
-    return '<tr>'
-      +'<td style="padding:3px;text-align:center;color:var(--text3);font-size:11px">'+(i+1)+'</td>'
-      +td('<select onchange="'+set('cod')+'" style="width:100%;font-size:11px">'+optAct(it.cod)+'</select>')
-      +td('<input value="'+esc(it.hi)+'" placeholder="00:00" oninput="'+set('hi')+'" style="width:100%;font-size:11px">')
-      +td('<input value="'+esc(it.hf)+'" placeholder="00:00" oninput="'+set('hf')+'" style="width:100%;font-size:11px">')
-      +'<td style="padding:3px;text-align:center;font-size:11px;color:var(--text3)">'+(eqopHorasItem(it)||'')+'</td>'
-      +td('<input type="number" step="0.01" min="0" value="'+esc(it.m)+'" oninput="'+set('m')+'" style="width:100%;font-size:11px">')
-      +td('<input type="number" step="0.01" min="0" value="'+esc(it.d)+'" oninput="'+set('d')+'" style="width:100%;font-size:11px">')
-      +td('<input type="number" step="1" min="0" value="'+esc(it.cant)+'" oninput="'+set('cant')+'" style="width:100%;font-size:11px">')
-      +td('<select onchange="'+set('oLabor')+'" style="width:100%;font-size:11px">'+optLab(it.oLabor)+'</select>')
-      +td('<input value="'+esc(it.oNv||'2820')+'" oninput="'+set('oNv')+'" style="width:56px;font-size:11px">')
-      +td('<select onchange="'+set('dLabor')+'" style="width:100%;font-size:11px">'+optLab(it.dLabor)+'</select>')
-      +td('<input value="'+esc(it.dNv||'2820')+'" oninput="'+set('dNv')+'" style="width:56px;font-size:11px">')
-      +'<td style="padding:3px"><button class="btn btn-outline" style="font-size:10px;padding:3px 7px;color:#f87171;border-color:#f87171" onclick="eqopItemQuitar('+i+')">✕</button></td>'
-      +'</tr>';
-  }).join('');
-  body.innerHTML=
-   '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
-    +'<div class="modal-title" style="margin-bottom:0;color:#fbbf24">'+eq.fig+' Reporte diario de operación — '+eq.nombre+'</div>'
-    +'<button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="eqopCerrar()">✕</button>'
-   +'</div>'
-   +'<div style="font-size:11px;color:var(--text3);margin-bottom:12px">Formato '+eq.formato+' · '+(f.zona||'Nv 2820')+' · '
-    +'M = mineral, D = desmonte. Los códigos son los del formato oficial.</div>'
-   +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:14px">'
-    +'<div class="form-group" style="margin:0"><label>Equipo</label><select onchange="eqopSet(\'equipo\',this.value)" style="width:100%">'+optEq+'</select></div>'
-    +'<div class="form-group" style="margin:0"><label>Fecha</label>'+inp('fecha','date','')+'</div>'
-    +'<div class="form-group" style="margin:0"><label>Turno</label><select onchange="eqopSet(\'turno\',this.value)" style="width:100%">'
-      +['Día','Noche'].map(x=>'<option'+(f.turno===x?' selected':'')+'>'+x+'</option>').join('')+'</select></div>'
-    +'<div class="form-group" style="margin:0"><label>Zona</label>'+inp('zona','text','Nv 2820')+'</div>'
-    +'<div class="form-group" style="margin:0"><label>Operador</label>'+inp('operador','text','Nombre del operador')+'</div>'
-    +'<div class="form-group" style="margin:0"><label>DNI del operador</label>'+inp('dni','text','')+'</div>'
-    +'<div class="form-group" style="margin:0"><label>Ingeniero a cargo</label>'+inp('ingeniero','text','')+'</div>'
-    +'<div class="form-group" style="margin:0"><label>Horómetro inicial</label>'+inp('hini','number','')+'</div>'
-    +'<div class="form-group" style="margin:0"><label>Horómetro final</label>'+inp('hfin','number','')+'</div>'
-   +'</div>'
-   +'<div class="table-wrap" style="overflow-x:auto;margin-bottom:10px"><table style="width:100%;min-width:900px;border-collapse:collapse;font-size:11px">'
-    +'<thead><tr style="color:var(--text3);text-align:left">'
-      +'<th style="padding:4px">#</th><th style="padding:4px">Código de actividad</th>'
-      +'<th style="padding:4px">Hr. inicial</th><th style="padding:4px">Hr. final</th><th style="padding:4px">Horas</th>'
-      +'<th style="padding:4px">M</th><th style="padding:4px">D</th><th style="padding:4px">'+eq.unidadCant+'</th>'
-      +'<th style="padding:4px">Origen labor</th><th style="padding:4px">Nv.</th>'
-      +'<th style="padding:4px">Destino labor</th><th style="padding:4px">Nv.</th><th></th></tr></thead>'
-    +'<tbody>'+filas+'</tbody>'
-    +'<tfoot><tr style="border-top:1px solid var(--border);font-weight:800">'
-      +'<td colspan="4" style="padding:6px 4px;text-align:right;color:var(--text3)">TOTALES</td>'
-      +'<td style="padding:6px 4px">'+t.horas+'</td><td style="padding:6px 4px">'+t.m+'</td>'
-      +'<td style="padding:6px 4px">'+t.d+'</td><td style="padding:6px 4px">'+t.cant+'</td>'
-      +'<td colspan="5"></td></tr></tfoot></table></div>'
-   +'<button class="btn btn-outline" style="font-size:12px;padding:7px 14px;border-style:dashed;width:100%;margin-bottom:14px" onclick="eqopItemAgregar()">➕ Agregar ítem</button>'
-   +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:12px">'
-    +'<div class="form-group" style="margin:0"><label>Consumo de petróleo (gls)</label>'+inp('petroleo','number','')+'</div>'
-    +'<div class="form-group" style="margin:0"><label>Horas inoperativas</label>'+inp('hrsInop','number','')+'</div>'
-    +'<div class="form-group" style="margin:0"><label>Estado final del equipo</label><select onchange="eqopSet(\'estado\',this.value)" style="width:100%">'
-      +['Operativo','No Operativo'].map(x=>'<option'+(f.estado===x?' selected':'')+'>'+x+'</option>').join('')+'</select></div>'
-   +'</div>'
-   +'<div class="form-group"><label>Observaciones</label><textarea rows="2" oninput="eqopSet(\'obs\',this.value)" style="width:100%;resize:vertical">'
-    +String(f.obs||'')+'</textarea></div>'
-   +'<div class="btn-row">'
-    +'<button class="btn btn-gold" onclick="eqopGuardar()">💾 Guardar hoja</button>'
-    +'<button class="btn btn-outline" onclick="eqopImprimir(\''+f.id+'\')">🖨 Imprimir / PDF</button>'
-    +'<button class="btn btn-outline" onclick="eqopCerrar()">Cerrar</button>'
-   +'</div>';
-}
-function eqopSet(campo,valor){ const f=eqopActual(); if(!f) return; f[campo]=valor; f._ts=Date.now();
-  if(campo==='equipo'||campo==='turno') eqopRenderFicha(); }
-function eqopItemSet(i,campo,valor){ const f=eqopActual(); if(!f||!f.items[i]) return; f.items[i][campo]=valor; f._ts=Date.now();
-  if(campo==='hi'||campo==='hf'||campo==='m'||campo==='d'||campo==='cant') eqopRefrescarTotales(); }
-function eqopRefrescarTotales(){ const f=eqopActual(); if(!f) return; const t=eqopTotales(f);
-  const tf=document.querySelector('#eqop-body tfoot tr');
-  if(tf) tf.innerHTML='<td colspan="4" style="padding:6px 4px;text-align:right;color:var(--text3)">TOTALES</td>'
-    +'<td style="padding:6px 4px">'+t.horas+'</td><td style="padding:6px 4px">'+t.m+'</td>'
-    +'<td style="padding:6px 4px">'+t.d+'</td><td style="padding:6px 4px">'+t.cant+'</td><td colspan="5"></td>'; }
-function eqopItemAgregar(){ const f=eqopActual(); if(!f) return; (f.items=f.items||[]).push(eqopItemVacio()); eqopRenderFicha(); }
-function eqopItemQuitar(i){ const f=eqopActual(); if(!f) return; f.items.splice(i,1); if(!f.items.length) f.items.push(eqopItemVacio()); eqopRenderFicha(); }
-function eqopGuardar(silencio){ const f=eqopActual(); if(!f) return; f._ts=Date.now(); eqopSave();
-  if(!silencio){ showNotif('✓ Hoja de equipo guardada'); renderEquiposOp(); } }
-// Impresión: el formato en papel, con sus firmas. Se abre en una ventana aparte para no
-// arrastrar los estilos oscuros de la app al papel.
 function eqopImprimir(id){
   const f=(state.equiposOp||[]).find(x=>x.id===id); if(!f) return;
+  eqopImprimirFicha(f);
+}
+function eqopImprimirFicha(ficha){
+  const f=(typeof ficha==='string')?JSON.parse(ficha):ficha; if(!f) return;
   const eq=equipoMina(f.equipo), t=eqopTotales(f);
   const e=s=>String(s==null?'':s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
   const filas=(f.items||[]).map((it,i)=>'<tr><td>'+(i+1)+'</td><td>'+e(it.cod)+'</td><td class="l">'+e(eqopActTxt(it.cod))+'</td>'
