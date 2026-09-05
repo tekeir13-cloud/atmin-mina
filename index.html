@@ -7335,9 +7335,81 @@ function fcGraficoCruzadoSVG(series){
   const fechas=(series[0]?series[0].serie:[]).map((s,i)=>(i%etq===0||i===n-1)
     ? '<text x="'+cx(i).toFixed(1)+'" y="'+(MT+ih+14)+'" font-size="8" fill="var(--text3)" text-anchor="middle">'+s.dia+'</text>':'').join('');
   const rotulos='<text x="'+ML+'" y="'+(MT-8)+'" font-size="9" font-weight="700" fill="var(--text3)">METROS DEL DÍA (barras)</text>'
-    +'<text x="'+(W-MR)+'" y="'+(MT-8)+'" font-size="9" font-weight="700" fill="var(--text3)" text-anchor="end">METROS ACUMULADOS (rectas) · el número sobre cada punto es el factor de carga kg/m</text>';
+    +'<text x="'+(W-MR)+'" y="'+(MT-8)+'" font-size="9" font-weight="700" fill="var(--text3)" text-anchor="end">METROS ACUMULADOS (rectas) · clic en un día para ver su reporte</text>';
+  // Franja invisible por día, encima de todo: da un blanco cómodo para el clic (y para el dedo en
+  // el celular), sin depender de acertarle a un punto de 4 px.
+  const zonas=(series[0]?series[0].serie:[]).map((s,i)=>{
+    const det=series.map(S=>S.nombre+': '+S.serie[i].metros+' m'
+      +(S.serie[i].fc>0?' · '+S.serie[i].fc.toFixed(2)+' kg/m':'')).join('  |  ');
+    return '<rect class="fc-dia'+(_fcDiaSel===s.fecha?' fc-dia-sel':'')+'" x="'+(ML+paso*i).toFixed(1)+'" y="'+MT+'" width="'+paso.toFixed(1)+'" height="'+ih+'" '
+      +'fill="'+(_fcDiaSel===s.fecha?'rgba(251,191,36,.14)':'transparent')+'" style="cursor:pointer" '
+      +'onclick="fcVerDia(\''+s.fecha+'\')"><title>'+s.dia+' — '+det+'\nClic para ver el reporte del día</title></rect>';
+  }).join('');
   return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;min-width:860px;height:auto;display:block">'
-    +rejilla+barras+optimos+lineas+puntos+valores+fechas+rotulos+'</svg>';
+    +rejilla+barras+optimos+lineas+puntos+valores+fechas+rotulos+zonas+'</svg>';
+}
+/* Día seleccionado en el gráfico. Al hacer clic se abre debajo el detalle de ESE día: qué
+   reportó cada jefe de guardia, disparo por disparo, con sus kilos y su factor. */
+let _fcDiaSel='';
+function fcVerDia(fecha){
+  _fcDiaSel = (_fcDiaSel===fecha) ? '' : fecha;
+  renderDashVoladura();
+  const d=document.getElementById('d-voladura-dia');
+  if(_fcDiaSel && d) try{ d.scrollIntoView({behavior:'smooth',block:'nearest'}); }catch(e){}
+}
+function fcDetalleDiaHTML(fecha){
+  if(!fecha) return '';
+  const LAB=[{key:'brenda',nombre:'Rampa',color:'#60a5fa'},{key:'crne',nombre:'Cortada',color:'#34d399'}];
+  const reps=(state.reportesGuardia||[]).filter(r=>String(r.fecha||'').slice(0,10)===fecha)
+    .sort((a,b)=>String(a.turno||'').localeCompare(String(b.turno||'')));
+  const dd=fecha.slice(8,10)+'/'+fecha.slice(5,7)+'/'+fecha.slice(0,4);
+  const cerrar='<button class="btn btn-outline" style="font-size:11px;padding:5px 12px;margin-left:auto" onclick="fcVerDia(\''+fecha+'\')">✕ Cerrar</button>';
+  if(!reps.length) return '<div class="card" style="margin-top:12px;padding:14px">'
+    +'<div style="display:flex;align-items:center;gap:10px"><b style="font-size:13px">📅 '+dd+'</b>'
+    +'<span style="font-size:12px;color:var(--text3)">Sin reporte de jefe de guardia ese día.</span>'+cerrar+'</div></div>';
+  const bloques=reps.map(r=>{
+    const partes=LAB.map(L=>{
+      const b=r[L.key]; if(!b) return '';
+      const disp=(b.disparos&&b.disparos.length)?b.disparos:[];
+      if(!disp.length && !(Number(b.metros)>0)) return '';
+      const opt=fcOptimo(L.key);
+      const filas=disp.map((d,i)=>{
+        const fd=fcDisparo(d,L.key);
+        const txt=(typeof FC_TXT!=='undefined'&&FC_TXT[fd.estado])?FC_TXT[fd.estado]:'';
+        return '<tr><td style="padding:4px 6px;color:var(--text3)">#'+(i+1)+'</td>'
+          +'<td style="padding:4px 6px">'+(Number(d.metros)||0)+' m</td>'
+          +'<td style="padding:4px 6px">'+fd.kg.toFixed(2)+' kg</td>'
+          +'<td style="padding:4px 6px;color:'+fd.color+';font-weight:700">'+(fd.fc>0?fd.fc.toFixed(2)+' kg/m':'—')+'</td>'
+          +'<td style="padding:4px 6px;color:'+fd.color+'">'+txt+(fd.estado!=='sin'&&opt?' ('+(fd.desvio>0?'+':'')+(fd.desvio*100).toFixed(1)+'%)':'')+'</td>'
+          +'<td style="padding:4px 6px;color:var(--text3)">'+(d.ltaladro?d.ltaladro+' m tal.':'')
+            +(d.m2malla?' · '+d.m2malla+' m² malla':'')+(d.pernos?' · '+d.pernos+' pernos':'')+'</td></tr>';
+      }).join('');
+      const kgT=disp.reduce((a,d)=>a+fcKilos(d),0), mT=disp.reduce((a,d)=>a+(Number(d.metros)||0),0)||Number(b.metros)||0;
+      const ft=fcDisparo({metros:mT,kg:kgT},L.key);
+      return '<div style="margin-top:10px">'
+        +'<div style="font-size:12px;font-weight:800;color:'+L.color+'">'+L.nombre
+          +' <span style="color:var(--text3);font-weight:600">· '+mT.toFixed(2)+' m · '+kgT.toFixed(2)+' kg · factor '
+          +'<b style="color:'+ft.color+'">'+(ft.fc>0?ft.fc.toFixed(2):'—')+'</b> kg/m (óptimo '+opt+')</span></div>'
+        +(filas?'<div class="table-wrap" style="overflow-x:auto"><table style="width:100%;font-size:11.5px;border-collapse:collapse;margin-top:4px">'
+          +'<thead><tr style="color:var(--text3);text-align:left"><th style="padding:4px 6px">Disparo</th>'
+          +'<th style="padding:4px 6px">Avance</th><th style="padding:4px 6px">Explosivo</th><th style="padding:4px 6px">Factor</th>'
+          +'<th style="padding:4px 6px">Contra el óptimo</th><th style="padding:4px 6px">Sostenimiento</th></tr></thead>'
+          +'<tbody>'+filas+'</tbody></table></div>':'')
+        +'</div>';
+    }).filter(Boolean).join('');
+    if(!partes) return '';
+    return '<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px">'
+      +'<div style="font-size:12px;color:var(--text2)"><b>Turno '+(r.turno||'—')+'</b>'
+        +'<span style="color:var(--text3)"> · Jefe de guardia: '+(r.jefe||'—')+'</span></div>'
+      +partes+'</div>';
+  }).filter(Boolean).join('');
+  return '<div class="card" style="margin-top:12px;padding:14px">'
+    +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+      +'<b style="font-size:13px">📅 Reporte del '+dd+'</b>'
+      +'<span style="font-size:11.5px;color:var(--text3)">'+reps.length+' reporte'+(reps.length!==1?'s':'')+' de guardia</span>'
+      +cerrar+'</div>'
+    +(bloques||'<div style="font-size:12px;color:var(--text3);margin-top:8px">Ese día no se reportaron disparos en Rampa ni en Cortada.</div>')
+    +'</div>';
 }
 function renderDashVoladura(){
   const cont=document.getElementById('d-voladura'); if(!cont) return;
@@ -7388,6 +7460,7 @@ function renderDashVoladura(){
         +' <span style="color:var(--text3)">(óptimo '+fcOptimo(L.key)+')</span></span>').join('')
     +'</div>'
     +'<div class="table-wrap" style="overflow-x:auto">'+fcGraficoCruzadoSVG(series)+'</div>'
+    +'<div id="d-voladura-dia">'+fcDetalleDiaHTML(_fcDiaSel)+'</div>'
     +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-top:14px">'+bloques+'</div>'
   +'</div>';
 }
