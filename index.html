@@ -19297,7 +19297,8 @@ function eqopDesdeGuardia(rep){
     f.operador=h.operador||f.operador||'';
     f.dni=h.dni||f.dni||'';
     f.items=(h.items&&h.items.length)?h.items.map(i=>Object.assign(eqopItemVacio(),i)):(f.items||[eqopItemVacio()]);
-    f.petroleo=h.petroleo||''; f.hrsInop=h.hrsInop||'';
+    f.hrsInop='';                    // la parada se calcula de la jornada, no se escribe
+    delete f.petroleo;               // el petróleo es del reporte del compresorista
     f.estado=h.estado||'Operativo'; f.obs=h.obs||'';
     f.ingeniero=rep.jefe||f.ingeniero||'';
     f._ts=Date.now(); n++;
@@ -19312,8 +19313,10 @@ function eqopDesdeGuardia(rep){
    que el reporte no quede interminable. */
 let _rgEq = {};                       // borrador en curso: {EQID:{hini,hfin,operador,dni,items:[],…}}
 let _rgEqAbierto = '';                // qué equipo está desplegado
+// El petróleo NO se pide aquí: lo lleva el compresorista en su reporte, y pedirlo dos veces solo
+// da dos cifras distintas del mismo combustible.
 function _rgEqBlanco(){ return { hini:'', hfin:'', operador:'', dni:'', items:[eqopItemVacio()],
-                                 petroleo:'', hrsInop:'', estado:'Operativo', obs:'' }; }
+                                 estado:'Operativo', obs:'' }; }
 function rgEquiposRender(datos){
   _rgEq={};
   const fch=(document.getElementById('rg-fecha')||{}).value||hoy();
@@ -19339,7 +19342,7 @@ function rgEquiposPintar(){
     const t=eqopTotales(v);
     const abierto=_rgEqAbierto===eq.id;
     const llenos=(v.items||[]).filter(i=>i.cod||i.hi||i.cant).length;
-    const resumen='⏱ '+(v.hini||'—')+' → '+(v.hfin||'—')+' · '+t.hm+' · 📋 '+llenos+' ítem'+(llenos!==1?'s':'')
+    const resumen='⏱ '+t.hm+' · ⛔ parada '+t.paradaHm+' · 📊 '+t.disp.toFixed(0)+'% · 📋 '+llenos+' ítem'+(llenos!==1?'s':'')
       +' · '+eq.labM+' '+t.m+' / '+eq.labD+' '+t.d+(eq.viajes?' · '+eq.unidadCant+' '+t.cant:'');
     const set=(campo)=>'rgEqSet(\''+eq.id+'\',\''+campo+'\',this.value)';
     const inp=(campo,tipo,ph)=>'<input type="'+tipo+'" value="'+esc(v[campo])+'" placeholder="'+ph+'" oninput="'+set(campo)+'" style="width:100%">';
@@ -19383,9 +19386,16 @@ function rgEquiposPintar(){
           +'<td style="padding:6px 4px">'+t.d+'</td>'+(eq.viajes?'<td style="padding:6px 4px">'+t.cant+'</td>':'')
           +'<td colspan="5"></td></tr></tfoot></table></div>'
       +'<button class="btn btn-outline" style="font-size:11.5px;padding:6px 12px;border-style:dashed;width:100%;margin:8px 0 10px" onclick="rgEqItemAgregar(\''+eq.id+'\')">➕ Agregar ítem</button>'
+      // La parada sale sola de las 8 horas de jornada: no se escribe, se calcula.
+      +'<div id="rg-disp-'+eq.id+'" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;background:var(--coal4);'
+        +'border-radius:8px;padding:8px 12px;margin:6px 0 10px;font-size:11.5px;color:var(--text3)">'
+        +'<span>Jornada <b style="color:var(--text2)">'+JORNADA_H+' h</b></span>'
+        +'<span>⏱ Trabajado <b style="color:var(--text2)">'+t.hm+'</b></span>'
+        +'<span>⛔ Parada <b style="color:'+(t.parada>0?'#f87171':'var(--text2)')+'">'+t.paradaHm+'</b></span>'
+        +'<span>📊 Disponibilidad <b style="color:'+t.dispColor+';font-size:14px">'+t.disp.toFixed(1)+'%</b> '
+          +'<span style="color:'+t.dispColor+'">'+eqopDispTxt(t.disp)+'</span></span>'
+      +'</div>'
       +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">'
-        +'<div class="form-group" style="margin:0"><label>Petróleo (gls)</label>'+inp('petroleo','number','')+'</div>'
-        +'<div class="form-group" style="margin:0"><label>Horas inoperativas</label>'+inp('hrsInop','number','')+'</div>'
         +'<div class="form-group" style="margin:0"><label>Estado final</label><select onchange="'+set('estado')+'" style="width:100%">'
           +['Operativo','No Operativo'].map(x=>'<option'+(v.estado===x?' selected':'')+'>'+x+'</option>').join('')+'</select></div>'
       +'</div>'
@@ -19415,10 +19425,16 @@ function rgEqItem(eqId,i,campo,valor){
   if(campo==='hi'||campo==='hf'||campo==='m'||campo==='d'||campo==='cant') rgEqTotales(eqId);
 }
 function rgEqTotales(eqId){
-  // Refresca solo los totales y el resumen del encabezado: repintar entero borraría lo que se
+  // Refresca solo los totales y la franja de disponibilidad: repintar entero borraría lo que se
   // está escribiendo en ese momento.
   const v=_rgEq[eqId]; if(!v) return;
   const t=eqopTotales(v), eq=equipoMina(eqId);
+  const fr=document.getElementById('rg-disp-'+eqId);
+  if(fr) fr.innerHTML='<span>Jornada <b style="color:var(--text2)">'+JORNADA_H+' h</b></span>'
+    +'<span>⏱ Trabajado <b style="color:var(--text2)">'+t.hm+'</b></span>'
+    +'<span>⛔ Parada <b style="color:'+(t.parada>0?'#f87171':'var(--text2)')+'">'+t.paradaHm+'</b></span>'
+    +'<span>📊 Disponibilidad <b style="color:'+t.dispColor+';font-size:14px">'+t.disp.toFixed(1)+'%</b> '
+      +'<span style="color:'+t.dispColor+'">'+eqopDispTxt(t.disp)+'</span></span>';
   const tf=document.querySelector('#rg-equipos tfoot tr');
   if(tf && _rgEqAbierto===eqId) tf.innerHTML='<td colspan="4" style="padding:6px 4px;text-align:right;color:var(--text3)">TOTALES</td>'
     +'<td style="padding:6px 4px">'+t.hm+'</td><td style="padding:6px 4px">'+t.m+'</td>'
@@ -19453,7 +19469,6 @@ function rgEquiposLeer(){
     d[eq.id]={ hini:String(v.hini||'').trim(), hfin:String(v.hfin||'').trim(),
                operador:String(v.operador||'').trim(), dni:String(v.dni||'').trim(),
                items:(v.items||[]).filter(i=>i.cod||i.hi||i.hf||i.m||i.d||i.cant||i.oLabor||i.dLabor),
-               petroleo:String(v.petroleo||'').trim(), hrsInop:String(v.hrsInop||'').trim(),
                estado:v.estado||'Operativo', obs:String(v.obs||'').trim() };
   });
   return d;
@@ -19478,17 +19493,56 @@ function eqopHM(dec){
   const d=Number(dec)||0;
   if(!d) return '—';
   const total=Math.round(d*60), h=Math.floor(total/60), m=total%60;
-  return (h?h+'h ':'')+(m||!h?m+'min':'').trim() || '0min';
+  const txt=(h?h+'h':'')+(h&&m?' ':'')+(m||!h?m+'min':'');
+  return txt || '0min';
+}
+/* JORNADA Y DISPONIBILIDAD DEL EQUIPO
+   La guardia son 8 horas de máquina. Lo que no se trabajó de esas 8 es TIEMPO DE PARADA, y no
+   hace falta que nadie lo escriba: sale de restar las horas de los ítems del turno. Con eso se
+   calcula la disponibilidad del día (trabajado ÷ 8) y, en el ciclo, dos cifras distintas que
+   conviene no confundir:
+     · el PROMEDIO DIARIO — la media de las disponibilidades de cada día, que dice cómo se comporta
+       la máquina en un día cualquiera;
+     · la TOTAL del periodo — horas trabajadas ÷ (8 × días con hoja), que pesa más los días largos.
+   Semáforo: menos de 85% rojo, 85% naranja, por encima verde. */
+const JORNADA_H = 8;
+const DISP_MIN  = 0.85;
+function eqopDispColor(pct){
+  const d=Number(pct)||0;
+  if(d < DISP_MIN*100) return '#ef4444';
+  if(d < 100)          return '#f59e0b';
+  return '#22c55e';
+}
+function eqopDispTxt(pct){
+  const d=Number(pct)||0;
+  return d<DISP_MIN*100 ? 'Bajo el mínimo (85%)' : (d<100?'Cerca del mínimo':'Jornada completa');
 }
 function eqopTotales(f){
   const it=f.items||[];
   const num=v=>Number(v)||0;
   const horas=Math.round(it.reduce((a,i)=>a+eqopHorasItem(i),0)*100)/100;
   const m=it.reduce((a,i)=>a+num(i.m),0), d=it.reduce((a,i)=>a+num(i.d),0);
+  // Parada del día: lo que faltó para las 8 horas de jornada.
+  const parada=Math.max(0, Math.round((JORNADA_H-horas)*100)/100);
+  const disp=Math.min(100, Math.round((horas/JORNADA_H)*1000)/10);
   return { horas, hm:eqopHM(horas), minutos:Math.round(horas*60),
+           parada, paradaHm:eqopHM(parada), disp, dispColor:eqopDispColor(disp),
            m, d, md:Math.round((m+d)*100)/100,       // cucharas totales en el scoop
            cant:it.reduce((a,i)=>a+num(i.cant),0),   // viajes
            horometro:Math.round(((Number(f.hfin)||0)-(Number(f.hini)||0))*100)/100 };
+}
+/* Acumulado del CICLO para un equipo: parada total y las dos disponibilidades. */
+function eqopResumenCiclo(equipoId, ciclo){
+  const per=ciclo||((typeof periodoActual==='function')?periodoActual():'');
+  const hojas=(state.equiposOp||[]).filter(f=>f.equipo===equipoId && eqopCiclo(f.fecha)===per);
+  let horas=0, parada=0, sumaDisp=0;
+  hojas.forEach(f=>{ const t=eqopTotales(f); horas+=t.horas; parada+=t.parada; sumaDisp+=t.disp; });
+  const dias=hojas.length;
+  const dispProm = dias ? Math.round((sumaDisp/dias)*10)/10 : 0;                 // media de las diarias
+  const dispTotal= dias ? Math.min(100, Math.round((horas/(JORNADA_H*dias))*1000)/10) : 0;
+  return { periodo:per, dias, horas:Math.round(horas*100)/100, parada:Math.round(parada*100)/100,
+           paradaHm:eqopHM(parada), dispProm, dispTotal,
+           colorProm:eqopDispColor(dispProm), colorTotal:eqopDispColor(dispTotal) };
 }
 // El horómetro final de la última hoja de un equipo es el inicial de la siguiente: se propone solo
 // y así no hay saltos en la lectura de la máquina.
@@ -19539,12 +19593,25 @@ function renderEquiposOp(){
         +'<span>⛏ '+eq.labM+' <b style="color:var(--text2)">'+t.m+'</b> · '+eq.labD+' <b style="color:var(--text2)">'+t.d+'</b>'
           +' <span style="color:var(--text3)">('+eq.totalMD.toLowerCase()+' '+t.md+')</span></span>'
         +(eq.viajes?'<span>'+eq.unidadCant+' <b style="color:var(--text2)">'+t.cant+'</b></span>':'')
-        +'<span>🛢 <b style="color:var(--text2)">'+(f.petroleo||0)+'</b> gls</span>'
+        +'<span>⛔ Parada <b style="color:'+(t.parada>0?'#f87171':'var(--text2)')+'">'+t.paradaHm+'</b></span>'
+        +'<span>📊 Disponibilidad <b style="color:'+t.dispColor+';font-size:13px">'+t.disp.toFixed(1)+'%</b></span>'
         +'<span style="color:'+(f.estado==='No Operativo'?'#f87171':'#22c55e')+'">● '+(f.estado||'Operativo')+'</span>'
         +(f.corregida?'<span style="color:#fbbf24">🔓 corregida'+(f.corregida.por?' por '+f.corregida.por:'')+'</span>':'')
         +'</div>'
       : '<div style="font-size:11.5px;color:var(--text3);margin-top:8px">Sin datos todavía — el jefe de guardia aún no reportó este equipo en '
         +F+' · '+T+'. La hoja se llena sola cuando él guarde su reporte; puede imprimirse en blanco si hace falta.</div>';
+    // Acumulado del ciclo: parada total y las dos disponibilidades (promedio diario y total).
+    const ac=eqopResumenCiclo(eq.id, eqopCiclo(F));
+    const acum=ac.dias
+      ? '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--text3);margin-top:8px;'
+        +'border-top:1px dashed var(--border);padding-top:8px">'
+        +'<span style="color:var(--text2);font-weight:700">Acumulado del ciclo</span>'
+        +'<span>🗓 <b style="color:var(--text2)">'+ac.dias+'</b> día'+(ac.dias!==1?'s':'')+'</span>'
+        +'<span>⏱ <b style="color:var(--text2)">'+eqopHM(ac.horas)+'</b> trabajadas</span>'
+        +'<span>⛔ Parada total <b style="color:'+(ac.parada>0?'#f87171':'var(--text2)')+'">'+ac.paradaHm+'</b></span>'
+        +'<span>📊 Promedio diario <b style="color:'+ac.colorProm+'">'+ac.dispProm.toFixed(1)+'%</b></span>'
+        +'<span>📈 Disponibilidad total <b style="color:'+ac.colorTotal+'">'+ac.dispTotal.toFixed(1)+'%</b></span>'
+      +'</div>' : '';
     return '<div class="card" style="padding:12px 14px;border-left:3px solid '+col+'">'
       +'<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
         +'<div style="font-size:13px;font-weight:800">'+eq.fig+' '+eq.nombre+'</div>'
@@ -19554,7 +19621,7 @@ function renderEquiposOp(){
           +(f?'<button class="btn btn-outline" style="font-size:11px;padding:6px 12px" onclick="eqopVerDia(\''+eq.id+'\')">👁 Ver hoja</button>':'')
           +'<button class="btn btn-outline" style="font-size:11px;padding:6px 12px" onclick="eqopImprimirDia(\''+eq.id+'\')">🖨 Imprimir</button>'
         +'</div>'
-      +'</div>'+cuerpo+'</div>';
+      +'</div>'+cuerpo+acum+'</div>';
   }).join('');
 
   // ── HISTORIAL DEL CICLO ── las hojas ya cerradas de días anteriores, por ciclo 26→25.
@@ -19688,8 +19755,27 @@ function eqopVerFicha(f){
      : '<div class="card" style="text-align:center;color:var(--text3);padding:22px;font-size:12px">'
        +'Esta hoja todavía no tiene ítems. Los llena el jefe de guardia en su reporte del turno.</div>')
    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:16px 0">'
-    +dato('Petróleo (gls)',f.petroleo)+dato('Horas inoperativas',f.hrsInop)+dato('Estado final',f.estado||'Operativo')
+    +dato('Estado final',f.estado||'Operativo')
    +'</div>'
+   +(function(){
+      const ac=eqopResumenCiclo(f.equipo, eqopCiclo(f.fecha));
+      return '<div style="background:var(--coal4);border-radius:10px;padding:12px 14px;margin-bottom:12px">'
+        +'<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--text3)">'
+          +'<span style="font-weight:800;color:var(--text2)">Jornada de '+JORNADA_H+' h</span>'
+          +'<span>⏱ Trabajado <b style="color:var(--text2)">'+t.hm+'</b></span>'
+          +'<span>⛔ Parada del día <b style="color:'+(t.parada>0?'#f87171':'var(--text2)')+'">'+t.paradaHm+'</b></span>'
+          +'<span>📊 Disponibilidad <b style="color:'+t.dispColor+';font-size:16px">'+t.disp.toFixed(1)+'%</b> '
+            +'<span style="color:'+t.dispColor+'">'+eqopDispTxt(t.disp)+'</span></span>'
+        +'</div>'
+        +(ac.dias?'<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;color:var(--text3);margin-top:8px;'
+          +'border-top:1px dashed var(--border);padding-top:8px">'
+          +'<span style="font-weight:700;color:var(--text2)">Acumulado del ciclo ('+ac.dias+' día'+(ac.dias!==1?'s':'')+')</span>'
+          +'<span>⛔ Parada total <b style="color:'+(ac.parada>0?'#f87171':'var(--text2)')+'">'+ac.paradaHm+'</b></span>'
+          +'<span>📊 Promedio diario <b style="color:'+ac.colorProm+'">'+ac.dispProm.toFixed(1)+'%</b></span>'
+          +'<span>📈 Disponibilidad total <b style="color:'+ac.colorTotal+'">'+ac.dispTotal.toFixed(1)+'%</b></span>'
+        +'</div>':'')
+      +'</div>';
+    })()
    +(f.obs?'<div style="font-size:12px;color:var(--text2);background:var(--coal4);border-radius:8px;padding:10px 12px;margin-bottom:12px">'
      +'<b style="color:var(--text3);font-size:10.5px;text-transform:uppercase">Observaciones</b><br>'+e(f.obs)+'</div>':'')
    +'<div class="btn-row">'
@@ -19781,9 +19867,14 @@ function eqopRenderEditor(){
       +'<td style="padding:6px 4px">'+t.d+'</td>'+(eq.viajes?'<td style="padding:6px 4px">'+t.cant+'</td>':'')
       +'<td colspan="5"></td></tr></tfoot></table></div>'
    +'<button class="btn btn-outline" style="font-size:12px;padding:7px 14px;border-style:dashed;width:100%;margin-bottom:14px" onclick="eqopEdItemAgregar()">➕ Agregar ítem</button>'
+   +'<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;background:var(--coal4);border-radius:8px;'
+     +'padding:8px 12px;margin-bottom:10px;font-size:11.5px;color:var(--text3)">'
+     +'<span>Jornada <b style="color:var(--text2)">'+JORNADA_H+' h</b></span>'
+     +'<span>⏱ Trabajado <b style="color:var(--text2)">'+t.hm+'</b></span>'
+     +'<span>⛔ Parada <b style="color:'+(t.parada>0?'#f87171':'var(--text2)')+'">'+t.paradaHm+'</b></span>'
+     +'<span>📊 Disponibilidad <b style="color:'+t.dispColor+';font-size:14px">'+t.disp.toFixed(1)+'%</b></span>'
+   +'</div>'
    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:10px">'
-    +'<div class="form-group" style="margin:0"><label>Petróleo (gls)</label>'+inp('petroleo','number','')+'</div>'
-    +'<div class="form-group" style="margin:0"><label>Horas inoperativas</label>'+inp('hrsInop','number','')+'</div>'
     +'<div class="form-group" style="margin:0"><label>Estado final</label><select onchange="eqopEdSet(\'estado\',this.value)" style="width:100%">'
       +['Operativo','No Operativo'].map(x=>'<option'+(f.estado===x?' selected':'')+'>'+x+'</option>').join('')+'</select></div>'
    +'</div>'
@@ -19858,14 +19949,25 @@ function eqopImprimirFicha(ficha){
      +'<tbody>'+filas+'</tbody>'
      +'<tfoot><tr><th colspan="5">TOTALES</th><th>'+t.hm+'</th><th>'+t.m+'</th><th>'+t.d+'</th>'
      +(eq.viajes?'<th>'+t.cant+'</th>':'')+'<th colspan="4"></th></tr></tfoot></table>'
-   +'<table class="cab" style="margin-top:8px"><tr><td><b>Consumo de petróleo (gls):</b> '+e(f.petroleo)+'</td>'
-     +'<td><b>Hrs. inoperativas:</b> '+e(f.hrsInop)+'</td>'
+   +'<table class="cab" style="margin-top:8px"><tr>'
+     +'<td><b>Jornada:</b> '+JORNADA_H+' h</td>'
+     +'<td><b>Tiempo de parada del día:</b> '+t.paradaHm+'</td>'
+     +'<td><b>Disponibilidad del día:</b> '+t.disp.toFixed(1)+'%</td>'
      +'<td><b>'+(eq.tipo==='scoop'?'#Cuchar. T. mineral':'Extracción T. mineral')+':</b> '+t.m+'</td>'
      +'<td><b>'+(eq.tipo==='scoop'?'#Cuchar. T. desmonte':'Extracción T. desmonte')+':</b> '+t.d+'</td>'
      +(eq.viajes?'<td><b>Total de viajes:</b> '+t.cant+'</td>':'')
      +'<td><b>Horas trabajadas:</b> '+t.hm+'</td>'
      +'<td><b>Estado final:</b> '+e(f.estado||'Operativo')+'</td></tr>'
      +'<tr><td colspan="5"><b>Observaciones:</b> '+e(f.obs)+'</td></tr></table>'
+   +(function(){
+      const ac=eqopResumenCiclo(f.equipo, eqopCiclo(f.fecha));
+      if(!ac.dias) return '';
+      return '<table class="cab" style="margin-top:6px"><tr>'
+        +'<td><b>Acumulado del ciclo ('+ac.dias+' día'+(ac.dias!==1?'s':'')+'):</b></td>'
+        +'<td><b>Parada total:</b> '+ac.paradaHm+'</td>'
+        +'<td><b>Disponibilidad promedio diaria:</b> '+ac.dispProm.toFixed(1)+'%</td>'
+        +'<td><b>Disponibilidad total:</b> '+ac.dispTotal.toFixed(1)+'%</td></tr></table>';
+    })()
    +'<div class="firmas"><div>Firma del Operador</div><div>Firma del Ing. a cargo</div><div>V°B° Productividad</div></div>'
    +'<div style="margin-top:14px;text-align:center"><button onclick="window.print()">🖨 Imprimir</button></div>'
    +'</body></html>';
