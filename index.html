@@ -7250,12 +7250,32 @@ function explosivoGastoComp(per){
    lo que se cargó (kg/m) contra lo que se avanzó (m): así se ve si un día de mucho avance vino
    con sobrecarga, o si bajar la carga costó metros.
    Se dibuja en SVG, sin librería: el dato tiene que verse aunque la mina esté sin señal. */
-const FC_DIAS = 30;                      // ventana del bloque de voladura: un mes, día por día
-function fcSerieDiaria(key, dias){
-  const N=dias||FC_DIAS;
+const FC_DIAS = 30;                      // respaldo si no hubiera ciclo activo
+// Rótulo de la ventana: el ciclo en curso con sus fechas, para que se sepa desde cuándo se suma.
+function fcVentanaLbl(){
+  const v=fcVentana();
+  const dd=f=>f.slice(8,10)+'/'+f.slice(5,7);
+  const n=(v.periodo && typeof finNombreMes==='function')?finNombreMes(v.periodo):'';
+  return (n?n+' · ':'')+'del '+dd(v.ini)+' al '+dd(v.fin)+' (ciclo en curso)';
+}
+/* Los días del CICLO en curso (26→25), del 26 hasta hoy. Antes eran "los últimos 30 días" a secas,
+   que se montan sobre dos ciclos: el acumulado sumaba también los metros del ciclo anterior y no
+   cuadraba con lo que reporta la operación a la fecha. */
+function fcVentana(){
   const hoyStr=hoy();
-  const dd=n=>{ const t=new Date(hoyStr+'T12:00:00'); t.setDate(t.getDate()-n); return t.toISOString().slice(0,10); };
-  const fechas=[]; for(let i=N-1;i>=0;i--) fechas.push(dd(i));
+  try{
+    const per=(typeof periodoActual==='function')?periodoActual():'';
+    const v=(typeof ventanaMes==='function')?ventanaMes(per):null;
+    if(v && v.ini) return { ini:v.ini, fin:(hoyStr<v.fin?hoyStr:v.fin), periodo:per };
+  }catch(e){}
+  const t=new Date(hoyStr+'T12:00:00'); t.setDate(t.getDate()-(FC_DIAS-1));
+  return { ini:t.toISOString().slice(0,10), fin:hoyStr, periodo:'' };
+}
+function fcSerieDiaria(key, dias){
+  const v=fcVentana();
+  const fechas=[];
+  { const t=new Date(v.ini+'T12:00:00'), fin=new Date(v.fin+'T12:00:00');
+    while(t<=fin && fechas.length<62){ fechas.push(t.toISOString().slice(0,10)); t.setDate(t.getDate()+1); } }
   const porDia={}; fechas.forEach(f=>porDia[f]={kg:0, metros:0});
   (state.reportesGuardia||[]).forEach(r=>{
     const f=String(r&&r.fecha||'').slice(0,10);
@@ -7500,7 +7520,7 @@ function renderDashVoladura(){
           +'<b style="color:'+colProm+';font-size:15px">'+(fcProm>0?fcProm.toFixed(2):'—')+'</b> kg/m</div>'
       +'</div>'
       +'<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:10.5px;color:var(--text3);margin-top:8px">'
-        +'<span>📏 <b style="color:'+L.color+'">'+m.toFixed(1)+' m</b> en '+FC_DIAS+' días</span>'
+        +'<span>📏 <b style="color:'+L.color+'">'+m.toFixed(1)+' m</b> en el ciclo</span>'
         +'<span>🗓 <b style="color:var(--text2)">'+conDato.length+'</b> día'+(conDato.length!==1?'s':'')+' con disparo</span>'
         +'<span>⚖️ <b style="color:var(--text2)">'+kg.toFixed(1)+' kg</b> de explosivo</span>'
         +'<span style="color:#22c55e">● '+cuenta('bajo')+' bajo</span>'
@@ -7512,7 +7532,7 @@ function renderDashVoladura(){
   '<div style="background:var(--coal3);border:1px solid var(--border);border-radius:18px;padding:18px;margin-bottom:18px">'
     +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px">'
       +'<div style="font-size:15px;font-weight:900;color:var(--gold-light);letter-spacing:.4px">⚖️ FACTOR DE CARGA Y AVANCE — RAMPA Y CORTADA</div>'
-      +'<div style="font-size:11px;color:var(--text3)">últimos '+FC_DIAS+' días, día por día</div>'
+      +'<div style="font-size:11px;color:var(--text3)">'+fcVentanaLbl()+'</div>'
     +'</div>'
     +'<div style="font-size:11px;color:var(--text3);margin-bottom:12px;line-height:1.6">'
       +'Las <b style="color:var(--text2)">barras</b> son los metros de cada día por labor. La <b style="color:var(--text2)">línea llena</b> es el '
