@@ -85,7 +85,8 @@ function cargosDe(personal) {
 // app; si mañana se abre un frente nuevo, se agrega en esta lista.
 const FRENTES = [
   { id: 1, nombre: 'RA Brenda' }, { id: 2, nombre: 'CRNE' },
-  { id: 'ESCM4410', nombre: 'ESCM 4410' }, { id: 'SN5100NW', nombre: 'SN 5100 NW' },
+  { id: 'ESCM4365', nombre: 'ESCM 4365' }, { id: 'ESCM4410', nombre: 'ESCM 4410' },
+  { id: 'ESCM4435', nombre: 'ESCM 4435' }, { id: 'SN5100NW', nombre: 'SN 5100 NW' },
   { id: 'GLNW3', nombre: 'GLNW 3' }, { id: 'GLSE3', nombre: 'GLSE 3' },
   { id: 'TJ5100', nombre: 'TJ 5100' },
 ];
