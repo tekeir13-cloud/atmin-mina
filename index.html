@@ -26136,18 +26136,23 @@ function _iaMB(){
 }
 // Respuestas sobre Monte Bravo. Devuelve null si la pregunta no es de la unidad.
 function _iaRespuestaMB(q, fS){
-  // Monte Bravo está cerrado a quien no puede ver su módulo: la asistente tampoco cuenta sus
-  // cifras. Sin esto, el módulo quedaba bajo llave pero sus números se pedían por el chat.
-  try{
-    if(typeof usuarioActivo!=='undefined' && usuarioActivo && typeof rolVeMonteBravo==='function'
-       && !rolVeMonteBravo(usuarioActivo.rol)) return null;
-  }catch(e){}
   const has=(...ws)=>ws.some(w=>q.includes(w));
   // Los sacos y la ley del mineral SOLO existen en Monte Bravo: si preguntan por ellos, la
   // respuesta es de esa unidad aunque no la nombren. NV 2820 no cuenta sacos.
   const esMB=has('monte bravo','montebravo',' monte',' mb ','de mb','rampa acopio');
   const soloMB=has('saco','alta ley','baja ley');
   if(!esMB && !soloMB) return null;
+  // Monte Bravo está cerrado a quien no puede ver su módulo: la asistente tampoco cuenta sus
+  // cifras. Sin esto, el módulo quedaba bajo llave pero sus números se pedían por el chat.
+  // Y se dice con todas sus letras, en vez de contestar cualquier otra cosa y dejar la duda.
+  try{
+    if(typeof usuarioActivo!=='undefined' && usuarioActivo && typeof rolVeMonteBravo==='function'
+       && !rolVeMonteBravo(usuarioActivo.rol))
+      return `${iaSR()} no tengo acceso a los datos de Monte Bravo con su usuario. Esa unidad la `
+        +`consultan la Gerencia General, Finanzas, el Ingeniero Residente y el compresorista de `
+        +`Monte Bravo. Sí puedo responderle todo lo de NV 2820: avance, costos, personal, `
+        +`explosivos, equipos o combustible.`;
+  }catch(e){}
   const d=_iaMB();
   const N=(v,dec)=>(Number(v)||0).toLocaleString('es-PE',{minimumFractionDigits:dec||0,maximumFractionDigits:dec||0});
   const ciclo=' (ciclo '+d.etiqueta+', 26→25)';
