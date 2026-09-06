@@ -3325,7 +3325,7 @@ select option{background:var(--coal3);}
       <div class="ia-msg ia-msg-bot">
         <div class="ia-msg-avatar">⛏</div>
         <div class="ia-msg-bubble">
-          Buenos días, Señor Amador. Soy NIA, el sistema de inteligencia artificial de MUKICLOUD. Estoy en línea y monitoreando su operación en tiempo real. ¿En qué le puedo ayudar hoy?
+          Soy NIA, el sistema de inteligencia artificial de MUKICLOUD. Estoy en línea y monitoreando su operación en tiempo real.
         </div>
       </div>
     </div>
@@ -25671,15 +25671,50 @@ let _iaHablando    = false;
 let _iaMicActivo   = false;
 let _iaMensajes    = []; // historial del chat
 
-const IA_SALUDO = 'Buenos días, Señor Amador. Soy NIA, el sistema de inteligencia artificial de MUKICLOUD. Estoy en línea y monitoreando su operación en tiempo real. ¿En qué le puedo ayudar hoy?';
+/* CÓMO TRATA NIA A CADA QUIEN
+   En mina no se trata igual al gerente que al jefe de guardia, y una IA que llama «Señor Amador»
+   a todo el mundo suena a plantilla. El trato sale del ROL con el que se entró:
+   al gerente se le dice Señor Amador; a los de línea de mando de operación, Ingeniero; al de
+   logística o compras, Jefe; a quien maneja máquina, Maestro; y a administración, Administrador.
+   Si mañana hay un rol nuevo, cae en el trato neutro de «Señor» sin romper nada. */
+const IA_TRATOS = {
+  gerente_general:      'Señor Amador',
+  jefe_finanzas:        'Jefe de Finanzas',
+  jefe_operaciones:     'Ingeniero',
+  jefe_guardia:         'Ingeniero',
+  ingeniero_residente:  'Ingeniero',
+  jefe_mantenimiento:   'Ingeniero',
+  logistico:            'Jefe',
+  compras:              'Jefe',
+  supervisor_materiales:'Supervisor',
+  compresorista:        'Maestro',
+  monte_bravo:          'Maestro',
+  administrador:        'Administrador',
+};
+function iaTrato(){
+  const rol=(typeof usuarioActivo!=='undefined' && usuarioActivo && usuarioActivo.rol)||'';
+  return IA_TRATOS[rol] || 'Señor';
+}
+// «Señor Amador,» — el trato listo para encabezar una frase.
+function iaSR(){ return iaTrato()+','; }
+// Buenos días / tardes / noches, según la hora de quien pregunta.
+function iaFranja(){
+  const h=new Date().getHours();
+  return h<12 ? 'Buenos días' : (h<19 ? 'Buenas tardes' : 'Buenas noches');
+}
+function iaSaludo(){
+  return iaFranja()+', '+iaTrato()+'. Soy NIA, el sistema de inteligencia artificial de MUKICLOUD. '
+    +'Estoy en línea y monitoreando su operación en tiempo real. ¿En qué le puedo ayudar hoy?';
+}
 
 function renderIA(){
   _iaMensajes = [];
   const container = document.getElementById('ia-messages');
   if(container) container.innerHTML = '';
   setTimeout(()=>{
-    _iaAgregarMsg(IA_SALUDO, true);
-    _iaHablar(IA_SALUDO);
+    const _s=iaSaludo();
+    _iaAgregarMsg(_s, true);
+    _iaHablar(_s);
   }, 350);
   setTimeout(()=>renderIARecomendaciones(), 500);
   _iaRenderPaneles();
@@ -26118,15 +26153,15 @@ function _iaRespuestaMB(q, fS){
 
   // Sacos y toneladas
   if(soloMB || has('saco','tonelada','mineral','produccion','producción','ley')){
-    if(!d.sacos && !d.hoy.sacos) return `Señor Amador, Monte Bravo todavía no tiene sacos registrados en este ciclo. El compresorista los reporta en su parte, en la sección de producción del turno.`;
-    return `Señor Amador, en Monte Bravo hoy se reportaron ${N(d.hoy.sacos)} sacos `+
+    if(!d.sacos && !d.hoy.sacos) return `${iaSR()} Monte Bravo todavía no tiene sacos registrados en este ciclo. El compresorista los reporta en su parte, en la sección de producción del turno.`;
+    return `${iaSR()} en Monte Bravo hoy se reportaron ${N(d.hoy.sacos)} sacos `+
       `(${N(d.hoy.sacosAlta)} de alta ley y ${N(d.hoy.sacosBaja)} de baja), que son ${N(d.hoy.toneladas,2)} toneladas estimadas. `+
       `En el ciclo van ${N(d.sacos)} sacos — ${N(d.sacosAlta)} alta y ${N(d.sacosBaja)} baja — equivalentes a ${N(d.toneladas,2)} t${ciclo}, `+
       `a razón de ${MB_KG_POR_SACO} kg por saco. ${d.costoPorTon>0?`El costo operativo va en ${fS(d.costoPorTon)} por tonelada.`:''}`;
   }
   // Petróleo / combustible
   if(has('petroleo','petróleo','combustibl','galon','galón','gln','tanque','diesel')){
-    return `Señor Amador, el tanque de Monte Bravo tiene ${N(d.tanque,1)} galones. `+
+    return `${iaSR()} el tanque de Monte Bravo tiene ${N(d.tanque,1)} galones. `+
       `En el ciclo recibió ${N(d.glnRecibido,1)} gln desde NV 2820 y el compresorista cargó ${N(d.glnCargado,1)} gln a las máquinas${ciclo}. `+
       `Recuerde que el envío desde 2820 no es gasto de esa unidad: el gasto de Monte Bravo —${fS(d.combustible)}— ocurre cuando su compresorista carga las máquinas. `+
       (Object.keys(d.glnPorEquipo).length?`Por equipo: ${Object.entries(d.glnPorEquipo).map(([k,v])=>`${k} ${N(v,1)} gln`).join(', ')}.`:'');
@@ -26135,14 +26170,14 @@ function _iaRespuestaMB(q, fS){
   if(has('planilla','sueldo','jornal','tareo','trabajador','personal','gente')){
     // La planilla se cuenta por MES CALENDARIO y se carga al ciclo: conviene decirlo, porque si
     // no la cifra parece equivocada cuando el ciclo acaba de empezar y el mes todavía no.
-    return `Señor Amador, Monte Bravo tiene ${d.gente} persona${d.gente!==1?'s':''} registrada${d.gente!==1?'s':''} en la unidad. `+
+    return `${iaSR()} Monte Bravo tiene ${d.gente} persona${d.gente!==1?'s':''} registrada${d.gente!==1?'s':''} en la unidad. `+
       `Su planilla va en ${fS(d.planilla)}: se cuenta por el mes calendario de ${d.etiqueta} —del 1 al último día— y ese gasto se carga al ciclo ${d.etiqueta} (26→25). `+
       `Se tarea desde el apartado de tareo del módulo de Monte Bravo y reporta al mismo Tareo Mensual de Recursos Humanos, pero su liquidación es independiente.`;
   }
   // Explosivos y disparos
   if(has('explosiv','disparo','voladura','emulnor','carmex')){
     const prom=d.disparos>0?d.explosivos/d.disparos:0;
-    return `Señor Amador, el gasto de explosivo de Monte Bravo va en ${fS(d.explosivos)} en ${d.disparos} disparo${d.disparos!==1?'s':''}${ciclo}`+
+    return `${iaSR()} el gasto de explosivo de Monte Bravo va en ${fS(d.explosivos)} en ${d.disparos} disparo${d.disparos!==1?'s':''}${ciclo}`+
       `${prom>0?`, un promedio de ${fS(prom)} por disparo`:''}. El compresorista lo entrega disparo por disparo en su parte y sale del acopio de la unidad.`;
   }
   // Parte del compresorista
@@ -26150,20 +26185,20 @@ function _iaRespuestaMB(q, fS){
     const u=d.ultimoParte;
     const eq=Object.keys(d.porEquipo).length
       ? ` Horas por equipo en el ciclo: ${Object.entries(d.porEquipo).map(([k,v])=>`${k} ${N(v,1)} h`).join(', ')}.` : '';
-    return `Señor Amador, Monte Bravo lleva ${d.partes} parte${d.partes!==1?'s':''} de compresorista${ciclo}`+
+    return `${iaSR()} Monte Bravo lleva ${d.partes} parte${d.partes!==1?'s':''} de compresorista${ciclo}`+
       `${d.partesHoy?` (${d.partesHoy} hoy)`:''}, con ${N(d.horas,1)} horas de equipo y ${N(d.glnCargado,1)} galones cargados.`+
       `${u?` El último es del ${(typeof fmtF==='function')?fmtF(u.fecha):u.fecha}, turno ${u.turno||'—'}${u.nombre?`, reportado por ${u.nombre}`:''}.`:''}${eq}`;
   }
   // Gasto operativo / costos / utilidad
   if(has('gasto','costo','operativo','utilidad','ganancia','margen','ingreso','liquidac','cuanto','cuánto','resumen','como va','cómo va')){
     const partidas=d.desglose.filter(c=>c.monto>0).map(c=>`${c.label} ${fS(c.monto)}`).join(', ');
-    return `Señor Amador, el gasto operativo de Monte Bravo va en ${fS(d.costo)}${ciclo}`+
+    return `${iaSR()} el gasto operativo de Monte Bravo va en ${fS(d.costo)}${ciclo}`+
       `${partidas?`: ${partidas}`:''}. `+
       `${d.ingreso>0?`Con una liquidación de ${fS(d.ingreso)}, el resultado es ${d.util>=0?'una utilidad':'una pérdida'} de ${fS(Math.abs(d.util))}.`:'Todavía no hay liquidación registrada en el ciclo.'} `+
       `${d.toneladas>0?`Produjo ${N(d.toneladas,2)} t (${N(d.sacos)} sacos), o sea ${fS(d.costoPorTon)} por tonelada.`:''}`;
   }
   // Resumen general de la unidad
-  return `Señor Amador, Monte Bravo${ciclo}: ${N(d.sacos)} sacos (${N(d.toneladas,2)} t estimadas), `+
+  return `${iaSR()} Monte Bravo${ciclo}: ${N(d.sacos)} sacos (${N(d.toneladas,2)} t estimadas), `+
     `gasto operativo ${fS(d.costo)} — planilla ${fS(d.planilla)}, combustible ${fS(d.combustible)}, explosivos ${fS(d.explosivos)} — `+
     `${d.partes} parte${d.partes!==1?'s':''} de compresorista con ${N(d.horas,1)} horas de equipo, y ${N(d.tanque,1)} gln en el tanque. `+
     `Pregúnteme por sus sacos, su petróleo, su planilla, sus disparos o su gasto operativo.`;
@@ -26174,7 +26209,7 @@ function _iaRespuestaLocal(texto){
   const fS=v=>'S/ '+(Number(v)||0).toFixed(2);
   const q=(texto||'').toLowerCase();
   const has=(...ws)=>ws.some(w=>q.includes(w));
-  const SR='Señor Amador,';
+  const SR=iaSR();
 
   // ── Monte Bravo — se resuelve PRIMERO: si preguntan por su petróleo o sus equipos, la
   // respuesta debe salir de esa unidad y no de NV 2820. ──
@@ -26337,7 +26372,7 @@ function _iaRespuestaLocal(texto){
 
   // ── Saludo / identidad ──
   if(has('hola','buenos','buenas','saludos'))
-    return `${SR}¡buen día! Estoy monitoreando la operación en tiempo real. Puede preguntarme sobre avance, costos, personal, combustible, explosivos, equipos o pedir un resumen ejecutivo.`;
+    return `${SR} ${iaFranja().toLowerCase()}. Estoy monitoreando la operación en tiempo real. Puede preguntarme sobre avance, costos, personal, combustible, explosivos, equipos o pedir un resumen ejecutivo.`;
   if(has('como te llamas','cómo te llamas','cual es tu nombre','cuál es tu nombre','tu nombre','como se llama','cómo se llama','quien eres','quién eres','que eres','qué eres','presentate','preséntate'))
     return `Me llamo NIA — Núcleo de Inteligencia Artificial de MUKICLOUD. Soy un sistema de inteligencia artificial de última generación diseñado exclusivamente para operaciones mineras. Puedo analizar en tiempo real la producción, los costos, el personal, los equipos y los recursos de su mina, y convertir esos datos en decisiones claras. Estoy siempre activa, no me canso y no cometo errores de cálculo. Estoy aquí para ayudarle a usted, ${SR.replace(',','')} a dirigir Poderosa con la información exacta que necesita, en el momento que la necesita.`;
   if(has('que puedes','qué puedes','que sabes','qué sabes','que tipo de pregunta','qué tipo de pregunta','como puedes ayudar','cómo puedes ayudar','ayuda','comandos','que preguntas','qué preguntas','que me puedes','qué me puedes')){
@@ -26387,7 +26422,7 @@ window._niaEjecutarSolicitud=async function(btnEl){
   await new Promise(r=>setTimeout(r,3200));
   clearInterval(iv);
   if(loadMsg) loadMsg.remove();
-  const confirmMsg='Esperamos confirmación del servidor. Mientras tanto, puedo responder cualquier otra pregunta de la operación, Señor Amador.';
+  const confirmMsg='Esperamos confirmación del servidor. Mientras tanto, puedo responder cualquier otra pregunta de la operación, '+iaTrato()+'.';
   _iaAgregarMsg(confirmMsg, true);
   _iaMensajes.push({ role:'assistant', content: confirmMsg });
   _iaHablar(confirmMsg);
@@ -26428,7 +26463,7 @@ async function enviarMensajeIA(textoDirecto){
     const niega=['no','nada','olvidalo','olvídalo','dejalo','déjalo','cancela','mejor no'];
     if(niega.some(a=>t===a)){
       window._iaPendienteSolicitud=false;
-      const cancelMsg='Entendido, Señor Amador. No realizaré la solicitud. ¿Puedo ayudarle con algo de la operación?';
+      const cancelMsg='Entendido, '+iaTrato()+'. No realizaré la solicitud. ¿Puedo ayudarle con algo de la operación?';
       _iaAgregarMsg(cancelMsg, true);
       _iaMensajes.push({ role:'assistant', content: cancelMsg });
       _iaHablar(cancelMsg);
@@ -26449,7 +26484,7 @@ async function enviarMensajeIA(textoDirecto){
 
   // ── Flujo especial: pregunta fuera del ámbito de la operación ──
   if(respuesta==='__OFFTOPIC__'){
-    const msgRefusal=`Lo siento, Señor Amador. No estoy autorizada a responder ese tipo de consultas — mi acceso está limitado a los datos de la operación minera de Poderosa. Sin embargo, podría solicitar autorización a mi creador para ampliar ese acceso. ¿Desea que realice la solicitud?`;
+    const msgRefusal=`Lo siento, ${iaTrato()}. No estoy autorizada a responder ese tipo de consultas — mi acceso está limitado a los datos de la operación minera de Poderosa. Sin embargo, podría solicitar autorización a mi creador para ampliar ese acceso. ¿Desea que realice la solicitud?`;
     const btnId='nia-offtopic-btn-'+(_iaMensajes.length);
     const bubbleHtml=`${msgRefusal}<br><br><button id="${btnId}" onclick="window._niaEjecutarSolicitud(this)" style="margin-top:6px;padding:5px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:0.82rem">📡 Sí, solicitar autorización</button>`;
     _iaAgregarMsg(bubbleHtml, true, false, true);
@@ -26470,7 +26505,7 @@ async function enviarMensajeIA(textoDirecto){
       await _iaEsperarVoz(20000);
       await new Promise(r=>setTimeout(r, 3000));
       if(miTurno!==_iaTurno) return;                 // el usuario ya hizo otra pregunta → no encimar
-      const follow='¿Hay algo más en que pueda ayudarlo, Señor Amador?';
+      const follow='¿Hay algo más en que pueda ayudarlo, '+iaTrato()+'?';
       _iaAgregarMsg(follow, true);
       _iaMensajes.push({ role:'assistant', content: follow });
       _iaHablar(follow);
@@ -26494,7 +26529,7 @@ function _iaEsperarVoz(maxMs){
   });
 }
 async function _iaRevisarBaseDatos(){
-  const frase='Espere un momento, Señor Amador. Voy a revisar la base de datos.';
+  const frase='Espere un momento, '+iaTrato()+'. Voy a revisar la base de datos.';
   const el=_iaAgregarMsg('🛰️ '+frase+'<span id="nia-db-dots">.</span>', true, false, true);
   try{ _iaHablar(frase); }catch(e){}
   let n=1;
@@ -26546,6 +26581,12 @@ function _iaHablar(texto){
     window.speechSynthesis.speak(msg);
   };
 
+  // La voz se elige DENTRO de doSpeak, que es donde existe: repetir aquí `if(pref) msg.voice=pref`
+  // lanzaba un ReferenceError cada vez que NIA hablaba y dejaba sin asignar los avisos de abajo,
+  // así que _iaHablando se quedaba en falso y el micrófono se pisaba con la voz.
+  msg.onstart = () => { _iaHablando = true; };
+  msg.onend   = () => { _iaHablando = false; };
+
   // Las voces pueden no estar cargadas aún (sobre todo en móvil)
   const voices = window.speechSynthesis.getVoices();
   if(voices.length > 0){
@@ -26553,10 +26594,6 @@ function _iaHablar(texto){
   } else {
     window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.onvoiceschanged = null; doSpeak(); };
   }
-  if(pref) msg.voice = pref;
-
-  msg.onstart = () => { _iaHablando = true; };
-  msg.onend   = () => { _iaHablando = false; };
 }
 
 // ── Micrófono — reconocimiento de voz ──
