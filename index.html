@@ -19362,7 +19362,8 @@ function rgEquiposPintar(){
     const t=eqopTotales(v);
     const abierto=_rgEqAbierto===eq.id;
     const llenos=(v.items||[]).filter(i=>i.cod||i.hi||i.cant).length;
-    const resumen='⏱ '+t.hm+' · ⛔ parada '+t.paradaHm+' · 📊 '+t.disp.toFixed(0)+'% · 📋 '+llenos+' ítem'+(llenos!==1?'s':'')
+    const resumen=(t.horometro>0?'⏲ '+t.horometroHm+' · ':'')+'⏱ '+t.hm+(t.cuadra?'':' ⚠ no cuadra')
+      +' · ⛔ parada '+t.paradaHm+' · 📊 '+t.disp.toFixed(0)+'% · 📋 '+llenos+' ítem'+(llenos!==1?'s':'')
       +' · '+eq.labM+' '+t.m+' / '+eq.labD+' '+t.d+(eq.viajes?' · '+eq.unidadCant+' '+t.cant:'');
     const set=(campo)=>'rgEqSet(\''+eq.id+'\',\''+campo+'\',this.value)';
     const inp=(campo,tipo,ph)=>'<input type="'+tipo+'" value="'+esc(v[campo])+'" placeholder="'+ph+'" oninput="'+set(campo)+'" style="width:100%">';
@@ -19410,10 +19411,12 @@ function rgEquiposPintar(){
       +'<div id="rg-disp-'+eq.id+'" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;background:var(--coal4);'
         +'border-radius:8px;padding:8px 12px;margin:6px 0 10px;font-size:11.5px;color:var(--text3)">'
         +'<span>Jornada <b style="color:var(--text2)">'+JORNADA_H+' h</b></span>'
-        +'<span>⏱ Trabajado <b style="color:var(--text2)">'+t.hm+'</b></span>'
-        +'<span>⛔ Parada <b style="color:'+(t.parada>0?'#f87171':'var(--text2)')+'">'+t.paradaHm+'</b></span>'
-        +'<span>📊 Disponibilidad <b style="color:'+t.dispColor+';font-size:14px">'+t.disp.toFixed(1)+'%</b> '
-          +'<span style="color:'+t.dispColor+'">'+eqopDispTxt(t.disp)+'</span></span>'
+    +'<span>⏲ Horómetro <b style="color:var(--text2)">'+(t.horometro>0?t.horometroHm:'—')+'</b></span>'
+    +'<span>⏱ Actividades <b style="color:var(--text2)">'+t.hm+'</b></span>'
+    +'<span>⛔ Parada <b style="color:'+(t.parada>0?'#f87171':'var(--text2)')+'">'+t.paradaHm+'</b></span>'
+    +'<span>📊 Disponibilidad <b style="color:'+t.dispColor+';font-size:14px">'+t.disp.toFixed(1)+'%</b> '
+      +'<span style="color:'+t.dispColor+'">'+eqopDispTxt(t.disp)+'</span></span>'
+    +(t.cuadra?'':'<span style="color:#f87171;font-weight:700">⚠ '+eqopDescuadreTxt(t)+'</span>')
       +'</div>'
       +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">'
         +'<div class="form-group" style="margin:0"><label>Estado final</label><select onchange="'+set('estado')+'" style="width:100%">'
@@ -19437,12 +19440,15 @@ function rgEquiposPintar(){
 function rgEqSet(eqId,campo,valor){
   if(!_rgEq[eqId]) _rgEq[eqId]=_rgEqBlanco();
   _rgEq[eqId][campo]=valor;
-  if(campo==='hini'||campo==='hfin') rgEquiposAviso();
+  // Al mover un horómetro cambian las horas de la máquina, la disponibilidad y el cuadre.
+  if(campo==='hini'||campo==='hfin'){ rgEqTotales(eqId); rgEquiposAviso(); }
 }
 function rgEqItem(eqId,i,campo,valor){
   const v=_rgEq[eqId]; if(!v||!v.items[i]) return;
   v.items[i][campo]=valor;
-  if(campo==='hi'||campo==='hf'||campo==='m'||campo==='d'||campo==='cant') rgEqTotales(eqId);
+  // Cambiar una hora mueve el cuadre contra el horómetro, así que el aviso de arriba también se
+  // repinta: si no, seguía mostrando el descuadre de hace dos teclas.
+  if(campo==='hi'||campo==='hf'||campo==='m'||campo==='d'||campo==='cant'){ rgEqTotales(eqId); rgEquiposAviso(); }
 }
 function rgEqTotales(eqId){
   // Refresca solo los totales y la franja de disponibilidad: repintar entero borraría lo que se
@@ -19451,10 +19457,12 @@ function rgEqTotales(eqId){
   const t=eqopTotales(v), eq=equipoMina(eqId);
   const fr=document.getElementById('rg-disp-'+eqId);
   if(fr) fr.innerHTML='<span>Jornada <b style="color:var(--text2)">'+JORNADA_H+' h</b></span>'
-    +'<span>⏱ Trabajado <b style="color:var(--text2)">'+t.hm+'</b></span>'
+    +'<span>⏲ Horómetro <b style="color:var(--text2)">'+(t.horometro>0?t.horometroHm:'—')+'</b></span>'
+    +'<span>⏱ Actividades <b style="color:var(--text2)">'+t.hm+'</b></span>'
     +'<span>⛔ Parada <b style="color:'+(t.parada>0?'#f87171':'var(--text2)')+'">'+t.paradaHm+'</b></span>'
     +'<span>📊 Disponibilidad <b style="color:'+t.dispColor+';font-size:14px">'+t.disp.toFixed(1)+'%</b> '
-      +'<span style="color:'+t.dispColor+'">'+eqopDispTxt(t.disp)+'</span></span>';
+      +'<span style="color:'+t.dispColor+'">'+eqopDispTxt(t.disp)+'</span></span>'
+    +(t.cuadra?'':'<span style="color:#f87171;font-weight:700">⚠ '+eqopDescuadreTxt(t)+'</span>');
   const tf=document.querySelector('#rg-equipos tfoot tr');
   if(tf && _rgEqAbierto===eqId) tf.innerHTML='<td colspan="4" style="padding:6px 4px;text-align:right;color:var(--text3)">TOTALES</td>'
     +'<td style="padding:6px 4px">'+t.hm+'</td><td style="padding:6px 4px">'+t.m+'</td>'
@@ -19478,6 +19486,13 @@ function rgEquiposAviso(){
     +horas.join(', ')+'</span>'; return; }
   const malos=EQUIPOS_MINA.filter(eq=>{ const v=_rgEq[eq.id]||{}; const a=Number(v.hini)||0,b=Number(v.hfin)||0;
     return a&&b&&b<a; }).map(eq=>eq.nombre);
+  if(!malos.length){
+    const desc=EQUIPOS_MINA.map(eq=>({eq, t:eqopTotales(_rgEq[eq.id]||{items:[]})}))
+      .filter(x=>!x.t.cuadra)
+      .map(x=>x.eq.nombre+' ('+eqopDescuadreTxt(x.t)+')');
+    if(desc.length){ av.innerHTML='<span style="color:#f87171">⚠ Las horas de actividad no cuadran con el horómetro en: '
+      +desc.join(' · ')+'</span>'; return; }
+  }
   av.innerHTML = malos.length
     ? '<span style="color:#f87171">⚠ El horómetro final es menor que el inicial en: '+malos.join(', ')+'</span>'
     : 'Lo que llenes aquí es la hoja que sale impresa en Operaciones › Reportes de Equipo.';
@@ -19542,6 +19557,9 @@ function eqopTotales(f){
   const num=v=>Number(v)||0;
   const horas=Math.round(it.reduce((a,i)=>a+eqopHorasItem(i),0)*100)/100;
   const m=it.reduce((a,i)=>a+num(i.m),0), d=it.reduce((a,i)=>a+num(i.d),0);
+  // Horas que marcó la máquina entre el horómetro inicial y el final: salen solas, no se escriben.
+  const hr=Math.round(((Number(f.hfin)||0)-(Number(f.hini)||0))*100)/100;
+  const descuadre=Math.round((horas-hr)*100)/100;   // + sobran horas de actividad, − faltan
   // Parada del día: lo que faltó para las 8 horas de jornada.
   const parada=Math.max(0, Math.round((JORNADA_H-horas)*100)/100);
   const disp=Math.min(100, Math.round((horas/JORNADA_H)*1000)/10);
@@ -19549,7 +19567,18 @@ function eqopTotales(f){
            parada, paradaHm:eqopHM(parada), disp, dispColor:eqopDispColor(disp),
            m, d, md:Math.round((m+d)*100)/100,       // cucharas totales en el scoop
            cant:it.reduce((a,i)=>a+num(i.cant),0),   // viajes
-           horometro:Math.round(((Number(f.hfin)||0)-(Number(f.hini)||0))*100)/100 };
+           horometro:hr, horometroHm:eqopHM(hr), descuadre, cuadra:!(hr>0) || Math.abs(descuadre)<=EQOP_TOL_H };
+}
+/* El horómetro manda: la máquina marcó esas horas y las actividades del turno tienen que sumarlas.
+   Si no cuadran, es que falta un ítem o sobra una hora, y sin avisarlo la hoja se archiva mal.
+   Se permite un margen de 6 minutos por el redondeo de las lecturas. */
+const EQOP_TOL_H = 0.1;
+function eqopDescuadreTxt(t){
+  if(!(t.horometro>0)) return '';
+  if(t.cuadra) return '';
+  const d=t.descuadre;
+  return d>0 ? 'Las actividades suman '+eqopHM(Math.abs(d))+' MÁS que el horómetro ('+t.horometroHm+')'
+             : 'Faltan '+eqopHM(Math.abs(d))+' por repartir en actividades para llegar al horómetro ('+t.horometroHm+')';
 }
 /* Acumulado del CICLO para un equipo: parada total y las dos disponibilidades. */
 function eqopResumenCiclo(equipoId, ciclo){
@@ -19573,7 +19602,17 @@ function eqopUltimoHorometro(equipoId, fecha, turno){
   return previas.length ? String(previas[0].hfin) : '';
 }
 // ── Pestaña Operaciones › Reportes de Equipo ──────────────────────────────────────
-let _eqopFiltro={ equipo:'', mes:'', fecha:'', turno:'Día' };
+let _eqopFiltro={ equipo:'', mes:'', fecha:'', turno:'Día', desde:'', hasta:'' };
+function eqopBuscar(){
+  const d=(document.getElementById('eqop-desde')||{}).value||'';
+  const h=(document.getElementById('eqop-hasta')||{}).value||'';
+  if(d&&h&&d>h){ showNotif('⚠ La fecha «del» es posterior a la «al»','error'); return; }
+  _eqopFiltro.desde=d; _eqopFiltro.hasta=h;
+  // Buscar por fechas manda sobre el ciclo: si se pide un rango a caballo entre dos, se ve entero.
+  if(d||h) _eqopFiltro.mes='__todos';
+  renderEquiposOp();
+}
+function eqopLimpiarBusqueda(){ _eqopFiltro.desde=''; _eqopFiltro.hasta=''; _eqopFiltro.mes=''; renderEquiposOp(); }
 function eqopSetFiltro(campo,valor){ _eqopFiltro[campo]=valor; renderEquiposOp(); }
 /* Las hojas se agrupan por el CICLO 26→25, igual que los reportes de guardia y el tareo: la del
    27 de agosto pertenece al ciclo de septiembre. Agruparlas por mes de calendario partiría el
@@ -19609,7 +19648,8 @@ function renderEquiposOp(){
       ? '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--text3);margin-top:8px">'
         +'<span>⏱ Horómetro <b style="color:var(--text2)">'+(f.hini||'—')+' → '+(f.hfin||'—')+'</b>'+(t.horometro>0?' ('+t.horometro.toFixed(1)+' h)':'')+'</span>'
         +'<span>📋 <b style="color:var(--text2)">'+llenos+'</b> ítem'+(llenos!==1?'s':'')+'</span>'
-        +'<span>⏱ <b style="color:var(--text2)">'+t.hm+'</b> trabajadas</span>'
+        +'<span>⏱ <b style="color:var(--text2)">'+t.hm+'</b> en actividades</span>'
+        +(t.cuadra?'':'<span style="color:#f87171;font-weight:700">⚠ no cuadra con el horómetro</span>')
         +'<span>⛏ '+eq.labM+' <b style="color:var(--text2)">'+t.m+'</b> · '+eq.labD+' <b style="color:var(--text2)">'+t.d+'</b>'
           +' <span style="color:var(--text3)">('+eq.totalMD.toLowerCase()+' '+t.md+')</span></span>'
         +(eq.viajes?'<span>'+eq.unidadCant+' <b style="color:var(--text2)">'+t.cant+'</b></span>':'')
@@ -19652,6 +19692,9 @@ function renderEquiposOp(){
   let hist=(state.equiposOp||[]).slice();
   if(_eqopFiltro.equipo) hist=hist.filter(f=>f.equipo===_eqopFiltro.equipo);
   if(_eqopFiltro.mes!=='__todos') hist=hist.filter(f=>eqopCiclo(f.fecha)===_eqopFiltro.mes);
+  // Búsqueda por rango de días dentro de lo anterior: «del 26 al 5», por ejemplo.
+  if(_eqopFiltro.desde) hist=hist.filter(f=>String(f.fecha||'')>=_eqopFiltro.desde);
+  if(_eqopFiltro.hasta) hist=hist.filter(f=>String(f.fecha||'')<=_eqopFiltro.hasta);
   hist=hist.filter(f=>!(f.fecha===F && (f.turno||'Día')===T));    // el día en curso ya está arriba
   hist.sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||''))||String(a.equipo).localeCompare(String(b.equipo)));
 
@@ -19687,10 +19730,17 @@ function renderEquiposOp(){
    +'</div>'
    +'<div style="display:grid;gap:10px">'+hojas+'</div>'
    +'<div class="section-title" style="margin:22px 0 8px">🗂 Otras hojas del ciclo</div>'
-   +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'
+   +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">'
     +'<select onchange="eqopSetFiltro(\'equipo\',this.value)" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px">'+opEq+'</select>'
     +'<select onchange="eqopSetFiltro(\'mes\',this.value)" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px">'+opMes+'</select>'
-    +'<span style="align-self:center;font-size:11.5px;color:var(--text3)">'+hist.length+' hoja'+(hist.length!==1?'s':'')+'</span>'
+    +'<span style="font-size:11.5px;color:var(--text3)">Del</span>'
+    +'<input type="date" id="eqop-desde" value="'+(_eqopFiltro.desde||'')+'" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px">'
+    +'<span style="font-size:11.5px;color:var(--text3)">al</span>'
+    +'<input type="date" id="eqop-hasta" value="'+(_eqopFiltro.hasta||'')+'" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px">'
+    +'<button class="btn btn-outline" style="font-size:11.5px;padding:6px 14px" onclick="eqopBuscar()">🔎 Buscar</button>'
+    +((_eqopFiltro.desde||_eqopFiltro.hasta)?'<button class="btn btn-outline" style="font-size:11.5px;padding:6px 12px" onclick="eqopLimpiarBusqueda()">✕ Limpiar</button>':'')
+    +'<button class="btn btn-gold" style="font-size:11.5px;padding:6px 14px" onclick="eqopImprimirPeriodo()">🖨 Imprimir periodo (PDF)</button>'
+    +'<span style="font-size:11.5px;color:var(--text3)">'+hist.length+' hoja'+(hist.length!==1?'s':'')+'</span>'
    +'</div>'
    +'<div class="card" style="padding:0;overflow:hidden">'+filasHist+'</div>';
 }
@@ -19782,7 +19832,9 @@ function eqopVerFicha(f){
       return '<div style="background:var(--coal4);border-radius:10px;padding:12px 14px;margin-bottom:12px">'
         +'<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--text3)">'
           +'<span style="font-weight:800;color:var(--text2)">Jornada de '+JORNADA_H+' h</span>'
-          +'<span>⏱ Trabajado <b style="color:var(--text2)">'+t.hm+'</b></span>'
+          +'<span>⏲ Horómetro <b style="color:var(--text2)">'+(t.horometro>0?t.horometroHm:'—')+'</b></span>'
+          +'<span>⏱ Actividades <b style="color:var(--text2)">'+t.hm+'</b></span>'
+          +(t.cuadra?'':'<span style="color:#f87171;font-weight:700">⚠ '+eqopDescuadreTxt(t)+'</span>')
           +'<span>⛔ Parada del día <b style="color:'+(t.parada>0?'#f87171':'var(--text2)')+'">'+t.paradaHm+'</b></span>'
           +'<span>📊 Disponibilidad <b style="color:'+t.dispColor+';font-size:16px">'+t.disp.toFixed(1)+'%</b> '
             +'<span style="color:'+t.dispColor+'">'+eqopDispTxt(t.disp)+'</span></span>'
@@ -19890,7 +19942,9 @@ function eqopRenderEditor(){
    +'<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;background:var(--coal4);border-radius:8px;'
      +'padding:8px 12px;margin-bottom:10px;font-size:11.5px;color:var(--text3)">'
      +'<span>Jornada <b style="color:var(--text2)">'+JORNADA_H+' h</b></span>'
-     +'<span>⏱ Trabajado <b style="color:var(--text2)">'+t.hm+'</b></span>'
+     +'<span>⏲ Horómetro <b style="color:var(--text2)">'+(t.horometro>0?t.horometroHm:'—')+'</b></span>'
+     +'<span>⏱ Actividades <b style="color:var(--text2)">'+t.hm+'</b></span>'
+     +(t.cuadra?'':'<span style="color:#f87171;font-weight:700">⚠ '+eqopDescuadreTxt(t)+'</span>')
      +'<span>⛔ Parada <b style="color:'+(t.parada>0?'#f87171':'var(--text2)')+'">'+t.paradaHm+'</b></span>'
      +'<span>📊 Disponibilidad <b style="color:'+t.dispColor+';font-size:14px">'+t.disp.toFixed(1)+'%</b></span>'
    +'</div>'
@@ -19937,6 +19991,105 @@ function eqopEdCerrar(){ _eqopEdit=''; cerrarModal('modal-equipo-op'); renderEqu
 function eqopImprimir(id){
   const f=(state.equiposOp||[]).find(x=>x.id===id); if(!f) return;
   eqopImprimirFicha(f);
+}
+/* IMPRESIÓN DEL PERIODO — una hoja por día y equipo, más el resumen del periodo y las firmas.
+   Es el documento que se archiva al cierre del ciclo: sale del navegador como PDF (Guardar como
+   PDF en el diálogo de impresión), con salto de página entre hojas. */
+function eqopImprimirPeriodo(){
+  eqopLoad();
+  let hojas=(state.equiposOp||[]).slice();
+  if(_eqopFiltro.equipo) hojas=hojas.filter(f=>f.equipo===_eqopFiltro.equipo);
+  if(_eqopFiltro.mes && _eqopFiltro.mes!=='__todos') hojas=hojas.filter(f=>eqopCiclo(f.fecha)===_eqopFiltro.mes);
+  if(_eqopFiltro.desde) hojas=hojas.filter(f=>String(f.fecha||'')>=_eqopFiltro.desde);
+  if(_eqopFiltro.hasta) hojas=hojas.filter(f=>String(f.fecha||'')<=_eqopFiltro.hasta);
+  hojas.sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha))
+    || EQUIPOS_MINA.findIndex(e=>e.id===a.equipo)-EQUIPOS_MINA.findIndex(e=>e.id===b.equipo)
+    || String(a.turno||'').localeCompare(String(b.turno||'')));
+  if(!hojas.length){ showNotif('⚠ No hay hojas en el periodo seleccionado','error'); return; }
+
+  const e=x=>String(x==null?'':x).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+  const dd=f=>String(f||'').slice(8,10)+'/'+String(f||'').slice(5,7)+'/'+String(f||'').slice(0,4);
+  const per=_eqopFiltro.mes && _eqopFiltro.mes!=='__todos' ? _eqopFiltro.mes : eqopCiclo(hojas[0].fecha);
+  const rango=(_eqopFiltro.desde||_eqopFiltro.hasta)
+    ? 'Del '+dd(_eqopFiltro.desde||hojas[0].fecha)+' al '+dd(_eqopFiltro.hasta||hojas[hojas.length-1].fecha)
+    : eqopCicloLbl(per);
+
+  // ── Resumen por equipo del periodo impreso ──
+  const resumen=EQUIPOS_MINA.map(eq=>{
+    const hs=hojas.filter(f=>f.equipo===eq.id);
+    if(!hs.length) return null;
+    let horas=0,parada=0,sumaDisp=0,m=0,d=0,cant=0;
+    hs.forEach(f=>{ const t=eqopTotales(f); horas+=t.horas; parada+=t.parada; sumaDisp+=t.disp; m+=t.m; d+=t.d; cant+=t.cant; });
+    return { eq, dias:hs.length, horas, parada, m, d, cant,
+             dispProm:Math.round((sumaDisp/hs.length)*10)/10,
+             dispTotal:Math.min(100, Math.round((horas/(JORNADA_H*hs.length))*1000)/10) };
+  }).filter(Boolean);
+
+  // ── Una página por hoja ──
+  const paginas=hojas.map((f,idx)=>{
+    const eq=equipoMina(f.equipo), t=eqopTotales(f);
+    const filas=(f.items||[]).filter(i=>i.cod||i.hi||i.cant||i.m||i.d).map((it,i)=>
+      '<tr><td>'+(i+1)+'</td><td>'+e(it.cod)+'</td><td class="l">'+e(eqopActTxt(it.cod))+'</td>'
+      +'<td>'+e(it.hi)+'</td><td>'+e(it.hf)+'</td><td>'+eqopHM(eqopHorasItem(it))+'</td>'
+      +'<td>'+e(it.m)+'</td><td>'+e(it.d)+'</td>'+(eq.viajes?'<td>'+e(it.cant)+'</td>':'')
+      +'<td class="l">'+e(it.oLabor)+(it.oNv?' Nv '+e(it.oNv):'')+'</td>'
+      +'<td class="l">'+e(it.dLabor)+(it.dNv?' Nv '+e(it.dNv):'')+'</td></tr>').join('')
+      || '<tr><td colspan="'+(eq.viajes?11:10)+'" class="l" style="color:#666">Sin actividades registradas</td></tr>';
+    return '<div class="pag">'
+      +'<div class="enc"><div><b>'+e(eq.nombre.toUpperCase())+'</b> · '+dd(f.fecha)+' · Turno '+e(f.turno||'—')+'</div>'
+        +'<div style="font-size:9px">'+e(eq.formato)+' · '+e(f.zona||'Nv 2820')+'</div></div>'
+      +'<table class="cab"><tr><td><b>Operador:</b> '+e(f.operador)+'</td><td><b>DNI:</b> '+e(f.dni)+'</td>'
+        +'<td><b>Jefe de guardia:</b> '+e(f.ingeniero)+'</td>'
+        +'<td><b>Horómetro:</b> '+e(f.hini)+' → '+e(f.hfin)+' ('+t.horometroHm+')</td></tr></table>'
+      +'<table><thead><tr><th>#</th><th>Cód.</th><th>Actividad</th><th>Hr. ini.</th><th>Hr. fin</th><th>Horas</th>'
+        +'<th>'+e(eq.labM)+'</th><th>'+e(eq.labD)+'</th>'+(eq.viajes?'<th>'+e(eq.unidadCant)+'</th>':'')
+        +'<th>Origen</th><th>Destino</th></tr></thead><tbody>'+filas+'</tbody>'
+        +'<tfoot><tr><th colspan="5">TOTALES</th><th>'+t.hm+'</th><th>'+t.m+'</th><th>'+t.d+'</th>'
+        +(eq.viajes?'<th>'+t.cant+'</th>':'')+'<th colspan="2"></th></tr></tfoot></table>'
+      +'<table class="cab"><tr><td><b>Parada:</b> '+t.paradaHm+'</td>'
+        +'<td><b>Disponibilidad:</b> '+t.disp.toFixed(1)+'%</td>'
+        +'<td><b>Estado final:</b> '+e(f.estado||'Operativo')+'</td>'
+        +'<td>'+(t.cuadra?'':'<b style="color:#c00">⚠ '+e(eqopDescuadreTxt(t))+'</b>')+'</td></tr>'
+        +(f.obs?'<tr><td colspan="4"><b>Observaciones:</b> '+e(f.obs)+'</td></tr>':'')+'</table>'
+      +'</div>';
+  }).join('');
+
+  const filasRes=resumen.map(r=>'<tr><td class="l">'+e(r.eq.nombre)+'</td><td>'+r.dias+'</td>'
+    +'<td>'+eqopHM(r.horas)+'</td><td>'+eqopHM(r.parada)+'</td>'
+    +'<td>'+r.dispProm.toFixed(1)+'%</td><td>'+r.dispTotal.toFixed(1)+'%</td>'
+    +'<td>'+r.m+'</td><td>'+r.d+'</td><td>'+(r.eq.viajes?r.cant:'—')+'</td></tr>').join('');
+
+  const html='<!doctype html><html lang="es"><head><meta charset="utf-8">'
+   +'<title>Reportes de equipo '+e(rango)+'</title><style>'
+   +'body{font-family:Arial,Helvetica,sans-serif;color:#000;margin:12px;font-size:10.5px}'
+   +'table{border-collapse:collapse;width:100%;margin-bottom:6px}'
+   +'td,th{border:1px solid #444;padding:2px 4px;text-align:center}th{background:#eee}'
+   +'.l{text-align:left}.cab td{border:none;text-align:left;padding:2px 4px}'
+   +'.enc{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #000;'
+     +'padding-bottom:3px;margin-bottom:6px;font-size:12px}'
+   +'.pag{page-break-after:always}.pag:last-of-type{page-break-after:auto}'
+   +'h1{font-size:15px;margin:0}h2{font-size:11px;margin:2px 0 10px;font-weight:normal}'
+   +'.firmas{margin-top:60px;display:flex;justify-content:space-around;text-align:center}'
+   +'.firmas div{width:34%;border-top:1px solid #000;padding-top:5px;font-size:11px}'
+   +'@media print{@page{size:A4 landscape;margin:9mm}button{display:none}}</style></head><body>'
+   +'<div class="pag">'
+     +'<h1>REPORTES DIARIOS DE OPERACIÓN — SCOOP Y DUMPERS</h1>'
+     +'<h2>TEMUAL · Nv 2820 · '+e(rango)+' · '+hojas.length+' hoja'+(hojas.length!==1?'s':'')+'</h2>'
+     +'<table><thead><tr><th class="l">Equipo</th><th>Días</th><th>Horas trabajadas</th><th>Parada total</th>'
+       +'<th>Disp. promedio diaria</th><th>Disp. total</th><th>Mineral</th><th>Desmonte</th><th>Viajes</th></tr></thead>'
+       +'<tbody>'+filasRes+'</tbody></table>'
+     +'<div style="font-size:9.5px;color:#444;margin-top:6px">Jornada de '+JORNADA_H+' h por equipo. '
+       +'La disponibilidad promedio diaria es la media de las disponibilidades de cada día; la total es '
+       +'el trabajo del periodo sobre las horas de jornada disponibles.</div>'
+     +'<div class="firmas"><div>Jefe de Operaciones</div><div>Ingeniero Residente</div></div>'
+   +'</div>'
+   +paginas
+   +'<div class="firmas" style="margin-top:40px"><div>Jefe de Operaciones</div><div>Ingeniero Residente</div></div>'
+   +'<div style="margin-top:12px;text-align:center"><button onclick="window.print()">🖨 Imprimir / Guardar como PDF</button></div>'
+   +'</body></html>';
+  const w=window.open('','_blank');
+  if(!w){ showNotif('⚠ El navegador bloqueó la ventana de impresión','error'); return; }
+  w.document.write(html); w.document.close();
 }
 function eqopImprimirFicha(ficha){
   const f=(typeof ficha==='string')?JSON.parse(ficha):ficha; if(!f) return;
@@ -19988,7 +20141,7 @@ function eqopImprimirFicha(ficha){
         +'<td><b>Disponibilidad promedio diaria:</b> '+ac.dispProm.toFixed(1)+'%</td>'
         +'<td><b>Disponibilidad total:</b> '+ac.dispTotal.toFixed(1)+'%</td></tr></table>';
     })()
-   +'<div class="firmas"><div>Firma del Operador</div><div>Firma del Ing. a cargo</div><div>V°B° Productividad</div></div>'
+   +'<div class="firmas"><div>Firma del Operador</div><div>Jefe de Operaciones</div><div>Ingeniero Residente</div></div>'
    +'<div style="margin-top:14px;text-align:center"><button onclick="window.print()">🖨 Imprimir</button></div>'
    +'</body></html>';
   const w=window.open('','_blank');
@@ -20462,6 +20615,15 @@ function guardarReporteGuardia(){
   // → al sincronizar entre equipos gana la versión con _ts más reciente, no la copia local vieja.
   const rep={ id:idActual||'RG'+Date.now(), fecha, turno, jefe, frentesExtra:[], creadoEn:Date.now(), _ts:Date.now() };
   rep.equipos=rgEquiposLeer();          // horómetros de scoop y dumpers
+  // Si las actividades de un equipo no suman lo que marcó su horómetro, se avisa ANTES de guardar:
+  // después esa hoja se archiva y se imprime con el descuadre dentro.
+  {
+    const malos=EQUIPOS_MINA.map(eq=>({eq, t:eqopTotales(rep.equipos[eq.id]||{items:[]})}))
+      .filter(x=>!x.t.cuadra)
+      .map(x=>'· '+x.eq.nombre+': '+eqopDescuadreTxt(x.t));
+    if(malos.length && !confirm('Las horas de actividad no cuadran con el horómetro:\n\n'+malos.join('\n')
+        +'\n\n¿Guardar así de todos modos?')) return;
+  }
   rep.complementarios=(g('rg-complementarios')?.value||'').trim();
   FRENTES.forEach(f=>{
     const disp=rgGetDisparos(f.pfx);
