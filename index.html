@@ -19416,7 +19416,8 @@ function rgEquiposPintar(){
     +'<span>⛔ Parada <b style="color:'+(t.parada>0?'#f87171':'var(--text2)')+'">'+t.paradaHm+'</b></span>'
     +'<span>📊 Disponibilidad <b style="color:'+t.dispColor+';font-size:14px">'+t.disp.toFixed(1)+'%</b> '
       +'<span style="color:'+t.dispColor+'">'+eqopDispTxt(t.disp)+'</span></span>'
-    +(t.cuadra?'':'<span style="color:#f87171;font-weight:700">⚠ '+eqopDescuadreTxt(t)+'</span>')
+    +((t.cuadra&&!t.pendiente)?'':'<span style="color:'+(t.pendiente?'#f59e0b':'#f87171')+';font-weight:700">'
+      +(t.pendiente?'⏳ ':'⚠ ')+eqopDescuadreTxt(t)+'</span>')
       +'</div>'
       +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">'
         +'<div class="form-group" style="margin:0"><label>Estado final</label><select onchange="'+set('estado')+'" style="width:100%">'
@@ -19462,7 +19463,8 @@ function rgEqTotales(eqId){
     +'<span>⛔ Parada <b style="color:'+(t.parada>0?'#f87171':'var(--text2)')+'">'+t.paradaHm+'</b></span>'
     +'<span>📊 Disponibilidad <b style="color:'+t.dispColor+';font-size:14px">'+t.disp.toFixed(1)+'%</b> '
       +'<span style="color:'+t.dispColor+'">'+eqopDispTxt(t.disp)+'</span></span>'
-    +(t.cuadra?'':'<span style="color:#f87171;font-weight:700">⚠ '+eqopDescuadreTxt(t)+'</span>');
+    +((t.cuadra&&!t.pendiente)?'':'<span style="color:'+(t.pendiente?'#f59e0b':'#f87171')+';font-weight:700">'
+      +(t.pendiente?'⏳ ':'⚠ ')+eqopDescuadreTxt(t)+'</span>');
   const tf=document.querySelector('#rg-equipos tfoot tr');
   if(tf && _rgEqAbierto===eqId) tf.innerHTML='<td colspan="4" style="padding:6px 4px;text-align:right;color:var(--text3)">TOTALES</td>'
     +'<td style="padding:6px 4px">'+t.hm+'</td><td style="padding:6px 4px">'+t.m+'</td>'
@@ -19560,14 +19562,21 @@ function eqopTotales(f){
   // Horas que marcó la máquina entre el horómetro inicial y el final: salen solas, no se escriben.
   const hr=Math.round(((Number(f.hfin)||0)-(Number(f.hini)||0))*100)/100;
   const descuadre=Math.round((horas-hr)*100)/100;   // + sobran horas de actividad, − faltan
-  // Parada del día: lo que faltó para las 8 horas de jornada.
-  const parada=Math.max(0, Math.round((JORNADA_H-horas)*100)/100);
-  const disp=Math.min(100, Math.round((horas/JORNADA_H)*1000)/10);
+  // Las horas que cuentan son las que marcó el HORÓMETRO: es lo que la máquina estuvo encendida,
+  // y se sabe apenas el jefe de guardia anota las dos lecturas, sin esperar a que reparta las
+  // actividades. Si todavía no hay horómetro, se usan las horas de las actividades.
+  const efectivas=hr>0 ? hr : horas;
+  const parada=Math.max(0, Math.round((JORNADA_H-efectivas)*100)/100);
+  const disp=Math.min(100, Math.round((efectivas/JORNADA_H)*1000)/10);
   return { horas, hm:eqopHM(horas), minutos:Math.round(horas*60),
+           efectivas, efectivasHm:eqopHM(efectivas),
            parada, paradaHm:eqopHM(parada), disp, dispColor:eqopDispColor(disp),
            m, d, md:Math.round((m+d)*100)/100,       // cucharas totales en el scoop
            cant:it.reduce((a,i)=>a+num(i.cant),0),   // viajes
-           horometro:hr, horometroHm:eqopHM(hr), descuadre, cuadra:!(hr>0) || Math.abs(descuadre)<=EQOP_TOL_H };
+           horometro:hr, horometroHm:eqopHM(hr), descuadre,
+           // Sin actividades todavía no hay descuadre que reclamar: está pendiente de repartir.
+           pendiente: hr>0 && horas===0,
+           cuadra: !(hr>0) || horas===0 || Math.abs(descuadre)<=EQOP_TOL_H };
 }
 /* El horómetro manda: la máquina marcó esas horas y las actividades del turno tienen que sumarlas.
    Si no cuadran, es que falta un ítem o sobra una hora, y sin avisarlo la hoja se archiva mal.
@@ -19575,6 +19584,7 @@ function eqopTotales(f){
 const EQOP_TOL_H = 0.1;
 function eqopDescuadreTxt(t){
   if(!(t.horometro>0)) return '';
+  if(t.pendiente) return 'Falta repartir '+t.horometroHm+' del horómetro en actividades';
   if(t.cuadra) return '';
   const d=t.descuadre;
   return d>0 ? 'Las actividades suman '+eqopHM(Math.abs(d))+' MÁS que el horómetro ('+t.horometroHm+')'
@@ -19585,7 +19595,7 @@ function eqopResumenCiclo(equipoId, ciclo){
   const per=ciclo||((typeof periodoActual==='function')?periodoActual():'');
   const hojas=(state.equiposOp||[]).filter(f=>f.equipo===equipoId && eqopCiclo(f.fecha)===per);
   let horas=0, parada=0, sumaDisp=0;
-  hojas.forEach(f=>{ const t=eqopTotales(f); horas+=t.horas; parada+=t.parada; sumaDisp+=t.disp; });
+  hojas.forEach(f=>{ const t=eqopTotales(f); horas+=t.efectivas; parada+=t.parada; sumaDisp+=t.disp; });
   const dias=hojas.length;
   const dispProm = dias ? Math.round((sumaDisp/dias)*10)/10 : 0;                 // media de las diarias
   const dispTotal= dias ? Math.min(100, Math.round((horas/(JORNADA_H*dias))*1000)/10) : 0;
@@ -19834,7 +19844,8 @@ function eqopVerFicha(f){
           +'<span style="font-weight:800;color:var(--text2)">Jornada de '+JORNADA_H+' h</span>'
           +'<span>⏲ Horómetro <b style="color:var(--text2)">'+(t.horometro>0?t.horometroHm:'—')+'</b></span>'
           +'<span>⏱ Actividades <b style="color:var(--text2)">'+t.hm+'</b></span>'
-          +(t.cuadra?'':'<span style="color:#f87171;font-weight:700">⚠ '+eqopDescuadreTxt(t)+'</span>')
+          +((t.cuadra&&!t.pendiente)?'':'<span style="color:'+(t.pendiente?'#f59e0b':'#f87171')+';font-weight:700">'
+      +(t.pendiente?'⏳ ':'⚠ ')+eqopDescuadreTxt(t)+'</span>')
           +'<span>⛔ Parada del día <b style="color:'+(t.parada>0?'#f87171':'var(--text2)')+'">'+t.paradaHm+'</b></span>'
           +'<span>📊 Disponibilidad <b style="color:'+t.dispColor+';font-size:16px">'+t.disp.toFixed(1)+'%</b> '
             +'<span style="color:'+t.dispColor+'">'+eqopDispTxt(t.disp)+'</span></span>'
@@ -19944,7 +19955,8 @@ function eqopRenderEditor(){
      +'<span>Jornada <b style="color:var(--text2)">'+JORNADA_H+' h</b></span>'
      +'<span>⏲ Horómetro <b style="color:var(--text2)">'+(t.horometro>0?t.horometroHm:'—')+'</b></span>'
      +'<span>⏱ Actividades <b style="color:var(--text2)">'+t.hm+'</b></span>'
-     +(t.cuadra?'':'<span style="color:#f87171;font-weight:700">⚠ '+eqopDescuadreTxt(t)+'</span>')
+     +((t.cuadra&&!t.pendiente)?'':'<span style="color:'+(t.pendiente?'#f59e0b':'#f87171')+';font-weight:700">'
+      +(t.pendiente?'⏳ ':'⚠ ')+eqopDescuadreTxt(t)+'</span>')
      +'<span>⛔ Parada <b style="color:'+(t.parada>0?'#f87171':'var(--text2)')+'">'+t.paradaHm+'</b></span>'
      +'<span>📊 Disponibilidad <b style="color:'+t.dispColor+';font-size:14px">'+t.disp.toFixed(1)+'%</b></span>'
    +'</div>'
