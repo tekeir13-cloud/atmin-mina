@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0d0f14">
+<meta name="robots" content="noindex">
+<title>Pronóstico Tenis · 4 Criterios</title>
+<link rel="icon" href="icon-192.png">
+<style>
+  :root{
+    --bg:#0d0f14; --card:#151922; --card2:#1b2029; --border:#2a303c;
+    --text:#e8ecf3; --text2:#aab3c2; --text3:#7b8493;
+    --ball:#d7f25a; --ok:#22c55e; --warn:#f59e0b; --bad:#f87171; --azul:#60a5fa;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+       padding:16px 12px 48px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:680px;margin:0 auto}
+  .marca{text-align:center;margin-bottom:14px}
+  .marca b{font-size:19px;letter-spacing:1px}
+  .marca b span{color:var(--ball)}
+  .marca div{font-size:10.5px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin-top:2px}
+  .tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px}
+  .tabs button{background:var(--card);border:1px solid var(--border);color:var(--text2);
+        border-radius:10px;padding:10px 4px;font-size:11.5px;font-weight:700;cursor:pointer;
+        font-family:inherit;text-transform:uppercase;letter-spacing:.4px}
+  .tabs button.on{background:var(--ball);color:#20260a;border-color:var(--ball)}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px}
+  .sec{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--text3);margin:0 0 10px}
+  label{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:5px}
+  input,select,textarea{width:100%;background:var(--card2);border:1px solid var(--border);border-radius:9px;
+        color:var(--text);padding:10px 12px;font-size:15px;font-family:inherit}
+  textarea{min-height:80px;font-size:13.5px;line-height:1.5;resize:vertical}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--ball)}
+  .campo{margin-bottom:11px}
+  .fila{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .fila3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}
+  button.principal{width:100%;background:var(--ball);color:#20260a;border:none;border-radius:10px;
+        padding:13px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit}
+  button.sec2{width:100%;background:none;border:1px solid var(--border);color:var(--text2);
+        border-radius:10px;padding:11px;font-size:13px;cursor:pointer;font-family:inherit;margin-top:8px}
+  .crit{border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:11px;background:var(--card2)}
+  .crit h4{margin:0 0 3px;font-size:14px}
+  .crit .peso{float:right;font-size:10.5px;color:var(--ball);font-weight:800}
+  .crit .guia{font-size:11.5px;color:var(--text3);line-height:1.5;margin:0 0 10px}
+  .lado{margin-bottom:10px}
+  .lado .top{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;margin-bottom:4px}
+  .lado .top b{font-size:12.5px}
+  .lado .top u{text-decoration:none;font-weight:800;font-size:14px}
+  input[type=range]{padding:0;background:none;border:none;accent-color:var(--ball);height:26px}
+  .mods{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+  .mods span{font-size:11px;border:1px solid var(--border);border-radius:999px;padding:5px 9px;
+        cursor:pointer;color:var(--text3);background:var(--bg);user-select:none;line-height:1.2}
+  .mods span.on{border-color:var(--ball);color:var(--text);background:#252b16}
+  .mods span i{font-style:normal;font-weight:800;opacity:.8}
+  .barra{height:26px;border-radius:8px;overflow:hidden;display:flex;background:var(--card2);margin:8px 0}
+  .barra i{display:flex;align-items:center;justify-content:center;font-style:normal;font-size:11.5px;font-weight:800}
+  .barra .a{background:var(--ball);color:#20260a}
+  .barra .b{background:var(--azul);color:#0a1a2e}
+  .veredicto{text-align:center;padding:6px 0 2px}
+  .veredicto b{font-size:19px;display:block}
+  .veredicto small{color:var(--text3);font-size:11.5px}
+  .pill{display:inline-block;border-radius:999px;padding:4px 11px;font-size:11px;font-weight:800;margin-top:7px}
+  .pill.alta{background:#123321;color:#4ade80}
+  .pill.media{background:#3a2b0c;color:#fbbf24}
+  .pill.baja{background:#3a1414;color:#fca5a5}
+  table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+  th{color:var(--text3);text-align:left;font-weight:700;font-size:10px;text-transform:uppercase;padding:5px 6px;border-bottom:1px solid var(--border)}
+  td{padding:6px;border-bottom:1px solid var(--border);color:var(--text2)}
+  td b{color:var(--text)}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+  .verde{color:var(--ok)} .rojo{color:var(--bad)} .ambar{color:var(--warn)} .gris{color:var(--text3)}
+  .item{border:1px solid var(--border);border-radius:11px;padding:11px;margin-bottom:9px;background:var(--card2)}
+  .item .cab{display:flex;justify-content:space-between;gap:8px;font-size:13px;font-weight:700}
+  .item .meta{font-size:11px;color:var(--text3);margin-top:3px}
+  .item .acc{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap}
+  .item .acc button{flex:1;min-width:92px;background:var(--bg);border:1px solid var(--border);color:var(--text2);
+        border-radius:8px;padding:8px 6px;font-size:11.5px;cursor:pointer;font-family:inherit;font-weight:700}
+  .item .acc button.del{flex:0 0 auto;min-width:38px;color:var(--text3)}
+  .nota{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;
+        font-size:12.5px;color:var(--text2);line-height:1.55;white-space:pre-wrap}
+  .vacio{text-align:center;color:var(--text3);font-size:12.5px;padding:18px 6px;line-height:1.6}
+  .pie{margin-top:16px;font-size:10.5px;color:var(--text3);text-align:center;line-height:1.6}
+  @media(max-width:420px){.fila3{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="marca"><b>PRONÓSTICO <span>TENIS</span></b><div>Modelo de 4 criterios</div></div>
+  <div class="tabs" id="tabs"></div>
+  <div id="vista"></div>
+  <div class="pie">Los datos se guardan solo en este dispositivo (localStorage). Exporta de vez en cuando desde <b>Datos</b>.<br>Ninguna apuesta es segura: el modelo ordena tu criterio, no adivina el partido.</div>
+</div>
+
+<script>
+/* ────────────────────────────────────────────────────────────────
+   MODELO
+   Cada criterio se puntúa 0–10 por jugador (5 = neutral) y se le
+   suman los "ajustes rápidos" marcados. El total de cada jugador es
+   el promedio ponderado por el peso de cada criterio, llevado a 100.
+   La diferencia de totales se convierte en probabilidad con una
+   curva logística: 10 pts ≈ 62%, 20 pts ≈ 73%, 40 pts ≈ 88%.
+   ──────────────────────────────────────────────────────────────── */
+const KEY='tenis_pronostico_v1';
+const K=0.05;           // pendiente de la curva
+const TOPE=0.93;        // nunca prometer más de 93%
+
+const CRITERIOS_BASE=[
+ {id:'solidez',nombre:'1. Solidez',peso:30,activo:true,
+  guia:'Cómo creció el tenista durante TODO el campeonato y si esa forma de ganar le sirve contra ESTE rival. Un jugador que avanzó solo por una arma (el saque) vale menos ante un rival que además de esa arma tiene respuesta.',
+  ejemplo:'Final US Open: Shelton avanzaba porque nadie le paraba el saque. Zverev no solo tenía saque, también respuesta.',
+  mods:[
+   {t:'Ganó todo apoyado en UNA sola arma',v:-1.5},
+   {t:'El rival neutraliza esa arma',v:-2},
+   {t:'Superó a un top-10 en el camino',v:1.5},
+   {t:'No perdió sets en el torneo',v:1},
+   {t:'Viene de 2+ partidos muy largos (desgaste)',v:-1},
+   {t:'Ganó levantando partidos perdidos (carácter)',v:1}],
+  notas:[]},
+ {id:'nivel',nombre:'2. Nuevo nivel',peso:25,activo:true,
+  guia:'Si estrena un puesto nuevo (nuevo top, N°1 del mundo) o puede alcanzarlo ganando: ese jugador NO puede perder, juega con presión a favor. Aplica también al top-5 que juega su segundo partido después de campeonar.',
+  ejemplo:'Zverev estrenaba N°1 del mundo y no podía perder. Rybakina estrenaba N°1 y no podía perder.',
+  mods:[
+   {t:'Estrena nuevo top / N°1 en este torneo',v:2.5},
+   {t:'Si gana este partido alcanza un puesto nuevo',v:2},
+   {t:'Top-5 jugando después de campeonar (impulso)',v:1.5},
+   {t:'Menos de 3 días desde la final que ganó (resaca)',v:-1},
+   {t:'Defiende muchos puntos, puede perder su puesto',v:-1},
+   {t:'Ranking estancado o bajando',v:-1}],
+  notas:[]},
+ {id:'local',nombre:'3. Localidad',peso:15,activo:true,
+  guia:'Jugar el campeonato en su propio país suma, y suma más todavía si viene ascendiendo y con buenas estadísticas. El público local también juega en contra del rival.',
+  ejemplo:'',
+  mods:[
+   {t:'Juega en su propio país',v:2,id:'local'},
+   {t:'Además viene ascendiendo con buenas estadísticas',v:1},
+   {t:'Ya fue campeón o finalista en este torneo',v:1},
+   {t:'El público está en contra (el local es el rival)',v:-1.5,id:'contra'},
+   {t:'Local con invitación pero sin ritmo de partidos',v:-1}],
+  notas:[]},
+ {id:'saque',nombre:'4. Saque y terreno',peso:30,activo:true,
+  guia:'Calidad de saque + nivel real en ESA superficie: un buen sacador con experiencia en esa cancha manda el partido. Si la superficie no lo acompaña, el saque solo no alcanza.',
+  ejemplo:'',
+  mods:[
+   {t:'Saque de élite (top-10 en puntos ganados con 1er saque)',v:1.5},
+   {t:'Especialista comprobado en esta superficie',v:1.5},
+   {t:'Superficie que no domina',v:-2},
+   {t:'Buen devolvedor, quiebra seguido',v:1},
+   {t:'Salva break points bajo presión',v:1},
+   {t:'Muchas dobles faltas / saque irregular',v:-1.5}],
+  notas:[]}
+];
+
+/* Criterios que puedo sumar cuando quieras (sugerencia estadística mía).
+   Entran con peso 0: no afectan nada hasta que tú les pongas peso. */
+const SUGERIDOS=[
+ {id:'h2h',nombre:'5. Head to head en esta superficie',peso:0,activo:true,
+  guia:'Cara a cara previo, pesando SOLO los partidos en la misma superficie y de los últimos 2 años. Un 3-0 en cemento vale mucho más que un 5-2 histórico repartido en todas las canchas.',ejemplo:'',
+  mods:[{t:'Le ganó las últimas 2 veces en esta superficie',v:2},{t:'Nunca le ha ganado',v:-2},{t:'Sin historial entre ellos',v:0}],notas:[]},
+ {id:'descanso',nombre:'6. Descanso y carga',peso:0,activo:true,
+  guia:'Minutos jugados en el torneo y días de descanso. En partidos al mejor de 5, la diferencia de desgaste explica muchas caídas del favorito en el tercer set.',ejemplo:'',
+  mods:[{t:'Un día más de descanso que el rival',v:1},{t:'Jugó 4h+ en su partido anterior',v:-1.5},{t:'Viene de dos maratones seguidos',v:-2},{t:'Molestia física o vendaje reciente',v:-2.5}],notas:[]},
+ {id:'clutch',nombre:'7. Momentos clave',peso:0,activo:true,
+  guia:'% de break points salvados y convertidos, y rendimiento en tie-breaks del torneo. Es el dato que mejor separa a dos jugadores parejos.',ejemplo:'',
+  mods:[{t:'Gana 70%+ de sus tie-breaks',v:1.5},{t:'Salva 65%+ de break points',v:1.5},{t:'Falla los break points que genera',v:-1.5}],notas:[]},
+ {id:'condiciones',nombre:'8. Condiciones de juego',peso:0,activo:true,
+  guia:'Altura de la sede, velocidad de la cancha, indoor/outdoor, calor y humedad, bolas usadas. Condiciones rápidas favorecen al sacador; lentas y con calor, al que corre y aguanta.',ejemplo:'',
+  mods:[{t:'Cancha rápida y él es sacador',v:1.5},{t:'Cancha lenta y él es de fondo',v:1.5},{t:'Calor extremo y tiene mal historial con eso',v:-1.5},{t:'Indoor, sin viento, favorece su juego',v:1}],notas:[]}
+];
+
+const SEMILLA=`Directriz inicial del modelo (4 criterios):
+1) SOLIDEZ: la forma en que el tenista creció en todo el campeonato ganando sus partidos, asumiendo cómo le iría en el partido actual si el rival tiene otras habilidades. Ejemplo final del US Open Shelton–Zverev: Shelton avanzaba porque su saque nadie lo paraba; Zverev no solo tenía saque, también respuesta.
+2) NUEVO NIVEL: si va a estrenar un nuevo top, o sea ascendiendo posiciones. Ejemplo: Zverev estrenaba N°1 del mundo y no podía perder; Rybakina estrenaba N°1 y no podía perder. Aplica también para tenistas del top 5 que van a jugar un segundo partido después de campeonar.
+3) LOCALIDAD: si juegan en su propio país un campeonato tienen más posibilidades de ganar, más aún si van ascendiendo y tienen buenas estadísticas.
+4) HABILIDAD DE SAQUE Y GRAN NIVEL EN EL TERRENO: jugador con buen saque y experiencia en ese tipo de cancha.`;
+
+const VACIO={v:1,criterios:JSON.parse(JSON.stringify(CRITERIOS_BASE)),partidos:[],
+  bitacora:[{fecha:hoy(),texto:SEMILLA}],borrador:null,banca:100};
+
+function hoy(){const d=new Date();return d.toISOString().slice(0,10)}
+function load(){try{const r=localStorage.getItem(KEY);if(r){const d=JSON.parse(r);
+    return Object.assign(JSON.parse(JSON.stringify(VACIO)),d)}}catch(e){}
+  return JSON.parse(JSON.stringify(VACIO))}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){alert('No se pudo guardar: '+e.message)}}
+let db=load();
+let tab='analizar';
+
+/* ── Cálculo ───────────────────────────────────────────────────── */
+function efectivo(c,lado){
+  const s=db.borrador.scores[c.id]||{};
+  let v=(lado==='a'?s.a:s.b); if(v==null)v=5;
+  const marcados=(lado==='a'?s.ma:s.mb)||[];
+  marcados.forEach(i=>{const m=c.mods[i]; if(m) v+=m.v});
+  return Math.max(0,Math.min(10,v));
+}
+function calcular(){
+  const act=db.criterios.filter(c=>c.activo&&c.peso>0);
+  const pesoTot=act.reduce((s,c)=>s+c.peso,0)||1;
+  let pa=0,pb=0,detalle=[];
+  act.forEach(c=>{
+    const ea=efectivo(c,'a'),eb=efectivo(c,'b');
+    pa+=c.peso*ea/10; pb+=c.peso*eb/10;
+    detalle.push({id:c.id,nombre:c.nombre,peso:c.peso,ea:ea,eb:eb,
+      aporte:c.peso*(ea-eb)/10*100/pesoTot});
+  });
+  pa=pa*100/pesoTot; pb=pb*100/pesoTot;
+  const D=pa-pb;
+  let prob=1/(1+Math.exp(-K*D));
+  prob=Math.max(1-TOPE,Math.min(TOPE,prob));
+  const claros=detalle.filter(d=>Math.abs(d.ea-d.eb)>=1).length;
+  let conf='baja';
+  if(Math.abs(D)>=20&&claros>=3)conf='alta';
+  else if(Math.abs(D)>=10&&claros>=2)conf='media';
+  return {pa,pb,D,prob,conf,detalle,claros};
+}
+function kelly(p,c){ if(!(c>1))return 0; const f=(p*c-1)/(c-1); return Math.max(0,f) }
+
+function recomendacion(r){
+  const favA=r.D>=0, p=favA?r.prob:1-r.prob;
+  const cuota=parseFloat(favA?db.borrador.cuotaA:db.borrador.cuotaB);
+  const out={fav:favA?'a':'b',p:p,cuota:cuota||null};
+  if(Math.abs(r.D)<8){out.txt='PASAR — partido parejo';out.cls='rojo';
+    out.det='La diferencia entre los dos es menor a 8 puntos: el modelo no separa a nadie.';return out}
+  if(r.conf==='baja'){out.txt='PASAR — poca información';out.cls='rojo';
+    out.det='Solo '+r.claros+' criterio(s) marcan diferencia real. Completa más datos antes de arriesgar.';return out}
+  if(!cuota){out.txt='FAVORITO CLARO — falta la cuota';out.cls='ambar';
+    out.det='Carga la cuota para saber si la casa te está pagando bien ese favorito.';return out}
+  const ev=p*cuota-1;
+  out.ev=ev;
+  const f=kelly(p,cuota)/4;                       // Kelly a un cuarto
+  out.stake=Math.min(0.03,f);                      // tope 3% de la banca
+  if(ev<=0){out.txt='NO APOSTAR — sin valor';out.cls='rojo';
+    out.det='Tu probabilidad ('+(p*100).toFixed(0)+'%) es menor que la que paga la cuota ('+(100/cuota).toFixed(0)+'%). Aciertas y aun así pierdes plata a la larga.';return out}
+  if(ev<0.05){out.txt='VALOR JUSTO — apostar poco o pasar';out.cls='ambar';
+    out.det='Valor esperado +'+(ev*100).toFixed(1)+'%. Muy al filo para arriesgar fuerte.';return out}
+  out.txt=r.conf==='alta'?'APOSTAR':'APOSTAR CON CAUTELA';out.cls='verde';
+  out.det='Valor esperado +'+(ev*100).toFixed(1)+'%. Monto sugerido: '+(out.stake*100).toFixed(1)+'% de la banca ('+(out.stake*db.banca).toFixed(1)+' de '+db.banca+').';
+  return out;
+}
+
+/* ── Utilidades de vista ───────────────────────────────────────── */
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function nuevoBorrador(){return {torneo:'',sede:'',superficie:'Dura',ronda:'',
+  a:{nombre:'',nac:''},b:{nombre:'',nac:''},cuotaA:'',cuotaB:'',scores:{},nota:''}}
+if(!db.borrador)db.borrador=nuevoBorrador();
+
+/* ── Vista: ANALIZAR ───────────────────────────────────────────
+   Ojo: aquí NO se repinta toda la pantalla en cada tecla, porque eso
+   te quitaba el cursor al escribir y cortaba el arrastre del slider.
+   Solo se refresca el marcador y los números que cambian.
+   ─────────────────────────────────────────────────────────────── */
+function vAnalizar(){
+  const d=db.borrador;
+  let h='<div class="card"><div class="sec">El partido</div>'+
+   '<div class="fila"><div class="campo"><label>Torneo</label><input value="'+esc(d.torneo)+'" oninput="setC(\'torneo\',this.value)" placeholder="US Open"></div>'+
+   '<div class="campo"><label>País sede</label><input value="'+esc(d.sede)+'" oninput="setC(\'sede\',this.value);autoLocal()" placeholder="Estados Unidos"></div></div>'+
+   '<div class="fila"><div class="campo"><label>Superficie</label><select onchange="setC(\'superficie\',this.value)">'+
+     ['Dura','Dura indoor','Arcilla','Césped'].map(s=>'<option'+(d.superficie===s?' selected':'')+'>'+s+'</option>').join('')+'</select></div>'+
+   '<div class="campo"><label>Ronda</label><input value="'+esc(d.ronda)+'" oninput="setC(\'ronda\',this.value)" placeholder="Final"></div></div>'+
+   '<div class="fila"><div class="campo"><label>Jugador A</label><input value="'+esc(d.a.nombre)+'" oninput="setJ(\'a\',\'nombre\',this.value)" placeholder="Shelton"></div>'+
+   '<div class="campo"><label>Jugador B</label><input value="'+esc(d.b.nombre)+'" oninput="setJ(\'b\',\'nombre\',this.value)" placeholder="Zverev"></div></div>'+
+   '<div class="fila"><div class="campo"><label>Nacionalidad A</label><input value="'+esc(d.a.nac)+'" oninput="setJ(\'a\',\'nac\',this.value);autoLocal()" placeholder="Estados Unidos"></div>'+
+   '<div class="campo"><label>Nacionalidad B</label><input value="'+esc(d.b.nac)+'" oninput="setJ(\'b\',\'nac\',this.value);autoLocal()" placeholder="Alemania"></div></div>'+
+   '<div class="fila"><div class="campo"><label>Cuota A</label><input inputmode="decimal" value="'+esc(d.cuotaA)+'" oninput="setC(\'cuotaA\',this.value)" placeholder="2.10"></div>'+
+   '<div class="campo"><label>Cuota B</label><input inputmode="decimal" value="'+esc(d.cuotaB)+'" oninput="setC(\'cuotaB\',this.value)" placeholder="1.75"></div></div></div>';
+
+  h+='<div class="card"><div class="sec">Criterios · 5 es neutral</div>';
+  db.criterios.filter(c=>c.activo).forEach(c=>{
+    const s=db.borrador.scores[c.id]||{};
+    h+='<div class="crit"><span class="peso">peso '+c.peso+'</span><h4>'+esc(c.nombre)+'</h4>'+
+       '<p class="guia">'+esc(c.guia)+(c.ejemplo?'<br><i>Ej.: '+esc(c.ejemplo)+'</i>':'')+'</p>';
+    ['a','b'].forEach(l=>{
+      const base=(l==='a'?s.a:s.b), marc=(l==='a'?s.ma:s.mb)||[];
+      h+='<div class="lado"><div class="top"><b class="jn-'+l+'">'+esc(nombre(l))+'</b>'+
+        '<u id="ef_'+c.id+'_'+l+'">'+efectivo(c,l).toFixed(1)+'</u></div>'+
+        '<input type="range" min="0" max="10" step="0.5" value="'+(base==null?5:base)+'" oninput="setS(\''+c.id+'\',\''+l+'\',this.value)">'+
+        '<div class="mods" id="mods_'+c.id+'_'+l+'">'+c.mods.map((m,i)=>
+          '<span class="'+(marc.indexOf(i)>=0?'on':'')+'" onclick="tog(this,\''+c.id+'\',\''+l+'\','+i+')">'+esc(m.t)+' <i>'+(m.v>0?'+':'')+m.v+'</i></span>').join('')+'</div></div>';
+    });
+    h+='</div>';
+  });
+  h+='</div>';
+
+  h+='<div class="card"><div class="sec">Resultado del modelo</div><div id="res">'+resHTML()+'</div>'+
+   '<div class="campo" style="margin-top:11px"><label>Nota del partido (opcional)</label>'+
+   '<textarea oninput="setC(\'nota\',this.value)" placeholder="Qué viste, qué te hizo dudar...">'+esc(d.nota)+'</textarea></div>'+
+   '<button class="principal" onclick="guardarPartido()">Guardar pronóstico</button>'+
+   '<button class="sec2" onclick="limpiar()">Limpiar y empezar otro</button></div>';
+  return h;
+}
+function nombre(l){return (l==='a'?db.borrador.a.nombre:db.borrador.b.nombre)||(l==='a'?'Jugador A':'Jugador B')}
+function resHTML(){
+  const r=calcular(),rec=recomendacion(r);
+  const nomA=nombre('a'),nomB=nombre('b'),pctA=Math.round(r.prob*100);
+  return '<div class="barra"><i class="a" style="width:'+pctA+'%">'+(pctA>=18?esc(nomA)+' '+pctA+'%':'')+'</i>'+
+   '<i class="b" style="width:'+(100-pctA)+'%">'+((100-pctA)>=18?esc(nomB)+' '+(100-pctA)+'%':'')+'</i></div>'+
+   '<div class="veredicto"><b>'+esc(r.D>=0?nomA:nomB)+' — '+Math.round(Math.max(r.prob,1-r.prob)*100)+'%</b>'+
+   '<small>'+r.pa.toFixed(1)+' vs '+r.pb.toFixed(1)+' puntos · diferencia '+Math.abs(r.D).toFixed(1)+'</small>'+
+   '<div class="pill '+r.conf+'">confianza '+r.conf+'</div></div>'+
+   '<table><tr><th>Criterio</th><th class="num">'+esc(nomA)+'</th><th class="num">'+esc(nomB)+'</th><th class="num">Aporte</th></tr>'+
+   r.detalle.map(x=>'<tr><td>'+esc(x.nombre)+'</td><td class="num">'+x.ea.toFixed(1)+'</td><td class="num">'+x.eb.toFixed(1)+'</td>'+
+     '<td class="num '+(x.aporte>0.5?'verde':x.aporte<-0.5?'rojo':'gris')+'">'+(x.aporte>0?'+':'')+x.aporte.toFixed(1)+'</td></tr>').join('')+'</table>'+
+   '<div style="margin-top:12px" class="nota"><b class="'+rec.cls+'">'+rec.txt+'</b>\n'+esc(rec.det)+'</div>';
+}
+/* Refresco parcial: números efectivos, nombres y marcador. */
+function refrescar(){
+  if(tab!=='analizar')return;
+  db.criterios.filter(c=>c.activo).forEach(c=>['a','b'].forEach(l=>{
+    const n=document.getElementById('ef_'+c.id+'_'+l);
+    if(n)n.textContent=efectivo(c,l).toFixed(1);
+  }));
+  document.querySelectorAll('.jn-a').forEach(n=>n.textContent=nombre('a'));
+  document.querySelectorAll('.jn-b').forEach(n=>n.textContent=nombre('b'));
+  const res=document.getElementById('res'); if(res)res.innerHTML=resHTML();
+}
+function setC(k,v){db.borrador[k]=v;save();refrescar()}
+function setJ(l,k,v){db.borrador[l][k]=v;save();refrescar()}
+function setS(id,l,v){const s=db.borrador.scores[id]||(db.borrador.scores[id]={});
+  s[l]=parseFloat(v);save();refrescar()}
+function tog(el,id,l,i){const s=db.borrador.scores[id]||(db.borrador.scores[id]={});
+  const k=l==='a'?'ma':'mb'; const arr=s[k]||(s[k]=[]);
+  const p=arr.indexOf(i); if(p>=0)arr.splice(p,1); else arr.push(i);
+  if(el)el.classList.toggle('on',p<0);
+  save();refrescar()}
+/* Si la nacionalidad coincide con el país sede, marca solo el "juega en su
+   país" del local y el "público en contra" del visitante. */
+function autoLocal(){
+  const c=db.criterios.find(x=>x.id==='local'); if(!c)return;
+  const iL=c.mods.findIndex(m=>m.id==='local'), iC=c.mods.findIndex(m=>m.id==='contra');
+  if(iL<0||iC<0)return;
+  const sede=(db.borrador.sede||'').trim().toLowerCase(); if(!sede)return;
+  const s=db.borrador.scores[c.id]||(db.borrador.scores[c.id]={});
+  s.ma=s.ma||[];s.mb=s.mb||[];
+  const eq=l=>((db.borrador[l].nac||'').trim().toLowerCase()===sede);
+  const set=(arr,i,on)=>{const p=arr.indexOf(i);if(on&&p<0)arr.push(i);if(!on&&p>=0)arr.splice(p,1)};
+  set(s.ma,iL,eq('a')); set(s.mb,iL,eq('b'));
+  set(s.ma,iC,eq('b')&&!eq('a')); set(s.mb,iC,eq('a')&&!eq('b'));
+  ['a','b'].forEach(l=>{
+    const cont=document.getElementById('mods_'+c.id+'_'+l); if(!cont)return;
+    const marc=(l==='a'?s.ma:s.mb);
+    [].forEach.call(cont.children,(sp,i)=>sp.classList.toggle('on',marc.indexOf(i)>=0));
+  });
+  save();refrescar();
+}
+function guardarPartido(){
+  const d=db.borrador;
+  if(!d.a.nombre||!d.b.nombre){alert('Pon el nombre de los dos jugadores.');return}
+  const r=calcular(),rec=recomendacion(r);
+  db.partidos.unshift({id:Date.now(),fecha:hoy(),torneo:d.torneo,sede:d.sede,superficie:d.superficie,
+    ronda:d.ronda,a:d.a.nombre,b:d.b.nombre,cuotaA:d.cuotaA,cuotaB:d.cuotaB,nota:d.nota,
+    pa:r.pa,pb:r.pb,prob:r.prob,conf:r.conf,fav:rec.fav,rec:rec.txt,apostado:rec.cls==='verde',
+    stake:rec.stake||0,detalle:r.detalle.map(x=>({id:x.id,nombre:x.nombre,ea:x.ea,eb:x.eb})),
+    ganador:null});
+  db.borrador=nuevoBorrador();save();tab='historial';render();
+}
+function limpiar(){if(confirm('¿Borrar lo cargado en esta pantalla?')){db.borrador=nuevoBorrador();save();render()}}
+
+/* ── Vista: HISTORIAL ──────────────────────────────────────────── */
+function vHistorial(){
+  const cerr=db.partidos.filter(p=>p.ganador);
+  const ok=cerr.filter(p=>p.ganador===p.fav).length;
+  const conApu=cerr.filter(p=>p.apostado&&(p.fav==='a'?p.cuotaA:p.cuotaB));
+  let u=0; conApu.forEach(p=>{const c=parseFloat(p.fav==='a'?p.cuotaA:p.cuotaB);
+    u+=(p.ganador===p.fav)?(c-1):-1});
+  let h='<div class="card"><div class="sec">Rendimiento</div><table>'+
+   '<tr><td>Pronósticos cerrados</td><td class="num"><b>'+cerr.length+'</b></td></tr>'+
+   '<tr><td>Aciertos</td><td class="num"><b>'+ok+(cerr.length?' ('+Math.round(ok*100/cerr.length)+'%)':'')+'</b></td></tr>'+
+   '<tr><td>Apuestas recomendadas jugadas</td><td class="num"><b>'+conApu.length+'</b></td></tr>'+
+   '<tr><td>Unidades a plano (1u por apuesta)</td><td class="num '+(u>0?'verde':u<0?'rojo':'gris')+'"><b>'+(u>0?'+':'')+u.toFixed(2)+'</b></td></tr>'+
+   '</table></div>';
+  h+='<div class="card"><div class="sec">Qué criterio te está acertando</div>';
+  const est={};
+  cerr.forEach(p=>p.detalle.forEach(x=>{
+    if(Math.abs(x.ea-x.eb)<1)return;
+    const e=est[x.id]||(est[x.id]={n:0,ok:0,nombre:x.nombre});
+    e.n++; const favC=x.ea>x.eb?'a':'b'; if(favC===p.ganador)e.ok++;
+  }));
+  const filas=Object.values(est);
+  h+=filas.length?'<table><tr><th>Criterio</th><th class="num">Veces</th><th class="num">Acierto</th><th>Sugerencia</th></tr>'+
+    filas.map(e=>{const pc=Math.round(e.ok*100/e.n);
+      let s='—'; if(e.n>=10&&pc>=65)s='<span class="verde">subir peso</span>';
+      else if(e.n>=10&&pc<=45)s='<span class="rojo">bajar peso</span>';
+      else if(e.n<10)s='<span class="gris">faltan datos</span>';
+      return '<tr><td>'+esc(e.nombre)+'</td><td class="num">'+e.n+'</td><td class="num">'+pc+'%</td><td>'+s+'</td></tr>'}).join('')+'</table>'
+    :'<div class="vacio">Cuando cierres partidos con su ganador, aquí verás qué criterio predice mejor y si conviene moverle el peso.</div>';
+  h+='</div>';
+  h+='<div class="card"><div class="sec">Pronósticos ('+db.partidos.length+')</div>';
+  if(!db.partidos.length)h+='<div class="vacio">Todavía no guardas ninguno.</div>';
+  db.partidos.forEach(p=>{
+    const favN=p.fav==='a'?p.a:p.b, pr=Math.round(Math.max(p.prob,1-p.prob)*100);
+    const est=p.ganador?(p.ganador===p.fav?'<span class="verde">✔ acertado</span>':'<span class="rojo">✘ fallado</span>'):'<span class="gris">pendiente</span>';
+    h+='<div class="item"><div class="cab"><span>'+esc(p.a)+' vs '+esc(p.b)+'</span><span>'+est+'</span></div>'+
+      '<div class="meta">'+esc(p.fecha)+' · '+esc(p.torneo||'sin torneo')+' · '+esc(p.superficie)+(p.ronda?' · '+esc(p.ronda):'')+'</div>'+
+      '<div class="meta">Favorito: <b style="color:var(--text)">'+esc(favN)+' '+pr+'%</b> · confianza '+p.conf+' · '+esc(p.rec)+'</div>'+
+      (p.nota?'<div class="meta">'+esc(p.nota)+'</div>':'')+
+      '<div class="acc">'+(p.ganador?'<button onclick="setGanador('+p.id+',null)">Quitar resultado</button>':
+        '<button onclick="setGanador('+p.id+',\'a\')">Ganó '+esc(p.a)+'</button><button onclick="setGanador('+p.id+',\'b\')">Ganó '+esc(p.b)+'</button>')+
+      '<button class="del" onclick="borrarPartido('+p.id+')">🗑</button></div></div>';
+  });
+  h+='</div>';
+  return h;
+}
+function setGanador(id,g){const p=db.partidos.find(x=>x.id===id);if(p){p.ganador=g;save();render()}}
+function borrarPartido(id){if(confirm('¿Borrar este pronóstico?')){db.partidos=db.partidos.filter(x=>x.id!==id);save();render()}}
+
+/* ── Vista: CRITERIOS ──────────────────────────────────────────── */
+function vCriterios(){
+  const tot=db.criterios.filter(c=>c.activo).reduce((s,c)=>s+ +c.peso,0);
+  let h='<div class="card"><div class="sec">Pesos · suman '+tot+'</div>'+
+   '<div class="nota">Los pesos no tienen que sumar 100: el modelo los normaliza solo. Sube el peso del criterio que te venga acertando (lo ves en Historial).</div></div>';
+  db.criterios.forEach((c,i)=>{
+    h+='<div class="card"><div class="fila" style="grid-template-columns:1fr 90px">'+
+     '<div class="campo"><label>Criterio</label><input value="'+esc(c.nombre)+'" oninput="setCrit('+i+',\'nombre\',this.value)"></div>'+
+     '<div class="campo"><label>Peso</label><input inputmode="numeric" value="'+c.peso+'" oninput="setCrit('+i+',\'peso\',this.value)"></div></div>'+
+     '<div class="campo"><label>Directriz</label><textarea oninput="setCrit('+i+',\'guia\',this.value)">'+esc(c.guia)+'</textarea></div>'+
+     '<div class="campo"><label>Ejemplo</label><input value="'+esc(c.ejemplo||'')+'" oninput="setCrit('+i+',\'ejemplo\',this.value)"></div>'+
+     '<label>Ajustes rápidos</label><div class="mods">'+
+       c.mods.map((m,j)=>'<span class="on" onclick="borrarMod('+i+','+j+')">'+esc(m.t)+' <i>'+(m.v>0?'+':'')+m.v+'</i> ✕</span>').join('')+
+       '<span onclick="nuevoMod('+i+')">+ agregar ajuste</span></div>'+
+     (c.notas&&c.notas.length?'<div class="nota" style="margin-top:10px">'+c.notas.map(n=>esc(n.fecha)+' — '+esc(n.texto)).join('\n')+'</div>':'')+
+     '<div class="acc" style="display:flex;gap:6px;margin-top:11px">'+
+      '<button class="sec2" style="margin:0" onclick="setCrit('+i+',\'activo\','+(!c.activo)+')">'+(c.activo?'Desactivar':'Activar')+'</button>'+
+      '<button class="sec2" style="margin:0" onclick="borrarCrit('+i+')">Eliminar</button></div></div>';
+  });
+  const faltan=SUGERIDOS.filter(s=>!db.criterios.some(c=>c.id===s.id));
+  h+='<div class="card"><div class="sec">Criterios que te sugiero (estadística)</div>';
+  h+=faltan.length?'<div class="nota" style="margin-bottom:10px">Entran con peso 0: no mueven nada hasta que tú les pongas peso.</div>'+
+    faltan.map(s=>'<div class="item"><div class="cab"><span>'+esc(s.nombre)+'</span></div><div class="meta">'+esc(s.guia)+'</div>'+
+    '<div class="acc"><button onclick="agregarSug(\''+s.id+'\')">Agregar</button></div></div>').join('')
+   :'<div class="vacio">Ya están todos agregados.</div>';
+  h+='<button class="sec2" onclick="critNuevo()">+ Criterio en blanco</button></div>';
+  return h;
+}
+function setCrit(i,k,v){if(k==='peso')v=Math.max(0,parseFloat(v)||0);db.criterios[i][k]=v;save();render()}
+function borrarMod(i,j){db.criterios[i].mods.splice(j,1);save();render()}
+function nuevoMod(i){const t=prompt('Texto del ajuste (ej. "El rival neutraliza su saque")');if(!t)return;
+  const v=parseFloat(prompt('Cuánto suma o resta (ej. 1.5 o -2)','1'));if(isNaN(v))return;
+  db.criterios[i].mods.push({t:t,v:v});save();render()}
+function borrarCrit(i){if(confirm('¿Eliminar el criterio "'+db.criterios[i].nombre+'"? El historial no se toca.')){db.criterios.splice(i,1);save();render()}}
+function agregarSug(id){const s=SUGERIDOS.find(x=>x.id===id);if(!s)return;
+  db.criterios.push(JSON.parse(JSON.stringify(s)));save();render()}
+function critNuevo(){const n=prompt('Nombre del criterio');if(!n)return;
+  db.criterios.push({id:'c'+Date.now(),nombre:n,peso:0,activo:true,guia:'',ejemplo:'',mods:[],notas:[]});
+  save();render()}
+
+/* ── Vista: DATOS (bitácora + respaldo) ────────────────────────── */
+function vDatos(){
+  let h='<div class="card"><div class="sec">Bitácora de directrices</div>'+
+   '<div class="campo"><textarea id="bit" placeholder="Pega aquí la directriz nueva del criterio que estés afinando..."></textarea></div>'+
+   '<button class="principal" onclick="addBitacora()">Guardar directriz</button></div>';
+  h+='<div class="card"><div class="sec">Historial de directrices ('+db.bitacora.length+')</div>'+
+   db.bitacora.map((b,i)=>'<div class="item"><div class="cab"><span>'+esc(b.fecha)+'</span>'+
+     '<button class="del" style="background:none;border:none;color:var(--text3);cursor:pointer" onclick="delBit('+i+')">🗑</button></div>'+
+     '<div class="nota" style="margin-top:7px">'+esc(b.texto)+'</div></div>').join('')+'</div>';
+  h+='<div class="card"><div class="sec">Banca y respaldo</div>'+
+   '<div class="campo"><label>Banca (para el monto sugerido)</label><input inputmode="decimal" value="'+db.banca+'" oninput="db.banca=parseFloat(this.value)||0;save()"></div>'+
+   '<button class="principal" onclick="exportar()">Exportar copia (.json)</button>'+
+   '<button class="sec2" onclick="document.getElementById(\'imp\').click()">Importar copia</button>'+
+   '<input id="imp" type="file" accept="application/json" style="display:none" onchange="importar(this)">'+
+   '<button class="sec2" onclick="borrarTodo()">Borrar todo</button></div>';
+  return h;
+}
+function addBitacora(){const t=document.getElementById('bit').value.trim();if(!t)return;
+  db.bitacora.unshift({fecha:hoy(),texto:t});save();render()}
+function delBit(i){if(confirm('¿Borrar esta directriz?')){db.bitacora.splice(i,1);save();render()}}
+function exportar(){
+  const b=new Blob([JSON.stringify(db,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);
+  a.download='pronostico-tenis-'+hoy()+'.json';a.click();URL.revokeObjectURL(a.href);
+}
+function importar(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();
+  r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.criterios)throw new Error('archivo no válido');
+    db=Object.assign(JSON.parse(JSON.stringify(VACIO)),d);if(!db.borrador)db.borrador=nuevoBorrador();
+    save();render();alert('Copia importada.')}catch(e){alert('No se pudo importar: '+e.message)}};
+  r.readAsText(f)}
+function borrarTodo(){if(confirm('¿Borrar TODO (partidos, criterios y directrices)?')){
+  db=JSON.parse(JSON.stringify(VACIO));db.borrador=nuevoBorrador();save();render()}}
+
+/* ── Router ────────────────────────────────────────────────────── */
+const TABS=[['analizar','Analizar'],['historial','Historial'],['criterios','Criterios'],['datos','Datos']];
+function render(){
+  document.getElementById('tabs').innerHTML=TABS.map(t=>
+    '<button class="'+(tab===t[0]?'on':'')+'" onclick="ir(\''+t[0]+'\')">'+t[1]+'</button>').join('');
+  const v=document.getElementById('vista');
+  const foco=document.activeElement, id=foco&&foco.id, sel=foco&&foco.selectionStart;
+  v.innerHTML=tab==='analizar'?vAnalizar():tab==='historial'?vHistorial():tab==='criterios'?vCriterios():vDatos();
+  if(id){const n=document.getElementById(id);if(n){n.focus();try{n.selectionStart=n.selectionEnd=sel}catch(e){}}}
+}
+function ir(t){tab=t;render()}
+render();
+</script>
+</body>
+</html>
