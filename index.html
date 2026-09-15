@@ -4026,9 +4026,20 @@ select option{background:var(--coal3);}
       <input type="text" id="cmpr-detalle" placeholder="Ej: Taxi de Pataz a la mina para traer repuestos"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <div class="form-group" style="margin:0"><label>Quién gastó</label><input type="text" id="cmpr-responsable" placeholder="Nombre"></div>
-      <div class="form-group" style="margin:0"><label>Monto (S/)</label>
-        <input type="number" id="cmpr-monto" min="0" step="0.01" placeholder="0.00"></div>
+      <div class="form-group" style="margin:0"><label id="cmpr-lbl-monto">Monto (S/)</label>
+        <input type="number" id="cmpr-monto" min="0" step="0.01" placeholder="0.00" oninput="cmpRendMoneda(true)"></div>
     </div>
+    <!-- Un gasto en dólares se captura en dólares y se convierte al guardar, igual que una factura. -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <div class="form-group" style="margin:0"><label>Moneda</label>
+        <select id="cmpr-moneda" onchange="cmpRendMoneda()" style="width:100%">
+          <option value="PEN">S/ Soles</option><option value="USD">US$ Dólares</option>
+        </select></div>
+      <div class="form-group" style="margin:0" id="cmpr-tc-wrap"><label>Tipo de cambio (S/ por US$)</label>
+        <input type="number" id="cmpr-tc" min="0" step="0.001" placeholder="3.750" oninput="cmpRendMoneda(true)"></div>
+    </div>
+    <div id="cmpr-conv" style="display:none;font-size:12px;border-radius:8px;padding:9px 12px;margin-bottom:10px;
+      background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.35);color:#93c5fd"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px">
       <div class="form-group" style="margin:0"><label>N° de comprobante <span style="color:var(--text3);font-weight:400">(opcional)</span></label>
         <input type="text" id="cmpr-numero" placeholder="Boleta, ticket…"></div>
@@ -4061,12 +4072,27 @@ select option{background:var(--coal3);}
       <div class="form-group" style="margin:0"><label>Proveedor</label><input type="text" id="cmpf-proveedor" placeholder="Razón social"></div>
     </div>
     <div class="form-group"><label>Producto / detalle</label><textarea id="cmpf-producto" rows="2" placeholder="Qué se compró" style="width:100%;resize:vertical"></textarea></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
-      <div class="form-group" style="margin:0"><label>Monto sin IGV (S/)</label><input type="number" step="0.01" min="0" id="cmpf-sinigv" placeholder="0.00" oninput="cmpCalcMontos('sin')"></div>
-      <div class="form-group" style="margin:0"><label>IGV (S/)</label><input type="number" step="0.01" min="0" id="cmpf-igv" placeholder="0.00" oninput="cmpCalcMontos('igv')"></div>
-      <div class="form-group" style="margin:0"><label>Total con IGV (S/)</label><input type="number" step="0.01" min="0" id="cmpf-conigv" placeholder="0.00" oninput="cmpCalcMontos('con')"></div>
+    <!-- MONEDA Y TIPO DE CAMBIO — una factura en dólares se registra en su moneda, pero el
+         sistema lleva todo en soles: se convierte aquí, al tipo de cambio del día de la factura,
+         y ese tipo queda guardado para que el cuadre se pueda rehacer igual dentro de un año. -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group" style="margin:0"><label>Moneda de la factura</label>
+        <select id="cmpf-moneda" onchange="cmpMonedaChange()" style="width:100%">
+          <option value="PEN">S/ Soles</option>
+          <option value="USD">US$ Dólares</option>
+        </select></div>
+      <div class="form-group" style="margin:0" id="cmpf-tc-wrap">
+        <label>Tipo de cambio (S/ por US$)</label>
+        <input type="number" step="0.001" min="0" id="cmpf-tc" placeholder="3.750" oninput="cmpMonedaChange(true)"></div>
     </div>
-    <div style="font-size:10px;color:var(--text3);margin-bottom:10px">Escribe cualquiera de los tres montos y los otros se completan solos (IGV 18%). Puedes corregir cualquiera.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div class="form-group" style="margin:0"><label id="cmpf-lbl-sin">Monto sin IGV (S/)</label><input type="number" step="0.01" min="0" id="cmpf-sinigv" placeholder="0.00" oninput="cmpCalcMontos('sin')"></div>
+      <div class="form-group" style="margin:0"><label id="cmpf-lbl-igv">IGV (S/)</label><input type="number" step="0.01" min="0" id="cmpf-igv" placeholder="0.00" oninput="cmpCalcMontos('igv')"></div>
+      <div class="form-group" style="margin:0"><label id="cmpf-lbl-con">Total con IGV (S/)</label><input type="number" step="0.01" min="0" id="cmpf-conigv" placeholder="0.00" oninput="cmpCalcMontos('con')"></div>
+    </div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:6px">Escribe cualquiera de los tres montos y los otros se completan solos (IGV 18%). Puedes corregir cualquiera.</div>
+    <div id="cmpf-conv" style="display:none;font-size:12px;border-radius:8px;padding:9px 12px;margin-bottom:10px;
+      background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.35);color:#93c5fd"></div>
     <div id="cmpf-items"></div>
     <div id="cmpf-foto-prev"></div>
     <div class="btn-row" style="margin-top:6px">
@@ -29729,6 +29755,19 @@ function comprasSave(){
   try{ sbSyncModulo('compras', state.compras); }catch(e){}
 }
 function cmpMoney(n){ return 'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+/* Un gasto en dólares se guarda en soles, pero el papel dice dólares: la marca deja ver de dónde
+   salió el importe sin tener que abrir el registro. */
+function cmpEsUsd(f){ return !!(f && f.moneda==='USD' && Number(f.tc)>0); }
+function cmpUsdTxt(f){
+  if(!cmpEsUsd(f)) return '';
+  const o=(f.montoOrig&&f.montoOrig.conIgv!=null)?Number(f.montoOrig.conIgv)
+         :Math.round((Number(f.conIgv)||0)/Number(f.tc)*100)/100;
+  return 'US$ '+(Number(o)||0).toFixed(2)+' × '+f.tc;
+}
+function cmpUsdChip(f){
+  if(!cmpEsUsd(f)) return '';
+  return '<div style="font-size:9.5px;color:#93c5fd;font-weight:600">💱 '+cmpUsdTxt(f)+'</div>';
+}
 // Periodos con datos + el vigente, para los selectores de ciclo
 function cmpPeriodos(){
   const c=comprasNorm();
@@ -29778,8 +29817,43 @@ function cmpCalcMontos(origen){
   else if(origen==='igv' && !isNaN(igv)){ const s=igv/CMP_IGV; g('cmpf-sinigv').value=r2(s); g('cmpf-conigv').value=r2(s+igv); }
   // El detalle compara su suma contra la base imponible: si cambian los montos, se revisa otra vez.
   try{ if(typeof cmpItemsResumen==='function') cmpItemsResumen(); }catch(e){}
+  try{ if(typeof cmpMonedaChange==='function') cmpMonedaChange(true); }catch(e){}
 }
 
+/* ── MONEDA DE LA FACTURA ────────────────────────────────────────────────────────
+   El sistema lleva TODO en soles: el balance, el informe, el presupuesto y el Excel. Una factura
+   en dólares se captura en su moneda —que es como está el documento y como se revisa contra el
+   papel— y se convierte al guardar, con el tipo de cambio del día. Ese tipo se guarda con la
+   factura: sin él, dentro de un año nadie podría rehacer el cuadre.
+   El último tipo usado se recuerda, que casi siempre es el de la semana. */
+const CMP_TC_KEY='atmin_cmp_tc';
+function cmpTcUltimo(){ const v=parseFloat(localStorage.getItem(CMP_TC_KEY)); return (v>0)?v:3.75; }
+function cmpTcGuardar(tc){ try{ if(tc>0) localStorage.setItem(CMP_TC_KEY, String(tc)); }catch(e){} }
+function cmpMonedaChange(soloConversion){
+  const g=id=>document.getElementById(id);
+  const usd=g('cmpf-moneda').value==='USD';
+  g('cmpf-tc-wrap').style.display=usd?'':'none';
+  const sim=usd?'US$':'S/';
+  g('cmpf-lbl-sin').textContent='Monto sin IGV ('+sim+')';
+  g('cmpf-lbl-igv').textContent='IGV ('+sim+')';
+  g('cmpf-lbl-con').textContent='Total con IGV ('+sim+')';
+  if(usd && !parseFloat(g('cmpf-tc').value)) g('cmpf-tc').value=cmpTcUltimo();
+  const conv=g('cmpf-conv');
+  if(!usd){ conv.style.display='none'; return; }
+  const tc=parseFloat(g('cmpf-tc').value)||0;
+  const con=parseFloat(g('cmpf-conigv').value)||0;
+  conv.style.display='block';
+  conv.innerHTML = (tc>0)
+    ? '💱 Se registrará en soles: <b>US$ '+con.toFixed(2)+' × '+tc+' = '+cmpMoney(con*tc)+'</b>'
+      +'<div style="font-size:10.5px;opacity:.85;margin-top:3px">El monto en dólares y el tipo de cambio quedan guardados con la factura.</div>'
+    : '⚠ Escribe el tipo de cambio para convertir a soles.';
+}
+// Los montos en soles de una factura capturada en dólares.
+function cmpEnSoles(monto, moneda, tc){
+  const n=Number(monto)||0;
+  if(moneda!=='USD') return Math.round(n*100)/100;
+  return Math.round(n*(Number(tc)||0)*100)/100;
+}
 // ── MODAL FACTURA ──
 function cmpAbrirFactura(datos){
   const g=id=>document.getElementById(id);
@@ -29791,9 +29865,18 @@ function cmpAbrirFactura(datos){
   g('cmpf-ruc').value=d.ruc||'';
   g('cmpf-proveedor').value=d.proveedor||'';
   g('cmpf-producto').value=d.producto||'';
-  g('cmpf-sinigv').value=(d.sinIgv!=null&&d.sinIgv!=='')?d.sinIgv:'';
-  g('cmpf-igv').value=(d.igv!=null&&d.igv!=='')?d.igv:'';
-  g('cmpf-conigv').value=(d.conIgv!=null&&d.conIgv!=='')?d.conIgv:'';
+  // Una factura en dólares se muestra en dólares —su importe original—, no en los soles
+  // convertidos: así se compara contra el papel sin hacer cuentas mentales.
+  const esUsd=(d.moneda==='USD');
+  g('cmpf-moneda').value=esUsd?'USD':'PEN';
+  g('cmpf-tc').value=esUsd?(d.tc||cmpTcUltimo()):'';
+  const orig=esUsd?(d.montoOrig||{}):null;
+  const _v=(clave,soles)=>{ if(esUsd && orig && orig[clave]!=null && orig[clave]!=='') return orig[clave];
+                            return (soles!=null&&soles!=='')?soles:''; };
+  g('cmpf-sinigv').value=_v('sinIgv', d.sinIgv);
+  g('cmpf-igv').value=_v('igv', d.igv);
+  g('cmpf-conigv').value=_v('conIgv', d.conIgv);
+  cmpMonedaChange();
   // Vista previa SOLO mientras revisas: al guardar, el documento se descarta.
   _cmpFotoPend=d.foto||null;
   _cmpLeidoDe=d._leidoDe||d.leidoDe||'';
@@ -29914,16 +29997,27 @@ function cmpGuardarFactura(){
   const num=n=>{ const v=parseFloat(g(n).value); return isNaN(v)?0:v; };
   const fecha=g('cmpf-fecha').value||hoy();
   const proveedor=g('cmpf-proveedor').value.trim();
-  const conIgv=num('cmpf-conigv');
+  const moneda=(g('cmpf-moneda').value==='USD')?'USD':'PEN';
+  const tc=moneda==='USD'?num('cmpf-tc'):0;
+  const conIgvOrig=num('cmpf-conigv');
   if(!proveedor){ showNotif('⚠ Indica el proveedor','error'); return; }
-  if(conIgv<=0){ showNotif('⚠ El total con IGV debe ser mayor a 0','error'); return; }
+  if(conIgvOrig<=0){ showNotif('⚠ El total con IGV debe ser mayor a 0','error'); return; }
+  if(moneda==='USD' && !(tc>0)){ showNotif('⚠ Escribe el tipo de cambio para convertir a soles','error'); return; }
+  // En el registro manda el SOL: es la moneda en la que cuadra todo el módulo. El importe en
+  // dólares y el tipo de cambio se guardan al lado para poder rehacer la conversión.
+  const conIgv=cmpEnSoles(conIgvOrig, moneda, tc);
+  const montoOrig = moneda==='USD'
+    ? { sinIgv:num('cmpf-sinigv'), igv:num('cmpf-igv'), conIgv:conIgvOrig } : null;
+  if(moneda==='USD') cmpTcGuardar(tc);
   comprasNorm();
   // Sufijo aleatorio: solo con Date.now() dos registros creados en el mismo milisegundo
   // compartían id y el segundo pisaba al primero.
   const id=g('cmpf-id').value||('FC'+Date.now()+Math.random().toString(36).slice(2,7));
   const reg={ id, _ts:Date.now(), fecha, numero:g('cmpf-numero').value.trim(),
     ruc:g('cmpf-ruc').value.trim(), proveedor, producto:g('cmpf-producto').value.trim(),
-    sinIgv:num('cmpf-sinigv'), igv:num('cmpf-igv'), conIgv,
+    sinIgv:cmpEnSoles(num('cmpf-sinigv'), moneda, tc),
+    igv:cmpEnSoles(num('cmpf-igv'), moneda, tc), conIgv,
+    moneda, tc:moneda==='USD'?tc:0, montoOrig,
     // El documento NO se guarda: solo queda la marca de cómo se leyeron los datos.
     leidoDe:_cmpLeidoDe||'',
     items:Array.isArray(_cmpItemsPend)?_cmpItemsPend:[] };
@@ -29934,7 +30028,8 @@ function cmpGuardarFactura(){
   _cmpFotoPend=null; _cmpItemsPend=[]; _cmpLeidoDe='';
   cerrarModal('modal-cmp-factura');
   renderComprasFacturas();
-  showNotif('✓ Factura registrada: '+proveedor+' · '+cmpMoney(conIgv));
+  showNotif('✓ Factura registrada: '+proveedor+' · '+cmpMoney(conIgv)
+    +(moneda==='USD'?' (US$ '+conIgvOrig.toFixed(2)+' × '+tc+')':''));
 }
 // ═══════════════════════════════════════════════════════════════════════════
 // RENDICIÓN DE GASTO (gastos sin factura: taxi, peaje, encomienda…)
@@ -29953,7 +30048,12 @@ function cmpAbrirRendicion(datos){
   g('cmpr-tipo').value=d.categoria||'Taxi / movilidad';
   g('cmpr-detalle').value=d.producto||'';
   g('cmpr-responsable').value=d.proveedor||'';
-  g('cmpr-monto').value=(d.conIgv!=null&&d.conIgv!=='')?d.conIgv:'';
+  const rUsd=(d.moneda==='USD');
+  if(g('cmpr-moneda')) g('cmpr-moneda').value=rUsd?'USD':'PEN';
+  if(g('cmpr-tc')) g('cmpr-tc').value=rUsd?(d.tc||cmpTcUltimo()):'';
+  g('cmpr-monto').value=rUsd&&d.montoOrig&&d.montoOrig.conIgv!=null ? d.montoOrig.conIgv
+    : ((d.conIgv!=null&&d.conIgv!=='')?d.conIgv:'');
+  try{ cmpRendMoneda(); }catch(e){}
   g('cmpr-numero').value=d.numero||'';
   g('cmpr-ruc').value=d.ruc||'';
   g('cmpr-conigv').checked=!!(Number(d.igv)>0);
@@ -29974,14 +30074,35 @@ function cmpRendPreview(){
     w.innerHTML='Sin IGV · total <b style="color:var(--gold-light)">'+cmpMoney(monto)+'</b><br>Carpeta: <b style="color:var(--text2)">'+carpeta+'</b>';
   }
 }
+function cmpRendMoneda(soloConv){
+  const g=id=>document.getElementById(id);
+  if(!g('cmpr-moneda')) return;
+  const usd=g('cmpr-moneda').value==='USD';
+  g('cmpr-tc-wrap').style.display=usd?'':'none';
+  g('cmpr-lbl-monto').textContent='Monto ('+(usd?'US$':'S/')+')';
+  if(usd && !parseFloat(g('cmpr-tc').value)) g('cmpr-tc').value=cmpTcUltimo();
+  const conv=g('cmpr-conv');
+  if(!usd){ conv.style.display='none'; try{ cmpRendPreview(); }catch(e){} return; }
+  const tc=parseFloat(g('cmpr-tc').value)||0, m=parseFloat(g('cmpr-monto').value)||0;
+  conv.style.display='block';
+  conv.innerHTML = tc>0
+    ? '💱 Se registrará en soles: <b>US$ '+m.toFixed(2)+' × '+tc+' = '+cmpMoney(m*tc)+'</b>'
+    : '⚠ Escribe el tipo de cambio para convertir a soles.';
+  try{ cmpRendPreview(); }catch(e){}
+}
 function cmpGuardarRendicion(){
   const g=id=>document.getElementById(id);
   const fecha=g('cmpr-fecha').value||hoy();
   const detalle=g('cmpr-detalle').value.trim();
   const resp=g('cmpr-responsable').value.trim();
-  const monto=parseFloat(g('cmpr-monto').value)||0;
+  const montoOrigNum=parseFloat(g('cmpr-monto').value)||0;
+  const moneda=(g('cmpr-moneda')&&g('cmpr-moneda').value==='USD')?'USD':'PEN';
+  const tc=moneda==='USD'?(parseFloat(g('cmpr-tc').value)||0):0;
   if(!detalle){ showNotif('⚠ Escribe en qué se gastó','error'); return; }
-  if(monto<=0){ showNotif('⚠ El monto debe ser mayor a 0','error'); return; }
+  if(montoOrigNum<=0){ showNotif('⚠ El monto debe ser mayor a 0','error'); return; }
+  if(moneda==='USD' && !(tc>0)){ showNotif('⚠ Escribe el tipo de cambio para convertir a soles','error'); return; }
+  const monto=cmpEnSoles(montoOrigNum, moneda, tc);
+  if(moneda==='USD') cmpTcGuardar(tc);
   const mes=cmpMesDe(fecha);
   // Un mes ya cerrado y bloqueado no admite gastos nuevos: su cuadro está congelado.
   if(typeof cmpBloqueado==='function' && cmpBloqueado(mes)){
@@ -29997,7 +30118,8 @@ function cmpGuardarRendicion(){
   const reg={ id, _ts:Date.now(), tipo:'rendicion', categoria:cat, fecha,
     numero:g('cmpr-numero').value.trim(), ruc:g('cmpr-ruc').value.trim().replace(/\D/g,''),
     proveedor:resp||('Rendición · '+cat), producto:detalle,
-    sinIgv, igv, conIgv, leidoDe:'rendicion', items:[] };
+    sinIgv, igv, conIgv, moneda, tc, montoOrig: moneda==='USD'?{conIgv:montoOrigNum}:null,
+    leidoDe:'rendicion', items:[] };
   const i=state.compras.facturas.findIndex(f=>f.id===id);
   if(i>=0) state.compras.facturas[i]={...state.compras.facturas[i],...reg}; else state.compras.facturas.push(reg);
   comprasSave();
@@ -30006,7 +30128,8 @@ function cmpGuardarRendicion(){
   const sel=document.getElementById('cmp-periodo');
   if(sel){ if(![...sel.options].some(o=>o.value===mes)) sel.innerHTML+=`<option value="${mes}">${cmpMesLabel(mes)}</option>`; sel.value=mes; }
   renderComprasFacturas();
-  showNotif('✓ Rendición guardada en '+cmpMesLabel(mes)+' · '+cmpMoney(conIgv));
+  showNotif('✓ Rendición guardada en '+cmpMesLabel(mes)+' · '+cmpMoney(conIgv)
+    +(moneda==='USD'?' (US$ '+montoOrigNum.toFixed(2)+' × '+tc+')':''));
 }
 function cmpEditarFactura(id){
   const f=comprasNorm().facturas.find(x=>x.id===id); if(!f) return;
@@ -30210,11 +30333,17 @@ function cmpParsearFacturaTexto(lineas){
   const todo=L.join('\n');
   const sinTildes=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
   const T=sinTildes(todo);
+  /* ¿La factura está en DÓLARES? Se busca cómo declara su moneda el documento: casi todas lo
+     dicen con todas sus letras ("MONEDA: DOLARES", "USD") o con el símbolo pegado al total.
+     Ante la duda manda el sol, que es lo corriente: convertir de más sería peor que no convertir. */
+  const esDolares = /\bUSD\b|\bUS\s*\$|\bDOLAR(?:ES)?\b|MONEDA\s*:?\s*(?:USD|DOLAR)/.test(T)
+                    && !/MONEDA\s*:?\s*(?:PEN|SOL)/.test(T);
   const nEs=v=>{ let s=String(v||'').trim().replace(/[^\d.,\-]/g,'');
     if(/,\d{1,2}$/.test(s)&&/\./.test(s)) s=s.replace(/\./g,'').replace(',','.');   // 1.234,56
     else s=s.replace(/,/g,'');                                                       // 1,234.56
     const x=parseFloat(s); return isNaN(x)?0:Math.round(x*100)/100; };
   const out={};
+  if(esDolares) out.moneda='USD';
 
   // ── RUC del emisor: el primero que aparece (va en la cabecera; el del cliente viene después)
   const rucs=(todo.match(/\b(?:10|15|17|20)\d{9}\b/g)||[]);
@@ -30518,6 +30647,12 @@ async function cmpLeerFoto(input){
       sinIgv:datos.sinIgv||'', igv:datos.igv||'', conIgv:datos.conIgv||'',
       items:Array.isArray(datos.items)?datos.items:[]
     });
+    // Documento en dólares: se abre ya en USD, con el último tipo de cambio usado propuesto, y
+    // los montos leídos quedan como importe original —que es lo que dice el papel—.
+    if(datos.moneda==='USD'){
+      base.moneda='USD'; base.tc=cmpTcUltimo();
+      base.montoOrig={ sinIgv:datos.sinIgv||'', igv:datos.igv||'', conIgv:datos.conIgv||'' };
+    }
   }
   base._aviso=true;
   cmpAbrirFactura(base);
@@ -30532,7 +30667,8 @@ async function cmpLeerFoto(input){
         +(datos.montosCuadran===false?'<br>\u26a0 <b>Revisa los montos con cuidado</b>: no cuadran entre s\u00ed (base + IGV \u2260 total). Corr\u00edgelos antes de guardar.':'')
         +(provRecordado?'<br>\u2139 El QR no trae la raz\u00f3n social: se puso la que ya usaste para el RUC '+base.ruc+'.':'')
         +(faltaProv?'<br>\u2139 No se pudo leer la raz\u00f3n social: compl\u00e9tala abajo. Con el PDF sale sola.':'')
-        +((!esPdf&&!(datos.items||[]).length&&!datos.producto)?'<br>\u2139 No se reconoci\u00f3 el detalle en la foto: escribe qu\u00e9 se compr\u00f3. Con el PDF se transcribe l\u00ednea por l\u00ednea.':'');
+        +((!esPdf&&!(datos.items||[]).length&&!datos.producto)?'<br>\u2139 No se reconoci\u00f3 el detalle en la foto: escribe qu\u00e9 se compr\u00f3. Con el PDF se transcribe l\u00ednea por l\u00ednea.':'')
+        +(datos.moneda==='USD'?'<br>\ud83d\udcb1 <b>La factura est\u00e1 en D\u00d3LARES</b>: los montos se dejaron en US$ y se convertir\u00e1n a soles al guardar. <b>Revisa el tipo de cambio</b> del d\u00eda de la factura antes de registrar.':'');
     }else{
       av.style.background='rgba(245,158,11,0.12)'; av.style.border='1px solid rgba(245,158,11,0.4)'; av.style.color='#f59e0b';
       av.innerHTML='\u26a0 '+motivo+' Tienes el documento a la vista abajo: copia los datos a mano.';
@@ -30612,7 +30748,7 @@ function renderComprasFacturas(){
       <td style="padding:7px 8px;font-size:11px;color:var(--text3);max-width:220px;white-space:normal">${f.producto||'—'}${(f.items&&f.items.length)?`<br><span style="font-size:10px;color:#22d3a5;cursor:pointer" onclick="cmpVerDetalle('${f.id}')">📋 ${f.items.length} línea${f.items.length!==1?'s':''} de detalle</span>`:''}</td>
       <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace">${cmpMoney(f.sinIgv)}</td>
       <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;color:#a855f7">${cmpMoney(f.igv)}</td>
-      <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;color:var(--gold-light);font-weight:700">${cmpMoney(f.conIgv)}</td>
+      <td style="padding:7px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;color:var(--gold-light);font-weight:700">${cmpMoney(f.conIgv)}${cmpUsdChip(f)}</td>
       <td style="padding:7px 8px;text-align:center;font-size:11px;color:var(--text3)" title="${f.leidoDe?'Los datos se leyeron automáticamente del documento; el archivo no se guarda':'Registrada a mano'}">${f.tipo==='rendicion'?('🧾 Rendición<br><span style="font-size:9px">'+(f.categoria||'')+'</span>'):(f.leidoDe==='pdf'?'📄 PDF':(f.leidoDe==='foto'?'📷 Foto':'✍ Manual'))}</td>
       <td style="padding:7px 8px;white-space:nowrap">
         <button onclick="cmpEditarFactura('${f.id}')" style="background:none;border:none;color:#60a5fa;cursor:pointer;font-size:13px" title="Editar">✏</button>
@@ -30931,7 +31067,7 @@ function cmpHistorialArchivadoHTML(){
           <td style="padding:5px 7px;font-size:10px;color:var(--text3);max-width:210px;white-space:normal">${f.producto||'—'}</td>
           <td style="padding:5px 7px;font-size:11px;text-align:right;font-family:'DM Mono',monospace">${cmpMoney(f.sinIgv)}</td>
           <td style="padding:5px 7px;font-size:11px;text-align:right;font-family:'DM Mono',monospace;color:#a855f7">${cmpMoney(f.igv)}</td>
-          <td style="padding:5px 7px;font-size:11px;text-align:right;font-family:'DM Mono',monospace;color:var(--gold-light);font-weight:700">${cmpMoney(f.conIgv)}</td>
+          <td style="padding:5px 7px;font-size:11px;text-align:right;font-family:'DM Mono',monospace;color:var(--gold-light);font-weight:700">${cmpMoney(f.conIgv)}${cmpUsdChip(f)}</td>
           <td style="padding:5px 7px;font-size:10px;color:var(--text3)">${f.tipo==='rendicion'?'🧾 Rendición':(f.leidoDe==='pdf'?'📄 PDF':(f.leidoDe==='foto'?'📷 QR':'✍ Manual'))}</td>
           <td style="padding:5px 7px;text-align:center"><button onclick="cmpEliminarArchivada('${abierta.periodo}',${i})" title="Eliminar esta factura del mes" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:13px">🗑</button></td>
         </tr>`).join('')}
