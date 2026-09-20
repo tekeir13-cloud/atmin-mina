@@ -5458,6 +5458,12 @@ async function init(){
   if(typeof seedModulosDemo==='function') seedModulosDemo();
   // Derivar avance lineal desde los reportes de guardia
   if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes();
+  // Si este equipo ya tenía sesión, se entra directo: no se pide la clave otra vez por una
+  // recarga. Va antes de pintar el login para que no parpadee la pantalla de acceso.
+  try{
+    const rec=(typeof sesionRecordada==='function')?sesionRecordada():null;
+    if(rec){ iniciarSesion(rec); return; }
+  }catch(e){}
   // Mostrar login inmediatamente — no esperar a Supabase
   mostrarLogin();
 
@@ -24647,6 +24653,29 @@ async function doLogin(){
   iniciarSesion(user);
 }
 
+/* SESIÓN RECORDADA EN EL EQUIPO
+   La sesión vivía SOLO en memoria: cualquier recarga —y el service worker recargaba solo al
+   publicar una versión— devolvía al login. En la mina eso es perder el parte a medio llenar.
+   Se recuerda quién entró en ESTE equipo (sin la contraseña) y se restaura al abrir. Caduca a los
+   7 días y se borra al cerrar sesión, que es lo que hace quien presta su teléfono. */
+const SESION_KEY='atmin_sesion';
+const SESION_DIAS=7;
+function sesionGuardar(user){
+  try{
+    if(!user) return;
+    const {password, ...limpio}=user;      // la contraseña NO se guarda
+    localStorage.setItem(SESION_KEY, JSON.stringify({ user:limpio, ts:Date.now() }));
+  }catch(e){}
+}
+function sesionOlvidar(){ try{ localStorage.removeItem(SESION_KEY); }catch(e){} }
+function sesionRecordada(){
+  try{
+    const d=JSON.parse(localStorage.getItem(SESION_KEY)||'null');
+    if(!d || !d.user || !d.user.rol) return null;
+    if(Date.now()-(Number(d.ts)||0) > SESION_DIAS*86400000){ sesionOlvidar(); return null; }
+    return d.user;
+  }catch(e){ return null; }
+}
 function iniciarSesion(user){
   // Seguridad se agrega solo a quien NO tiene lista propia de módulos. Si el usuario trae
   // `modulos` explícitos, esa lista se respeta tal cual: es una decisión deliberada y forzarle
@@ -24661,6 +24690,7 @@ function iniciarSesion(user){
     user.modulos = user.modulos.filter(m=>m!=='montebravo');
   }
   usuarioActivo = user;
+  sesionGuardar(user);
   document.getElementById('login-screen').style.display = 'none';
   mostrarBottomNav(true);
   try{ armarBottomNav(); }catch(e){}
@@ -24743,6 +24773,7 @@ function aplicarPermisosNavegacion(mods){
 
 async function doLogout(){
   try{ await sb.auth.signOut(); }catch(e){}
+  sesionOlvidar();
   usuarioActivo = null;
   document.getElementById('login-email').value = '';
   document.getElementById('login-pass').value  = '';
@@ -32854,8 +32885,31 @@ document.addEventListener('webkitfullscreenchange',_syncFullscreenBtn);
   // volver de la cámara el navegador busca versión nueva: si justo se publicó una, la app se
   // recargaba encima de la lectura, la tiraba a la basura y te sacaba del módulo. Se espera a
   // que el trabajo termine y recién ahí se toma la versión nueva.
+  /* ¿Está la app en medio de un trabajo? Esta guarda EXISTÍA pero nadie la encendía nunca:
+     `window._appOcupada` no se asignaba en ninguna parte del programa, así que la app se
+     consideraba siempre libre y se recargaba apenas se publicaba una versión —en medio del parte
+     del compresorista, del reporte del jefe de guardia o de una factura a medio leer—, botando al
+     usuario al login y tirando lo que llevaba escrito. Ahora se mira lo que de verdad pasa en
+     pantalla: un modal abierto, un campo con el cursor dentro o una edición reciente. */
+  let _ultimaTecla=0;
+  ['input','keydown','change'].forEach(ev=>document.addEventListener(ev,()=>{ _ultimaTecla=Date.now(); }, true));
+  const GRACIA_MS=60000;          // un minuto sin tocar nada antes de dar por terminado el trabajo
   const _appOcupada=()=>{
     try{ if(window._appOcupada) return true; }catch(e){}
+    try{
+      // Un modal abierto es trabajo en curso, siempre. Se mira si está VISIBLE y no la clase: no
+      // todos los modales de la app se abren igual —unos ponen `show`, otros solo el display—, y
+      // fiarse de la clase dejaba fuera justo el parte del compresorista.
+      const abierto=[...document.querySelectorAll('.modal-overlay')]
+        .some(m=>{ const d=(m.style&&m.style.display)||''; 
+                   return d!=='none' && (d!=='' || m.classList.contains('show') || m.classList.contains('active')); });
+      if(abierto) return true;
+      // El cursor dentro de un campo: está escribiendo.
+      const a=document.activeElement;
+      if(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName||'') && a.type!=='button') return true;
+      // Acaba de escribir algo: se le da un minuto antes de tocar nada.
+      if(_ultimaTecla && (Date.now()-_ultimaTecla) < GRACIA_MS) return true;
+    }catch(e){}
     return false;
   };
   const _recargarUnaVez=()=>{
@@ -32870,6 +32924,8 @@ document.addEventListener('webkitfullscreenchange',_syncFullscreenBtn);
     }
     _recargando=true; try{ location.reload(); }catch(e){}
   };
+  // Queda a la vista para poder comprobar en campo por qué una actualización está esperando.
+  try{ window.appOcupada=_appOcupada; }catch(e){}
   navigator.serviceWorker.addEventListener('controllerchange', _recargarUnaVez);
   // El SW nuevo avisa "sw-updated" al activarse → recargar para tomar el código nuevo.
   navigator.serviceWorker.addEventListener('message',(ev)=>{ if(ev&&ev.data&&ev.data.type==='sw-updated') _recargarUnaVez(); });
@@ -32884,10 +32940,18 @@ document.addEventListener('webkitfullscreenchange',_syncFullscreenBtn);
       const bar=document.createElement('div');
       bar.id='sw-update-bar';
       bar.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:10000;background:#1a1f2e;border:1px solid #8b5cf6;border-radius:12px;padding:10px 16px;display:flex;gap:12px;align-items:center;box-shadow:0 8px 28px rgba(0,0,0,0.5);font-size:13px;color:#ece7da';
-      bar.innerHTML=_appOcupada()
-        ? '✨ Hay una versión nueva: se instalará apenas termine lo que está leyendo.'
-        : '✨ Actualizando MukiCloud a la versión nueva…';
+      // Nunca se recarga a la fuerza encima de alguien: se avisa y se deja el botón. Si está
+      // ocupado, la actualización espera a que termine; si no, se aplica sola en unos segundos.
+      bar.innerHTML='<span>✨ Hay una versión nueva de MukiCloud.</span>'
+        +'<button id="sw-update-now" style="background:#8b5cf6;border:none;color:#fff;border-radius:8px;'
+        +'padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Actualizar ahora</button>'
+        +'<button id="sw-update-later" style="background:none;border:none;color:#9aa0b4;font-size:12px;'
+        +'cursor:pointer;font-family:inherit">Después</button>';
       document.body.appendChild(bar);
+      const btn=document.getElementById('sw-update-now');
+      if(btn) btn.onclick=()=>{ _recargando=true; try{ location.reload(); }catch(e){} };
+      const post=document.getElementById('sw-update-later');
+      if(post) post.onclick=()=>{ try{ bar.remove(); }catch(e){} };
       // El SW nuevo se activa solo (skipWaiting) y controllerchange recarga; esto es solo aviso.
       try{ if(reg.waiting) reg.waiting.postMessage&&reg.waiting.postMessage('skip'); }catch(e){}
     }
