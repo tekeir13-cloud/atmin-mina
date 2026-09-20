@@ -5436,8 +5436,87 @@ function showNotif(msg,type){
   n.style.color='var(--text)';
   n.classList.add('show');setTimeout(()=>n.classList.remove('show'),2800);
 }
+/* ═══ BORRADOR AUTOMÁTICO DE LOS FORMULARIOS LARGOS ═══════════════════════════════
+   El parte del compresorista y el reporte del jefe de guardia son media hora de trabajo. Si el
+   teléfono se apaga, se cierra el navegador o se va la señal, todo eso se perdía: nada se escribe
+   hasta pulsar Guardar. Ahora lo tecleado se va copiando solo en el propio equipo cada pocos
+   segundos, y al volver a abrir el formulario se ofrece recuperarlo.
+   El borrador es local y se borra en cuanto el reporte se guarda de verdad. */
+const BORR_MODALES = {
+  'modal-compresorista':   { que:'parte del compresorista',
+                             extra:()=>({ turno:(typeof _compTurnoSeleccionado!=='undefined')?_compTurnoSeleccionado:'' }),
+                             aplicar:e=>{ try{ if(e&&e.turno&&typeof seleccionarTurno==='function') seleccionarTurno(e.turno); }catch(x){} } },
+  'modal-reporte-guardia': { que:'reporte de jefe de guardia' },
+  'modal-cmp-factura':     { que:'factura' },
+  'modal-mb-parte':        { que:'parte de Monte Bravo' },
+};
+const BORR_HORAS = 48;              // pasado ese tiempo el borrador ya no se ofrece
+let _borrModal='', _borrTimer=null;
+function _borrKey(id){ return 'atmin_borrador_'+id; }
+function _borrCampos(id){
+  const m=document.getElementById(id); if(!m) return {};
+  const out={};
+  m.querySelectorAll('input[id],select[id],textarea[id]').forEach(el=>{
+    if(el.type==='file'||el.type==='button') return;
+    out[el.id]=(el.type==='checkbox'||el.type==='radio')?!!el.checked:el.value;
+  });
+  return out;
+}
+function _borrVacio(campos){
+  return !Object.values(campos||{}).some(v=>v===true || (typeof v==='string' && v.trim()!=='' && !/^\d{4}-\d{2}-\d{2}$/.test(v)));
+}
+function borrGuardar(id){
+  try{
+    if(!BORR_MODALES[id]) return;
+    const campos=_borrCampos(id);
+    if(_borrVacio(campos)) return;                 // un formulario recién abierto no es un borrador
+    const ex=BORR_MODALES[id].extra?BORR_MODALES[id].extra():null;
+    localStorage.setItem(_borrKey(id), JSON.stringify({ ts:Date.now(), campos, extra:ex }));
+  }catch(e){}
+}
+function borrLimpiar(id){ try{ localStorage.removeItem(_borrKey(id)); }catch(e){} }
+function _borrLeer(id){
+  try{
+    const d=JSON.parse(localStorage.getItem(_borrKey(id))||'null');
+    if(!d||!d.campos) return null;
+    if(Date.now()-(Number(d.ts)||0) > BORR_HORAS*3600000){ borrLimpiar(id); return null; }
+    return d;
+  }catch(e){ return null; }
+}
+function borrVigilar(id){
+  if(!BORR_MODALES[id]) return;
+  _borrModal=id;
+  // Ofrecer lo que quedó a medias. Se pregunta porque recuperar encima de un formulario que el
+  // usuario abrió para OTRA cosa sería peor que no recuperar nada.
+  // Abrir un registro EXISTENTE para editarlo no es retomar un borrador: ahí el formulario ya
+  // viene con sus datos y ofrecer otra cosa encima solo lleva a pisarlos.
+  const editando=[...document.querySelectorAll('#'+id+' input[type=hidden][id$="-id"]')].some(el=>String(el.value||'').trim());
+  const d=editando?null:_borrLeer(id);
+  if(d){
+    const cuando=new Date(d.ts).toLocaleString('es-PE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    if(confirm('Quedó un '+BORR_MODALES[id].que+' a medio llenar del '+cuando+'\n\n¿Recuperar lo que habías escrito?')){
+      setTimeout(()=>{
+        Object.entries(d.campos).forEach(([k,v])=>{
+          const el=document.getElementById(k); if(!el) return;
+          if(el.type==='checkbox'||el.type==='radio') el.checked=!!v; else el.value=v;
+          try{ el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); }catch(x){}
+        });
+        try{ if(BORR_MODALES[id].aplicar) BORR_MODALES[id].aplicar(d.extra||{}); }catch(x){}
+        try{ showNotif('✓ Se recuperó lo que estabas llenando'); }catch(x){}
+      }, 120);
+    } else borrLimpiar(id);
+  }
+  if(_borrTimer) clearInterval(_borrTimer);
+  _borrTimer=setInterval(()=>{
+    const m=document.getElementById(_borrModal);
+    const visible=m && (m.style.display&&m.style.display!=='none' || m.classList.contains('show'));
+    if(!visible) return;                            // cerrado: se deja de copiar, pero NO se borra
+    borrGuardar(_borrModal);
+  }, 5000);
+}
 function cerrarModal(id){const m=document.getElementById(id);if(!m)return;m.classList.remove('show');m.classList.remove('active');m.style.display='';}
 function abrirModal(id){const m=document.getElementById(id);if(!m)return;
+  try{ if(BORR_MODALES[id]) setTimeout(()=>borrVigilar(id), 60); }catch(e){}
   // Sacar el modal al <body> para que no quede oculto si está anidado dentro de
   // una .page inactiva (display:none en el ancestro oculta el modal aunque tenga .show).
   if(m.parentElement!==document.body){try{document.body.appendChild(m);}catch(e){}}
@@ -20687,6 +20766,7 @@ function guardarReporteGuardia(){
     if(m>0)state.perforacion.push({_rg:rep.id,fecha,frente:f.id,metros:m,personas:1,roca:'—',obs:f.nombre+' — '+(rep.jefe||'')});
   });
   reportesGuardiaSave();
+  try{ borrLimpiar('modal-reporte-guardia'); }catch(e){}
   // Abre/actualiza la hoja diaria de cada equipo con horómetro reportado.
   let _hojas=0; try{ _hojas=eqopDesdeGuardia(rep); }catch(e){ console.warn('equipos',e); }
   cerrarModal('modal-reporte-guardia');renderAvance();
@@ -28214,6 +28294,8 @@ const COMP_HOROMETROS = ['Grupo Electrógeno MP-120','Grupo Electrógeno MV 2321
 
 function abrirModalCompresorista() {
   document.getElementById('modal-compresorista').style.display = 'flex';
+  // El borrador se ofrece cuando el formulario ya terminó de armarse (más abajo se rellenan
+  // tablas y listas), por eso va al final de esta función.
   document.getElementById('comp-nombre').value = '';
   document.getElementById('comp-dni').value = '';
   document.getElementById('comp-obs').value = '';
@@ -28270,6 +28352,8 @@ function abrirModalCompresorista() {
       ${['HI','HF'].map(f => `<td style="padding:4px 6px"><input type="number" min="0" step="0.01" id="choro-${m.replace(/ /g,'_')}-${f}" placeholder="0" oninput="compCalcHT('${m}')" style="width:100%;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:5px 8px;font-size:12px;text-align:center"></td>`).join('')}
       <td style="padding:6px 8px;text-align:center;font-family:'DM Mono',monospace;font-size:12px;color:var(--accent-light)" id="choro-${m.replace(/ /g,'_')}-HT">—</td>
     </tr>`).join('');
+  // Ya está armado el formulario: recién ahora se puede ofrecer el borrador y empezar a copiarlo.
+  try{ borrVigilar('modal-compresorista'); }catch(e){}
 }
 
 function cerrarModalCompresorista() {
@@ -28419,6 +28503,7 @@ function compCalcHT(maquina) {
 }
 
 function guardarReporteComp() {
+  const _borrOk=()=>{ try{ borrLimpiar('modal-compresorista'); }catch(e){} };
   const nombre = document.getElementById('comp-nombre').value.trim();
   const dni = document.getElementById('comp-dni').value.trim();
   const fecha = document.getElementById('comp-fecha').value;
@@ -28531,6 +28616,7 @@ function guardarReporteComp() {
   const selVT=document.getElementById('vt-dia-sel');
   if(selVT){selVT.value=fecha;}
   visorRenderDia();
+  _borrOk();                       // el parte quedó guardado: el borrador ya no hace falta
   cerrarModalCompresorista();
   showNotif('Reporte guardado · datos acumulados del mes','ok');
 }
@@ -30057,6 +30143,7 @@ function cmpGuardarFactura(){
   else state.compras.facturas.push(reg);
   comprasSave();
   _cmpFotoPend=null; _cmpItemsPend=[]; _cmpLeidoDe='';
+  try{ borrLimpiar('modal-cmp-factura'); }catch(e){}
   cerrarModal('modal-cmp-factura');
   renderComprasFacturas();
   showNotif('✓ Factura registrada: '+proveedor+' · '+cmpMoney(conIgv)
