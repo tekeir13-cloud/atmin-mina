@@ -3892,6 +3892,10 @@ select option{background:var(--coal3);}
       <div class="section-title" style="margin-bottom:12px">📝 Observaciones</div>
       <textarea id="comp-obs" rows="3" placeholder="Ej: Personal de galería realizó un disparo..." style="width:100%;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:10px;font-size:12px;resize:vertical;margin-bottom:20px"></textarea>
 
+      <!-- El aviso va AQUÍ, junto al botón, y no se va solo: un mensaje flotante de tres
+           segundos abajo a la derecha pasa desapercibido en el celular, y el compresorista se
+           queda creyendo que el botón no hace nada. -->
+      <div id="comp-aviso" style="display:none;font-size:12.5px;border-radius:8px;padding:11px 14px;margin-bottom:10px;line-height:1.5"></div>
       <div class="modal-actions" style="display:flex;gap:10px">
         <button class="btn btn-gold" onclick="guardarReporteComp()" style="flex:1">💾 Guardar Reporte</button>
         <button class="btn btn-outline" onclick="cerrarModalCompresorista()">Cancelar</button>
@@ -5458,7 +5462,10 @@ function _borrCampos(id){
   const out={};
   m.querySelectorAll('input[id],select[id],textarea[id]').forEach(el=>{
     if(el.type==='file'||el.type==='button') return;
-    out[el.id]=(el.type==='checkbox'||el.type==='radio')?!!el.checked:el.value;
+    // Solo lo que tiene valor. Guardar los cientos de casillas vacías de un parte engordaba el
+    // borrador sin aportar nada y empujaba el almacenamiento del teléfono contra su límite.
+    if(el.type==='checkbox'||el.type==='radio'){ if(el.checked) out[el.id]=true; return; }
+    if(String(el.value||'').trim()!=='') out[el.id]=el.value;
   });
   return out;
 }
@@ -28106,9 +28113,22 @@ function eliminarReporteComp(){
   try{ if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
   showNotif('🗑 Reporte del '+fecha+' ('+turno+') eliminado','warn');
 }
+/* Guardar el parte en el equipo. Este `catch` vacío se tragaba el fallo más peligroso de todos:
+   si el almacenamiento del teléfono está lleno, `setItem` lanza QuotaExceededError, el reporte se
+   quedaba SOLO en memoria y desaparecía al recargar —con el aviso de «guardado» ya dado—. Ahora
+   se avisa si no se pudo escribir, se hace sitio tirando borradores viejos y se reintenta. */
 function compGuardarLocal() {
-  try { localStorage.setItem(COMP_STORAGE_KEY, JSON.stringify(state.compresorista)); } catch(e){}
+  let ok=false;
+  const escribir=()=>{ try{ localStorage.setItem(COMP_STORAGE_KEY, JSON.stringify(state.compresorista)); return true; }
+                       catch(e){ return false; } };
+  ok=escribir();
+  if(!ok){
+    // Hacer sitio: los borradores son lo único prescindible aquí.
+    try{ Object.keys(localStorage).filter(k=>k.indexOf('atmin_borrador_')===0).forEach(k=>localStorage.removeItem(k)); }catch(e){}
+    ok=escribir();
+  }
   try { sbSyncModulo('compresorista', state.compresorista||[]); } catch(e){}  // nube: trazabilidad NV2820 + combustible
+  return ok;
 }
 function compCargarLocal() {
   try {
@@ -28502,16 +28522,64 @@ function compCalcHT(maquina) {
   if(htEl) htEl.textContent = hf > 0 ? (hf - hi).toFixed(2) : '—';
 }
 
-function guardarReporteComp() {
+/* El parte es media hora de trabajo: el botón NUNCA debe quedarse callado. Si falta un dato se
+   dice aquí mismo, con el campo resaltado; y si algo revienta por dentro, se muestra el error y se
+   ofrece descargar el parte como respaldo en vez de perderlo. */
+function compAviso(msg, tipo){
+  const el=document.getElementById('comp-aviso'); if(!el){ showNotif(msg, tipo==='ok'?'ok':'error'); return; }
+  const c = tipo==='ok' ? ['rgba(34,211,165,.12)','rgba(34,211,165,.45)','#22d3a5']
+                        : ['rgba(239,68,68,.12)','rgba(239,68,68,.45)','#fca5a5'];
+  el.style.display='block'; el.style.background=c[0]; el.style.border='1px solid '+c[1]; el.style.color=c[2];
+  el.innerHTML=msg;
+  try{ el.scrollIntoView({behavior:'smooth',block:'nearest'}); }catch(e){}
+}
+function compAvisoLimpiar(){ const el=document.getElementById('comp-aviso'); if(el){ el.style.display='none'; el.innerHTML=''; } }
+function compFalta(idCampo, msg){
+  compAviso('⚠ '+msg, 'error');
+  const el=document.getElementById(idCampo);
+  if(el){ try{ el.style.borderColor='#ef4444'; el.focus(); el.scrollIntoView({behavior:'smooth',block:'center'});
+                setTimeout(()=>{ el.style.borderColor=''; }, 4000); }catch(e){} }
+  return false;
+}
+// Respaldo de urgencia: si el guardado falla, el parte se baja como archivo para no perderlo.
+function compDescargarRespaldo(){
+  try{
+    const campos={};
+    document.querySelectorAll('#modal-compresorista input[id],#modal-compresorista select[id],#modal-compresorista textarea[id]')
+      .forEach(el=>{ const v=(el.type==='checkbox')?el.checked:el.value; if(v!=='' && v!==false) campos[el.id]=v; });
+    const data={ guardadoEl:new Date().toISOString(), turno:(typeof _compTurnoSeleccionado!=='undefined')?_compTurnoSeleccionado:'', campos };
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,1)],{type:'application/json'}));
+    a.download='parte-compresorista-'+(document.getElementById('comp-fecha').value||hoy())+'.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    compAviso('✓ Respaldo descargado. Envíalo a sistemas y no pierdes el parte.','ok');
+  }catch(e){ compAviso('No se pudo descargar el respaldo: '+(e&&e.message||e),'error'); }
+}
+function guardarReporteComp(){
+  compAvisoLimpiar();
+  try{ return _guardarReporteComp(); }
+  catch(e){
+    // Cualquier fallo inesperado se ve, con su causa, y el parte sigue en pantalla.
+    console.error('guardarReporteComp', e);
+    compAviso('❌ <b>No se pudo guardar el reporte.</b><br>'+String((e&&e.message)||e)
+      +'<br><br>Tu parte <b>sigue en pantalla y no se ha perdido</b>. Descarga el respaldo y avisa a sistemas:'
+      +'<br><button class="btn btn-outline" style="margin-top:8px;font-size:12px;padding:6px 14px" onclick="compDescargarRespaldo()">⬇ Descargar respaldo del parte</button>','error');
+    return false;
+  }
+}
+function _guardarReporteComp() {
   const _borrOk=()=>{ try{ borrLimpiar('modal-compresorista'); }catch(e){} };
   const nombre = document.getElementById('comp-nombre').value.trim();
   const dni = document.getElementById('comp-dni').value.trim();
   const fecha = document.getElementById('comp-fecha').value;
-  if(!nombre){showNotif('Ingresa el nombre','error');return;}
-  if(!dni){showNotif('Ingresa el DNI','error');return;}
-  if(!_compTurnoSeleccionado){showNotif('Selecciona el turno','error');return;}
-  if(!fecha){showNotif('Selecciona la fecha','error');return;}
-  if(bloqueadoPorCierre(fecha,'reportes del Compresorista')) return;
+  if(!nombre) return compFalta('comp-nombre','Falta el nombre del compresorista.');
+  if(!dni)    return compFalta('comp-dni','Falta el DNI.');
+  if(!_compTurnoSeleccionado) return compFalta('comp-turno-dia','Falta elegir el turno: Día o Noche.');
+  if(!fecha)  return compFalta('comp-fecha','Falta la fecha del reporte.');
+  if(periodoEstaCerrado(fecha)){
+    return compAviso('🔒 El ciclo <b>'+periodoDeFecha(fecha)+'</b> ya está cerrado: no admite reportes con fecha '
+      +String(fecha).slice(0,10)+'. Corrige la fecha o pide a Finanzas que reabra el ciclo.','error');
+  }
 
   // materiales almacén — registro manual/informal del compresorista (no afecta stock del subalmacén;
   // el stock real de NV2820 se alimenta de las salidas de Logística confirmadas, ver comp-mat-pendientes)
@@ -28592,13 +28660,24 @@ function guardarReporteComp() {
 
   const idx = state.compresorista.findIndex(r => r.fecha===fecha && r.turno===_compTurnoSeleccionado);
   if(idx>=0){
-    if(!confirm('Ya existe un reporte para esta fecha y turno. ¿Reemplazar?')) return;
+    if(!confirm('Ya existe un reporte para esta fecha y turno. ¿Reemplazar?')){
+      compAviso('No se guardó nada: ya hay un reporte de <b>'+fecha+' · turno '+_compTurnoSeleccionado
+        +'</b> y elegiste no reemplazarlo. Cambia la fecha o el turno si este es otro parte.','error');
+      return;
+    }
     state.compresorista[idx] = reporte;
   } else {
     state.compresorista.push(reporte);
   }
   state.compresorista.sort((a,b)=>a.fecha.localeCompare(b.fecha));
-  compGuardarLocal();
+  // Si no se pudo escribir en el equipo, el parte NO está a salvo: se dice y se ofrece el
+  // respaldo, en vez de cerrar el formulario cantando victoria.
+  if(compGuardarLocal()===false){
+    compAviso('❌ <b>El almacenamiento del equipo está lleno</b>: el reporte no se pudo guardar aquí.'
+      +'<br>Sí se envió a la nube si hay señal, pero <b>descarga el respaldo</b> por seguridad y avisa a sistemas.'
+      +'<br><button class="btn btn-outline" style="margin-top:8px;font-size:12px;padding:6px 14px" onclick="compDescargarRespaldo()">⬇ Descargar respaldo del parte</button>','error');
+    return;
+  }
   renderTablaCompresorista();
   // Refrescar Stock Remanente: el egreso (campo E) de este reporte debe verse al instante
   // en su historial de movimientos si esa pestaña está montada.
@@ -28617,6 +28696,7 @@ function guardarReporteComp() {
   if(selVT){selVT.value=fecha;}
   visorRenderDia();
   _borrOk();                       // el parte quedó guardado: el borrador ya no hace falta
+  compAvisoLimpiar();
   cerrarModalCompresorista();
   showNotif('Reporte guardado · datos acumulados del mes','ok');
 }
