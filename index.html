@@ -28320,6 +28320,10 @@ function abrirModalCompresorista() {
   document.getElementById('comp-dni').value = '';
   document.getElementById('comp-obs').value = '';
   document.getElementById('comp-fecha').value = hoy();
+  // Un parte es de un turno YA trabajado: el calendario no ofrece días futuros. Un reporte con
+  // fecha adelantada se cuela en el ciclo siguiente y descuadra combustible, explosivos y costos
+  // de un mes que todavía no existe.
+  try{ document.getElementById('comp-fecha').max = hoy(); }catch(e){}
   _compTurnoSeleccionado = '';
   ['dia','noche'].forEach(t => {
     const b = document.getElementById('comp-turno-'+t);
@@ -28576,6 +28580,10 @@ function _guardarReporteComp() {
   if(!dni)    return compFalta('comp-dni','Falta el DNI.');
   if(!_compTurnoSeleccionado) return compFalta('comp-turno-dia','Falta elegir el turno: Día o Noche.');
   if(!fecha)  return compFalta('comp-fecha','Falta la fecha del reporte.');
+  if(String(fecha) > hoy()){
+    return compFalta('comp-fecha','La fecha '+fecha+' todavía no ha llegado (hoy es '+hoy()+'). '
+      +'Un parte se reporta del turno ya trabajado.');
+  }
   if(periodoEstaCerrado(fecha)){
     return compAviso('🔒 El ciclo <b>'+periodoDeFecha(fecha)+'</b> ya está cerrado: no admite reportes con fecha '
       +String(fecha).slice(0,10)+'. Corrige la fecha o pide a Finanzas que reabra el ciclo.','error');
