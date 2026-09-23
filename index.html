@@ -7636,6 +7636,25 @@ function fcDetalleDiaHTML(fecha){
     +(bloques||'<div style="font-size:12px;color:var(--text3);margin-top:8px">Ese día no se reportaron disparos en Rampa ni en Cortada.</div>')
     +'</div>';
 }
+/* Metros del ciclo por labor, TODAS las labores. Sirve para explicar en el propio bloque por qué
+   su cifra es menor que la del tablero: aquí solo van Rampa y Cortada —las únicas con óptimo—, y
+   sin decirlo parece que faltan metros. */
+function fcAvanceCiclo(){
+  const v=fcVentana();
+  const por={}, LAB=(typeof FRENTES!=='undefined')?FRENTES.filter(f=>!f.tajo):[];
+  let total=0;
+  (state.reportesGuardia||[]).forEach(r=>{
+    const f=String(r&&r.fecha||'').slice(0,10);
+    if(!f || f<v.ini || f>v.fin) return;
+    LAB.forEach(L=>{
+      const b=r[L.key]; if(!b) return;
+      const disp=(b.disparos&&b.disparos.length)?b.disparos:null;
+      const m=disp?disp.reduce((a,d)=>a+(Number(d.metros)||0),0):(Number(b.metros)||0);
+      if(m>0){ por[L.key]=Math.round(((por[L.key]||0)+m)*100)/100; total=Math.round((total+m)*100)/100; }
+    });
+  });
+  return { por, total, ini:v.ini, fin:v.fin };
+}
 function renderDashVoladura(){
   const cont=document.getElementById('d-voladura'); if(!cont) return;
   const LAB=[{key:'brenda',nombre:'Rampa',color:'#60a5fa'},{key:'crne',nombre:'Cortada',color:'#34d399'}];
@@ -7672,6 +7691,23 @@ function renderDashVoladura(){
       +'<div style="font-size:15px;font-weight:900;color:var(--gold-light);letter-spacing:.4px">⚖️ FACTOR DE CARGA Y AVANCE — RAMPA Y CORTADA</div>'
       +'<div style="font-size:11px;color:var(--text3)">'+fcVentanaLbl()+'</div>'
     +'</div>'
+    +(function(){
+       // Cuadre a la vista: cuánto de los metros del ciclo está aquí y cuánto en las demás labores.
+       let a; try{ a=fcAvanceCiclo(); }catch(e){ return ''; }
+       const ctrl=(a.por.brenda||0)+(a.por.crne||0);
+       const resto=Math.round((a.total-ctrl)*100)/100;
+       if(!(a.total>0)) return '';
+       const otras=Object.keys(a.por).filter(k=>k!=='brenda'&&k!=='crne')
+         .map(k=>{ const f=FRENTES.find(x=>x.key===k); return (f?f.nombre:k)+' '+a.por[k].toFixed(1)+' m'; });
+       return '<div style="font-size:11.5px;color:var(--text3);background:var(--coal4);border-radius:8px;'
+         +'padding:9px 12px;margin:8px 0 10px;line-height:1.6">'
+         +'📐 Avance del ciclo: <b style="color:var(--text2)">'+a.total.toFixed(1)+' m</b> entre todas las labores. '
+         +'De esos, <b style="color:#fbbf24">'+ctrl.toFixed(1)+' m</b> son de Rampa y Cortada, que son las que se '
+         +'controlan por factor de carga y las únicas que aparecen abajo.'
+         +(resto>0?'<br><span style="color:var(--text3)">Los otros '+resto.toFixed(1)+' m son de '
+            +otras.join(' · ')+', que no tienen óptimo definido y por eso no se juzgan aquí.</span>':'')
+         +'</div>';
+     })()
     +'<div style="font-size:11px;color:var(--text3);margin-bottom:12px;line-height:1.6">'
       +'Las <b style="color:var(--text2)">barras</b> son los metros de cada día por labor. La <b style="color:var(--text2)">línea llena</b> es el '
       +'<b style="color:var(--text2)">factor de carga diario</b> (kg/m, eje derecho): va horizontal porque ronda su óptimo, y se nota el día que se sale. '
