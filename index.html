@@ -4453,7 +4453,9 @@ select option{background:var(--coal3);}
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
       <button class="btn btn-outline" style="border-color:#60a5fa;color:#60a5fa;padding:8px 16px;font-size:12px" onclick="agregarExploAlVale('exi')">➕ Agregar al vale</button>
       <span id="exi-total" style="font-size:12px;color:var(--text3)"></span>
+      <button class="btn btn-outline" style="margin-left:auto;padding:8px 14px;font-size:12px" onclick="exploMultiToggle('exi')" id="exi-multi-btn">☑ Marcar varios</button>
     </div>
+    <div id="exi-multi" style="display:none"></div>
     <div id="exi-cart"></div>
     <div class="btn-row">
       <button class="btn btn-gold" onclick="guardarExploIngreso()">✓ Registrar Ingreso</button>
@@ -4751,9 +4753,11 @@ select option{background:var(--coal3);}
       </div>
       <span id="exs-total" style="font-size:12px;color:var(--text3)"></span>
     </div>
-    <div style="margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
       <button class="btn btn-outline" style="border-color:#f87171;color:#f87171;padding:8px 16px;font-size:12px" onclick="agregarExploAlVale('exs')">➕ Agregar al vale</button>
+      <button class="btn btn-outline" style="margin-left:auto;padding:8px 14px;font-size:12px" onclick="exploMultiToggle('exs')" id="exs-multi-btn">☑ Marcar varios</button>
     </div>
+    <div id="exs-multi" style="display:none"></div>
     <div id="exs-cart"></div>
     <div class="btn-row">
       <button class="btn btn-gold" onclick="guardarExploSalida()">✓ Registrar Salida</button>
@@ -14724,6 +14728,107 @@ function agregarExploAlVale(pfx){
   try{ g(pfx+'-producto').focus(); }catch(e){}
   return true;
 }
+/* ── MARCAR VARIOS EXPLOSIVOS DE UNA VEZ ──────────────────────────────────────────
+   Un vale trae quince tipos; elegirlos uno por uno en el desplegable —abrir, buscar, cerrar,
+   escribir, agregar— es media hora de trabajo. Aquí se marcan todos con su palomita, se escribe
+   la cantidad de cada uno en la misma lista y entran al vale de un golpe.
+   El desplegable de arriba sigue existiendo para cargar un solo tipo, que es lo corriente. */
+function exploMultiToggle(pfx){
+  const w=document.getElementById(pfx+'-multi'); if(!w) return;
+  const abierto=w.style.display!=='none';
+  const btn=document.getElementById(pfx+'-multi-btn');
+  if(abierto){ w.style.display='none'; if(btn) btn.textContent='☑ Marcar varios'; return; }
+  w.style.display='block'; if(btn) btn.textContent='✕ Cerrar lista';
+  exploMultiRender(pfx);
+}
+// El catálogo sale del propio desplegable del modal: cada uno tiene el suyo y no se inventa nada.
+function exploMultiOpciones(pfx){
+  const sel=document.getElementById(pfx+'-producto'); if(!sel) return [];
+  return [...sel.options].filter(o=>o.value).map(o=>({ id:o.value, texto:o.textContent }));
+}
+function exploMultiRender(pfx){
+  const w=document.getElementById(pfx+'-multi'); if(!w) return;
+  const col=pfx==='exi'?'#60a5fa':'#f87171';
+  const esSalida=(pfx==='exs');
+  const stock=esSalida?exploStockActual():null;
+  const filas=exploMultiOpciones(pfx).map(o=>{
+    const c=exploGetCat(o.id), mecha=exploEsMetros(c);
+    const disp=esSalida?((stock[o.id]||0)-exploEnCarrito('exs',o.id)):null;
+    const sinStock=esSalida && !(disp>0);
+    const nom=(c&&c.nombre)||o.texto;
+    return '<tr style="border-top:1px solid var(--border2)'+(sinStock?';opacity:.45':'')+'">'
+      +'<td style="padding:5px 6px">'
+        +'<label style="display:flex;align-items:center;gap:8px;cursor:'+(sinStock?'not-allowed':'pointer')+'">'
+        +'<input type="checkbox" class="'+pfx+'-mk" data-id="'+o.id+'" '+(sinStock?'disabled':'')
+        +' onchange="exploMultiCuenta(\''+pfx+'\')" style="width:17px;height:17px;accent-color:'+col+';cursor:inherit">'
+        +'<span style="font-size:12px;color:var(--text)">'+nom+'</span></label></td>'
+      +'<td style="padding:5px 6px"><input type="number" min="0" step="1" placeholder="0" class="'+pfx+'-mc" data-id="'+o.id+'" '
+        +(sinStock?'disabled':'')+' oninput="exploMultiCuenta(\''+pfx+'\')" style="width:78px;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 8px;font-size:12px;text-align:right"></td>'
+      +'<td style="padding:5px 6px"><input type="number" min="0" step="1" placeholder="0" class="'+pfx+'-mu" data-id="'+o.id+'" '
+        +(sinStock?'disabled':'')+' oninput="exploMultiCuenta(\''+pfx+'\')" style="width:78px;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 8px;font-size:12px;text-align:right"></td>'
+      +'<td style="padding:5px 6px;font-size:11px;color:var(--text3);white-space:nowrap">'
+        +(esSalida?('quedan <b style="color:'+(disp>0?'#22c55e':'#f87171')+'">'+(disp||0)+'</b> '+(mecha?'m':((c&&c.unidad)||'und')))
+                  :(mecha?'rollos + metros':(c?c.upCaja+' / caja':'')))+'</td>'
+      +'</tr>';
+  }).join('');
+  w.innerHTML='<div style="border:1px solid '+col+'55;border-radius:10px;padding:10px 12px;margin-bottom:12px;background:var(--coal3)">'
+    +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
+      +'<span style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px">☑ Marca los que trae el vale</span>'
+      +'<button class="btn btn-outline" style="font-size:10.5px;padding:4px 10px" onclick="exploMultiTodos(\''+pfx+'\',true)">Marcar todos</button>'
+      +'<button class="btn btn-outline" style="font-size:10.5px;padding:4px 10px" onclick="exploMultiTodos(\''+pfx+'\',false)">Ninguno</button>'
+    +'</div>'
+    +'<div class="table-wrap" style="max-height:290px;overflow:auto"><table style="width:100%;border-collapse:collapse">'
+      +'<thead><tr style="font-size:9px;color:var(--text3);text-align:left">'
+        +'<th style="padding:4px 6px">Explosivo</th><th style="padding:4px 6px">Cajas</th>'
+        +'<th style="padding:4px 6px">Sueltas</th><th style="padding:4px 6px"></th></tr></thead>'
+      +'<tbody>'+filas+'</tbody></table></div>'
+    +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px">'
+      +'<button class="btn btn-gold" style="font-size:12px;padding:8px 16px" onclick="exploMultiAgregar(\''+pfx+'\')">➕ Agregar los marcados</button>'
+      +'<span id="'+pfx+'-multi-cuenta" style="font-size:11.5px;color:var(--text3)"></span>'
+    +'</div></div>';
+  exploMultiCuenta(pfx);
+}
+function exploMultiTodos(pfx, marcar){
+  document.querySelectorAll('.'+pfx+'-mk').forEach(ch=>{ if(!ch.disabled) ch.checked=!!marcar; });
+  exploMultiCuenta(pfx);
+}
+// Marcar sin cantidad no sirve de nada: la cuenta avisa cuántos quedan por llenar.
+function exploMultiCuenta(pfx){
+  const el=document.getElementById(pfx+'-multi-cuenta'); if(!el) return;
+  let marcados=0, conCantidad=0;
+  document.querySelectorAll('.'+pfx+'-mk').forEach(ch=>{
+    if(!ch.checked) return;
+    marcados++;
+    const id=ch.dataset.id;
+    const caj=document.querySelector('.'+pfx+'-mc[data-id="'+id+'"]');
+    const und=document.querySelector('.'+pfx+'-mu[data-id="'+id+'"]');
+    if(((parseInt(caj&&caj.value)||0)+(parseInt(und&&und.value)||0))>0) conCantidad++;
+  });
+  el.innerHTML = !marcados ? 'Marca uno o varios y escribe sus cantidades.'
+    : marcados+' marcado'+(marcados!==1?'s':'')+' · '+conCantidad+' con cantidad'
+      +(conCantidad<marcados?' <span style="color:#f59e0b">— a los otros les falta cantidad</span>':'');
+}
+function exploMultiAgregar(pfx){
+  const g=id=>document.getElementById(id);
+  const marcados=[...document.querySelectorAll('.'+pfx+'-mk')].filter(ch=>ch.checked);
+  if(!marcados.length){ showNotif('⚠ No marcaste ningún explosivo','error'); return; }
+  let puestos=0, sinCantidad=[], rechazados=[];
+  marcados.forEach(ch=>{
+    const id=ch.dataset.id;
+    const caj=parseInt((document.querySelector('.'+pfx+'-mc[data-id="'+id+'"]')||{}).value)||0;
+    const und=parseInt((document.querySelector('.'+pfx+'-mu[data-id="'+id+'"]')||{}).value)||0;
+    const c=exploGetCat(id);
+    if(caj<=0 && und<=0){ sinCantidad.push((c&&c.nombre)||id); return; }
+    // Se reusa el mismo camino que el alta de uno en uno: misma validación de stock, mismo
+    // cálculo de cajas y mismo carrito. Duplicar esa lógica aquí acabaría en dos verdades.
+    g(pfx+'-producto').value=id; g(pfx+'-cajas').value=caj||''; g(pfx+'-unidades').value=und||'';
+    if(agregarExploAlVale(pfx)) puestos++; else rechazados.push((c&&c.nombre)||id);
+  });
+  exploMultiRender(pfx);                 // el stock disponible cambió: la lista se repinta
+  if(puestos) showNotif('✓ '+puestos+' explosivo'+(puestos!==1?'s':'')+' agregado'+(puestos!==1?'s':'')+' al vale');
+  if(sinCantidad.length) showNotif('⚠ Sin cantidad, no se agregaron: '+sinCantidad.join(', '),'error');
+  if(rechazados.length) showNotif('⚠ No entraron por stock: '+rechazados.join(', '),'error');
+}
 function quitarExploDelVale(pfx,idx){
   const arr=_exploCart(pfx); arr.splice(idx,1); _exploSetCart(pfx,arr);
   renderExploCart(pfx);
@@ -14771,6 +14876,8 @@ function abrirModalExploIngreso(){
   g('exi-fecha').value=hoy();g('exi-vale').value='';g('exi-producto').value='';
   g('exi-cajas').value='';g('exi-unidades').value='';g('exi-total').textContent='';
   exploCartI=[]; renderExploCart('exi');
+  try{ const w=g('exi-multi'); if(w){ w.style.display='none'; w.innerHTML=''; }
+       const btn=g('exi-multi-btn'); if(btn) btn.textContent='☑ Marcar varios'; }catch(e){}
   abrirModal('modal-explo-ingreso');
 }
 // Sube una foto (base64) a Supabase Storage y devuelve la URL pública (compartible entre dispositivos).
@@ -14865,6 +14972,9 @@ function abrirModalExploSalida(){
         return `<option value="${c.id}">${c.nombre} — ${stockLabel}</option>`;
       }).join('');
   }
+  // La lista de «marcar varios» se rearma con el stock del momento y arranca cerrada.
+  try{ const w=g('exs-multi'); if(w){ w.style.display='none'; w.innerHTML=''; }
+       const btn=g('exs-multi-btn'); if(btn) btn.textContent='☑ Marcar varios'; }catch(e){}
   abrirModal('modal-explo-salida');
 }
 async function guardarExploSalida(){
