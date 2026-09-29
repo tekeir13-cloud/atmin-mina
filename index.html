@@ -28202,12 +28202,15 @@ function _compMergeByTs(a, b){
 // Elimina un reporte de compresorista. SOLO el Jefe de Finanzas puede hacerlo.
 // Deja lápida por firma 'comp:fecha|turno' para que el borrado se imponga al sincronizar.
 function eliminarReporteComp(){
+  const btn=document.getElementById('vt-del-btn');
+  eliminarReporteCompDe((btn&&btn.dataset.fecha)||'', (btn&&btn.dataset.turno)||'');
+}
+// Borrado por fecha+turno explícitos: lo usa tanto el botón del panel del día como el 🗑 de la
+// lista de observaciones (única vía para reportes que el selector de día no alcanza).
+function eliminarReporteCompDe(fecha, turno){
   if(typeof usuarioActivo==='undefined' || !usuarioActivo || usuarioActivo.rol!=='jefe_finanzas'){
     showNotif('Solo el Jefe de Finanzas puede eliminar reportes','error'); return;
   }
-  const btn=document.getElementById('vt-del-btn');
-  const fecha=(btn&&btn.dataset.fecha)||'';
-  const turno=(btn&&btn.dataset.turno)||'';
   if(!fecha||!turno){ showNotif('Selecciona un reporte para eliminar','error'); return; }
   if(!confirm('¿Eliminar el reporte del '+fecha+' — turno '+turno+'?\nEsta acción no se puede deshacer.')) return;
   try{ if(typeof tombAdd==='function') tombAdd('comp:'+fecha+'|'+turno); }catch(e){}
@@ -29229,6 +29232,11 @@ function renderTablaCompresorista() {
   document.getElementById('tbody-horometros').innerHTML = horoRows || '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sin datos</td></tr>';
   // observaciones / lista de reportes clicables (más reciente primero)
   let obsRows = '';
+  // El Jefe de Finanzas puede borrar desde ESTA lista. Antes el único botón de eliminar vivía
+  // dentro del panel del día, y a ese panel se llega por un selector filtrado por mes: un reporte
+  // con fecha de otro mes (o futura, por error de tipeo) salía aquí listado pero era IMPOSIBLE de
+  // seleccionar, así que no había forma de borrarlo desde la app.
+  const _obsPuedeBorrar = typeof usuarioActivo!=='undefined' && usuarioActivo && usuarioActivo.rol==='jefe_finanzas';
   data.forEach(r => {
     const turnoIc = r.turno==='Día'?'☀️':'🌙';
     obsRows += `<tr onmouseover="this.style.background='var(--coal4)'" onmouseout="this.style.background=''">
@@ -29239,6 +29247,7 @@ function renderTablaCompresorista() {
       <td class="r" style="white-space:nowrap">
         <span onclick="abrirReporteVisor('${r.fecha}','${r.turno}')" style="cursor:pointer;font-size:10px;background:var(--accent-dim);color:var(--accent-light);border:1px solid var(--accent-border);border-radius:4px;padding:3px 8px">Ver gráficos ▸</span>
         <span onclick="enviarWhatsAppReporte('${r.fecha}','${r.turno}')" style="cursor:pointer;font-size:10px;background:rgba(37,211,102,0.15);color:#25d366;border:1px solid rgba(37,211,102,0.4);border-radius:4px;padding:3px 8px;margin-left:4px">📲 WhatsApp</span>
+        ${_obsPuedeBorrar?`<span onclick="eliminarReporteCompDe('${r.fecha}','${r.turno}')" title="Eliminar este reporte" style="cursor:pointer;font-size:10px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.4);border-radius:4px;padding:3px 8px;margin-left:4px">🗑</span>`:''}
       </td>
     </tr>`;
   });
@@ -33249,23 +33258,48 @@ document.addEventListener('webkitfullscreenchange',_syncFullscreenBtn);
 })();
 
 // Chip de estado de conexión: visible solo cuando NO hay señal o hay datos pendientes de subir.
+let _chipPendDesde=0, _chipPendT=null;
 function actualizarChipConexion(){
   let chip=document.getElementById('conexion-chip');
   const pend=(typeof _sbPend!=='undefined')?Object.keys(_sbPend).length:0;
   const off=!navigator.onLine;
-  if(!off && !pend){ if(chip) chip.remove(); return; }
+  if(!off && !pend){ if(chip) chip.remove(); _chipPendDesde=0; return; }
+  // Toda subida pasa por la cola, así que sin esta espera el chip parpadearía en cada guardado.
+  // Solo interesa avisar cuando algo lleva rato atascado.
+  if(!off){
+    if(!_chipPendDesde) _chipPendDesde=Date.now();
+    if(Date.now()-_chipPendDesde < 5000){
+      clearTimeout(_chipPendT);
+      _chipPendT=setTimeout(()=>{ try{ actualizarChipConexion(); }catch(e){} }, 5200);
+      if(chip) chip.remove();
+      return;
+    }
+  }
   if(!chip){
     chip=document.createElement('div');
     chip.id='conexion-chip';
-    chip.style.cssText='position:fixed;left:12px;bottom:12px;z-index:9996;border-radius:999px;padding:6px 14px;font-size:11px;font-weight:800;display:flex;gap:6px;align-items:center;box-shadow:0 4px 16px rgba(0,0,0,0.4);pointer-events:none';
+    // Va ARRIBA de la insignia de tiempo real, no encima: las dos estaban en la misma esquina y
+    // "En vivo" (z-index mayor) tapaba justamente el aviso de que algo NO se estaba subiendo.
+    // El resultado era el peor posible: partes atascados en la cola y el usuario viendo "En vivo".
+    chip.style.cssText='position:fixed;left:12px;bottom:46px;z-index:9997;border-radius:999px;padding:6px 14px;font-size:11px;font-weight:800;display:flex;gap:6px;align-items:center;box-shadow:0 4px 16px rgba(0,0,0,0.4);cursor:pointer';
+    chip.title='Clic para reintentar la subida ahora';
+    chip.onclick=()=>{
+      try{ showNotif('Reintentando subir los cambios pendientes…'); }catch(e){}
+      try{ if(typeof sbFlushPendientes==='function') sbFlushPendientes().then(()=>{
+        try{ actualizarChipConexion(); }catch(e){}
+        const q=(typeof _sbPend!=='undefined')?Object.keys(_sbPend).length:0;
+        try{ showNotif(q? 'Aún quedan '+q+' sin subir — revisa la señal' : '✓ Todo subido a la nube', q?'warn':'success'); }catch(e){}
+      }); }catch(e){}
+    };
     document.body.appendChild(chip);
   }
+  const quePend=(typeof _sbPend!=='undefined')?Object.keys(_sbPend).join(', '):'';
   if(off){
     chip.style.background='rgba(220,38,38,0.92)'; chip.style.color='#fff';
     chip.textContent='📴 Sin conexión — trabajando offline'+(pend?' · '+pend+' por subir':'');
   }else{
     chip.style.background='rgba(245,158,11,0.92)'; chip.style.color='#1c1a14';
-    chip.textContent='📤 Subiendo '+pend+' cambio'+(pend!==1?'s':'')+' pendiente'+(pend!==1?'s':'')+'…';
+    chip.textContent='📤 '+pend+' sin subir ('+quePend+') — toca para reintentar';
   }
 }
 window.addEventListener('online',()=>{ actualizarChipConexion(); try{ showNotif('✓ Conexión recuperada — sincronizando'); }catch(e){} });
