@@ -3115,7 +3115,9 @@ select option{background:var(--coal3);}
     <button class="mod-tab" onclick="modTab('op','vsproyectado',this)">👷 Reporte Ing. Residente</button>
     <button class="mod-tab" onclick="modTab('op','valorizaciones',this)">💵 Valorizaciones</button>
     <button class="mod-tab" onclick="modTab('op','solicitudes',this);renderSolicitudesPendientesOp()">🛒 Solicitudes</button>
+    <button class="mod-tab" onclick="modTab('op','presentaciones',this);renderPresentaciones()">📊 Presentaciones</button>
   </div>
+  <div class="mod-pane" style="display:none" id="op-presentaciones"></div>
   <div class="mod-pane active" style="display:block" id="op-tablero">
     <div style="margin-bottom:8px"><div class="section-title" style="margin:0">🎯 Tablero de Operaciones</div><div style="font-size:12px;color:var(--text3);margin-top:4px">Vista consolidada de avance, taladros, personal y explosivos — <span id="tab-mes-label"></span></div></div>
     <div class="kpi-grid" id="tab-kpis"></div>
@@ -15613,6 +15615,62 @@ function renderSolicitudesPendientesFin(){
   const wHist=document.getElementById('fin-sc-historial');
   _renderSolicitudesPendientes(wPend,'fin');
   _renderSolicitudesHistorial(wHist,'fin');
+}
+// ═══════════════ PRESENTACIONES (Operaciones) ═══════════════
+// Estudios y exposiciones técnicas que se guardan para volver a mostrarlas en reunión.
+// Cada una es un archivo HTML propio dentro de /presentaciones (no van dentro de index.html: son
+// pesadas y no tienen por qué cargarse en cada arranque de la app). El Service Worker las guarda
+// en caché la primera vez que se abren, así que después se ven sin señal en interior mina.
+// Para agregar otra: se copia su archivo a /presentaciones y se añade una línea a esta lista.
+const PRESENTACIONES = [
+  { id:'carmex-fanel',
+    titulo:'MEJORAS ALCANZADAS CARMEX VS FANEL',
+    sub:'Cambio de iniciador en CR NE y Rampa Brenda · Unidad Palca — Temual',
+    fecha:'2026-09-25',
+    detalle:'Comparación de los disparos de avance con carga: Carmex (25/08–11/09) frente a Fanel (12/09–25/09). Mismo diseño de malla y misma longitud de barra; el único cambio es el sistema de iniciación.',
+    archivo:'presentaciones/carmex-vs-fanel.html' },
+];
+let _presAbierta = null;
+function presAbrir(id){ _presAbierta = (_presAbierta===id) ? null : id; renderPresentaciones();
+  if(_presAbierta){ setTimeout(()=>{ const v=document.getElementById('pres-visor'); if(v) v.scrollIntoView({behavior:'smooth',block:'start'}); },60); } }
+function presPantallaCompleta(archivo){ window.open(archivo,'_blank','noopener'); }
+function renderPresentaciones(){
+  const el=document.getElementById('op-presentaciones'); if(!el) return;
+  const abierta=PRESENTACIONES.find(p=>p.id===_presAbierta);
+  const tarjetas=PRESENTACIONES.map((p,i)=>{
+    const on=p.id===_presAbierta;
+    return `<div style="background:var(--coal2);border:1px solid ${on?'var(--accent-border)':'var(--border)'};border-radius:12px;padding:16px 18px;margin-bottom:12px">
+      <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+        <div style="font-size:26px;line-height:1">📊</div>
+        <div style="flex:1;min-width:220px">
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">Presentación ${i+1} · ${p.fecha}</div>
+          <div style="font-size:15px;font-weight:800;color:var(--accent-light);margin-bottom:4px">${p.titulo}</div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:6px">${p.sub}</div>
+          <div style="font-size:11.5px;color:var(--text3);line-height:1.5">${p.detalle}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:7px;min-width:150px">
+          <button class="btn btn-gold" style="font-size:12px;padding:8px 14px" onclick="presAbrir('${p.id}')">${on?'✕ Cerrar':'▶ Ver aquí'}</button>
+          <button class="btn btn-outline" style="font-size:12px;padding:8px 14px" onclick="presPantallaCompleta('${p.archivo}')">⛶ Pantalla completa</button>
+          <a class="btn btn-outline" style="font-size:12px;padding:8px 14px;text-align:center;text-decoration:none" href="${p.archivo}" download>⬇ Descargar</a>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  el.innerHTML=`<div style="margin-bottom:12px">
+      <div class="section-title" style="margin:0">📊 Presentaciones</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">Estudios y exposiciones técnicas de la unidad. Se abren aquí mismo o a pantalla completa para proyectar.</div>
+    </div>
+    ${tarjetas}
+    ${abierta?`<div id="pres-visor" style="margin-top:6px;border:1px solid var(--accent-border);border-radius:12px;overflow:hidden;background:#0b0b0d">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 14px;background:var(--coal3);border-bottom:1px solid var(--border);flex-wrap:wrap">
+        <div style="font-size:12px;font-weight:700;color:var(--text)">${abierta.titulo}</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline" style="font-size:11px;padding:5px 11px" onclick="presPantallaCompleta('${abierta.archivo}')">⛶ Pantalla completa</button>
+          <button class="btn btn-outline" style="font-size:11px;padding:5px 11px" onclick="presAbrir('${abierta.id}')">✕ Cerrar</button>
+        </div>
+      </div>
+      <iframe src="${abierta.archivo}" title="${escAttr(abierta.titulo)}" style="width:100%;height:78vh;min-height:520px;border:0;display:block;background:#0b0b0d"></iframe>
+    </div>`:''}`;
 }
 function renderSolicitudesPendientesOp(){
   const wPend=document.getElementById('op-sc-pendientes');
