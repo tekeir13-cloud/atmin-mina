@@ -4321,6 +4321,8 @@ select option{background:var(--coal3);}
       <div class="form-group"><label>Almacén</label><select id="prod-almacen"><option value="General">Insumos</option><option value="Mantenimiento">Mantenimiento</option></select></div>
       <div class="form-group" style="grid-column:1/-1"><label>Nombre del Producto</label><input type="text" id="prod-nombre" placeholder="Ej: CEMENTO GRIS ANTISALITRE PORTL. TIPO MS"></div>
       <div class="form-group" style="grid-column:1/-1"><label>Precio Unitario (S/)</label><input id="prod-precio" type="number" step="0.01" min="0" placeholder="0.00" style="width:140px"></div>
+      <div class="form-group" style="grid-column:1/-1"><label>Mínimo de reposición</label><input id="prod-minimo" type="number" step="1" min="0" placeholder="automático" style="width:140px">
+        <div style="font-size:10.5px;color:var(--text3);margin-top:4px">Déjalo vacío y se usa el mínimo automático de su familia. Solo se avisa de aceros, barrenos, brocas, cimbras, mangas, pernos helicoidales y EPP.</div></div>
     </div>
     <div class="btn-row" style="margin-top:16px">
       <button class="btn btn-gold" onclick="guardarProductoCatalogo()">✓ Guardar</button>
@@ -8038,8 +8040,8 @@ function renderDashStockActual(){
   const cont=document.getElementById('d-stock-actual'); if(!cont)return;
 
   // ── Combustible ──
-  const stPet=(typeof combStockTipo==='function')?combStockTipo('pet'):0;
-  const stGas=(typeof combStockTipo==='function')?combStockTipo('gas'):0;
+  const stPet=(typeof combStockTipo==='function')?combStockVista('pet'):0;
+  const stGas=(typeof combStockTipo==='function')?combStockVista('gas'):0;
   const capPet=(typeof COMB_CAP_PET!=='undefined')?COMB_CAP_PET:2000;
   const capGas=(typeof COMB_CAP_GAS!=='undefined')?COMB_CAP_GAS:120;
   const altPet=(typeof COMB_ALERTA_PET!=='undefined')?COMB_ALERTA_PET:250;
@@ -8857,6 +8859,7 @@ function abrirModalProducto(id){
     g('prod-nombre').value=p.nombre;
     g('prod-unidad').value=p.unidad||'PZA';
     g('prod-precio').value=p.precio||'';
+    if(g('prod-minimo')) g('prod-minimo').value=p.minimo||'';
     if(g('prod-almacen')) g('prod-almacen').value=p.almacen||'General';
   }else{
     g('modal-prod-titulo').textContent='Nuevo Producto';
@@ -8866,6 +8869,7 @@ function abrirModalProducto(id){
     g('prod-nombre').value='';
     g('prod-unidad').value='PZA';
     g('prod-precio').value='';
+    if(g('prod-minimo')) g('prod-minimo').value='';
     if(g('prod-almacen')) g('prod-almacen').value='General';
   }
   abrirModal('modal-producto');
@@ -8879,6 +8883,7 @@ function guardarProductoCatalogo(){
   const editId=g('prod-edit-id').value;
   const precio=parseFloat(g('prod-precio')?.value)||0;
   const unidad=g('prod-unidad').value.trim()||'PZA';
+  const minimo=Math.max(0, parseFloat(g('prod-minimo')?.value)||0);   // 0 = usar el mínimo de su familia
   if(!state.almacen.productos)state.almacen.productos=[];
   const duplicado=state.almacen.productos.find(x=>x.codigo===codigo&&x.id!==editId);
   if(duplicado){showNotif('⚠ Ya existe un producto con ese código','error');return;}
@@ -8905,12 +8910,12 @@ function guardarProductoCatalogo(){
         });
         if(n) showNotif('Se actualizaron '+n+' movimiento'+(n!==1?'s':'')+' al código '+codNuevo,'ok');
       }
-      p.codigo=codigo;p.nombre=nombre;p.unidad=unidad;p.precio=precio;p.almacen=almacen;
+      p.codigo=codigo;p.nombre=nombre;p.unidad=unidad;p.precio=precio;p.almacen=almacen;p.minimo=minimo;
     }
   }else{
     // id único POR EQUIPO: solo con la hora, dos altas hechas en el mismo milisegundo en dos
     // computadoras compartían id y al unir los maestros una pisaba a la otra.
-    state.almacen.productos.push({id:'P'+Date.now()+'-'+Math.random().toString(36).slice(2,7),codigo,nombre,unidad,precio,almacen});
+    state.almacen.productos.push({id:'P'+Date.now()+'-'+Math.random().toString(36).slice(2,7),codigo,nombre,unidad,precio,almacen,minimo});
   }
   state.almacen.productosTs=Date.now();   // marca de edición: el maestro más reciente gana en la sincronización
   almacenSave();cerrarModal('modal-producto');renderProductos();
@@ -10324,7 +10329,7 @@ function calcStock(){
     if(!p) return;
     const c=String(p.codigo||'').trim().toUpperCase();
     const n=String(p.nombre||'').trim().toUpperCase();
-    const reg={precio:Number(p.precio)||0, nombre:p.nombre||'', unidad:p.unidad||''};
+    const reg={precio:Number(p.precio)||0, nombre:p.nombre||'', unidad:p.unidad||'', minimo:Number(p.minimo)||0};
     if(c) _pmCod[c]=reg;
     if(n && _pmNom[n]===undefined) _pmNom[n]=reg;
   });
@@ -10336,6 +10341,7 @@ function calcStock(){
     if(pm.precio>0) r.precio=pm.precio;      // sin precio en catálogo se conserva el del movimiento
     if(pm.nombre){ r.producto=pm.nombre; r.descripcion=pm.nombre; }
     if(pm.unidad) r.unidad=pm.unidad;
+    if(pm.minimo>0) r.minimo=pm.minimo;    // mínimo de reposición cargado a mano en el maestro
   });
   Object.values(map).forEach(r=>r.stock=r.ingreso-r.salida);
   return Object.values(map);
@@ -11121,7 +11127,8 @@ function renderAlertaPendientes2820(){
 let ingresoCart=[];
 function abrirIngresoModal(){
   const g=id=>document.getElementById(id);
-  g('in-fecha').value=hoy();g('in-vale').value='';g('in-detalle').value='Almacen Poderosa';
+  g('in-fecha').value=hoy();g('in-fecha').max=hoy();   // sin tope se colaba un ingreso de 2027 por un tipeo
+  g('in-vale').value='';g('in-detalle').value='Almacen Poderosa';
   g('in-almacen').value='General';g('in-producto').value='';
   g('in-descripcion').value='';g('in-unidad').value='UND';g('in-cantidad').value='';g('in-precio').value='';
   g('in-total').textContent='S/ 0.00';
@@ -11179,6 +11186,7 @@ function guardarIngreso(){
   const g=id=>document.getElementById(id);
   if(!ingresoCart.length){showNotif('⚠ Agrega al menos un ítem a la hoja','error');return;}
   const fecha=g('in-fecha').value||hoy();
+  if(fecha>hoy()){showNotif('⚠ La fecha del ingreso ('+fecha+') es futura. Corrígela.','error');return;}
   if(bloqueadoPorCierre(fecha,'ingresos de almacén')) return;
   const detalle=g('in-detalle').value||'Almacen Poderosa';
   const almacen=g('in-almacen').value;
@@ -11197,7 +11205,8 @@ function guardarIngreso(){
 let salidaCart=[];
 function abrirSalidaModal(){
   const g=id=>document.getElementById(id);
-  g('sa-fecha').value=hoy();g('sa-almacen').value='';   // "Todos los almacenes" por defecto → ve todo el stock
+  g('sa-fecha').value=hoy();g('sa-fecha').max=hoy();    // no se entrega material en una fecha futura
+  g('sa-almacen').value='';   // "Todos los almacenes" por defecto → ve todo el stock
   g('sa-solicitante').value='';
   g('sa-unidad').value='';g('sa-precio').value='';
   g('sa-maquina').value='';g('sa-cantidad').value='';g('sa-destino').value='2820';
@@ -11339,6 +11348,7 @@ function guardarSalida(){
   const g=id=>document.getElementById(id);
   if(!salidaCart.length){showNotif('⚠ Agrega al menos un ítem a la lista','error');return;}
   const fecha=g('sa-fecha').value||hoy();
+  if(fecha>hoy()){showNotif('⚠ La fecha de la salida ('+fecha+') es futura. Corrígela.','error');return;}
   if(bloqueadoPorCierre(fecha,'salidas de almacén')) return;
   const destino=g('sa-destino').value;
   if(!destino){showNotif('⚠ Seleccione el destino / nivel de la salida','error');return;}
@@ -11348,6 +11358,29 @@ function guardarSalida(){
   // Si es Entrega a Operario, exigir a quién se le entregó (personal activo)
   const operario=(destino==='operario')?(g('sa-operario').value||'').trim():'';
   if(destino==='operario' && !operario){showNotif('⚠ Selecciona el operario que recibe el material','error');return;}
+  // REVALIDAR EL STOCK JUSTO ANTES DE ESCRIBIR. El stock se comprobaba solo al agregar el ítem al
+  // carrito, y entre ese momento y el guardado pueden pasar minutos en los que OTRO equipo registra
+  // su propia salida del mismo material (se sincroniza en vivo). El resultado medido era stock
+  // NEGATIVO aceptado sin un solo aviso: carrito de 8 con 10 en stock + salida ajena de 9 = −7.
+  // Aquí se vuelve a mirar el stock real y se suma lo que el propio carrito ya compromete.
+  {
+    const _st=calcStock(), _pedido={};
+    salidaCart.forEach(i=>{ _pedido[i.key]=(_pedido[i.key]||0)+(Number(i.cantidad)||0); });
+    const faltantes=[];
+    Object.keys(_pedido).forEach(k=>{
+      const r=_st.find(x=>x.key===k);
+      const hay=r?r.stock:0;
+      if(_pedido[k]>hay+1e-9){
+        const it=salidaCart.find(i=>i.key===k)||{};
+        faltantes.push((it.producto||it.descripcion||k)+': pides '+fmt3(_pedido[k])+' y quedan '+fmt3(hay)+' '+(it.unidad||''));
+      }
+    });
+    if(faltantes.length){
+      showNotif('⚠ El stock cambió mientras llenabas la salida (otro equipo movió material). No se guardó nada:\n• '+faltantes.join('\n• '),'error');
+      try{ poblarProductosSalida(); renderSalidaCart(); }catch(e){}
+      return;
+    }
+  }
   const base=Date.now();const grupo='G'+base;
   salidaCart.forEach((i,idx)=>{
     const item={id:'S'+(base+idx),_ts:base+idx,grupo,fecha,destino,almacen:i.almacen,maquina,solicitante,operario,
@@ -11362,13 +11395,32 @@ function guardarSalida(){
   cerrarModal('modal-salida');renderAlmacen();renderHistorialAlmacen();renderStockVigente();
   showNotif(`✓ Salida registrada: ${n} ítem${n>1?'s':''} → ${nivelLabel(destino)}`);
 }
+// Quién puede borrar un movimiento de almacén. Antes NO se miraba el rol: cualquiera que entrara
+// a Logística podía borrar un ingreso o una salida, sin dejar constancia de quién fue.
+const ALM_ROLES_BORRAR=['logistico','jefe_finanzas','gerente_general','administrador'];
+// Comprobación común a ingresos y salidas: rol autorizado y ciclo abierto.
+// Lo del ciclo era una asimetría peligrosa: `bloqueadoPorCierre` impedía AGREGAR movimientos a un
+// mes cerrado, pero borrar no lo consultaba, así que se podían cambiar por detrás las cifras de un
+// periodo ya cerrado y firmado.
+function _almPuedeBorrar(mov, queCosa){
+  if(typeof usuarioActivo==='undefined' || !usuarioActivo || ALM_ROLES_BORRAR.indexOf(usuarioActivo.rol)<0){
+    showNotif('Tu usuario no puede eliminar movimientos de almacén','error'); return false;
+  }
+  if(!mov){ showNotif('No se encontró el movimiento','error'); return false; }
+  if(typeof bloqueadoPorCierre==='function' && bloqueadoPorCierre(mov.fecha, queCosa)) return false;
+  return true;
+}
 function eliminarIngreso(id){
-  if(!confirm('¿Eliminar este ingreso?'))return;
+  const mov=(state.almacen.ingresos||[]).find(i=>i.id===id);
+  if(!_almPuedeBorrar(mov,'borrados de ingresos de almacén')) return;
+  if(!confirm('¿Eliminar este ingreso?\n'+(mov.producto||mov.descripcion||'')+' · '+fmt3(mov.cantidad)+' '+(mov.unidad||'')+' · '+(mov.fecha||'')))return;
   if(typeof tombAdd==='function')tombAdd(id);
   state.almacen.ingresos=state.almacen.ingresos.filter(i=>i.id!==id);almacenSave();renderAlmacen();renderHistorialAlmacen();showNotif('Ingreso eliminado','warn');
 }
 function eliminarSalida(id){
-  if(!confirm('¿Eliminar esta salida?'))return;
+  const mov=(state.almacen.salidas||[]).find(s=>s.id===id);
+  if(!_almPuedeBorrar(mov,'borrados de salidas de almacén')) return;
+  if(!confirm('¿Eliminar esta salida?\n'+(mov.producto||mov.descripcion||'')+' · '+fmt3(mov.cantidad)+' '+(mov.unidad||'')+' · '+(mov.fecha||'')))return;
   if(typeof tombAdd==='function')tombAdd(id);
   state.almacen.salidas=state.almacen.salidas.filter(s=>s.id!==id);almacenSave();renderAlmacen();renderHistorialAlmacen();showNotif('Salida eliminada','warn');
 }
@@ -11912,6 +11964,34 @@ function cerrarMesInventario(){
 // ── SOLICITUD DE COMPRA ──
 const SC_UMBRAL_URGENTE=5;
 const SC_UMBRAL_BAJO=15;
+// ── MÍNIMOS DE REPOSICIÓN ──────────────────────────────────────────────────────
+// Antes se avisaba con un solo número para TODO el almacén (bajo 15, urgente 5), sin mirar de qué
+// producto se trataba: un motor nunca llegaba a avisar y los consumibles avisaban siempre. La lista
+// de Solicitud de Compra se volvía ruido y se dejaba de mirar.
+// Ahora solo se vigilan las familias críticas de perforación, sostenimiento y EPP, que son las que
+// paran la labor si faltan. El resto de productos NO genera alerta.
+const ALM_MIN_DEF=2;                       // mínimo por defecto de las familias vigiladas
+const ALM_FAMILIAS_ALERTA=[
+  {id:'acero',   label:'Aceros',              re:/\bacero|\bacero de perforaci/i},
+  {id:'barreno', label:'Barrenos',            re:/barren/i},
+  {id:'broca',   label:'Brocas',              re:/\bbroca/i},
+  {id:'cimbra',  label:'Cimbras',             re:/cimbra/i},
+  {id:'manga',   label:'Mangas',              re:/\bmanga/i},
+  {id:'perno',   label:'Pernos helicoidales', re:/perno.*helicoid|helicoid.*perno/i},
+  {id:'epp',     label:'EPP',                 re:/\bepp\b|casco|guante|respirador|mameluco|barbiquejo|tapon(es)? ?(de)? ?o[ií]do|protector auditiv|lente(s)? ?de ?seguridad|botin|bota de jebe|arn[eé]s|careta/i},
+];
+// Familia vigilada a la que pertenece un producto, o null si no se vigila.
+function almFamilia(r){
+  const t=String((r&&(r.producto||r.nombre))||'')+' '+String((r&&r.descripcion)||'');
+  return ALM_FAMILIAS_ALERTA.find(f=>f.re.test(t))||null;
+}
+// Mínimo que aplica a un producto: el que tenga cargado en el maestro manda; si no, el de su
+// familia. Devuelve null cuando el producto no se vigila (no debe generar alerta).
+function almMinimo(r){
+  const prop=Number(r&&r.minimo);
+  if(prop>0) return prop;
+  return almFamilia(r) ? ALM_MIN_DEF : null;
+}
 
 // ── EXPLOSIVOS NV3190 ──
 /* ══ DETONADOR NO ELECTRICO FANEL — 16 TIPOS EN CADA MEDIDA (2.40 m, 3 m y 4.2 m) ══
@@ -15323,18 +15403,25 @@ function renderSolicitudCompra(){
 
 function renderAlertasStock(){
   const wrap=document.getElementById('sc-alertas');if(!wrap)return;
-  const stock=calcStock().filter(r=>r.stock<=SC_UMBRAL_BAJO).sort((a,b)=>a.stock-b.stock);
-  if(!stock.length){wrap.innerHTML='<div style="color:#22c55e;font-size:13px;padding:10px 0">✅ Todos los productos tienen stock suficiente.</div>';return;}
+  // Solo las familias vigiladas (aceros, barrenos, brocas, cimbras, mangas, pernos helicoidales y
+  // EPP) y cada una contra SU mínimo. Lo demás no avisa, para que esta lista se pueda mirar.
+  const stock=filtrarPorMaestro(calcStock())
+    .map(r=>({...r,_min:almMinimo(r)}))
+    .filter(r=>r._min!=null && r.stock<=r._min)
+    .sort((a,b)=>a.stock-b.stock);
+  const _fams=ALM_FAMILIAS_ALERTA.map(f=>f.label).join(', ');
+  if(!stock.length){wrap.innerHTML='<div style="color:#22c55e;font-size:13px;padding:10px 0">✅ Sin faltantes en las familias vigiladas.<div style="font-size:11px;color:var(--text3);margin-top:4px">Se vigilan: '+_fams+' — mínimo '+ALM_MIN_DEF+' und (editable por producto en el maestro).</div></div>';return;}
   wrap.innerHTML=stock.map(r=>{
-    const urgente=r.stock<=SC_UMBRAL_URGENTE;
+    const urgente=r.stock<=0;
     const color=urgente?'#ef4444':'#f59e0b';
     const bg=urgente?'rgba(239,68,68,0.08)':'rgba(245,158,11,0.08)';
     const border=urgente?'rgba(239,68,68,0.4)':'rgba(245,158,11,0.4)';
-    const badge=urgente?'<span style="background:#ef4444;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:6px">🔴 URGENTE</span>':'<span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:6px">🟠 HACER PEDIDO</span>';
+    const badge=urgente?'<span style="background:#ef4444;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:6px">🔴 AGOTADO</span>':'<span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:6px">🟠 HACER PEDIDO</span>';
+    const fam=almFamilia(r);
     return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:${bg};border:1px solid ${border};border-radius:8px;padding:10px 14px;margin-bottom:8px;flex-wrap:wrap">
       <div>
         <div style="font-weight:700;color:${color}">${r.producto||r.descripcion}${badge}</div>
-        <div style="font-size:11px;color:var(--text3)">${r.descripcion} · ${almLabel(r.almacen)} · Stock actual: <strong style="color:${color}">${fmt3(r.stock)} ${r.unidad}</strong></div>
+        <div style="font-size:11px;color:var(--text3)">${fam?fam.label+' · ':''}${almLabel(r.almacen)} · Stock actual: <strong style="color:${color}">${fmt3(r.stock)} ${r.unidad}</strong> · mínimo ${fmt3(r._min)}</div>
       </div>
       <button class="btn btn-outline" style="font-size:11px;padding:5px 12px;border-color:${color};color:${color}" onclick="abrirModalSolicitudProd('${encodeURIComponent(r.descripcion)}','${r.unidad}')">📋 Solicitar</button>
     </div>`;
@@ -22652,8 +22739,16 @@ function combStockTipo(tipo){
   let consumido=0;
   if(tipo==='pet') consumido=(state.compresorista||[]).reduce((s,r)=>s+(r.petroleo||[]).reduce((ss,p)=>ss+(p.gln||0),0),0);
   else consumido=(state.compresorista||[]).reduce((s,r)=>s+(r.gasolina||[]).reduce((ss,p)=>ss+(p.gln||0),0),0);
-  return Math.max(0,ingresos-consumido);
+  // Este Math.max(0, …) ESCONDÍA el descuadre que más importa en combustible: si los partes
+  // declaran más galones consumidos de los que consta que entraron, el saldo negativo se recortaba
+  // a 0 y el tanque se veía simplemente vacío. Faltaba petróleo por explicar y nadie se enteraba.
+  // Ahora el saldo se devuelve tal cual, y combDescuadre() permite avisarlo donde toca.
+  return ingresos-consumido;
 }
+// Galones declarados de más (consumo > ingresos registrados). 0 = todo cuadra.
+function combDescuadre(tipo){ const s=combStockTipo(tipo); return s<0 ? -s : 0; }
+// Saldo para mostrar como existencia (nunca negativo). El faltante se avisa aparte, no se disfraza.
+function combStockVista(tipo){ return Math.max(0, combStockTipo(tipo)); }
 
 function combSem(stock,alerta){
   if(stock<=alerta) return {color:'#ef4444',label:'CRÍTICO',emoji:'🔴'};
@@ -22775,7 +22870,8 @@ function renderCombustible(){
   const el=document.getElementById('log-combustible');
   if(!el) return;
 
-  const stPet=combStockTipo('pet'), stGas=combStockTipo('gas');
+  const stPet=combStockVista('pet'), stGas=combStockVista('gas');
+  const dqPet=combDescuadre('pet'), dqGas=combDescuadre('gas');
   const semPet=combSem(stPet,COMB_ALERTA_PET), semGas=combSem(stGas,COMB_ALERTA_GAS);
   const ingPet=combCargar('pet'), ingGas=combCargar('gas');
   const totPet=ingPet.reduce((s,r)=>s+(r.cantidad||0),0);
@@ -22787,8 +22883,10 @@ function renderCombustible(){
     <h3 style="color:var(--accent-light);margin-bottom:18px">🛢 Control de Combustible</h3>
 
     <!-- ALERTAS BANNER -->
-    ${stPet<=COMB_ALERTA_PET?`<div style="background:rgba(239,68,68,.14);border:1px solid #ef4444;border-radius:10px;padding:12px 16px;margin-bottom:14px;color:#ef4444;font-weight:700;font-size:13px">⚠️ PETRÓLEO CRÍTICO — Solo quedan ${stPet.toFixed(0)} galones. Coordinar reabastecimiento urgente.</div>`:''}
-    ${stGas<=COMB_ALERTA_GAS?`<div style="background:rgba(249,115,22,.14);border:1px solid #f97316;border-radius:10px;padding:12px 16px;margin-bottom:14px;color:#f97316;font-weight:700;font-size:13px">⚠️ GASOLINA BAJA — Solo quedan ${stGas.toFixed(1)} galones. Coordinar reabastecimiento.</div>`:''}
+    ${(dqPet||dqGas)?`<div style="background:rgba(168,85,247,.14);border:1px solid #a855f7;border-radius:10px;padding:12px 16px;margin-bottom:14px;color:#c084fc;font-weight:700;font-size:13px">🔎 DESCUADRE DE COMBUSTIBLE — los partes declaran más consumo del que consta que entró:${dqPet?` petróleo <b>${dqPet.toFixed(1)} gln</b> de más`:''}${(dqPet&&dqGas)?' ·':''}${dqGas?` gasolina <b>${dqGas.toFixed(1)} gln</b> de más`:''}. Falta registrar un abastecimiento o hay un parte con galones mal digitados.</div>`:''}
+    ${(totPet===0&&totGas===0)?`<div style="background:rgba(148,163,184,.12);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:14px;color:var(--text3);font-size:12px">Aún no hay abastecimientos registrados, por eso los tanques salen en cero. No es una alerta de stock.</div>`:''}
+    ${(totPet>0&&stPet<=COMB_ALERTA_PET)?`<div style="background:rgba(239,68,68,.14);border:1px solid #ef4444;border-radius:10px;padding:12px 16px;margin-bottom:14px;color:#ef4444;font-weight:700;font-size:13px">⚠️ PETRÓLEO CRÍTICO — Solo quedan ${stPet.toFixed(0)} galones. Coordinar reabastecimiento urgente.</div>`:''}
+    ${(totGas>0&&stGas<=COMB_ALERTA_GAS)?`<div style="background:rgba(249,115,22,.14);border:1px solid #f97316;border-radius:10px;padding:12px 16px;margin-bottom:14px;color:#f97316;font-weight:700;font-size:13px">⚠️ GASOLINA BAJA — Solo quedan ${stGas.toFixed(1)} galones. Coordinar reabastecimiento.</div>`:''}
 
     <!-- DOS TANQUES SIDE BY SIDE -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px">
@@ -22882,7 +22980,7 @@ function combRegistrar(tipo){
   const arr=combCargar(tipo);
   arr.push({fecha,hora,placa,chofer,cantidad,precio,obs});
   combGuardar(tipo,arr);
-  const stock=combStockTipo(tipo);
+  const stock=combStockVista(tipo);
   const alerta=tipo==='pet'?COMB_ALERTA_PET:COMB_ALERTA_GAS;
   const nombre=tipo==='pet'?'petróleo':'gasolina';
   if(stock<=alerta) showNotif(`⚠️ Stock crítico de ${nombre}: ${stock.toFixed(0)} gln`,'warn');
