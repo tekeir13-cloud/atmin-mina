@@ -19614,34 +19614,125 @@ const EQUIPOS_MINA = [
     grupoMD:'Extracción', labM:'Extrac. M', labD:'Extrac. D', viajes:true, unidadCant:'# Viajes', totalMD:'Extracción total' },
 ];
 function equipoMina(id){ return EQUIPOS_MINA.find(e=>e.id===id) || EQUIPOS_MINA[0]; }
-// Códigos de actividad del formato (versión 2, la que está en uso).
+// Códigos de actividad del formato de operación de equipos, en tres grupos como en la hoja impresa:
+// actividad operativa (1xx), demoras operativas (2xx) y demoras no operativas (3xx, fallas y mantenimiento).
+const EQOP_GRUPOS = [ {g:'op', t:'Actividad operativa'}, {g:'dop', t:'Demoras operativas'}, {g:'dnop', t:'Demoras no operativas'} ];
 const EQOP_ACT = [
-  {c:'100',d:'Limpieza de mineral'},              {c:'101',d:'Limpieza de desmonte'},
-  {c:'102',d:'Limpieza de mineral acumulado'},    {c:'103',d:'Limpieza de desmonte acumulado'},
-  {c:'104',d:'Carguío a dumper / volquete'},      {c:'105',d:'Mantenimiento / ripiado de vía'},
-  {c:'106',d:'Limpieza de lama'},                 {c:'107',d:'Rebaje de piso para más altura'},
-  {c:'108',d:'Traslado de cemento'},              {c:'109',d:'Empuje de carga'},
-  {c:'110',d:'Traslado de materiales'},           {c:'111',d:'Carga y descarga de materiales'},
-  {c:'112',d:'Descampaneo y/o campaneo de carga'},
-  {c:'200',d:'Traslado personal Int. Mina',x:1},  {c:'201',d:'Reparto de guardia',x:1},
-  {c:'202',d:'Charla y/o capacitación Int. Mina',x:1}, {c:'203',d:'Personal en proceso de cambio (vestuario)',x:1},
-  {c:'204',d:'Traslado de personal en Int. Mina a equipo',x:1}, {c:'205',d:'Llenado de las herramientas de gestión',x:1},
-  {c:'206',d:'Traslado con equipo a labores',x:1},{c:'207',d:'Traslado de equipo de labor a labor',x:1},
-  {c:'208',d:'Refrigerio / almuerzo',x:1},        {c:'209',d:'Traslado de labor a comedor',x:1},
-  {c:'210',d:'Traslado de comedor a labor',x:1},  {c:'211',d:'Limpieza de equipo al término de guardia',x:1},
-  {c:'212',d:'Traslado de personal de labores a vestuario',x:1}, {c:'213',d:'Salida del personal',x:1},
-  {c:'214',d:'Capacitación en superficie',x:1},   {c:'215',d:'Parada de seguridad',x:1},
-  {c:'216',d:'Equipo parado por falta operador',x:1}, {c:'217',d:'Abastecimiento de combustible',x:1},
-  {c:'218',d:'Falta de ventilación',x:1},         {c:'219',d:'Parado por falta de pase / tráfico en la vía',x:1},
-  {c:'220',d:'Accidente equipo',x:1},             {c:'221',d:'Equipo en stand by',x:1},
-  {c:'222',d:'Desatado de labor',x:1},            {c:'223',d:'Demora por topógrafos (marcado de mallas)',x:1},
-  {c:'224',d:'Parado por falta de área',x:1},     {c:'225',d:'Estandarización y/o orden y limpieza de labor',x:1},
-  {c:'226',d:'Falta de carga',x:1},               {c:'227',d:'Falta de energía en la labor',x:1},
-  {c:'228',d:'No hay energía en la unidad minera',x:1}, {c:'229',d:'Parado por falta de instalación eléctrica - labor',x:1},
-  {c:'230',d:'Parado por ventilación de labor',x:1}, {c:'231',d:'Carga llena echadero',x:1},
-  {c:'232',d:'Parado por falta de combustible',x:1},
+  {c:'100',g:'op',d:'Limpieza/acarreo de mineral'},
+  {c:'102',g:'op',d:'Limpieza/acarreo de desmonte'},
+  {c:'118',g:'op',d:'Desinstalación de equipo'},
+  {c:'126',g:'op',d:'Traslado de cemento'},
+  {c:'127',g:'op',d:'Apoyo a terceros y/u otros'},
+  {c:'151',g:'op',d:'Acarreo de mineral acumulado'},
+  {c:'152',g:'op',d:'Acarreo de desmonte acumulado'},
+  {c:'201',g:'dop',d:'Reparto de guardia'},
+  {c:'202',g:'dop',d:'Traslado personal Int. Mina'},
+  {c:'204',g:'dop',d:'Refrigerio / almuerzo'},
+  {c:'205',g:'dop',d:'Salida del personal'},
+  {c:'206',g:'dop',d:'Capacitación en superficie'},
+  {c:'207',g:'dop',d:'Charla y/o capacitación Int. Mina'},
+  {c:'208',g:'dop',d:'Operador apoya otros trabajos'},
+  {c:'209',g:'dop',d:'Equipo parado por falta operador'},
+  {c:'210',g:'dop',d:'Abastecimiento de combustible'},
+  {c:'211',g:'dop',d:'Traslado de equipo de labor a labor'},
+  {c:'213',g:'dop',d:'Falta de ventilación'},
+  {c:'214',g:'dop',d:'Parado por disparo y/o tiro cortado'},
+  {c:'215',g:'dop',d:'Parado por falta de pase/tráfico en la vía'},
+  {c:'217',g:'dop',d:'Baja presión de agua'},
+  {c:'218',g:'dop',d:'Baja presión de aire'},
+  {c:'219',g:'dop',d:'Accidente equipo'},
+  {c:'222',g:'dop',d:'Equipo parado por falta de aceite y/o grasa'},
+  {c:'223',g:'dop',d:'Parada de seguridad (sobre accidentes ocurridos)'},
+  {c:'226',g:'dop',d:'Equipo en stand by'},
+  {c:'227',g:'dop',d:'Desatado de labor'},
+  {c:'228',g:'dop',d:'Muestreo en labor'},
+  {c:'229',g:'dop',d:'Apoyo en el carguío de frente'},
+  {c:'231',g:'dop',d:'Demora por topógrafos (marcado mallas)'},
+  {c:'232',g:'dop',d:'Parado por falta de área'},
+  {c:'233',g:'dop',d:'Parado por falta de scoop/dumper'},
+  {c:'234',g:'dop',d:'Estandarización y/u orden y limpieza de labor'},
+  {c:'236',g:'dop',d:'Carga y descarga de materiales'},
+  {c:'237',g:'dop',d:'Traslado de labor a comedor'},
+  {c:'238',g:'dop',d:'Traslado de comedor a labor'},
+  {c:'239',g:'dop',d:'Otras demoras operativas'},
+  {c:'241',g:'dop',d:'Descampaneo y/o campaneo de carga'},
+  {c:'243',g:'dop',d:'Falta de carga'},
+  {c:'247',g:'dop',d:'Limpieza del fondo del pique'},
+  {c:'248',g:'dop',d:'Inspección prog. seguridad'},
+  {c:'253',g:'dop',d:'Falta de energía en la labor'},
+  {c:'254',g:'dop',d:'No hay energía en la unidad minera'},
+  {c:'255',g:'dop',d:'Equipo parado por falta de aire'},
+  {c:'256',g:'dop',d:'Equipo parado por falta de agua'},
+  {c:'257',g:'dop',d:'Parado por falta de instalación eléctrica - labor'},
+  {c:'262',g:'dop',d:'Cambio de llantas por accidente'},
+  {c:'264',g:'dop',d:'No hay movilidad para ingreso a mina'},
+  {c:'265',g:'dop',d:'Ventilación de labor'},
+  {c:'272',g:'dop',d:'Carga llena echadero Nv. 1 - SKIP parado'},
+  {c:'273',g:'dop',d:'No hay echadero Int. Mina'},
+  {c:'274',g:'dop',d:'Llenado de las herramientas de gestión'},
+  {c:'275',g:'dop',d:'Limpieza de equipo al término de guardia'},
+  {c:'283',g:'dop',d:'Parado por rompebanco inoperativo'},
+  {c:'284',g:'dop',d:'Inspección de labor'},
+  {c:'285',g:'dop',d:'Parado por falta de combustible'},
+  {c:'292',g:'dop',d:'Parado por colapso de TJ'},
+  {c:'300',g:'dnop',d:'Inspección / chequeo de equipo'},
+  {c:'301',g:'dnop',d:'Falla mecánica'},
+  {c:'302',g:'dnop',d:'Cambio de llanta por desgaste'},
+  {c:'304',g:'dnop',d:'Cambio de eje diferencial de equipo'},
+  {c:'305',g:'dnop',d:'Falla eléctrica del equipo'},
+  {c:'307',g:'dnop',d:'Mantenimiento preventivo'},
+  {c:'308',g:'dnop',d:'Mantenimiento correctivo'},
+  {c:'311',g:'dnop',d:'Mantenimiento y/o evaluación de motor'},
+  {c:'312',g:'dnop',d:'Problemas de compresora de aire acondicionado'},
+  {c:'315',g:'dnop',d:'Traslado de equipo de labor a taller (problemas)'},
+  {c:'318',g:'dnop',d:'Parado por engrase de equipo'},
+  {c:'319',g:'dnop',d:'Rotura y/o cambio de manguera'},
+  {c:'321',g:'dnop',d:'Inoperativo por falta de repuestos'},
+  {c:'322',g:'dnop',d:'Inoperativo por aceite contaminado en el equipo'},
+  {c:'323',g:'dnop',d:'Inoperativo por contaminación de combustible'},
+  {c:'324',g:'dnop',d:'Parado por falta de aceite hidráulico'},
+  {c:'328',g:'dnop',d:'Inoperativo por fuga de aceite de motor'},
+  {c:'330',g:'dnop',d:'Problemas con el monóxido del equipo'},
+  {c:'334',g:'dnop',d:'Pines y bocinas en mal estado'},
+  {c:'335',g:'dnop',d:'Cilindro de dirección en mal estado'},
+  {c:'337',g:'dnop',d:'Inoperativo por fuga de aceite hidráulico'},
+  {c:'338',g:'dnop',d:'Reparación de tolva'},
+  {c:'340',g:'dnop',d:'Pines y bocinas de articulación central en mal estado'},
+  {c:'342',g:'dnop',d:'Falla de caja de transmisión'},
+  {c:'343',g:'dnop',d:'Falla de diferencial posterior y/o delantero'},
+  {c:'344',g:'dnop',d:'Cilindro de levante en mal estado'},
+  {c:'345',g:'dnop',d:'Cilindro de volteo en mal estado'},
+  {c:'346',g:'dnop',d:'Falla de línea cardánica'},
+  {c:'347',g:'dnop',d:'Falla de alternador o arrancador'},
 ];
-function eqopActTxt(c){ const a=EQOP_ACT.find(x=>x.c===String(c||'')); return a?a.d:''; }
+// Lista anterior: solo para que las hojas ya guardadas con esos códigos sigan mostrando qué fue.
+// No aparece en el selector.
+const EQOP_ACT_ANT = {
+  '101':'Limpieza de desmonte','103':'Limpieza de desmonte acumulado','104':'Carguío a dumper / volquete',
+  '105':'Mantenimiento / ripiado de vía','106':'Limpieza de lama','107':'Rebaje de piso para más altura',
+  '108':'Traslado de cemento','109':'Empuje de carga','110':'Traslado de materiales','111':'Carga y descarga de materiales',
+  '112':'Descampaneo y/o campaneo de carga','200':'Traslado personal Int. Mina','203':'Personal en proceso de cambio (vestuario)',
+  '212':'Traslado de personal de labores a vestuario','216':'Equipo parado por falta operador','220':'Accidente equipo',
+  '221':'Equipo en stand by','224':'Parado por falta de área','225':'Estandarización y/o orden y limpieza de labor',
+  '230':'Parado por ventilación de labor'
+};
+function eqopActTxt(c){ const k=String(c||''); const a=EQOP_ACT.find(x=>x.c===k); return a?a.d:(EQOP_ACT_ANT[k]||''); }
+// Lo que se muestra de un ítem: la descripción que tenía al elegirse, para que cambiar la lista
+// después no reescriba lo que dice una hoja ya archivada.
+function eqopItemAct(it){ return (it&&it.dsc) || eqopActTxt((it||{}).cod); }
+// Opciones del selector, agrupadas. Si la hoja trae un código que ya no está en la lista, se
+// conserva como primera opción para no borrarlo al abrirla.
+function eqopActOpciones(cod, dsc){
+  const k=String(cod||'');
+  let h='<option value=""></option>';
+  if(k && !EQOP_ACT.some(a=>a.c===k)){
+    const t=(dsc||eqopActTxt(k)||'').replace(/</g,'&lt;');
+    h+='<option value="'+k+'" selected>'+k+(t?' · '+t:'')+' (código anterior)</option>';
+  }
+  return h+EQOP_GRUPOS.map(gr=>'<optgroup label="'+gr.t+'">'
+    +EQOP_ACT.filter(a=>a.g===gr.g).map(a=>'<option value="'+a.c+'"'+(k===a.c?' selected':'')+'>'+a.c+' · '+a.d+'</option>').join('')
+    +'</optgroup>').join('');
+}
 // Labores donde puede estar el equipo: las del Nv 2820 más los destinos de acarreo.
 function eqopLabores(){
   const fr=(typeof frentesActivos==='function'?frentesActivos():FRENTES).map(f=>f.nombre);
@@ -19666,7 +19757,7 @@ function eqopLoad(){
 }
 function eqopSave(){ try{ localStorage.setItem(EQOP_KEY,JSON.stringify(state.equiposOp||[])); }catch(e){} try{ sbSyncModulo('equipos_operacion', state.equiposOp||[]); }catch(e){} }
 function eqopFicha(fecha,turno,equipo){ return (state.equiposOp||[]).find(f=>f.fecha===fecha&&f.turno===turno&&f.equipo===equipo); }
-function eqopItemVacio(){ return {cod:'',hi:'',hf:'',m:'',d:'',cant:'',oLabor:'',oNv:'2820',dLabor:'',dNv:'2820'}; }
+function eqopItemVacio(){ return {cod:'',dsc:'',hi:'',hf:'',m:'',d:'',cant:'',oLabor:'',oNv:'2820',dLabor:'',dNv:'2820'}; }
 /* Puente con el reporte del jefe de guardia: en cuanto él anota horómetros, la hoja del equipo
    queda abierta con la cabecera puesta. Nunca pisa lo que ya se llenó a mano en la ficha. */
 function eqopDesdeGuardia(rep){
@@ -19742,12 +19833,11 @@ function rgEquiposPintar(){
     const set=(campo)=>'rgEqSet(\''+eq.id+'\',\''+campo+'\',this.value)';
     const inp=(campo,tipo,ph)=>'<input type="'+tipo+'" value="'+esc(v[campo])+'" placeholder="'+ph+'" oninput="'+set(campo)+'" style="width:100%">';
     const optLab=x=>'<option value=""></option>'+labores.map(l=>'<option'+(x===l?' selected':'')+'>'+l+'</option>').join('');
-    const optAct=x=>'<option value=""></option>'+EQOP_ACT.map(a=>'<option value="'+a.c+'"'+(String(x)===a.c?' selected':'')+'>'+a.c+' · '+a.d+'</option>').join('');
     const filas=(v.items||[]).map((it,i)=>{
       const si=(c)=>'rgEqItem(\''+eq.id+'\','+i+',\''+c+'\',this.value)';
       const td=h=>'<td style="padding:3px">'+h+'</td>';
       return '<tr><td style="padding:3px;text-align:center;color:var(--text3);font-size:11px">'+(i+1)+'</td>'
-        +td('<select onchange="'+si('cod')+'" style="width:100%;font-size:11px">'+optAct(it.cod)+'</select>')
+        +td('<select onchange="'+si('cod')+'" style="width:100%;font-size:11px">'+eqopActOpciones(it.cod,it.dsc)+'</select>')
         +td('<input value="'+esc(it.hi)+'" placeholder="ej. 1203.2" inputmode="decimal" data-hr="'+i+'|hi" oninput="'+si('hi')+'" style="width:100%;font-size:11px'+(eqopLecturaError(v,it,'hi')?';border-color:#ef4444;color:#f87171':'')+'" title="'+esc(eqopLecturaError(v,it,'hi'))+'">')
         +td('<input value="'+esc(it.hf)+'" placeholder="ej. 1203.2" inputmode="decimal" data-hr="'+i+'|hf" oninput="'+si('hf')+'" style="width:100%;font-size:11px'+(eqopLecturaError(v,it,'hf')?';border-color:#ef4444;color:#f87171':'')+'" title="'+esc(eqopLecturaError(v,it,'hf'))+'">')
         +'<td data-hrs="'+i+'" style="padding:3px;text-align:center;font-size:11px;color:var(--text3)">'+eqopHM(eqopHorasItem(it))+'</td>'
@@ -19839,6 +19929,7 @@ function rgEqSet(eqId,campo,valor){
 function rgEqItem(eqId,i,campo,valor){
   const v=_rgEq[eqId]; if(!v||!v.items[i]) return;
   v.items[i][campo]=valor;
+  if(campo==='cod') v.items[i].dsc=eqopActTxt(valor);
   // Cambiar una hora mueve el cuadre contra el horómetro, así que el aviso de arriba también se
   // repinta: si no, seguía mostrando el descuadre de hace dos teclas.
   if(campo==='hi'||campo==='hf'||campo==='m'||campo==='d'||campo==='cant'){ rgEqTotales(eqId); rgEquiposAviso(); }
@@ -20226,7 +20317,7 @@ function eqopVerFicha(f){
     +'<div style="font-size:13px;color:var(--text);font-weight:600">'+(e(v)||'—')+'</div></div>';
   const filas=(f.items||[]).filter(i=>i.cod||i.hi||i.cant||i.m||i.d).map((it,i)=>
     '<tr><td style="padding:5px 4px;text-align:center;color:var(--text3)">'+(i+1)+'</td>'
-    +'<td style="padding:5px 4px">'+e(it.cod)+'</td><td style="padding:5px 4px">'+e(eqopActTxt(it.cod))+'</td>'
+    +'<td style="padding:5px 4px">'+e(it.cod)+'</td><td style="padding:5px 4px">'+e(eqopItemAct(it))+'</td>'
     +'<td style="padding:5px 4px;text-align:center">'+e(it.hi)+'</td><td style="padding:5px 4px;text-align:center">'+e(it.hf)+'</td>'
     +'<td style="padding:5px 4px;text-align:center;color:var(--text3)">'+eqopHM(eqopHorasItem(it))+'</td>'
     +'<td style="padding:5px 4px;text-align:center">'+e(it.m)+'</td><td style="padding:5px 4px;text-align:center">'+e(it.d)+'</td>'
@@ -20340,12 +20431,11 @@ function eqopRenderEditor(){
   const inp=(campo,tipo,ph)=>'<input type="'+tipo+'" value="'+esc(f[campo])+'" placeholder="'+ph+'" '
     +'oninput="eqopEdSet(\''+campo+'\',this.value)" style="width:100%">';
   const optLab=v=>'<option value=""></option>'+labores.map(l=>'<option'+(v===l?' selected':'')+'>'+l+'</option>').join('');
-  const optAct=v=>'<option value=""></option>'+EQOP_ACT.map(a=>'<option value="'+a.c+'"'+(String(v)===a.c?' selected':'')+'>'+a.c+' · '+a.d+'</option>').join('');
   const filas=(f.items||[]).map((it,i)=>{
     const si=c=>'eqopEdItem('+i+',\''+c+'\',this.value)';
     const td=h=>'<td style="padding:3px">'+h+'</td>';
     return '<tr><td style="padding:3px;text-align:center;color:var(--text3);font-size:11px">'+(i+1)+'</td>'
-      +td('<select onchange="'+si('cod')+'" style="width:100%;font-size:11px">'+optAct(it.cod)+'</select>')
+      +td('<select onchange="'+si('cod')+'" style="width:100%;font-size:11px">'+eqopActOpciones(it.cod,it.dsc)+'</select>')
       +td('<input value="'+esc(it.hi)+'" placeholder="ej. 1203.2" inputmode="decimal" data-hr="'+i+'|hi" oninput="'+si('hi')+'" style="width:100%;font-size:11px'+(eqopLecturaError(f,it,'hi')?';border-color:#ef4444;color:#f87171':'')+'" title="'+esc(eqopLecturaError(f,it,'hi'))+'">')
       +td('<input value="'+esc(it.hf)+'" placeholder="ej. 1203.2" inputmode="decimal" data-hr="'+i+'|hf" oninput="'+si('hf')+'" style="width:100%;font-size:11px'+(eqopLecturaError(f,it,'hf')?';border-color:#ef4444;color:#f87171':'')+'" title="'+esc(eqopLecturaError(f,it,'hf'))+'">')
       +'<td data-hrs="'+i+'" style="padding:3px;text-align:center;font-size:11px;color:var(--text3)">'+eqopHM(eqopHorasItem(it))+'</td>'
@@ -20415,6 +20505,7 @@ function eqopEdSet(campo,valor){ const f=eqopEnEdicion(); if(!f) return;
   if(campo==='hini') eqopPrimeraLectura(f, antes, valor, document.getElementById('eqop-body'));
   if(campo==='hini'||campo==='hfin') eqopEdTotales(); }
 function eqopEdItem(i,campo,valor){ const f=eqopEnEdicion(); if(!f||!f.items[i]) return; f.items[i][campo]=valor;
+  if(campo==='cod') f.items[i].dsc=eqopActTxt(valor);
   if(campo==='hi'||campo==='hf'||campo==='m'||campo==='d'||campo==='cant') eqopEdTotales(); }
 function eqopEdTotales(){
   const f=eqopEnEdicion(); if(!f) return; const t=eqopTotales(f);
@@ -20483,7 +20574,7 @@ function eqopImprimirPeriodo(){
   const paginas=hojas.map((f,idx)=>{
     const eq=equipoMina(f.equipo), t=eqopTotales(f);
     const filas=(f.items||[]).filter(i=>i.cod||i.hi||i.cant||i.m||i.d).map((it,i)=>
-      '<tr><td>'+(i+1)+'</td><td>'+e(it.cod)+'</td><td class="l">'+e(eqopActTxt(it.cod))+'</td>'
+      '<tr><td>'+(i+1)+'</td><td>'+e(it.cod)+'</td><td class="l">'+e(eqopItemAct(it))+'</td>'
       +'<td>'+e(it.hi)+'</td><td>'+e(it.hf)+'</td><td>'+eqopHM(eqopHorasItem(it))+'</td>'
       +'<td>'+e(it.m)+'</td><td>'+e(it.d)+'</td>'+(eq.viajes?'<td>'+e(it.cant)+'</td>':'')
       +'<td class="l">'+e(it.oLabor)+(it.oNv?' Nv '+e(it.oNv):'')+'</td>'
@@ -20549,7 +20640,7 @@ function eqopImprimirFicha(ficha){
   const f=(typeof ficha==='string')?JSON.parse(ficha):ficha; if(!f) return;
   const eq=equipoMina(f.equipo), t=eqopTotales(f);
   const e=s=>String(s==null?'':s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
-  const filas=(f.items||[]).map((it,i)=>'<tr><td>'+(i+1)+'</td><td>'+e(it.cod)+'</td><td class="l">'+e(eqopActTxt(it.cod))+'</td>'
+  const filas=(f.items||[]).map((it,i)=>'<tr><td>'+(i+1)+'</td><td>'+e(it.cod)+'</td><td class="l">'+e(eqopItemAct(it))+'</td>'
     +'<td>'+e(it.hi)+'</td><td>'+e(it.hf)+'</td><td>'+eqopHM(eqopHorasItem(it))+'</td>'
     +'<td>'+e(it.m)+'</td><td>'+e(it.d)+'</td>'+(eq.viajes?'<td>'+e(it.cant)+'</td>':'')
     +'<td class="l">'+e(it.oLabor)+'</td><td>'+e(it.oNv)+'</td><td class="l">'+e(it.dLabor)+'</td><td>'+e(it.dNv)+'</td></tr>').join('');
