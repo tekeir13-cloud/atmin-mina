@@ -87,7 +87,6 @@ function cargosDe(personal) {
 // trabajador nuevo no se le asigna una labor cerrada.
 const FRENTES = [
   { id: 1, nombre: 'RA Brenda' }, { id: 2, nombre: 'CRNE' },
-  { id: 'SN5100NW', nombre: 'SN 5100 NW' },
   { id: 'GLNW4', nombre: 'GLNW 4' },
   { id: 'ESCM4515', nombre: 'ESCM 4515' },
   { id: 'TJ5100', nombre: 'TJ 5100' },
