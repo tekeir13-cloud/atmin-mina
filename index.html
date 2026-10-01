@@ -19721,6 +19721,7 @@ function rgEquiposRender(datos){
     _rgEq[eq.id]=Object.assign(b, v, { items:(v.items&&v.items.length)?v.items.map(i=>Object.assign(eqopItemVacio(),i)):b.items });
     // El horómetro final del turno anterior es el inicial de este: se propone solo.
     if(!_rgEq[eq.id].hini){ try{ _rgEq[eq.id].hini=eqopUltimoHorometro(eq.id,fch,trn); }catch(e){} }
+    eqopPrimeraLectura(_rgEq[eq.id], '', _rgEq[eq.id].hini, null);
   });
   _rgEqAbierto='';
   rgEquiposPintar();
@@ -19747,9 +19748,9 @@ function rgEquiposPintar(){
       const td=h=>'<td style="padding:3px">'+h+'</td>';
       return '<tr><td style="padding:3px;text-align:center;color:var(--text3);font-size:11px">'+(i+1)+'</td>'
         +td('<select onchange="'+si('cod')+'" style="width:100%;font-size:11px">'+optAct(it.cod)+'</select>')
-        +td('<input value="'+esc(it.hi)+'" placeholder="00:00" oninput="'+si('hi')+'" style="width:100%;font-size:11px'+(_rgEqMalaHora(it.hi)?';border-color:#ef4444;color:#f87171':'')+'">')
-        +td('<input value="'+esc(it.hf)+'" placeholder="00:00" oninput="'+si('hf')+'" style="width:100%;font-size:11px'+(_rgEqMalaHora(it.hf)?';border-color:#ef4444;color:#f87171':'')+'">')
-        +'<td style="padding:3px;text-align:center;font-size:11px;color:var(--text3)">'+eqopHM(eqopHorasItem(it))+'</td>'
+        +td('<input value="'+esc(it.hi)+'" placeholder="ej. 1203.2" inputmode="decimal" data-hr="'+i+'|hi" oninput="'+si('hi')+'" style="width:100%;font-size:11px'+(eqopLecturaError(v,it,'hi')?';border-color:#ef4444;color:#f87171':'')+'" title="'+esc(eqopLecturaError(v,it,'hi'))+'">')
+        +td('<input value="'+esc(it.hf)+'" placeholder="ej. 1203.2" inputmode="decimal" data-hr="'+i+'|hf" oninput="'+si('hf')+'" style="width:100%;font-size:11px'+(eqopLecturaError(v,it,'hf')?';border-color:#ef4444;color:#f87171':'')+'" title="'+esc(eqopLecturaError(v,it,'hf'))+'">')
+        +'<td data-hrs="'+i+'" style="padding:3px;text-align:center;font-size:11px;color:var(--text3)">'+eqopHM(eqopHorasItem(it))+'</td>'
         +td('<input type="number" step="0.01" min="0" value="'+esc(it.m)+'" oninput="'+si('m')+'" style="width:100%;font-size:11px">')
         +td('<input type="number" step="0.01" min="0" value="'+esc(it.d)+'" oninput="'+si('d')+'" style="width:100%;font-size:11px">')
         +(eq.viajes?td('<input type="number" step="1" min="0" value="'+esc(it.cant)+'" oninput="'+si('cant')+'" style="width:100%;font-size:11px">'):'')
@@ -19767,6 +19768,8 @@ function rgEquiposPintar(){
         +'<div class="form-group" style="margin:0"><label>Horómetro inicial</label>'+inp('hini','number','')+'</div>'
         +'<div class="form-group" style="margin:0"><label>Horómetro final</label>'+inp('hfin','number','')+'</div>'
       +'</div>'
+      +'<div style="font-size:11px;color:var(--text3);margin:-2px 0 6px">Hr. inicial y Hr. final de cada actividad son <b>lecturas del horómetro</b>, no horas del reloj: '
+        +'si el turno va de 1203.2 a 1211.2, una actividad de 1203.2 a 1205.2 son 2 h. La primera empieza en el horómetro inicial y cada una sigue donde terminó la anterior.</div>'
       +'<div class="table-wrap" style="overflow-x:auto"><table style="width:100%;min-width:880px;border-collapse:collapse;font-size:11px">'
         +'<thead><tr style="color:var(--text3);text-align:left"><th style="padding:4px">#</th><th style="padding:4px">Código de actividad</th>'
         +'<th style="padding:4px">Hr. inicial</th><th style="padding:4px">Hr. final</th><th style="padding:4px">Horas</th>'
@@ -19811,9 +19814,25 @@ function rgEquiposPintar(){
   +'<div id="rg-eq-aviso" style="font-size:11px;color:var(--text3);margin-top:4px"></div>';
   rgEquiposAviso();
 }
+// La primera actividad arranca en el horómetro inicial: se copia sola mientras nadie la haya
+// cambiado a mano (vacía, o igual al horómetro inicial que había antes).
+function eqopPrimeraLectura(f, antes, ahora, cont){
+  const it=(f.items||[])[0]; if(!it) return;
+  const hi=String(it.hi||'').trim();
+  if(hi && hi!==String(antes||'').trim()) return;
+  it.hi=String(ahora||'').trim();
+  const el=cont&&cont.querySelector('input[data-hr="0|hi"]'); if(el) el.value=it.hi;
+}
+function eqopSiguienteLectura(f, it){
+  const items=f.items||[], ult=items[items.length-1];
+  if(ult){ if(String(ult.hf||'').trim() && !eqopLecturaError(f,ult,'hf')) it.hi=String(ult.hf).trim(); }
+  else if(String(f.hini||'').trim()) it.hi=String(f.hini).trim();
+}
 function rgEqSet(eqId,campo,valor){
   if(!_rgEq[eqId]) _rgEq[eqId]=_rgEqBlanco();
+  const antes=_rgEq[eqId][campo];
   _rgEq[eqId][campo]=valor;
+  if(campo==='hini') eqopPrimeraLectura(_rgEq[eqId], antes, valor, document.getElementById('rg-equipos'));
   // Al mover un horómetro cambian las horas de la máquina, la disponibilidad y el cuadre.
   if(campo==='hini'||campo==='hfin'){ rgEqTotales(eqId); rgEquiposAviso(); }
 }
@@ -19829,6 +19848,7 @@ function rgEqTotales(eqId){
   // está escribiendo en ese momento.
   const v=_rgEq[eqId]; if(!v) return;
   const t=eqopTotales(v), eq=equipoMina(eqId);
+  if(_rgEqAbierto===eqId) eqopMarcarLecturas(document.getElementById('rg-equipos'), v);
   const fr=document.getElementById('rg-disp-'+eqId);
   if(fr) fr.innerHTML='<span>Jornada <b style="color:var(--text2)">'+JORNADA_H+' h</b></span>'
     +'<span>⏲ Horómetro <b style="color:var(--text2)">'+(t.horometro>0?t.horometroHm:'—')+'</b></span>'
@@ -19846,19 +19866,18 @@ function rgEqTotales(eqId){
 function rgEqItemAgregar(eqId){
   const v=_rgEq[eqId]; if(!v) return;
   const it=eqopItemVacio();
-  // La hora final de un ítem es la inicial del siguiente: el turno es continuo, no tiene huecos.
-  const ult=(v.items||[])[ (v.items||[]).length-1 ];
-  if(ult && eqopHoraValida(ult.hf)!=null) it.hi=String(ult.hf).trim();
+  // La lectura final de un ítem es la inicial del siguiente: el horómetro es continuo, sin huecos.
+  eqopSiguienteLectura(v, it);
   (v.items=v.items||[]).push(it); rgEquiposPintar();
 }
 function rgEqItemQuitar(eqId,i){ const v=_rgEq[eqId]; if(!v) return; v.items.splice(i,1);
   if(!v.items.length) v.items.push(eqopItemVacio()); rgEquiposPintar(); }
-function _rgEqMalaHora(t){ return !!String(t||'').trim() && eqopHoraValida(t)===null; }
 function rgEquiposAviso(){
   const av=document.getElementById('rg-eq-aviso'); if(!av) return;
-  const horas=EQUIPOS_MINA.filter(eq=>((_rgEq[eq.id]||{}).items||[]).some(i=>_rgEqMalaHora(i.hi)||_rgEqMalaHora(i.hf))).map(eq=>eq.nombre);
-  if(horas.length){ av.innerHTML='<span style="color:#f87171">⚠ Hay horas imposibles (deben ir entre 00:00 y 23:59) en: '
-    +horas.join(', ')+'</span>'; return; }
+  const lect=EQUIPOS_MINA.map(eq=>({eq, e:eqopErroresLecturas(_rgEq[eq.id]||{})})).filter(x=>x.e.length)
+    .map(x=>x.eq.nombre+' ('+x.e.join('; ')+')');
+  if(lect.length){ av.innerHTML='<span style="color:#f87171">⚠ Revisa las lecturas de horómetro de las actividades en: '
+    +lect.join(' · ')+'</span>'; return; }
   const malos=EQUIPOS_MINA.filter(eq=>{ const v=_rgEq[eq.id]||{}; const a=Number(v.hini)||0,b=Number(v.hfin)||0;
     return a&&b&&b<a; }).map(eq=>eq.nombre);
   if(!malos.length){
@@ -19883,20 +19902,67 @@ function rgEquiposLeer(){
   });
   return d;
 }
-// Hora del reloj: solo 00:00–23:59. Antes se aceptaba «25:10» y salía un turno de tres horas que
-// nadie trabajó; ahora una hora imposible no suma y se marca en rojo en la casilla.
+/* Las horas de cada actividad salen del HORÓMETRO de la máquina, no del reloj. Si el turno va de
+   1203.2 a 1211.2, las actividades se reparten dentro de ese tramo (1203.2→1205.2, 1205.2→1211.2)
+   y cada una dura la diferencia de lecturas. El horómetro no vuelve a cero a medianoche, así que una
+   lectura final menor que la inicial es un error de digitación, no un cambio de día. */
+function eqopLectura(t){
+  const x=String(t==null?'':t).trim().replace(',','.');
+  return /^\d+(\.\d+)?$/.test(x) ? Number(x) : null;
+}
+// Las hojas antiguas se llenaron con hora de reloj (07:00–09:30): esas se siguen leyendo como antes
+// para que su histórico no cambie. Solo se reconocen por los dos puntos.
+function _eqopEsReloj(t){ return String(t||'').indexOf(':')>=0; }
 function eqopHoraValida(t){
-  const m=String(t||'').trim().match(/^(\d{1,2}):?(\d{2})$/);
+  const m=String(t||'').trim().match(/^(\d{1,2}):(\d{2})$/);
   if(!m) return null;
   const h=Number(m[1]), mi=Number(m[2]);
   if(h>23||mi>59) return null;
   return h+mi/60;
 }
 function eqopHorasItem(it){
-  const a=eqopHoraValida(it.hi), b=eqopHoraValida(it.hf);
-  if(a==null||b==null) return 0;
-  let h=b-a; if(h<0) h+=24;             // el ítem cruza la medianoche
-  return Math.round(h*100)/100;
+  if(_eqopEsReloj(it.hi)||_eqopEsReloj(it.hf)){
+    const a=eqopHoraValida(it.hi), b=eqopHoraValida(it.hf);
+    if(a==null||b==null) return 0;
+    let h=b-a; if(h<0) h+=24;
+    return Math.round(h*100)/100;
+  }
+  const a=eqopLectura(it.hi), b=eqopLectura(it.hf);
+  if(a==null||b==null||b<a) return 0;
+  return Math.round((b-a)*100)/100;
+}
+// Qué tiene mal la lectura de una actividad, en palabras para el aviso; '' si está bien.
+// f es la hoja (lleva hini/hfin): la lectura tiene que caer dentro del horómetro del turno.
+function eqopLecturaError(f,it,campo){
+  const raw=String((it||{})[campo]||'').trim(); if(!raw) return '';
+  if(_eqopEsReloj(raw)) return eqopHoraValida(raw)==null ? 'hora imposible' : '';
+  const x=eqopLectura(raw);
+  if(x==null) return 'no es una lectura de horómetro (ej. 1203.2)';
+  const a=Number((f||{}).hini)||0, b=Number((f||{}).hfin)||0;
+  if(a && x<a-1e-9) return 'es menor que el horómetro inicial ('+a+')';
+  if(b && x>b+1e-9) return 'es mayor que el horómetro final ('+b+')';
+  if(campo==='hf'){ const h=eqopLectura(it.hi); if(h!=null && x<h) return 'la final es menor que la inicial'; }
+  return '';
+}
+function eqopErroresLecturas(f){
+  const out=[];
+  ((f||{}).items||[]).forEach((it,i)=>['hi','hf'].forEach(c=>{
+    const e=eqopLecturaError(f,it,c); if(e) out.push('ítem '+(i+1)+' '+(c==='hi'?'Hr. inicial':'Hr. final')+': '+e);
+  }));
+  return out;
+}
+// Repinta en la tabla abierta el rojo de las lecturas y la columna de horas, sin redibujarla:
+// redibujar borraría lo que se está escribiendo.
+function eqopMarcarLecturas(cont,f){
+  if(!cont||!f) return;
+  cont.querySelectorAll('input[data-hr]').forEach(el=>{
+    const [i,c]=el.getAttribute('data-hr').split('|'); const it=(f.items||[])[Number(i)]; if(!it) return;
+    const e=eqopLecturaError(f,it,c);
+    el.style.borderColor=e?'#ef4444':''; el.style.color=e?'#f87171':''; el.title=e;
+  });
+  cont.querySelectorAll('td[data-hrs]').forEach(td=>{
+    const it=(f.items||[])[Number(td.getAttribute('data-hrs'))]; if(it) td.textContent=eqopHM(eqopHorasItem(it));
+  });
 }
 // Las horas se leen en horas y minutos, que es como se reportan: 3.75 no dice nada, 3h 45min sí.
 function eqopHM(dec){
@@ -20280,9 +20346,9 @@ function eqopRenderEditor(){
     const td=h=>'<td style="padding:3px">'+h+'</td>';
     return '<tr><td style="padding:3px;text-align:center;color:var(--text3);font-size:11px">'+(i+1)+'</td>'
       +td('<select onchange="'+si('cod')+'" style="width:100%;font-size:11px">'+optAct(it.cod)+'</select>')
-      +td('<input value="'+esc(it.hi)+'" placeholder="00:00" oninput="'+si('hi')+'" style="width:100%;font-size:11px'+(_rgEqMalaHora(it.hi)?';border-color:#ef4444;color:#f87171':'')+'">')
-      +td('<input value="'+esc(it.hf)+'" placeholder="00:00" oninput="'+si('hf')+'" style="width:100%;font-size:11px'+(_rgEqMalaHora(it.hf)?';border-color:#ef4444;color:#f87171':'')+'">')
-      +'<td style="padding:3px;text-align:center;font-size:11px;color:var(--text3)">'+eqopHM(eqopHorasItem(it))+'</td>'
+      +td('<input value="'+esc(it.hi)+'" placeholder="ej. 1203.2" inputmode="decimal" data-hr="'+i+'|hi" oninput="'+si('hi')+'" style="width:100%;font-size:11px'+(eqopLecturaError(f,it,'hi')?';border-color:#ef4444;color:#f87171':'')+'" title="'+esc(eqopLecturaError(f,it,'hi'))+'">')
+      +td('<input value="'+esc(it.hf)+'" placeholder="ej. 1203.2" inputmode="decimal" data-hr="'+i+'|hf" oninput="'+si('hf')+'" style="width:100%;font-size:11px'+(eqopLecturaError(f,it,'hf')?';border-color:#ef4444;color:#f87171':'')+'" title="'+esc(eqopLecturaError(f,it,'hf'))+'">')
+      +'<td data-hrs="'+i+'" style="padding:3px;text-align:center;font-size:11px;color:var(--text3)">'+eqopHM(eqopHorasItem(it))+'</td>'
       +td('<input type="number" step="0.01" min="0" value="'+esc(it.m)+'" oninput="'+si('m')+'" style="width:100%;font-size:11px">')
       +td('<input type="number" step="0.01" min="0" value="'+esc(it.d)+'" oninput="'+si('d')+'" style="width:100%;font-size:11px">')
       +(eq.viajes?td('<input type="number" step="1" min="0" value="'+esc(it.cant)+'" oninput="'+si('cant')+'" style="width:100%;font-size:11px">'):'')
@@ -20344,11 +20410,15 @@ function eqopRenderEditor(){
     +'<button class="btn btn-outline" onclick="eqopEdCerrar()">Cancelar</button>'
    +'</div>';
 }
-function eqopEdSet(campo,valor){ const f=eqopEnEdicion(); if(!f) return; f[campo]=valor; }
+function eqopEdSet(campo,valor){ const f=eqopEnEdicion(); if(!f) return;
+  const antes=f[campo]; f[campo]=valor;
+  if(campo==='hini') eqopPrimeraLectura(f, antes, valor, document.getElementById('eqop-body'));
+  if(campo==='hini'||campo==='hfin') eqopEdTotales(); }
 function eqopEdItem(i,campo,valor){ const f=eqopEnEdicion(); if(!f||!f.items[i]) return; f.items[i][campo]=valor;
   if(campo==='hi'||campo==='hf'||campo==='m'||campo==='d'||campo==='cant') eqopEdTotales(); }
 function eqopEdTotales(){
   const f=eqopEnEdicion(); if(!f) return; const t=eqopTotales(f);
+  eqopMarcarLecturas(document.getElementById('eqop-body'), f);
   const tf=document.querySelector('#eqop-body tfoot tr'), eq=equipoMina(f.equipo);
   if(tf) tf.innerHTML='<td colspan="4" style="padding:6px 4px;text-align:right;color:var(--text3)">TOTALES</td>'
     +'<td style="padding:6px 4px">'+t.hm+'</td><td style="padding:6px 4px">'+t.m+'</td>'
@@ -20357,8 +20427,7 @@ function eqopEdTotales(){
 function eqopEdItemAgregar(){
   const f=eqopEnEdicion(); if(!f) return;
   const it=eqopItemVacio();
-  const ult=(f.items||[])[(f.items||[]).length-1];
-  if(ult && eqopHoraValida(ult.hf)!=null) it.hi=String(ult.hf).trim();   // sigue donde terminó el anterior
+  eqopSiguienteLectura(f, it);                 // sigue donde terminó el anterior
   (f.items=f.items||[]).push(it); eqopRenderEditor();
 }
 function eqopEdItemQuitar(i){ const f=eqopEnEdicion(); if(!f) return; f.items.splice(i,1);
