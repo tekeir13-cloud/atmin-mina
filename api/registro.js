@@ -88,7 +88,7 @@ function cargosDe(personal) {
 const FRENTES = [
   { id: 1, nombre: 'RA Brenda' }, { id: 2, nombre: 'CRNE' },
   { id: 'SN5100NW', nombre: 'SN 5100 NW' },
-  { id: 'GLNW3', nombre: 'GLNW 3' }, { id: 'GLNW4', nombre: 'GLNW 4' },
+  { id: 'GLNW4', nombre: 'GLNW 4' },
   { id: 'ESCM4515', nombre: 'ESCM 4515' },
   { id: 'TJ5100', nombre: 'TJ 5100' },
 ];
