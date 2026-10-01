@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.02-175</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.02-176</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.02-175</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.02-176</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.02-175</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.02-176</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -4366,6 +4366,7 @@ select option{background:var(--coal3);}
     <div style="background:var(--coal4);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
       <div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Agregar producto a la solicitud</div>
       <div class="form-group" style="margin:0 0 8px"><label style="font-size:11px">Producto (Maestro de Productos)</label><select id="sc-prod-sel" onchange="autoFillSolicitudProdSel()" style="font-size:13px;width:100%"><option value="">— Seleccionar producto del maestro —</option></select></div>
+      <div id="sc-stock-info" style="display:none;background:var(--coal4);border-radius:8px;padding:8px 12px;margin:0 0 8px;font-size:12px"></div>
       <div style="display:grid;grid-template-columns:120px 1fr 70px 90px 110px auto;gap:8px;align-items:flex-end">
         <div class="form-group" style="margin:0"><label style="font-size:11px">Código</label><input type="text" id="sc-prod-cod" list="sc-prod-datalist" oninput="autoFillSolicitudProd()" placeholder="auto" style="font-size:13px"><datalist id="sc-prod-datalist"></datalist></div>
         <div class="form-group" style="margin:0"><label style="font-size:11px">Descripción</label><input type="text" id="sc-prod-desc" placeholder="Descripción del producto" style="font-size:13px"></div>
@@ -4377,9 +4378,9 @@ select option{background:var(--coal3);}
     </div>
     <div class="table-wrap" style="max-height:200px;overflow-y:auto;margin-bottom:10px">
       <table>
-        <thead><tr><th>Código</th><th>Descripción</th><th>U.M.</th><th>Cant.</th><th>Precio Est.</th><th>Total Est.</th><th></th></tr></thead>
-        <tbody id="sc-cart-tbody"><tr><td colspan="7" style="text-align:center;color:var(--text3);padding:16px;font-size:13px">Agrega productos arriba</td></tr></tbody>
-        <tfoot><tr><td colspan="5" style="text-align:right;font-weight:700">Total estimado</td><td id="sc-cart-total" style="color:var(--gold-light);font-weight:700">S/ 0.00</td><td></td></tr></tfoot>
+        <thead><tr><th>Código</th><th>Descripción</th><th>U.M.</th><th>Stock actual</th><th>Cant.</th><th>Precio Est.</th><th>Total Est.</th><th></th></tr></thead>
+        <tbody id="sc-cart-tbody"><tr><td colspan="8" style="text-align:center;color:var(--text3);padding:16px;font-size:13px">Agrega productos arriba</td></tr></tbody>
+        <tfoot><tr><td colspan="6" style="text-align:right;font-weight:700">Total estimado</td><td id="sc-cart-total" style="color:var(--gold-light);font-weight:700">S/ 0.00</td><td></td></tr></tfoot>
       </table>
     </div>
     <div class="btn-row">
@@ -15444,11 +15445,57 @@ function renderAlertasStock(){
   }).join('');
 }
 
+/* STOCK A LA VISTA AL PEDIR.
+   Una solicitud sin el stock del día obliga a quien aprueba a ir a buscarlo a otra pantalla, y
+   normalmente no lo hace: firma sin saber si quedaban 2 o 200. Aquí el stock se muestra al elegir
+   el producto, se guarda con el ítem y viaja con la solicitud, así que el que aprueba ve con qué
+   existencia se pidió, aunque la mire tres días después. */
+function scStockDe(codigo, desc){
+  try{
+    const cod=String(codigo||'').trim().toLowerCase();
+    const nom=String(desc||'').trim().toLowerCase();
+    const filas=(typeof filtrarPorMaestro==='function'?filtrarPorMaestro(calcStock()):calcStock())
+      .filter(r=> cod ? String(r.codigo||'').trim().toLowerCase()===cod
+                      : (String(r.producto||r.descripcion||'').trim().toLowerCase()===nom));
+    if(!filas.length) return null;
+    // Un mismo producto puede estar en Insumos y en Mantenimiento: se suma y se dice dónde está.
+    const stock=filas.reduce((a,r)=>a+(Number(r.stock)||0),0);
+    const min=(typeof almMinimo==='function') ? almMinimo(filas[0]) : null;
+    return { stock, unidad:filas[0].unidad||'', minimo:min,
+             reparto:filas.length>1 ? filas.map(r=>almLabel(r.almacen)+': '+fmt3(r.stock)).join(' · ') : '' };
+  }catch(e){ return null; }
+}
+// Lo mismo, listo para escribirlo en un papel o en una tabla.
+function scStockTxt(it){
+  if(it && it.stock!=null) return fmt3(it.stock)+' '+(it.unidad||'');
+  return 'sin dato';
+}
+function scPintarStock(){
+  const box=document.getElementById('sc-stock-info'); if(!box) return;
+  const cod=(document.getElementById('sc-prod-cod')||{}).value||'';
+  const desc=(document.getElementById('sc-prod-desc')||{}).value||'';
+  if(!cod && !desc){ box.style.display='none'; box.innerHTML=''; return; }
+  const st=scStockDe(cod,desc);
+  box.style.display='block';
+  if(!st){
+    box.innerHTML='<span style="color:var(--text3)">📦 Sin existencias registradas de este producto en el almacén — se pedirá como material nuevo.</span>';
+    return;
+  }
+  const bajo = st.minimo!=null && st.stock<=st.minimo;
+  const col = st.stock<=0 ? '#f87171' : (bajo ? '#f59e0b' : '#22c55e');
+  box.innerHTML='<b style="color:'+col+'">📦 Stock actual: '+fmt3(st.stock)+' '+(st.unidad||'')+'</b>'
+    +(st.minimo!=null?'<span style="color:var(--text3)"> · mínimo '+fmt3(st.minimo)+'</span>':'')
+    +(st.reparto?'<span style="color:var(--text3)"> · '+st.reparto+'</span>':'')
+    +(st.stock<=0?'<span style="color:#f87171;font-weight:700"> — AGOTADO</span>'
+      :(bajo?'<span style="color:#f59e0b;font-weight:700"> — por debajo del mínimo</span>':''))
+    +'<div style="font-size:10.5px;color:var(--text3);margin-top:3px">Este dato queda guardado en la solicitud: quien aprueba verá con qué stock se pidió.</div>';
+}
 function abrirModalSolicitudProd(desc,um){
   abrirModalSolicitud();
   setTimeout(()=>{
     const d=document.getElementById('sc-prod-desc');if(d)d.value=decodeURIComponent(desc);
     const u=document.getElementById('sc-prod-um');if(u)u.value=um;
+    scPintarStock();
     document.getElementById('sc-prod-cant')?.focus();
   },200);
 }
@@ -15461,6 +15508,7 @@ function abrirModalSolicitud(){
   g('sc-prod-cod').value='';g('sc-prod-desc').value='';g('sc-prod-um').value='UND';
   g('sc-prod-cant').value='';g('sc-prod-precio').value='';
   solicitudCart=[];renderSolicitudCart();
+  const _si=g('sc-stock-info'); if(_si){ _si.style.display='none'; _si.innerHTML=''; }
   // poblar selector y datalist de productos desde el MAESTRO DE PRODUCTOS
   const prods=(state.almacen.productos||[]).slice().sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
   const sel=g('sc-prod-sel');
@@ -15479,6 +15527,7 @@ function autoFillSolicitudProdSel(){
   const d=document.getElementById('sc-prod-desc');if(d)d.value=p.descripcion||p.nombre||'';
   const u=document.getElementById('sc-prod-um');if(u)u.value=p.unidad||'UND';
   const pr=document.getElementById('sc-prod-precio');if(pr&&!pr.value&&p.precio)pr.value=p.precio;
+  scPintarStock();
 }
 
 function autoFillSolicitudProd(){
@@ -15489,6 +15538,7 @@ function autoFillSolicitudProd(){
     const u=document.getElementById('sc-prod-um');if(u)u.value=p.unidad;
     const pr=document.getElementById('sc-prod-precio');if(pr&&!pr.value&&p.precio)pr.value=p.precio;
   }
+  scPintarStock();
 }
 
 function agregarItemSolicitud(){
@@ -15498,10 +15548,13 @@ function agregarItemSolicitud(){
   if(!desc){showNotif('⚠ Ingresa la descripción','error');return;}
   if(cant<=0){showNotif('⚠ Ingresa una cantidad válida','error');return;}
   const precio=parseFloat(g('sc-prod-precio').value)||0;
-  solicitudCart.push({codigo:g('sc-prod-cod').value.trim(),descripcion:desc,unidad:g('sc-prod-um').value,cantidad:cant,precio,total:cant*precio});
+  const _st=scStockDe(g('sc-prod-cod').value.trim(), desc);   // foto del stock al momento de pedir
+  solicitudCart.push({codigo:g('sc-prod-cod').value.trim(),descripcion:desc,unidad:g('sc-prod-um').value,cantidad:cant,precio,total:cant*precio,
+                      stock:_st?_st.stock:null, minimo:_st?_st.minimo:null});
   renderSolicitudCart();
   const s=g('sc-prod-sel');if(s)s.value='';
   g('sc-prod-cod').value='';g('sc-prod-desc').value='';g('sc-prod-cant').value='';g('sc-prod-precio').value='';
+  scPintarStock();
   g('sc-prod-sel').focus();
 }
 
@@ -15510,11 +15563,12 @@ function renderSolicitudCart(){
   if(tb)tb.innerHTML=solicitudCart.length?solicitudCart.map((i,idx)=>`<tr>
     <td style="font-size:12px;font-family:'DM Mono',monospace">${i.codigo||'—'}</td>
     <td style="font-size:12px">${i.descripcion}</td><td style="font-size:12px">${i.unidad}</td>
+    <td style="font-size:12px;color:${i.stock==null?'var(--text3)':(i.stock<=0?'#f87171':(i.minimo!=null&&i.stock<=i.minimo?'#f59e0b':'var(--text2)'))}">${i.stock==null?'—':fmt3(i.stock)+' '+(i.unidad||'')}</td>
     <td style="font-size:12px">${fmt3(i.cantidad)}</td>
     <td style="font-size:12px">${i.precio?fmtS2(i.precio):'—'}</td>
     <td style="color:var(--gold-light);font-weight:700;font-size:12px">${i.total?fmtS2(i.total):'—'}</td>
     <td><button onclick="solicitudCart.splice(${idx},1);renderSolicitudCart()" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px">🗑</button></td>
-  </tr>`).join(''):`<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:16px;font-size:13px">Agrega productos arriba</td></tr>`;
+  </tr>`).join(''):`<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:16px;font-size:13px">Agrega productos arriba</td></tr>`;
   const tot=solicitudCart.reduce((a,i)=>a+i.total,0);
   const t=document.getElementById('sc-cart-total');if(t)t.textContent=fmtS2(tot);
 }
@@ -15618,7 +15672,7 @@ function renderHistorialSolicitudes(){
           <div style="font-size:13px;color:var(--gold-light);font-weight:700">${s.totalEst?fmtS2(s.totalEst):''}</div>
         </div>
       </div>
-      <div style="font-size:11px;color:var(--text3)">${s.productos.map(p=>`${p.descripcion} × ${fmt3(p.cantidad)} ${p.unidad}`).join(' · ')}</div>
+      <div style="font-size:11px;color:var(--text3)">${s.productos.map(p=>`${p.descripcion} × ${fmt3(p.cantidad)} ${p.unidad}${p.stock!=null?` <span style="color:${p.stock<=0?'#f87171':(p.minimo!=null&&p.stock<=p.minimo?'#f59e0b':'var(--text3)')}">(stock ${fmt3(p.stock)})</span>`:''}`).join(' · ')}</div>
       ${s.estado==='aprobado'?`<div style="margin-top:10px"><button class="btn btn-outline" style="font-size:12px;padding:6px 18px;color:#22c55e;border-color:#22c55e" onclick="exportarOrdenCompra('${s.id}')">📄 Orden de Compra (Excel)</button></div>`:''}
     </div>`).join('');
 }
@@ -15773,7 +15827,7 @@ function _renderSolicitudesPendientes(wrap,area){
         <div>
           <div style="font-weight:700;font-size:14px">${s.prioridad==='urgente'?'🔴 ':''}<span style="color:var(--gold-light)">SC-${s.id.slice(-6)}</span> · ${fmtF(s.fecha)} · 👤 ${s.solicitante}</div>
           <div style="font-size:12px;color:var(--text3);margin-top:3px">📦 ${DEST[s.destino||'logistica-trujillo']||s.destino} ${s.observaciones?'· '+s.observaciones:''}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:4px">${s.productos.map(p=>`${p.descripcion} × ${fmt3(p.cantidad)} ${p.unidad}`).join(' · ')}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:4px">${s.productos.map(p=>`${p.descripcion} × ${fmt3(p.cantidad)} ${p.unidad}${p.stock!=null?` <span style="color:${p.stock<=0?'#f87171':(p.minimo!=null&&p.stock<=p.minimo?'#f59e0b':'var(--text3)')}">(stock ${fmt3(p.stock)})</span>`:''}`).join(' · ')}</div>
         </div>
         <div style="text-align:right"><div style="font-size:14px;color:var(--gold-light);font-weight:700">${s.totalEst?fmtS2(s.totalEst):''}</div>
         <div style="font-size:10px;color:var(--text3);margin-top:4px">${(s.productos||[]).length} producto(s)</div></div>
@@ -15794,7 +15848,7 @@ function _renderSolicitudesHistorial(wrap,area){
     return `<div class="card" style="margin-bottom:8px;padding:12px 16px;opacity:0.8">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <div><div style="font-weight:700;font-size:13px">${s.prioridad==='urgente'?'🔴 ':''}<span style="color:var(--gold-light)">SC-${s.id.slice(-6)}</span> · ${fmtF(s.fecha)} · 👤 ${s.solicitante}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:3px">${s.productos.map(p=>`${p.descripcion} × ${fmt3(p.cantidad)} ${p.unidad}`).join(' · ')}</div></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">${s.productos.map(p=>`${p.descripcion} × ${fmt3(p.cantidad)} ${p.unidad}${p.stock!=null?` <span style="color:${p.stock<=0?'#f87171':(p.minimo!=null&&p.stock<=p.minimo?'#f59e0b':'var(--text3)')}">(stock ${fmt3(p.stock)})</span>`:''}`).join(' · ')}</div></div>
         <div style="text-align:right">${badge}<div style="font-size:12px;color:var(--gold-light);font-weight:700;margin-top:4px">${s.totalEst?fmtS2(s.totalEst):''}</div></div>
       </div>
     </div>`;
@@ -15809,7 +15863,7 @@ async function exportarOrdenCompra(id){
   const destLabel=DEST[s.destino||'logistica-trujillo']||s.destino||'—';
   const wb=new ExcelJS.Workbook();
   const ws=wb.addWorksheet('Orden de Compra',{views:[{state:'frozen',ySplit:12}]});
-  ws.columns=[{width:6},{width:14},{width:40},{width:10},{width:12},{width:16},{width:16}];
+  ws.columns=[{width:6},{width:14},{width:40},{width:10},{width:14},{width:12},{width:16},{width:16}];
   const C_AZUL='FF1E3A5F',C_BLANCO='FFFFFFFF',C_GRIS='FFF3F4F6',C_VERDE='FF15803D',C_ORO='FFB45309';
   const thin={style:'thin',color:{argb:'FFD1D5DB'}};
   const bord={top:thin,bottom:thin,left:thin,right:thin};
@@ -15817,11 +15871,11 @@ async function exportarOrdenCompra(id){
   const font=(bold,sz,argb)=>({bold,size:sz||11,color:{argb:argb||'FF111827'}});
   const aln=(h,v)=>({horizontal:h||'left',vertical:v||'middle',wrapText:true});
   // ── Encabezado ──
-  ws.mergeCells('A1:G1');
+  ws.mergeCells('A1:H1');
   const t=ws.getCell('A1');t.value='ORDEN DE COMPRA';
   t.font={bold:true,size:20,color:{argb:C_BLANCO}};t.fill=fill(C_AZUL);t.alignment=aln('center');
   ws.getRow(1).height=40;
-  ws.mergeCells('A2:G2');
+  ws.mergeCells('A2:H2');
   const sub=ws.getCell('A2');sub.value='Minera Atmin — Unidad NV3190';
   sub.font={bold:false,size:11,color:{argb:C_BLANCO}};sub.fill=fill(C_AZUL);sub.alignment=aln('center');
   ws.getRow(2).height=20;
@@ -15843,7 +15897,8 @@ async function exportarOrdenCompra(id){
   addMeta(10,'Aprobado Finanzas:',s.fechaAprobFin?`✓ ${fmtF(s.fechaAprobFin)}`:'—');
   ws.getRow(11).height=10;
   // ── Tabla de productos ──
-  const thead=['N°','Código','Descripción','U.M.','Cantidad','Precio Unit. (S/)','Total (S/)'];
+  // El stock del día en que se pidió: es lo que justifica el pedido ante quien firma.
+  const thead=['N°','Código','Descripción','U.M.','Stock actual','Cantidad','Precio Unit. (S/)','Total (S/)'];
   const hr=ws.getRow(12);hr.height=22;
   thead.forEach((h,i)=>{const c=hr.getCell(i+1);c.value=h;c.font={bold:true,size:11,color:{argb:C_BLANCO}};
     c.fill=fill(C_AZUL);c.alignment=aln('center');c.border=bord;});
@@ -15851,28 +15906,31 @@ async function exportarOrdenCompra(id){
   s.productos.forEach((p,i)=>{
     const row=ws.getRow(r);row.height=18;
     const bg=(i%2===0)?'FFFFFFFF':'FFF9FAFB';
-    const vals=[i+1,p.codigo||'—',p.descripcion,p.unidad,p.cantidad,p.precio||0,p.total||0];
+    const vals=[i+1,p.codigo||'—',p.descripcion,p.unidad,(p.stock==null?'—':p.stock),p.cantidad,p.precio||0,p.total||0];
     vals.forEach((v,ci)=>{const c=row.getCell(ci+1);c.value=v;c.border=bord;
       c.fill=fill(bg);c.font=font(ci===2,10);
       c.alignment=aln(ci===2?'left':ci===0?'center':'right');
-      if(ci>=5)c.numFmt='"S/"#,##0.00';
+      if(ci>=6)c.numFmt='"S/"#,##0.00';
+      // Agotado o bajo el mínimo: se marca en rojo, que es el motivo del pedido.
+      if(ci===4 && p.stock!=null && (p.stock<=0 || (p.minimo!=null && p.stock<=p.minimo)))
+        c.font={bold:true,size:10,color:{argb:p.stock<=0?'FFDC2626':'FFD97706'}};
     });
     gran+=p.total||0;r++;
   });
   // Total
   ws.getRow(r).height=22;
-  ws.mergeCells(`A${r}:F${r}`);
+  ws.mergeCells(`A${r}:G${r}`);
   const totL=ws.getCell(`A${r}`);totL.value='TOTAL ESTIMADO';totL.font={bold:true,size:12,color:{argb:C_BLANCO}};
   totL.fill=fill(C_VERDE);totL.alignment=aln('right');totL.border=bord;
-  const totV=ws.getCell(`G${r}`);totV.value=gran;totV.font={bold:true,size:12,color:{argb:C_BLANCO}};
+  const totV=ws.getCell(`H${r}`);totV.value=gran;totV.font={bold:true,size:12,color:{argb:C_BLANCO}};
   totV.numFmt='"S/"#,##0.00';totV.fill=fill(C_VERDE);totV.alignment=aln('right');totV.border=bord;
   r+=2;
   // ── Firmas ──
-  ws.mergeCells(`A${r}:C${r}`);ws.getCell(`A${r}`).value='_________________________________';ws.getRow(r).height=20;
-  ws.mergeCells(`E${r}:G${r}`);ws.getCell(`E${r}`).value='_________________________________';
+  ws.mergeCells(`A${r}:D${r}`);ws.getCell(`A${r}`).value='_________________________________';ws.getRow(r).height=20;
+  ws.mergeCells(`F${r}:H${r}`);ws.getCell(`F${r}`).value='_________________________________';
   r++;
-  ws.mergeCells(`A${r}:C${r}`);const fOp=ws.getCell(`A${r}`);fOp.value='Visto Bueno — Operaciones';fOp.font=font(true,10,C_AZUL);fOp.alignment=aln('center');
-  ws.mergeCells(`E${r}:G${r}`);const fFin=ws.getCell(`E${r}`);fFin.value='Visto Bueno — Finanzas';fFin.font=font(true,10,C_AZUL);fFin.alignment=aln('center');
+  ws.mergeCells(`A${r}:D${r}`);const fOp=ws.getCell(`A${r}`);fOp.value='Visto Bueno — Operaciones';fOp.font=font(true,10,C_AZUL);fOp.alignment=aln('center');
+  ws.mergeCells(`F${r}:H${r}`);const fFin=ws.getCell(`F${r}`);fFin.value='Visto Bueno — Finanzas';fFin.font=font(true,10,C_AZUL);fFin.alignment=aln('center');
   r++;
   ws.mergeCells(`A${r}:C${r}`);ws.getCell(`A${r}`).value=s.fechaAprobOp?fmtF(s.fechaAprobOp):'Fecha: ____________';ws.getCell(`A${r}`).alignment=aln('center');ws.getCell(`A${r}`).font=font(false,9,'FF6B7280');
   ws.mergeCells(`E${r}:G${r}`);ws.getCell(`E${r}`).value=s.fechaAprobFin?fmtF(s.fechaAprobFin):'Fecha: ____________';ws.getCell(`E${r}`).alignment=aln('center');ws.getCell(`E${r}`).font=font(false,9,'FF6B7280');
