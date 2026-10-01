@@ -83,11 +83,13 @@ function cargosDe(personal) {
 
 // Los frentes activos de la operación. Se mantienen aquí porque la página pública no carga la
 // app; si mañana se abre un frente nuevo, se agrega en esta lista.
+// Labores VIGENTES (las mismas que ofrece la app). Las retiradas no se listan aquí: a un
+// trabajador nuevo no se le asigna una labor cerrada.
 const FRENTES = [
   { id: 1, nombre: 'RA Brenda' }, { id: 2, nombre: 'CRNE' },
-  { id: 'ESCM4365', nombre: 'ESCM 4365' }, { id: 'ESCM4410', nombre: 'ESCM 4410' },
-  { id: 'ESCM4435', nombre: 'ESCM 4435' }, { id: 'SN5100NW', nombre: 'SN 5100 NW' },
-  { id: 'GLNW3', nombre: 'GLNW 3' }, { id: 'GLSE3', nombre: 'GLSE 3' },
+  { id: 'SN5100NW', nombre: 'SN 5100 NW' },
+  { id: 'GLNW3', nombre: 'GLNW 3' }, { id: 'GLNW4', nombre: 'GLNW 4' },
+  { id: 'ESCM4515', nombre: 'ESCM 4515' },
   { id: 'TJ5100', nombre: 'TJ 5100' },
 ];
 
