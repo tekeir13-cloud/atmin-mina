@@ -143,16 +143,16 @@ td:nth-child(-n+4),th:nth-child(-n+4){text-align:left}
   </div>
 
   <div class="card">
-    <div class="type">Curva S · día de campaña</div>
-    <h2>Avance acumulado por día de campaña</h2>
-    <p>Ambos periodos empiezan en el día 1. La curva de Fanel sube más rápido: más metros por cada día con disparo.</p>
+    <div class="type">Curva S · por disparo</div>
+    <h2>Avance acumulado por disparo</h2>
+    <p>Acumulado contra el número de disparos, no contra los días: en el periodo Fanel se dispararon 3.93 veces por día y en el Carmex 2.87, y comparar por día mezclaría ese ritmo —que depende de los frentes disponibles— con lo que aporta el iniciador. Aquí la pendiente de cada curva es el metraje por disparo. A igualdad de 43 disparos, Fanel habría dado 67.5 m frente a los 61.1 m de Carmex.</p>
     <div class="cv"><canvas id="chS"></canvas></div>
   </div>
 
   <div class="card">
     <div class="type">Curva S · calendario</div>
     <h2>Avance acumulado del 25/08 al 25/09</h2>
-    <p>La pendiente cambia a partir del 12/09. El tramo plano del 04 al 06/09 es la paralización sin carga.</p>
+    <p>La pendiente cambia a partir del 12/09. El tramo plano del 04 al 06/09 es la paralización sin carga. Ojo al leerla: esta curva es la producción total de la unidad, y sube por dos motivos a la vez —se avanza más por disparo y se dispara más veces al día—. Lo que aporta el iniciador es solo el primero; para verlo aislado, la curva por disparo.</p>
     <div class="cv"><canvas id="chCal"></canvas></div>
   </div>
 
@@ -347,14 +347,21 @@ function render(){
   // 2. S curve by campaign day
   const byDay = rs => { const m = {}; rs.forEach(r => m[r.d] = (m[r.d]||0) + r.av); return Object.keys(m).sort().map(k=>m[k]); };
   const cum = a => { let s = 0; return a.map(x => +(s += x).toFixed(2)); };
-  const dc = cum(byDay(R.C)), df = cum(byDay(R.F));
+  // ACUMULADO POR DISPARO, NO POR DÍA DE CAMPAÑA.
+  // Los dos periodos se dispararon a ritmos muy distintos: 2.87 disparos/día con Carmex y 3.93
+  // con Fanel. Acumular por día sumaba ese ritmo —que depende de cuántos frentes hubo disponibles,
+  // no del iniciador— al efecto que aquí se quiere medir, y la curva marcaba +41% cuando la mejora
+  // por disparo es +10.5%. Contando por disparo, la pendiente de cada curva ES el metraje por
+  // disparo, que es lo único que cambia al cambiar de iniciador.
+  const porDisparo = rs => cum(rs.slice().sort((a,b)=>String(a.d).localeCompare(String(b.d))).map(r=>r.av));
+  const dc = porDisparo(R.C), df = porDisparo(R.F);
   const nd = Math.max(dc.length, df.length);
   mk('chS', {type:'line', data:{labels: Array.from({length:nd}, (_,i)=>i+1), datasets:[
     {label:'Carmex', data: dc, borderColor:car, backgroundColor: car+'22', fill:true, borderWidth:2, pointRadius:3, pointBackgroundColor:car, tension:.25},
     {label:'Fanel', data: df, borderColor:fan, backgroundColor: fan+'22', fill:true, borderWidth:2, pointRadius:3, pointBackgroundColor:fan, tension:.25},
   ]}, options:{maintainAspectRatio:false, interaction:{mode:'index', intersect:false},
-    plugins:{legend:{position:'bottom', labels:{color:fg}}, tooltip:{callbacks:{title: i => 'Día de campaña ' + i[0].label, label: c => ` ${c.dataset.label}: ${c.parsed.y.toFixed(2)} m acumulados`}}},
-    scales: axes({x:{title:{display:true,text:'Día con disparo',color:muted}}, y:{beginAtZero:true, title:{display:true,text:'Metros acumulados',color:muted}}})}});
+    plugins:{legend:{position:'bottom', labels:{color:fg}}, tooltip:{callbacks:{title: i => 'Disparo ' + i[0].label, label: c => ` ${c.dataset.label}: ${c.parsed.y.toFixed(2)} m acumulados`}}},
+    scales: axes({x:{title:{display:true,text:'Disparo acumulado',color:muted}}, y:{beginAtZero:true, title:{display:true,text:'Metros acumulados',color:muted}}})}});
 
   // 3. calendar S curve
   const days = []; for (let d = new Date('2026-08-25T00:00:00'); d <= new Date('2026-09-25T00:00:00'); d.setDate(d.getDate()+1)) days.push(d.toISOString().slice(0,10));
