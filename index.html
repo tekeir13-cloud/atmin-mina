@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-180</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-181</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-180</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-181</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.04-180</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.04-181</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -23137,10 +23137,15 @@ function combCargar(tipo){ const k=tipo==='gas'?COMB_KEY_GAS:COMB_KEY_PET; try{r
 // Apertura de petróleo del periodo (1650 gln). Idempotente: usa el MISMO id determinista que el
 // cierre de periodo, así dos equipos no pueden duplicarla. No borra ingresos ni consumos reales.
 const APERTURA_PET_GLN = 1650;
+// Siembra de UN SOLO ciclo: el saldo con que se empezó a llevar el control. De ahí en adelante la
+// apertura de cada mes la pone el cierre con lo que realmente quedó, y esta función no debe tocarla:
+// sin este candado, al cargar la app volvía a forzar 1650 y borraba el arrastre real del mes.
+const APERTURA_PET_PERIODO = '2026-10';
 function aplicarAperturaPetroleo(){
   try{
     if(typeof periodoActual!=='function') return false;
     const periodo=periodoActual();
+    if(periodo!==APERTURA_PET_PERIODO) return false;
     const id='CBPET'+periodo.replace('-','');
     const arr=combCargar('pet');
     const i=arr.findIndex(r=>r&&r.id===id);
@@ -33409,6 +33414,14 @@ async function cerrarPeriodo(periodo){
 
   // 3) Arrastre de stocks de inicio de mes (lo que queda pasa a apertura del nuevo periodo)
   const fechaApertura=r.fin; // último día del periodo = saldo de apertura del siguiente
+  // El petróleo NO se reinicia: lo que queda al cerrar es el stock inicial del mes siguiente. Por eso
+  // su fila de apertura se fecha el PRIMER DÍA DEL CICLO NUEVO y se rotula con ese ciclo; fechada el
+  // último día del ciclo que cierra quedaba fuera de la ventana nueva y el tanque arrancaba en cero.
+  const _sig=(()=>{ const d=new Date(r.fin+'T00:00:00'); d.setDate(d.getDate()+1);
+    const f=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    let per=periodo; try{ per=(typeof periodoDeFecha==='function')?periodoDeFecha(f):periodo; }catch(e){}
+    return {fecha:f, periodo:per};
+  })();
   // 3a) Almacén → nuevo inventario inicial = stock vigente (>0)
   try{
     const stock=(typeof calcStock==='function')?calcStock():[];
@@ -33436,9 +33449,9 @@ async function cerrarPeriodo(periodo){
   try{
     ['pet','gas'].forEach(tipo=>{
       const restante=(typeof combStockTipo==='function')?combStockTipo(tipo):0;
-      const id='CB'+tipo.toUpperCase()+periodo.replace('-','');
+      const id='CB'+tipo.toUpperCase()+_sig.periodo.replace('-','');
       const arr=(typeof combCargar==='function')?combCargar(tipo):[];
-      const fila={ id, fecha:fechaApertura, placa:'APERTURA', chofer:'Sistema',
+      const fila={ id, fecha:_sig.fecha, placa:'APERTURA', chofer:'Sistema',
         cantidad:Math.round(Math.max(0,restante)*10)/10, precio:0, apertura:true,
         obs:'Saldo de apertura del periodo' };
       const i=arr.findIndex(x=>x&&x.id===id);
