@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-195</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-196</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-195</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-196</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.04-195</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.04-196</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -23358,9 +23358,22 @@ function _combEnCiclo(fecha, v){ const d=String(fecha||'').slice(0,10); const w=
    Lo que sí se cierra mes a mes es el CONSUMO, que es gasto y se monitorea por ciclo. Son dos
    cosas distintas: un mes puede cerrar con 6000 gln consumidos y dejar 450 gln en el tanque. */
 function combIngresos(tipo){ return combCargar(tipo).reduce((s,r)=>s+(Number(r&&r.cantidad)||0),0); }
+/* CORTE DEL TANQUE.
+   Al poner los tanques en cero se borraron los abastecimientos viejos, pero los partes del
+   compresorista se conservaron enteros, como se pidió. El saldo corrido restaba entonces AÑOS de
+   consumo contra unos ingresos que arrancan de cero: el petróleo marcaba 0 galones con 4950
+   cargados, porque el consumo histórico se los comía.
+   Ese consumo anterior ya lo pagó el combustible que se borró del registro. Desde el corte, el
+   tanque cuenta TODO lo que entra —un abastecimiento es real lleve la fecha que lleve— pero solo
+   descuenta el consumo del corte en adelante. */
+const COMB_CORTE = '2026-10-01';
 function combConsumo(tipo, soloCiclo){
   const v=soloCiclo?_combVentana():null;
-  const partes=(state.compresorista||[]).filter(r=>!soloCiclo || _combEnCiclo(r&&r.fecha, v));
+  const partes=(state.compresorista||[]).filter(r=>{
+    const d=String((r&&r.fecha)||'').slice(0,10);
+    if(d && d<COMB_CORTE) return false;           // anterior al corte: ya saldado
+    return !soloCiclo || _combEnCiclo(d, v);
+  });
   const campo=tipo==='pet'?'petroleo':'gasolina';
   return partes.reduce((s,r)=>s+((r&&r[campo])||[]).reduce((ss,p)=>ss+(Number(p&&p.gln)||0),0),0);
 }
