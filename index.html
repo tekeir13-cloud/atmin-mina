@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-184</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-185</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-184</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-185</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.04-184</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.04-185</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -2649,6 +2649,7 @@ select option{background:var(--coal3);}
   <div id="d-resumen-hoy"></div>
   <div id="d-avance-meta"></div>
   <div id="d-explosivo-metro"></div>
+  <div id="d-ing-vs-cons"></div>
   <!-- Bloque adicional: solo Rampa y Cortada, las dos labores con óptimo de carga. El avance de
        TODAS las labores se sigue viendo arriba, como siempre; esto no lo reemplaza. -->
   <div id="d-top-trabajadores"></div>
@@ -7177,7 +7178,9 @@ function renderDashEjecutivo(){
   const diasPeriodoEjec=diasDelPeriodo(mes);               // horizonte real del pronóstico
   // Los reportes de guardia son avance de Operaciones: su ventana es el ciclo 26→25.
   const rgMesEjec=(state.reportesGuardia||[]).filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mes,AREA_OP):((r.fecha||'').slice(0,7)===mes));
-  const cimbrasMesEjec=rgMesEjec.reduce((s,r)=>{ let c=FRENTES.reduce((ss,f)=>ss+((r[f.key]&&r[f.key].cimbra)||0),0); (r.frentesExtra||[]).forEach(fx=>c+=(fx.cimbra||0)); return s+c; },0);
+  // Las cimbras son consumo: se miden por MES, aunque los metros de esos mismos reportes vayan por ciclo.
+  const rgMesCimb=(state.reportesGuardia||[]).filter(r=>(typeof filtroMes==='function')?filtroMes(r.fecha,mes):((r.fecha||'').slice(0,7)===mes));
+  const cimbrasMesEjec=rgMesCimb.reduce((s,r)=>{ let c=FRENTES.reduce((ss,f)=>ss+((r[f.key]&&r[f.key].cimbra)||0),0); (r.frentesExtra||[]).forEach(fx=>c+=(fx.cimbra||0)); return s+c; },0);
   // Solo labores vigentes: sumar la meta de una labor retirada inflaría el objetivo del mes.
   const metaTotalEjec=frentesActivos().reduce((s,f)=>s+(metaMensualFrente(f.id,diasHabEjec)||0),0);
   const diasTranscEjec=diasTranscurridosPeriodo(mes);
@@ -7345,6 +7348,7 @@ function renderDashboard(){
   renderDashResumenHoy();
   renderDashAvanceMeta();
   renderDashExplosivoMetro();
+  try{ renderDashIngVsCons(); }catch(e){ console.warn('ing vs cons',e); }
   renderDashTopTrabajadores();
   renderDashStockActual();
   renderDashAlertas();
@@ -7716,6 +7720,76 @@ function renderDashVoladura(){
     +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-top:14px">'+bloques+'</div>'
   +'</div>';
 }
+/* INGRESADO VS CONSUMIDO.
+   Son dos medidas distintas y hay que leerlas por separado: entrar material al almacen o combustible
+   al tanque NO es gastarlo. Confundirlas fue justo lo que hacia que el saldo arrastrado de petroleo
+   se contara dos veces.
+   Cada fila lleva ademas SU calendario, porque no todas cierran igual: lo que compra y recibe
+   Logistica se mide por mes; lo que se consume en labor pertenece al ciclo 26-25 de Operaciones. */
+function renderDashIngVsCons(){
+  const cont=document.getElementById('d-ing-vs-cons'); if(!cont) return;
+  const mesGen=(typeof periodoActual==='function')?periodoActual():'';
+  const lbl=p=>{ try{ return (typeof periodoLabel==='function')?periodoLabel(p):p; }catch(e){ return p; } };
+  const rango=(p,a)=>{ try{ const w=ventanaMes(p,a); return w.ini.slice(8)+'/'+w.ini.slice(5,7)+'-'+w.fin.slice(8)+'/'+w.fin.slice(5,7); }catch(e){ return ''; } };
+  const num=v=>(Number(v)||0).toLocaleString('es-PE',{maximumFractionDigits:1});
+  const filas=[];
+  try{
+    [['pet','Petroleo','gln'],['gas','Gasolina','gln']].forEach(function(x){
+      const t=x[0];
+      const man=combSalidasManuales(t,true);
+      // Consumido = lo que descuenta el parte del compresorista MÁS las salidas manuales: las dos
+      // cosas salieron del tanque, aunque se registren por caminos distintos.
+      filas.push({ nom:x[1], u:x[2], ing:combIngresoCiclo(t), con:combConsumo(t,true)+man,
+                   saldo:combStockVista(t), cal:'mes', extra:man });
+    });
+  }catch(e){}
+  try{
+    const esCimbra=r=>/cimbra/i.test(String((r&&(r.producto||r.descripcion))||''));
+    const ingC=((state.almacen&&state.almacen.ingresos)||[]).filter(r=>esCimbra(r)&&filtroMes(r.fecha,mesGen))
+      .reduce((a,r)=>a+(Number(r.cantidad)||0),0);
+    // El consumo también es MENSUAL: el ciclo 26→25 es solo para los METROS DE AVANCE.
+    const rg=(state.reportesGuardia||[]).filter(r=>filtroMes(r.fecha,mesGen));
+    const conC=rg.reduce(function(a,r){ let c=FRENTES.reduce((ss,fr)=>ss+((r[fr.key]&&r[fr.key].cimbra)||0),0);
+      (r.frentesExtra||[]).forEach(fx=>{ c+=(fx.cimbra||0); }); return a+c; },0);
+    filas.push({ nom:'Cimbras', u:'und', ing:ingC, con:conC, saldo:null, cal:'mes' });
+  }catch(e){}
+  try{
+    const vIng=((state.almacen&&state.almacen.ingresos)||[]).filter(r=>filtroMes(r.fecha,mesGen))
+      .reduce((a,r)=>a+((Number(r.cantidad)||0)*(Number(r.precio)||0)),0);
+    const vSal=((state.almacen&&state.almacen.salidas)||[]).filter(r=>filtroMes(r.fecha,mesGen))
+      .reduce((a,r)=>a+(Number(r.importe)||((Number(r.cantidad)||0)*(Number(r.precio)||0))),0);
+    filas.push({ nom:'Almacen (valor)', u:'S/', ing:vIng, con:vSal, saldo:null, cal:'mes', soles:true });
+  }catch(e){}
+  if(!filas.length){ cont.innerHTML=''; return; }
+  const fmt=(v,fl)=>fl?('S/ '+Math.round(v).toLocaleString('es-PE')):num(v);
+  const cab=['','Ingresado','Consumido','Diferencia','En existencia'];
+  cont.innerHTML='<div class="card" style="margin-bottom:14px;padding:16px 18px">'
+    +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px">'
+      +'<div class="section-title" style="margin:0">&#9878;&#65039; Ingresado vs consumido</div>'
+      +'<div style="font-size:11px;color:var(--text3)">Entrar material no es gastarlo: son dos medidas y se leen por separado.</div></div>'
+    +'<div style="font-size:10.5px;color:var(--text3);margin-bottom:10px">Ingresos y consumos se miden por MES ('+lbl(mesGen)+' &middot; '+rango(mesGen)+'). '
+      +'El ciclo 26&rarr;25 es solo para los metros de avance de Operaciones.</div>'
+    +'<div class="table-wrap" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
+    +'<thead><tr style="color:var(--text3)">'
+      +cab.map((h,i)=>'<th style="padding:6px 8px;text-align:'+(i?'right':'left')+';border-bottom:1px solid var(--border)">'+h+'</th>').join('')
+    +'</tr></thead><tbody>'
+    +filas.map(function(r){
+        const dif=r.ing-r.con;
+        const col=dif<0?'#f87171':(dif>0?'#22c55e':'var(--text2)');
+        return '<tr style="border-bottom:1px solid rgba(255,255,255,.04)">'
+          +'<td style="padding:7px 8px;font-weight:700;color:var(--text)">'+r.nom
+            +(r.cal==='mixto'?'<span style="font-size:10px;color:var(--text3);font-weight:400"> &middot; ingreso por mes, consumo por ciclo</span>':'')
+            +(r.extra?'<span style="font-size:10px;color:#f87171;font-weight:400"> &middot; '+num(r.extra)+' '+r.u+' de salida manual</span>':'')+'</td>'
+          +'<td style="padding:7px 8px;text-align:right;color:#60a5fa;font-weight:700">'+fmt(r.ing,r.soles)+'</td>'
+          +'<td style="padding:7px 8px;text-align:right;color:#f59e0b;font-weight:700">'+fmt(r.con,r.soles)+'</td>'
+          +'<td style="padding:7px 8px;text-align:right;color:'+col+';font-weight:700">'+(dif>=0?'+':'-')+fmt(Math.abs(dif),r.soles)+'</td>'
+          +'<td style="padding:7px 8px;text-align:right;color:var(--text2)">'+(r.saldo==null?'&mdash;':fmt(r.saldo,r.soles)+' '+r.u)+'</td>'
+        +'</tr>';
+      }).join('')
+    +'</tbody></table></div>'
+    +'<div style="font-size:10.5px;color:var(--text3);margin-top:8px">La diferencia no es un error: es cuanto crecio o bajo la existencia en el periodo. En existencia es el saldo real de hoy, que no se corta con el cierre.</div>'
+  +'</div>';
+}
 function renderDashExplosivoMetro(){
   const cont=document.getElementById('d-explosivo-metro'); if(!cont) return;
   const per=(typeof periodoActual==='function')?periodoActual():'';
@@ -7984,7 +8058,9 @@ function renderDashAvanceMeta(){
   const fSexp=n=>'S/ '+Math.round(Number(n)||0).toLocaleString('es-PE');
 
   // Por frente — los 5 frentes configurados
-  let cimbExtra=0; rgMes.forEach(r=>(r.frentesExtra||[]).forEach(fx=>cimbExtra+=(fx.cimbra||0)));
+  // Cimbras = consumo → MES. Los metros de estos mismos reportes siguen con el ciclo 26→25.
+  const rgMesCimb=(state.reportesGuardia||[]).filter(r=>(typeof filtroMes==='function')?filtroMes(r.fecha,mesAct):((r.fecha||'').slice(0,7)===mesAct));
+  let cimbExtra=0; rgMesCimb.forEach(r=>(r.frentesExtra||[]).forEach(fx=>cimbExtra+=(fx.cimbra||0)));
   // Días OPERADOS del periodo = fechas distintas con avance en cualquier frente (divisor único
   // del ritmo diario, para que los frentes sumen el total y no se infle el pronóstico).
   const perfPeriodo=state.perforacion.filter(p=>(typeof filtroMes==='function')?filtroMes(p.fecha,mesAct):true);
@@ -7994,7 +8070,7 @@ function renderDashAvanceMeta(){
     const real=r1(perfF.reduce((s,p)=>s+(Number(p.metros)||0),0));
     const meta=metaMensualFrente(f.id,dias)||0;
     const pc=meta>0?Math.round(real/meta*100):0;
-    const cimb=rgMes.reduce((s,r)=>s+((r[f.key]&&r[f.key].cimbra)||0),0);
+    const cimb=rgMesCimb.reduce((s,r)=>s+((r[f.key]&&r[f.key].cimbra)||0),0);
     const gastoExp=gastoExpD[f.id]||0;
     const pronM=calcPronostico(real,diasPeriodo,diasTransc);
     const pronC=calcPronostico(cimb,diasPeriodo,diasTransc);
@@ -23176,7 +23252,10 @@ function combConsumo(tipo, soloCiclo){
 // Ingresos del ciclo vigente: solo para la cifra mensual, no para el saldo.
 function combIngresoCiclo(tipo){
   const v=_combVentana();
-  return combCargar(tipo).filter(r=>_combEnCiclo(r&&r.fecha, v)).reduce((s,r)=>s+(Number(r&&r.cantidad)||0),0);
+  // Solo lo que ENTRÓ. Las salidas manuales van en negativo y se informan aparte: restarlas aquí
+  // haría parecer que se abasteció menos de lo que realmente llegó al tanque.
+  return combCargar(tipo).filter(r=>_combEnCiclo(r&&r.fecha, v) && Number(r&&r.cantidad)>0)
+    .reduce((s,r)=>s+(Number(r.cantidad)||0),0);
 }
 function combStockTipo(tipo){
   return Math.round((combIngresos(tipo)-combConsumo(tipo,false))*10)/10;
