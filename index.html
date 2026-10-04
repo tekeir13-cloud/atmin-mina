@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-201</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-202</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-201</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-202</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.04-201</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.04-202</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -10598,9 +10598,32 @@ function almacenAplicarConteoMant(){
             unidad:e.u||'PZA', precio:Number(e.p)||0, almacen:'Mantenimiento', minimo:0 };
         state.almacen.productos.push(p); porNom[k]=p;
       }else if(Number(e.p)>0){ p.precio=Number(e.p); }     // el conteo trae el precio al día
-      inv.push({ id:'IMT1-'+String(i+1).padStart(3,'0'), fecha:MANT_CONTEO_FECHA, almacen:'Mantenimiento',
+      inv.push({ _n:k, id:'IMT1-'+String(i+1).padStart(3,'0'), fecha:MANT_CONTEO_FECHA, almacen:'Mantenimiento',
         codigo:String((p&&p.codigo)||''), producto:p.nombre, descripcion:p.nombre,
         unidad:p.unidad||e.u||'PZA', precio:Number(p.precio)||Number(e.p)||0, cantidad:Number(e.s)||0 });
+    });
+    /* LA APERTURA ABSORBE LOS MOVIMIENTOS YA REGISTRADOS.
+       El stock que muestra la app es apertura + ingresos − salidas. Si la apertura se dejara en la
+       cifra del conteo a secas, cada salida ya registrada volvería a descontarse encima y el
+       producto quedaría por debajo del conteo: el FRENO 7/8 marcaba 3 con el conteo diciendo 5,
+       porque arrastraba dos salidas.
+       Como el inventario inicial de Mantenimiento ya se vació arriba, lo que calcStock devuelve
+       ahora para este almacén son SOLO los movimientos. Se les resta, y así el stock resultante es
+       exactamente el del conteo físico. Los movimientos no se tocan: siguen en el historial y en
+       el gasto, que es donde tienen que estar. */
+    let netos={};
+    try{
+      (typeof calcStock==='function'?calcStock():[]).forEach(r=>{
+        if(r&&r.almacen==='Mantenimiento'){
+          const kk=_mantNN(r.producto||r.descripcion);
+          netos[kk]=(netos[kk]||0)+((Number(r.ingreso)||0)-(Number(r.salida)||0));
+        }
+      });
+    }catch(err){ netos={}; }
+    inv.forEach(it=>{
+      const neto=Number(netos[it._n])||0;
+      if(neto) it.cantidad=Math.round((it.cantidad-neto)*100)/100;
+      delete it._n;
     });
     state.almacen.inventarioInicial=(state.almacen.inventarioInicial||[]).concat(inv);
     state.almacen.productosTs=Date.now();
