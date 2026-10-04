@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-182</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-183</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-182</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-183</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.04-182</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.04-183</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5788,9 +5788,8 @@ async function cargarAlmacenCombustibleSB(){
         if(local.length) await _sbSubirSiNubeVacia('comb_'+tipo, local);
       }
     }
-    // Apertura de petróleo del periodo (1650 gln). Se aplica DESPUÉS de traer la nube, por id
-    // determinista: nunca duplica ni pisa los ingresos/consumos reales de otros equipos.
-    try{ if(typeof aplicarAperturaPetroleo==='function') aplicarAperturaPetroleo(); }catch(e){}
+    // Reseteo de tanques a cero: una sola vez por equipo, después de traer la nube.
+    try{ if(typeof combResetTanques==='function') combResetTanques(); }catch(e){}
     // El historial de ingresos manda sobre el maestro: alinea nombres, une equivalentes y da de
     // alta lo que falte, para que ningún ingreso quede invisible. Corre una sola vez.
     try{ if(typeof almacenReconciliarIngresos==='function') await almacenReconciliarIngresos(); }catch(e){}
@@ -23136,59 +23135,50 @@ const COMB_ALERTA_GAS = 20;  // alerta gasolina
 function combCargar(tipo){ const k=tipo==='gas'?COMB_KEY_GAS:COMB_KEY_PET; try{return JSON.parse(localStorage.getItem(k)||'[]');}catch(e){return[];} }
 // Apertura de petróleo del periodo (1650 gln). Idempotente: usa el MISMO id determinista que el
 // cierre de periodo, así dos equipos no pueden duplicarla. No borra ingresos ni consumos reales.
-const APERTURA_PET_GLN = 1650;
-// Siembra de UN SOLO ciclo: el saldo con que se empezó a llevar el control. De ahí en adelante la
-// apertura de cada mes la pone el cierre con lo que realmente quedó, y esta función no debe tocarla:
-// sin este candado, al cargar la app volvía a forzar 1650 y borraba el arrastre real del mes.
-const APERTURA_PET_PERIODO = '2026-10';
-function aplicarAperturaPetroleo(){
+/* RESETEO DE TANQUES (una sola vez, en todos los equipos).
+   Los dos tanques se dejan en cero para volver a cargar los abastecimientos reales. El consumo NO
+   se toca: lo que se consumió, consumido está, y se sigue leyendo de los partes del compresorista.
+   Se controla por versión, como las demás aperturas del sistema: para repetirlo, sube COMB_RESET_V. */
+const COMB_RESET_V = 1;
+const COMB_RESET_KEY = 'atmin_comb_reset_v';
+function combResetTanques(){
   try{
-    if(typeof periodoActual!=='function') return false;
-    const periodo=periodoActual();
-    if(periodo!==APERTURA_PET_PERIODO) return false;
-    const id='CBPET'+periodo.replace('-','');
-    const arr=combCargar('pet');
-    const i=arr.findIndex(r=>r&&r.id===id);
-    if(i>=0){
-      if(Number(arr[i].cantidad)===APERTURA_PET_GLN) return false;   // ya está: no re-subir
-      arr[i].cantidad=APERTURA_PET_GLN;
-    }else{
-      const r=(typeof periodoRango==='function')?periodoRango(periodo):null;
-      arr.unshift({ id, fecha:(r&&r.ini)||new Date().toISOString().slice(0,10),
-        placa:'APERTURA', chofer:'Sistema', cantidad:APERTURA_PET_GLN, precio:0,
-        apertura:true, obs:'Saldo de apertura del periodo' });
-    }
-    combGuardar('pet', arr);
+    if((Number(localStorage.getItem(COMB_RESET_KEY))||0) >= COMB_RESET_V) return false;
+    combGuardar('pet', []); combGuardar('gas', []);
+    localStorage.setItem(COMB_RESET_KEY, String(COMB_RESET_V));
     return true;
   }catch(e){ return false; }
 }
 function combGuardar(tipo,arr){ const k=tipo==='gas'?COMB_KEY_GAS:COMB_KEY_PET; try{localStorage.setItem(k,JSON.stringify(arr));}catch(e){} sbSyncModulo('comb_'+(tipo==='gas'?'gas':'pet'), arr); }
 
-// Ventana del ciclo vigente (26 → 25). Fuera de ella no se cuenta ni lo que entró ni lo que salió.
+// Ventana del ciclo vigente (26 → 25). Sirve para el MONITOREO MENSUAL, no para el saldo.
 function _combVentana(){
   try{ if(typeof periodoActual==='function' && typeof periodoRango==='function') return periodoRango(periodoActual()); }catch(e){}
   return null;
 }
-/* EL SALDO SE MIDE SOBRE EL MISMO PERIODO EN LOS DOS LADOS.
-   Antes los ingresos se reiniciaban en cada cierre (quedaba solo la fila de APERTURA) pero el
-   consumo se sumaba de TODOS los partes del compresorista desde el principio de los tiempos. Se
-   restaban dos tramos de tiempo distintos, así que tras cualquier cierre el tanque mostraba un
-   faltante enorme que no existía. Ahora ambos lados se filtran por la ventana del ciclo vigente:
-   la fila de apertura lleva fecha del primer día del periodo, así que entra; lo anterior queda
-   en el historial pero ya no suma. */
-function combStockTipo(tipo){
+function _combEnCiclo(fecha, v){ const d=String(fecha||'').slice(0,10); const w=v||_combVentana();
+  return !w || (d>=w.ini && d<=w.fin); }
+/* EL TANQUE ES UN SALDO CORRIDO, NO UN SALDO DE CICLO.
+   El combustible físico no se reinicia en una fecha: lo que queda en la cisterna el 25 sigue ahí
+   el 26. Por eso el stock es TODO lo que entró menos TODO lo que salió, de corrido, y no lleva
+   filas de apertura: el saldo que pasa al mes siguiente NO es un abastecimiento nuevo, y meterlo
+   como tal lo contaba dos veces.
+   Lo que sí se cierra mes a mes es el CONSUMO, que es gasto y se monitorea por ciclo. Son dos
+   cosas distintas: un mes puede cerrar con 6000 gln consumidos y dejar 450 gln en el tanque. */
+function combIngresos(tipo){ return combCargar(tipo).reduce((s,r)=>s+(Number(r&&r.cantidad)||0),0); }
+function combConsumo(tipo, soloCiclo){
+  const v=soloCiclo?_combVentana():null;
+  const partes=(state.compresorista||[]).filter(r=>!soloCiclo || _combEnCiclo(r&&r.fecha, v));
+  const campo=tipo==='pet'?'petroleo':'gasolina';
+  return partes.reduce((s,r)=>s+((r&&r[campo])||[]).reduce((ss,p)=>ss+(Number(p&&p.gln)||0),0),0);
+}
+// Ingresos del ciclo vigente: solo para la cifra mensual, no para el saldo.
+function combIngresoCiclo(tipo){
   const v=_combVentana();
-  const dentro=f=>{ const d=String(f||'').slice(0,10); return !v || (d>=v.ini && d<=v.fin); };
-  const ingresos=combCargar(tipo).filter(r=>dentro(r&&r.fecha)).reduce((s,r)=>s+(r.cantidad||0),0);
-  const partes=(state.compresorista||[]).filter(r=>dentro(r&&r.fecha));
-  let consumido=0;
-  if(tipo==='pet') consumido=partes.reduce((s,r)=>s+(r.petroleo||[]).reduce((ss,p)=>ss+(p.gln||0),0),0);
-  else consumido=partes.reduce((s,r)=>s+(r.gasolina||[]).reduce((ss,p)=>ss+(p.gln||0),0),0);
-  // Este Math.max(0, …) ESCONDÍA el descuadre que más importa en combustible: si los partes
-  // declaran más galones consumidos de los que consta que entraron, el saldo negativo se recortaba
-  // a 0 y el tanque se veía simplemente vacío. Faltaba petróleo por explicar y nadie se enteraba.
-  // Ahora el saldo se devuelve tal cual, y combDescuadre() permite avisarlo donde toca.
-  return ingresos-consumido;
+  return combCargar(tipo).filter(r=>_combEnCiclo(r&&r.fecha, v)).reduce((s,r)=>s+(Number(r&&r.cantidad)||0),0);
+}
+function combStockTipo(tipo){
+  return Math.round((combIngresos(tipo)-combConsumo(tipo,false))*10)/10;
 }
 // Galones declarados de más (consumo > ingresos registrados). 0 = todo cuadra.
 function combDescuadre(tipo){ const s=combStockTipo(tipo); return s<0 ? -s : 0; }
@@ -23293,9 +23283,9 @@ function combFormHtml(tipo){
 
 // ── Historial tabla ─────────────────────────────────────────
 /* HISTORIAL CONTINUO DE INGRESOS: todos los meses, no solo el ciclo vigente.
-   El saldo del tanque sí se mide por ciclo (lo que quedó pasa como apertura al mes siguiente),
-   pero el historial de abastecimientos se lee de corrido, agrupado por ciclo y con el subtotal
-   de cada uno, para poder seguir de dónde salió cada galón sin cambiar de pantalla. */
+   El ingreso de combustible lo carga Logística y la salida la descuenta el parte del Compresorista;
+   el flujo es constante y no se corta con el ciclo. Se agrupa por ciclo con su subtotal solo para
+   poder leer cuánto entró cada mes, pero el saldo del tanque se mide de corrido. */
 function combCicloDe(fecha){
   try{ if(typeof periodoDeFecha==='function') return periodoDeFecha(String(fecha||'').slice(0,10)); }catch(e){}
   return String(fecha||'').slice(0,7);
@@ -23337,7 +23327,7 @@ function combHistorialHtml(tipo){
     });
   });
   const total=arr.reduce((a,r)=>a+(Number(r.cantidad)||0),0);
-  return `<div style="font-size:11px;color:var(--text3);margin-bottom:6px">Historial completo de abastecimientos, de todos los ciclos. El saldo del tanque se calcula sobre el ciclo vigente.</div>
+  return `<div style="font-size:11px;color:var(--text3);margin-bottom:6px">Historial completo de abastecimientos, de todos los ciclos. El tanque es un saldo corrido: entra el abastecimiento, sale el consumo del compresorista, y lo que queda al cerrar el mes sigue en la cisterna.</div>
   <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
     <thead><tr style="color:var(--text2)">${th.map(h=>`<th style="padding:7px 10px;text-align:${h==='Galones'?'right':'left'};border-bottom:1px solid var(--border)">${h}</th>`).join('')}</tr></thead>
     <tbody>${cuerpo}</tbody>
@@ -23358,13 +23348,10 @@ function renderCombustible(){
   // Ingresado y consumido se miden en el CICLO VIGENTE, igual que el saldo del tanque: así las tres
   // cifras cuadran entre sí (ingresado − consumido = lo que queda). El historial de abajo sí es
   // continuo y muestra todos los ciclos.
-  const _v=_combVentana();
-  const _en=f=>{ const d=String(f||'').slice(0,10); return !_v || (d>=_v.ini && d<=_v.fin); };
-  const totPet=ingPet.filter(r=>_en(r&&r.fecha)).reduce((s,r)=>s+(r.cantidad||0),0);
-  const totGas=ingGas.filter(r=>_en(r&&r.fecha)).reduce((s,r)=>s+(r.cantidad||0),0);
-  const _partes=(state.compresorista||[]).filter(r=>_en(r&&r.fecha));
-  const consPet=_partes.reduce((s,r)=>s+(r.petroleo||[]).reduce((ss,p)=>ss+(p.gln||0),0),0);
-  const consGas=_partes.reduce((s,r)=>s+(r.gasolina||[]).reduce((ss,p)=>ss+(p.gln||0),0),0);
+  // El tanque es saldo corrido; estas dos cifras son el MONITOREO DEL MES y no tienen por qué
+  // cuadrar con él: un mes puede cerrar con mucho consumo y dejar poco stock, o al revés.
+  const totPet=combIngresoCiclo('pet'), totGas=combIngresoCiclo('gas');
+  const consPet=combConsumo('pet',true), consGas=combConsumo('gas',true);
 
   el.innerHTML=`<div style="padding:16px">
     <h3 style="color:var(--accent-light);margin-bottom:18px">🛢 Control de Combustible</h3>
@@ -33487,26 +33474,10 @@ async function cerrarPeriodo(periodo){
     state.almacen.stockCorteTs=Date.now();
     if(typeof almacenSave==='function') almacenSave();
   }catch(e){ console.warn('arrastre almacen',e); }
-  // 3b) Combustible → se AÑADE la fila de apertura con el saldo que queda. El historial NO se toca.
-  // Antes esta línea hacía `combGuardar(tipo, [apertura])`, que REEMPLAZABA el arreglo entero: al
-  // cerrar un periodo desaparecían todos los abastecimientos cargados y en el historial quedaba una
-  // sola fila de APERTURA. Es el mismo error que ya se había corregido en almacén y en el punto 4
-  // de esta misma función ("el cierre ya no destruye datos"), pero aquí había quedado sin arreglar.
-  // No hace falta borrar: combStockTipo ya cuenta solo lo del periodo vigente, así que el ciclo
-  // nuevo arranca con su apertura sin que el historial estorbe.
-  try{
-    ['pet','gas'].forEach(tipo=>{
-      const restante=(typeof combStockTipo==='function')?combStockTipo(tipo):0;
-      const id='CB'+tipo.toUpperCase()+_sig.periodo.replace('-','');
-      const arr=(typeof combCargar==='function')?combCargar(tipo):[];
-      const fila={ id, fecha:_sig.fecha, placa:'APERTURA', chofer:'Sistema',
-        cantidad:Math.round(Math.max(0,restante)*10)/10, precio:0, apertura:true,
-        obs:'Saldo de apertura del periodo' };
-      const i=arr.findIndex(x=>x&&x.id===id);
-      if(i>=0) arr[i]=fila; else arr.unshift(fila);     // idempotente: cerrar dos veces no duplica
-      if(typeof combGuardar==='function') combGuardar(tipo, arr);
-    });
-  }catch(e){ console.warn('arrastre combustible',e); }
+  // 3b) Combustible → NO se toca. El tanque es un saldo corrido: lo que queda el 25 sigue ahí el 26,
+  // y no es un ingreso del mes nuevo. Antes se escribía una fila de APERTURA con el saldo, que el
+  // sistema volvía a sumar como si fuera un abastecimiento. El consumo del mes se monitorea aparte,
+  // por ciclo, y para eso no hace falta mover nada aquí.
   // 3c) Explosivos → apertura con el stock actual por producto
   try{
     const exMap=(typeof exploStockActual==='function')?exploStockActual():{};
