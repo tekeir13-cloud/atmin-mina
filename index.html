@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-189</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-190</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-189</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-190</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.04-189</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.04-190</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5793,6 +5793,8 @@ async function cargarAlmacenCombustibleSB(){
     try{ if(typeof combResetTanques==='function') combResetTanques(); }catch(e){}
     // El historial de ingresos manda sobre el maestro: alinea nombres, une equivalentes y da de
     // alta lo que falte, para que ningún ingreso quede invisible. Corre una sola vez.
+    // Reposición de los ingresos de setiembre ANTES de reconciliar, para que el maestro los adopte.
+    try{ if(typeof almacenReponerIngresosSep==='function') almacenReponerIngresosSep(); }catch(e){}
     try{ if(typeof almacenReconciliarIngresos==='function') await almacenReconciliarIngresos(); }catch(e){}
     // ── COMPRAS (módulo de control, independiente del costeo) ──
     try{
@@ -10445,6 +10447,72 @@ function calcStock(){
   Object.values(map).forEach(r=>r.stock=r.ingreso-r.salida);
   return Object.values(map);
 }
+/* REPOSICIÓN DE LOS INGRESOS DE MATERIAL DEL CICLO DE SETIEMBRE.
+   Diecinueve ingresos cargados por Logística entre el 27 y el 31 de agosto que dejaron de verse en
+   el sistema. Se reponen desde el Excel de inventario exportado por la propia app, que es el
+   respaldo fiel de lo que había.
+   Se aplica una sola vez por equipo, con ids deterministas, y ANTES de insertar comprueba que no
+   exista ya un ingreso equivalente (misma fecha, producto y cantidad): si alguien repuso algo a
+   mano, no se duplica. Cada fila lleva su `_ts` derivado de su propia fecha, para que el corte de
+   stock la trate igual que a cualquier movimiento de ese día.
+   Para repetirla, subir ALM_SEP_V. */
+const ALM_SEP_V = 1;
+const ALM_SEP_ING = [
+  {f:'2026-08-27',v:'F003-00041023',d:'Logistica Trujillo',a:'General',p:'PINTURA SPRAY',u:'PZA',c:72.0,pr:3.5},
+  {f:'2026-08-29',v:'186570',d:'Almacen Poderosa',a:'General',p:'ACEITE AIR TOOL OIL S2 A 100',u:'UND',c:55.0,pr:47.59},
+  {f:'2026-08-29',v:'183244',d:'Almacen Poderosa',a:'General',p:'BARRA CONICA 6\' X 7/8\'\'',u:'PZA',c:10.0,pr:249.787},
+  {f:'2026-08-29',v:'186569',d:'Almacen Poderosa',a:'General',p:'PERNO HELICOIDAL 19 MM X 6´(1.83MTR)',u:'JGO',c:150.0,pr:23.9954},
+  {f:'2026-08-29',v:'186574',d:'Almacen Poderosa',a:'General',p:'PERNO HELICOIDAL 19 MM X 7´(2.13MTR)',u:'JGO',c:150.0,pr:27.18},
+  {f:'2026-08-29',v:'186573',d:'Almacen Poderosa',a:'General',p:'CARTUCHO DE CEMENTO 30MM X 305MM',u:'PZA',c:600.0,pr:1.0416},
+  {f:'2026-08-29',v:'186577',d:'Almacen Poderosa',a:'General',p:'RESINA 28 MM X 305 MM 0-60 SECOND SET',u:'PZA',c:600.0,pr:2.72},
+  {f:'2026-08-29',v:'186575',d:'Almacen Poderosa',a:'General',p:'BROCA DESCARTABLE DE BOTONES 32 MM',u:'PZA',c:20.0,pr:76.199},
+  {f:'2026-08-29',v:'186576',d:'Almacen Poderosa',a:'General',p:'BROCA DESCARTABLE DE BOTONES 36 MM',u:'PZA',c:60.0,pr:90.01},
+  {f:'2026-08-29',v:'186571',d:'Almacen Poderosa',a:'General',p:'MALLA ELECTROSOLDADA 4"X4"-2.42 X 25 MTR',u:'ROLL',c:10.0,pr:330.566},
+  {f:'2026-08-31',v:'FER-SUYU',d:'Logistica Trujillo',a:'General',p:'CUTER (CUCHILLA DE CORTE)',u:'PZA',c:4.0,pr:10.0},
+  {f:'2026-08-31',v:'12456',d:'Logistica Trujillo',a:'Mantenimiento',p:'BALDE DE GRASA COLOR AZUL VISTONY',u:'PZA',c:1.0,pr:337.9},
+  {f:'2026-08-31',v:'565678',d:'Logistica Trujillo',a:'Mantenimiento',p:'BALDE DE GRASA COLOR AZUL VISTONY',u:'PZA',c:1.0,pr:337.9},
+  {f:'2026-08-31',v:'567899',d:'Logistica Trujillo',a:'Mantenimiento',p:'FILTRO DE ACEITE P553771',u:'PZA',c:8.0,pr:47.32},
+  {f:'2026-08-31',v:'786778',d:'Logistica Trujillo',a:'Mantenimiento',p:'FILTRO DE PETROLEO P553004',u:'PZA',c:8.0,pr:42.25},
+  {f:'2026-08-31',v:'675678',d:'Logistica Trujillo',a:'Mantenimiento',p:'KIT FILTRO DE ADMISIÓN PRIMARIO Y SECUNDARIO A5105',u:'PZA',c:4.0,pr:202.8},
+  {f:'2026-08-31',v:'234567',d:'Logistica Trujillo',a:'Mantenimiento',p:'KIT DE FILTRO DE ADMISION PRIMARIO Y SECUNDARIO A6705',u:'PZA',c:4.0,pr:185.9},
+  {f:'2026-08-31',v:'234567',d:'Logistica Trujillo',a:'Mantenimiento',p:'BALDE DE ACEITE DE HD30 PARA TRANSMISION',u:'PZA',c:3.0,pr:390.0},
+  {f:'2026-08-31',v:'567878',d:'Logistica Trujillo',a:'Mantenimiento',p:'ACEITE SHELL 15W 40',u:'PZA',c:4.0,pr:350.0}
+];
+function almacenReponerIngresosSep(){
+  try{
+    if((Number(state.almacen&&state.almacen.ingSepV)||0) >= ALM_SEP_V) return 0;
+    if(!state.almacen) return 0;
+    state.almacen.ingresos = state.almacen.ingresos || [];
+    const norm=s=>String(s||'').trim().toUpperCase();
+    // Se compara SOLO contra lo que ya había antes de empezar. Si se comparara contra la lista que
+    // se va llenando, dos ingresos legítimamente iguales del mismo día —el Excel trae dos baldes de
+    // grasa idénticos con vales distintos, 12456 y 565678— se tomarían por duplicados y se
+    // repondría uno solo.
+    const previos=state.almacen.ingresos.slice();
+    const yaEsta=(x)=> previos.some(i=>
+      String(i&&i.fecha||'').slice(0,10)===x.f &&
+      norm(i.producto||i.descripcion)===norm(x.p) &&
+      Math.abs((Number(i.cantidad)||0)-x.c)<1e-6 &&
+      String(i&&i.vale||'').trim()===String(x.v).trim());   // el vale distingue dos iguales
+    let n=0;
+    ALM_SEP_ING.forEach((x,k)=>{
+      const id='ISEP'+ALM_SEP_V+'-'+String(k+1).padStart(2,'0');
+      if(state.almacen.ingresos.some(i=>i&&i.id===id)) return;   // ya repuesto
+      if(yaEsta(x)) return;                                      // existe equivalente: no duplicar
+      const ts=Date.parse(x.f+'T12:00:00')||Date.now();
+      state.almacen.ingresos.push({ id, _ts:ts, grupo:'GSEP'+ALM_SEP_V, fecha:x.f, vale:x.v,
+        detalle:x.d, almacen:x.a, codigo:'', producto:x.p, descripcion:x.p, unidad:x.u,
+        cantidad:x.c, precio:x.pr, total:Math.round(x.c*x.pr*100)/100 });
+      n++;
+    });
+    state.almacen.ingSepV = ALM_SEP_V;
+    if(n && typeof almacenSave==='function') almacenSave();
+    else if(typeof almacenSave==='function') almacenSave();
+    if(n) try{ showNotif('✓ Se repusieron '+n+' ingresos de material del ciclo de setiembre'); }catch(e){}
+    return n;
+  }catch(e){ console.warn('reponer ingresos sep',e); return 0; }
+}
+
 // EL MAESTRO DE PRODUCTOS MANDA: solo existen los productos cuyo código está en el maestro.
 // Si un código se elimina del maestro, su existencia desaparece del stock al instante (queda en 0).
 // Regla: si el movimiento tiene código → ese código debe existir en el maestro; si no tiene
