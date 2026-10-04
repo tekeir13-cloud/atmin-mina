@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-193</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-194</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-193</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-194</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.04-193</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.04-194</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -33505,32 +33505,24 @@ function periodoActual(area){
   return periodoDeFecha(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'), area);
 }
 /* ════════ CIERRE MENSUAL PARA TODO, SALVO OPERACIONES ════════
-   Desde MENSUAL_DESDE cada área cierra por MES CALENDARIO (1 al último día). La única excepción es
-   OPERACIONES y sus reportes de avance, que siguen con el ciclo 26→25: lo del 26 de setiembre en
-   adelante pertenece al ciclo de octubre, hasta el 25.
-
-   Lo ya cerrado NO se toca: los periodos anteriores a MENSUAL_DESDE conservan su significado 26→25,
-   así que ningún gasto ni metro cambia de mes hacia atrás ni descuadra un cierre ya rendido.
-
-   PERIODO PUENTE. Al pasar de 26→25 a mes calendario quedarían huérfanos los días 26–31 del mes
-   anterior al corte: hoy pertenecen al primer periodo mensual y mañana no caerían en ninguno. Por
-   eso ESE primer periodo arranca el 26 del mes previo y termina el último día de su mes. Una sola
-   vez; de ahí en adelante son meses limpios. */
-const MENSUAL_DESDE = '2026-11';   // primer periodo que se mide por mes calendario
+   Cada área cierra por MES CALENDARIO, del 1 al último día. La única excepción es OPERACIONES y
+   sus avances lineales, que van con el ciclo 26→25: lo del 26 de setiembre pertenece al ciclo de
+   octubre, hasta el 25.
+   Almacén, compras, finanzas, mantenimiento, combustible, explosivo y Monte Bravo cierran de mes a
+   mes. Pedir el historial de octubre devuelve octubre, no un ingreso del 26 de setiembre. */
 const AREA_OP = 'op';              // Operaciones: siempre ciclo 26→25
 function _esOp(area){ return String(area||'')===AREA_OP; }
-function _mensual(pYM){ try{ return String(pYM||'')>=MENSUAL_DESDE; }catch(e){ return false; } }
 function _ultDia(y,m){ return new Date(y,m,0).getDate(); }   // m es 1-indexado
+/* Regla única y sin excepciones de fecha: Operaciones va por ciclo 26→25 y TODO lo demás por mes
+   calendario, del 1 al último día. Antes el mes calendario empezaba en un periodo de corte, con un
+   periodo puente, para no mover lo ya cerrado; el resultado fue que al pedir el historial de
+   octubre en Logística aparecía un ingreso del 26 de setiembre, porque octubre seguía siendo
+   26/09→25/10. Almacén cierra de mes a mes, así que el mes es el mes. */
 function periodoRango(pYM, area){
   const [y,m]=String(pYM).split('-').map(Number);
   const f=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-  if(_esOp(area) || !_mensual(pYM)){
-    return { ini:f(new Date(y,m-2,26)), fin:f(new Date(y,m-1,25)) };  // 26 mes anterior → 25 de cierre
-  }
-  const dd=String(_ultDia(y,m)).padStart(2,'0');
-  const fin=pYM+'-'+dd;
-  if(pYM===MENSUAL_DESDE) return { ini:f(new Date(y,m-2,26)), fin };   // puente: 26 del mes previo → fin de mes
-  return { ini:pYM+'-01', fin };
+  if(_esOp(area)) return { ini:f(new Date(y,m-2,26)), fin:f(new Date(y,m-1,25)) };  // 26 → 25
+  return { ini:pYM+'-01', fin:pYM+'-'+String(_ultDia(y,m)).padStart(2,'0') };
 }
 function periodoLabel(pYM){ return (typeof finNombreMes==='function')?finNombreMes(pYM):pYM; }
 
@@ -33633,17 +33625,10 @@ function enRango(fecha,r){ const f=(fecha||'').slice(0,10); return !!f && f>=r.i
 function periodoDeFecha(fecha, area){
   const d=String(fecha||'').slice(0,10);
   if(!/^\d{4}-\d{2}-\d{2}$/.test(d)) return '';
+  if(!_esOp(area)) return d.slice(0,7);               // mes calendario
   let y=+d.slice(0,4), m=+d.slice(5,7); const dd=+d.slice(8,10);
-  // Candidato con la regla 26→25, que es la que rige antes del corte y siempre en Operaciones.
-  let cy=y, cm=m; if(dd>=26){ cm++; if(cm>12){ cm=1; cy++; } }
-  const ciclo=cy+'-'+String(cm).padStart(2,'0');
-  if(_esOp(area)) return ciclo;
-  const mes=d.slice(0,7);
-  // Antes del corte manda el ciclo; desde el corte manda el mes calendario, salvo los días 26–31
-  // del mes previo al corte, que caen en el periodo puente.
-  if(!_mensual(ciclo)) return ciclo;
-  if(ciclo===MENSUAL_DESDE && dd>=26 && mes<MENSUAL_DESDE) return MENSUAL_DESDE;
-  return _mensual(mes) ? mes : ciclo;
+  if(dd>=26){ m++; if(m>12){ m=1; y++; } }            // ciclo 26→25 de Operaciones
+  return y+'-'+String(m).padStart(2,'0');
 }
 // Un periodo CERRADO ya rindió cuentas: se puede consultar, pero no admite montos nuevos.
 // Ojo: se compara por PERIODO, no por mes de calendario — el 28 de julio pertenece al ciclo
