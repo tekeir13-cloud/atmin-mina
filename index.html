@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-200</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-201</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-200</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-201</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.04-200</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.04-201</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5742,7 +5742,7 @@ async function cargarAlmacenCombustibleSB(){
       // Conservar el valor MÁS ALTO de cada flag de migración (nube o local) para que las
       // migraciones de explosivos (apertura, ajuste, fijación) NO se vuelvan a ejecutar en
       // cada carga y borren las salidas nuevas registradas por Logística.
-      ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','almExcelV','stockCorteTs']
+      ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','almExcelV','stockCorteTs','mantConteoV']
         .forEach(k=>{ const mx=Math.max(Number(almNube[k]||0), Number(almLocalPrev[k]||0)); if(mx) state.almacen[k]=mx; });
       // Conservar el saldo/corte de apertura del remanente (objeto + timestamp), venga de nube o local.
       if(!state.almacen.remApertura && (almNube.remApertura||almLocalPrev.remApertura)) state.almacen.remApertura=almNube.remApertura||almLocalPrev.remApertura;
@@ -5774,6 +5774,8 @@ async function cargarAlmacenCombustibleSB(){
     try{ if(typeof fijarSalidasExplosivosDefinitivo==='function') fijarSalidasExplosivosDefinitivo(); }catch(e){}
     // Carga del Excel oficial de stock (maestro + existencias, una sola vez, sin tocar gasto)
     try{ if(typeof almacenAplicarExcelV1==='function' && almacenAplicarExcelV1()) await sbSyncModulo('almacen',(typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
+    // Conteo físico del almacén de mantenimiento (va DESPUÉS del Excel oficial: lo corrige)
+    try{ if(typeof almacenAplicarConteoMant==='function' && almacenAplicarConteoMant()) await sbSyncModulo('almacen',(typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
     // Salida de PRUEBA reversible (se activa/desactiva con EXPLO_PRUEBA_ACTIVA)
     try{ if(typeof aplicarSalidaPrueba==='function') aplicarSalidaPrueba(); }catch(e){}
     // EPP enviados a NV2820 (fueron consumidos por operarios): sacarlos del subalmacén
@@ -8820,7 +8822,7 @@ function _almMergeSnaps(a,b){
     explosivos:{ ...exA, ...exB, ingresos:_exploMergeMov(exA.ingresos,exB.ingresos), salidas:_exploMergeMov(exA.salidas,exB.salidas) },
     mbAcopio:{ ...mbA, ...mbB, ingresos:_exploMergeMov(mbA.ingresos,mbB.ingresos), salidas:_exploMergeMov(mbA.salidas,mbB.salidas) },
     productos, productosTs };
-  ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','exploStockBaseV','catalogVersion','almExcelV','stockCorteTs','aguaFixV']
+  ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','exploStockBaseV','catalogVersion','almExcelV','stockCorteTs','aguaFixV','mantConteoV']
     .forEach(k=>{ const mx=Math.max(Number(a[k]||0), Number(b[k]||0)); if(mx) out[k]=mx; });
   if(a.exploLock||b.exploLock) out.exploLock=true;
   out.remApertura=a.remApertura||b.remApertura||out.remApertura;
@@ -10374,6 +10376,240 @@ function almacenAplicarExcelV1(){
     try{ if(typeof renderAlmacen==='function') renderAlmacen(); }catch(e){}
     return true;
   }catch(e){ console.warn('[almExcelV1]', e); return false; }
+}
+/* ── CONTEO FÍSICO DEL ALMACÉN DE MANTENIMIENTO (setiembre 2026) ───────────────────────────
+   El inventario que trajo el usuario es el conteo real del polvorín de repuestos, y manda sobre
+   lo que tenía el sistema. Son 163 productos: 124 con existencias y 39 en cero.
+
+   QUÉ TOCA Y QUÉ NO. Solo el almacén "Mantenimiento". El almacén General, el subalmacén NV2820,
+   los explosivos y el combustible quedan exactamente igual. Tampoco se tocan ingresos ni salidas:
+   el conteo entra como APERTURA (inventario inicial), que es lo que ya usa la carga del Excel
+   oficial, así que el historial y el gasto no se mueven ni un sol.
+
+   LOS 40 QUE EL CONTEO NO LISTA. Son filtros y fajas que el sistema tenía con existencias y que
+   el conteo físico no encontró. Por decisión del usuario quedan en CERO: el almacén tiene que
+   reflejar lo que de verdad hay en el anaquel. Sus fichas se conservan en el maestro, así que
+   vuelven a aparecer solos en cuanto se les registre un ingreso.
+
+   EL CANDADO VA EN LA DATA, NO EN EL EQUIPO. `mantConteoV` se guarda dentro de state.almacen, que
+   viaja a la nube. Si fuera un localStorage, el primer celular que abriera la app sin haberlo
+   corrido volvería a aplicar el conteo encima de los consumos posteriores — que es exactamente el
+   error que borró el combustible. Así, aplicado una vez, ningún equipo lo repite. */
+const MANT_CONTEO_V = 1;
+const MANT_CONTEO_FECHA = '2026-09-30';
+// Fichas que el conteo unifica: el mismo repuesto escrito de dos formas. Se quedan con el nombre
+// y la cantidad del conteo, y la ficha repetida se retira del maestro.
+// 'ANILLO RNOR-7' estaba dos veces en el maestro (códigos 63 y 107), diferenciadas solo por un
+// espacio de más. Al coincidir el nombre normalizado, las dos salen y el conteo crea una sola.
+const MANT_CONTEO_DUPLICADOS = ['ANILLO (2)   RNOR-21', 'ANILLO  RNOR-7'];
+const MANT_CONTEO = [
+  {n:"ACEITE MOOTUL 20 W 50 7100",u:"PZA",p:0,s:0},
+  {n:"ACEITE MOVIL 85W 140",u:"PZA",p:348.6,s:8},
+  {n:"ACEITE SHELL 15W 40",u:"PZA",p:350,s:5},
+  {n:"ADAPTADOR DE CODO DE AIRE  RNRB83-147-0",u:"PZA",p:53.12,s:4},
+  {n:"ADAPTADOR LUBRICADOR   RNL-06",u:"PZA",p:42.28,s:4},
+  {n:"AGARRADERA  RNFL7-468",u:"PZA",p:192.99,s:1},
+  {n:"ALETA   RNR91-11A",u:"PZA",p:21.34,s:105},
+  {n:"ANILLO   RNOR-03",u:"PZA",p:3.8,s:2},
+  {n:"ANILLO   RNOR-11",u:"PZA",p:3.8,s:6},
+  {n:"ANILLO   RNOR-21",u:"PZA",p:3.45,s:11},
+  {n:"ANILLO   RNOR-9",u:"PZA",p:0,s:8},
+  {n:"ANILLO   RNORP-210B",u:"PZA",p:3.8,s:18},
+  {n:"ANILLO   RNORP-34",u:"PZA",p:3.42,s:2},
+  {n:"ANILLO  RNCL5-324P",u:"PZA",p:0,s:9},
+  {n:"ANILLO  RNOR-7",u:"PZA",p:3.45,s:8},
+  {n:"ANILLO DE GAMARILLA (2)   RN-8325",u:"PZA",p:3.8,s:6},
+  {n:"ANILLO LUBRICADORA   RN164731",u:"PZA",p:3.8,s:8},
+  {n:"ANILLOS  RNCL5-441",u:"PZA",p:3.8,s:29},
+  {n:"ANILLOS (2)   RNOR-10",u:"PZA",p:3.8,s:31},
+  {n:"ANILLOS (2)   RNOR-18",u:"PZA",p:3.8,s:21},
+  {n:"ANILLOS (2)   RNORP-116A",u:"PZA",p:3.8,s:18},
+  {n:"ANILLOS (2)   RNORP-214B",u:"PZA",p:3.8,s:12},
+  {n:"ANILLOS (4)   RNORP-6",u:"PZA",p:3.45,s:10},
+  {n:"ARANDELA   RNS48F-1W",u:"PZA",p:17.22,s:3},
+  {n:"ARANDELA   RNWP-10",u:"PZA",p:1.84,s:1},
+  {n:"ARANDELA (2)   RND73-3S",u:"PZA",p:13.91,s:4},
+  {n:"ARANDELA GLÁNDULA DE AGUA   RND83-40",u:"PZA",p:11.63,s:2},
+  {n:"ARO RANURADO  RNFL7-206",u:"PZA",p:0,s:1},
+  {n:"BALDE 15 W 40 ACEITE TOTAL",u:"PZA",p:0,s:8},
+  {n:"BALDE DE ACEITE 68",u:"PZA",p:0,s:7},
+  {n:"BALDE DE ACEITE DE HD30 PARA TRANSMISION",u:"PZA",p:390,s:2},
+  {n:"BALDE DE GRASA AZUL VISTONE",u:"PZA",p:0,s:2},
+  {n:"BALDE DE REFRIGERANTE",u:"PZA",p:0,s:0},
+  {n:"BALDES DE 80 W90",u:"PZA",p:0,s:0},
+  {n:"BARRA DE ROTACIÓN  RNS83F-26-28",u:"PZA",p:412.01,s:2},
+  {n:"BROQUERO BOCINA 7/8\"   RNS58F-7TLB",u:"PZA",p:120.54,s:7},
+  {n:"BUJE BRONCE   RNS53F-1L",u:"PZA",p:171.59,s:2},
+  {n:"BUJE EMPUJADOR   RNFL7-208",u:"PZA",p:0,s:0},
+  {n:"BUJE EMPUJADOR   RNFL7-209",u:"PZA",p:0,s:0},
+  {n:"BUJE EMPUJADOR  RNFL7-203",u:"PZA",p:0,s:0},
+  {n:"BUJE EMPUJADOR (RNFL7 - 210)  RN-1045660",u:"PZA",p:0,s:1},
+  {n:"BUJE EMPUJADOR (RNFL7 - 31)  RN-1029902",u:"PZA",p:127.47,s:0},
+  {n:"CABEZA  RNS63F-2",u:"PZA",p:0,s:0},
+  {n:"CAJA DE VÁLVULA  RNS83F-15",u:"PZA",p:0,s:0},
+  {n:"CALIBRADOR DE BOCINA   RN-GAGE",u:"PZA",p:0,s:1},
+  {n:"CALIPER",u:"PZA",p:1600,s:0},
+  {n:"CAMARA DE DUMPER 10X20",u:"PZA",p:180,s:2},
+  {n:"CANDADO   RNS58F-36RA",u:"PZA",p:98.47,s:4},
+  {n:"CANDADO   RNTRR5",u:"PZA",p:4.62,s:3},
+  {n:"CANDADO DE GAMARILLA   RNTRR3",u:"PZA",p:3.59,s:6},
+  {n:"CILINDRO   RNS83F-1T",u:"PZA",p:0,s:0},
+  {n:"CILINDRO DE ALUMINIO   RNFL7-25E",u:"PZA",p:664.85,s:1},
+  {n:"CODO DE AIRE   RNRB83-147",u:"PZA",p:135.43,s:6},
+  {n:"CONEXIÓN DE AGUA   RN760-01",u:"PZA",p:29.32,s:4},
+  {n:"CONEXIÓN DE AGUA   RNS48F-13T1",u:"PZA",p:139.02,s:3},
+  {n:"CONEXIÓN DE AIRE   RNFL-05",u:"PZA",p:37.6,s:7},
+  {n:"CONEXIÓN DE SALIDA LUBRICADORA   RNL-08",u:"PZA",p:36.23,s:1},
+  {n:"CONO DEL SWIVEL   RNFL7-201",u:"PZA",p:46.95,s:0},
+  {n:"CUÑA DE MANIJA   RNS58F-12K",u:"PZA",p:9.27,s:1},
+  {n:"CUPLIN",u:"PZA",p:0,s:1},
+  {n:"DISTRIBUIDORA DE AGUA (GAMARRILLA)  RN760",u:"PZA",p:140.54,s:2},
+  {n:"ELECTROVALVULA DE MARCHA",u:"PZA",p:0,s:1},
+  {n:"EMPAQUE   RN1029906",u:"PZA",p:30.93,s:1},
+  {n:"EMPAQUE   RNUCP-1",u:"PZA",p:21.92,s:2},
+  {n:"EMPAQUE DE ASIENTO DE VALVULA  RNDBN83-45",u:"PZA",p:7.22,s:3},
+  {n:"EMPAQUE DE CILINDRO DE DIRECCION",u:"PZA",p:0,s:1},
+  {n:"EMPAQUE DE TAPA DE VALENCINES",u:"PZA",p:0,s:5},
+  {n:"EMPAQUE DEL TUBO DE AGUA RN729B",u:"PZA",p:24.72,s:3},
+  {n:"EMPAQUE IR8320D  RNRB94-20PA",u:"PZA",p:25.26,s:4},
+  {n:"EMPAQUE TAPON (2)   RNS83F-715H",u:"PZA",p:28.3,s:6},
+  {n:"ESPACIDOR DE EMPUJADOR (F17)  RNFL7-207",u:"PZA",p:0,s:1},
+  {n:"FEED PISTON COMPLETO  RNFL7-33ES",u:"PZA",p:0,s:0},
+  {n:"FILTRO   RN2062234",u:"PZA",p:97.82,s:3},
+  {n:"FILTRO DE ACEITE HIDRAULICO 1613610500",u:"PZA",p:0,s:4},
+  {n:"FILTRO DE ACEITE MARCA VOLVO 24063074",u:"PZA",p:0,s:3},
+  {n:"FILTRO DE ACEITE P553771",u:"PZA",p:47.32,s:4},
+  {n:"FILTRO DE AGUA   RNS48-13S",u:"PZA",p:46.37,s:3},
+  {n:"FILTRO DE AIRE ACONDICIONADO 60305487",u:"PZA",p:0,s:1},
+  {n:"FILTRO DE AIRE AF1658K",u:"PZA",p:0,s:1},
+  {n:"FILTRO DE AIRE AF26353",u:"PZA",p:0,s:2},
+  {n:"FILTRO DE AIRE AF26398",u:"PZA",p:0,s:1},
+  {n:"FILTRO DE AIRE AF26399",u:"PZA",p:0,s:1},
+  {n:"FILTRO DE AIRE PRIMARIO AF26397",u:"PZA",p:0,s:2},
+  {n:"FILTRO LUBRICADOR   RNFIL-L07",u:"PZA",p:0,s:0},
+  {n:"FILTRO SEPARADOR DE AGUA FS19532",u:"PZA",p:0,s:2},
+  {n:"FILTRO SEPARADOR DE AGUA FS20112",u:"PZA",p:0,s:2},
+  {n:"FRENO 7/8 HEXÁGONAL  RNS53F-36A",u:"PZA",p:221.41,s:5},
+  {n:"GLÁNDULA DE AGUA   RND83N-40",u:"PZA",p:234.25,s:1},
+  {n:"GRASERA   RNZ1",u:"PZA",p:5.76,s:3},
+  {n:"JEBE PARA MANERAL   RN-JM1820",u:"PZA",p:3.59,s:0},
+  {n:"LUBRICADORA   RNL-07",u:"PZA",p:1328.25,s:0},
+  {n:"MANERAL DERECHO (RNS83F - 114AB)  RNS83F-114",u:"PZA",p:18.53,s:0},
+  {n:"MANERAL IZQUIERDO COMPLETO  RNS83F-112",u:"PZA",p:0,s:0},
+  {n:"MANIJA DE CONTROL   RNS58F-12E",u:"PZA",p:226.21,s:1},
+  {n:"MANIVELA   RNS83F-215H",u:"PZA",p:203.08,s:2},
+  {n:"MANÓMETRO COMPLETO  MAN-01",u:"PZA",p:271.7,s:1},
+  {n:"NEUMATICO 12.00X24 SET COMPLETO L5S MARCA TIANLI",u:"PZA",p:4427,s:0},
+  {n:"PARCHE PARA LLANAT N° 05",u:"PZA",p:45,s:0},
+  {n:"PARCHE PARA LLANTA N°6",u:"PZA",p:65,s:0},
+  {n:"PARTE DELANTERA (TROMPA)   RNS58F-17FC",u:"PZA",p:2208,s:0},
+  {n:"PARTE INTERMEDIA   RNS83F-1B",u:"PZA",p:0,s:0},
+  {n:"PERNO ALETA (4)   RN711B",u:"PZA",p:8.01,s:15},
+  {n:"PERNO DE CAJA VÁLVULA  RNS83F-15D",u:"PZA",p:10.06,s:1},
+  {n:"PERNO ESPIRAL MANERAL (114 AB)  RNERP-6",u:"PZA",p:5.14,s:10},
+  {n:"PERNO GUÍA   RNS53F-36P",u:"PZA",p:45.29,s:3},
+  {n:"PERNO MANERAL (112AB)   RNS83F-113",u:"PZA",p:9.27,s:5},
+  {n:"PERNO PASADOR   RNS58F-36K",u:"PZA",p:18.53,s:9},
+  {n:"PERNO SUJETADOR   RNS53F-36TA",u:"PZA",p:149.31,s:3},
+  {n:"PERNO SWIVEL FL7   RNFL7-200",u:"PZA",p:6.67,s:5},
+  {n:"PICO DE APOYO   RNFL7-39S",u:"PZA",p:252.32,s:2},
+  {n:"PISTON  RNS83F-9A",u:"PZA",p:499.31,s:1},
+  {n:"PIVOTE   RNFL7-91A",u:"PZA",p:319.68,s:4},
+  {n:"PORTABROQUERO  RNS58F-7DA",u:"PZA",p:386.78,s:0},
+  {n:"PORTAEMPAQUE   RNFL7-38A",u:"PZA",p:39.61,s:1},
+  {n:"PUNTERA DE ENGRASE",u:"PZA",p:40,s:0},
+  {n:"RESORTE  RN72ES",u:"PZA",p:8.83,s:1},
+  {n:"RESORTE ALETA (4)   RN711C",u:"PZA",p:5.17,s:160},
+  {n:"RESORTE DE GLÁNDULA DE AGUA   RND83N-43",u:"PZA",p:15.96,s:3},
+  {n:"RESORTE MANERAL (112 AB)  RNS83F-117",u:"PZA",p:7.38,s:2},
+  {n:"RESORTE MANERAL (114AB)  RNS83F-119B",u:"PZA",p:18.53,s:1},
+  {n:"RESORTE RNFL5-97",u:"PZA",p:55.81,s:7},
+  {n:"RESORTE SUJETADOR   RNS58F-36N",u:"PZA",p:24.15,s:11},
+  {n:"RETÉN   RN72A",u:"PZA",p:18.04,s:1},
+  {n:"RETÉN DE ASIENTO   RND83N-44",u:"PZA",p:49.47,s:1},
+  {n:"RETEN DE EJE POSTERIOR",u:"PZA",p:0,s:1},
+  {n:"RETEN DE GLÁNDULA DE AGUA   RND83N-42",u:"PZA",p:36.55,s:1},
+  {n:"RETÉN MANERAL (114AB)  RNS83F-120",u:"PZA",p:18.53,s:1},
+  {n:"RONDANA   RND73H-146W",u:"PZA",p:11.31,s:3},
+  {n:"RONDANA  RNS58F-35W",u:"PZA",p:9.04,s:1},
+  {n:"RONDANA DE PRESIÓN  RNWP-31",u:"PZA",p:9.27,s:1},
+  {n:"RONDANA GLÁNDULA DE AGUA   RN1739A",u:"PZA",p:9.27,s:2},
+  {n:"SEGURO EMPUJADOR   RNFL7-211",u:"PZA",p:0,s:1},
+  {n:"SWIVEL FL7  RNFL7-90",u:"PZA",p:601.97,s:0},
+  {n:"TACOMETRO",u:"PZA",p:0,s:0},
+  {n:"TAPA DE CILINDRO  RNFL7-27A",u:"PZA",p:0,s:0},
+  {n:"TAPA DE VÁLVULA  RNS83F-15B",u:"PZA",p:413.65,s:0},
+  {n:"TAPA SUPERIOR (CAPUCHON)  RNFL7-29",u:"PZA",p:0,s:0},
+  {n:"TARRO VIPAL PEGAMENTO",u:"PZA",p:80,s:0},
+  {n:"TORNILLO ALLEN MANERAL (112 AB)  RNPP2",u:"PZA",p:6.67,s:1},
+  {n:"TORNILLO EMPUJADOR   RNSH-75",u:"PZA",p:6.67,s:0},
+  {n:"TORNILLO LATERAL (2)   RNS83F-3D",u:"PZA",p:196.88,s:4},
+  {n:"TRINQUETE   RNS83F-3335",u:"PZA",p:286.91,s:3},
+  {n:"TUBO DE AIRE  RN1FL7-27B",u:"PZA",p:110.34,s:5},
+  {n:"TUBO DEL AGUA  RNS63F-27B",u:"PZA",p:42.3,s:10},
+  {n:"TUERCA CABEZA  RNS48F-12N",u:"PZA",p:30.9,s:1},
+  {n:"TUERCA CHUCK   RNS63F-7N",u:"PZA",p:185.36,s:4},
+  {n:"TUERCA CONEXIÓN DE AGUA   RNS48F-13E",u:"PZA",p:80.31,s:2},
+  {n:"TUERCA DEL CODO DE AIRE   RNRB83-146",u:"PZA",p:0,s:0},
+  {n:"TUERCA DEL FRENO (2)   RNS53F-36N",u:"PZA",p:20.48,s:6},
+  {n:"TUERCA EMPUJADOR   RNNH-10",u:"PZA",p:3.62,s:0},
+  {n:"TUERCA EMPUJADOR F17  RNFL7-21",u:"PZA",p:0,s:0},
+  {n:"TUERCA LUBRICADOR   RNRB-114",u:"PZA",p:0,s:0},
+  {n:"TUERCA RIFLE   RNS83F-25-28",u:"PZA",p:154.9,s:5},
+  {n:"TUERCA SUPERIOR RNFL7-202",u:"PZA",p:128.76,s:2},
+  {n:"TUERCA SWIVEL FL7 (RNNH 108-FL7)  RN-NH-108",u:"PZA",p:42.66,s:2},
+  {n:"TUERCA SWIVEL FL9   RNFL7-99",u:"PZA",p:57.83,s:2},
+  {n:"TUERCA TORNILLO LATERAL   RNS58-3N",u:"PZA",p:52.13,s:5},
+  {n:"VALVULA AUTOMATICA RNS83F-16",u:"PZA",p:270.5,s:2},
+  {n:"VALVULA CHOTTP",u:"PZA",p:0,s:1},
+  {n:"VÁLVULA CONTROL DE MANERAL (114AB)  RNS83F-118B",u:"PZA",p:0,s:0},
+  {n:"VÁLVULA DE ACELERACIÓN   RNS83F-12BM",u:"PZA",p:0,s:0},
+  {n:"VALVULA DE CONTROL MANERAL (112 AB)  RNS83F-116C",u:"PZA",p:0,s:0},
+  {n:"VÁLVULA DE GLÁNDULA DE AGUA   RND83N-41",u:"PZA",p:44.82,s:2},
+];
+function _mantNN(s){ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toUpperCase(); }
+function almacenAplicarConteoMant(){
+  try{
+    if(!state.almacen) return false;
+    if((Number(state.almacen.mantConteoV)||0) >= MANT_CONTEO_V) return false;
+    // 1) El conteo reemplaza TODA la apertura de Mantenimiento. Lápidas para que la fusión de la
+    //    nube no resucite la apertura vieja en otro equipo.
+    const viejos=(state.almacen.inventarioInicial||[]).filter(x=>x&&x.almacen==='Mantenimiento');
+    const ids=viejos.map(x=>x&&x.id).filter(Boolean);
+    if(ids.length && typeof _tombAddMuchos==='function') _tombAddMuchos(ids);
+    state.almacen.inventarioInicial=(state.almacen.inventarioInicial||[]).filter(x=>!(x&&x.almacen==='Mantenimiento'));
+    // 2) Fichas duplicadas que el conteo unifica
+    const dup=new Set(MANT_CONTEO_DUPLICADOS.map(_mantNN));
+    state.almacen.productos=(state.almacen.productos||[]).filter(p=>!(p&&p.almacen==='Mantenimiento'&&dup.has(_mantNN(p.nombre))));
+    // 3) Maestro indexado por nombre: se reusa la ficha que ya existe (con su código) y solo se
+    //    crean las que faltan, para no partir en dos un repuesto que ya tenía historia.
+    const porNom={};
+    (state.almacen.productos||[]).forEach(p=>{ if(p&&p.almacen==='Mantenimiento'){ const k=_mantNN(p.nombre); if(porNom[k]===undefined) porNom[k]=p; } });
+    const usados=new Set((state.almacen.productos||[]).map(p=>String((p&&p.codigo)||'').toUpperCase()));
+    let seq=0, creados=0;
+    const inv=[];
+    MANT_CONTEO.forEach((e,i)=>{
+      const k=_mantNN(e.n);
+      let p=porNom[k];
+      if(!p){
+        let cod; do{ cod='MTO-'+String(++seq).padStart(3,'0'); }while(usados.has(cod));
+        usados.add(cod); creados++;
+        p={ id:'PMTO'+String(i+1).padStart(3,'0'), codigo:cod, nombre:e.n, descripcion:e.n,
+            unidad:e.u||'PZA', precio:Number(e.p)||0, almacen:'Mantenimiento', minimo:0 };
+        state.almacen.productos.push(p); porNom[k]=p;
+      }else if(Number(e.p)>0){ p.precio=Number(e.p); }     // el conteo trae el precio al día
+      inv.push({ id:'IMT1-'+String(i+1).padStart(3,'0'), fecha:MANT_CONTEO_FECHA, almacen:'Mantenimiento',
+        codigo:String((p&&p.codigo)||''), producto:p.nombre, descripcion:p.nombre,
+        unidad:p.unidad||e.u||'PZA', precio:Number(p.precio)||Number(e.p)||0, cantidad:Number(e.s)||0 });
+    });
+    state.almacen.inventarioInicial=(state.almacen.inventarioInicial||[]).concat(inv);
+    state.almacen.productosTs=Date.now();
+    state.almacen.mantConteoV=MANT_CONTEO_V;
+    almacenSave();
+    try{ if(typeof renderAlmacen==='function') renderAlmacen(); }catch(e){}
+    console.log('[conteoMant] aplicado:', inv.length, 'productos,', creados, 'fichas nuevas');
+    return true;
+  }catch(e){ console.warn('[conteoMant]', e); return false; }
 }
 function calcStock(){
   const map={};
