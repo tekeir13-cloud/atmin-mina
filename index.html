@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-183</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-184</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-183</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-184</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.04-183</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.04-184</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5185,7 +5185,7 @@ function calcPronostico(valorAlaFecha, diasHabiles, diasConActividad){
 function diasDelPeriodo(mesYM){
   try{
     if(typeof ventanaMes!=='function') return 30;
-    const w=ventanaMes(mesYM);
+    const w=ventanaMes(mesYM, AREA_OP);   // la meta de avance se mide sobre el ciclo 26→25
     const a=new Date(w.ini+'T00:00:00'), b=new Date(w.fin+'T00:00:00');
     const d=Math.round((b-a)/86400000)+1;
     return d>0?d:30;
@@ -5199,7 +5199,7 @@ function diasDelPeriodo(mesYM){
 function diasTranscurridosPeriodo(mesYM){
   try{
     if(typeof ventanaMes!=='function') return 1;
-    const w=ventanaMes(mesYM);
+    const w=ventanaMes(mesYM, AREA_OP);   // idem: avance = ciclo de Operaciones
     const ini=new Date(w.ini+'T00:00:00'), fin=new Date(w.fin+'T00:00:00');
     const hoyD=new Date(hoy()+'T00:00:00');
     const ref=hoyD<fin?hoyD:fin;
@@ -7175,7 +7175,8 @@ function renderDashEjecutivo(){
   // 26→25 (≈30, a veces 31 o 28) ──
   const diasHabEjec=(state.metas&&state.metas.dias)||26;   // para derivar metas de F1/F2
   const diasPeriodoEjec=diasDelPeriodo(mes);               // horizonte real del pronóstico
-  const rgMesEjec=(state.reportesGuardia||[]).filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mes):((r.fecha||'').slice(0,7)===mes));
+  // Los reportes de guardia son avance de Operaciones: su ventana es el ciclo 26→25.
+  const rgMesEjec=(state.reportesGuardia||[]).filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mes,AREA_OP):((r.fecha||'').slice(0,7)===mes));
   const cimbrasMesEjec=rgMesEjec.reduce((s,r)=>{ let c=FRENTES.reduce((ss,f)=>ss+((r[f.key]&&r[f.key].cimbra)||0),0); (r.frentesExtra||[]).forEach(fx=>c+=(fx.cimbra||0)); return s+c; },0);
   // Solo labores vigentes: sumar la meta de una labor retirada inflaría el objetivo del mes.
   const metaTotalEjec=frentesActivos().reduce((s,f)=>s+(metaMensualFrente(f.id,diasHabEjec)||0),0);
@@ -7377,7 +7378,7 @@ function disparosStats(per){
   const pex=(typeof compGetPreciosExp==='function')?(compGetPreciosExp()||{}):{};
   const vacio=()=>({n:0, metros:0, costo:0, tperf:0, tcarg:0});
   const out={ total:vacio(), clases:{'6':vacio(),'8':vacio(),'corto':vacio(),'largo':vacio()} };
-  const enPer=f=>!per || ((typeof enVentana==='function')?enVentana(f,per):String(f||'').slice(0,7)===per);
+  const enPer=f=>!per || ((typeof enVentana==='function')?enVentana(f,per,AREA_OP):String(f||'').slice(0,7)===per);
   (state.reportesGuardia||[]).forEach(r=>{
     if(!r || !enPer(r.fecha)) return;
     (typeof FRENTES!=='undefined'?FRENTES:[]).forEach(f=>{
@@ -7424,8 +7425,8 @@ function fcVentanaLbl(){
 function fcVentana(){
   const hoyStr=hoy();
   try{
-    const per=(typeof periodoActual==='function')?periodoActual():'';
-    const v=(typeof ventanaMes==='function')?ventanaMes(per):null;
+    const per=(typeof periodoActual==='function')?periodoActual(AREA_OP):'';
+    const v=(typeof ventanaMes==='function')?ventanaMes(per,AREA_OP):null;
     if(v && v.ini) return { ini:v.ini, fin:(hoyStr<v.fin?hoyStr:v.fin), periodo:per };
   }catch(e){}
   const t=new Date(hoyStr+'T12:00:00'); t.setDate(t.getDate()-(FC_DIAS-1));
@@ -7973,7 +7974,7 @@ function renderDashAvanceMeta(){
   // Sigue el ciclo elegido en el panel ejecutivo (no siempre el vigente)
   const mesAct=(typeof ejecMesActual==='function')?ejecMesActual():((typeof finMesActual==='function')?finMesActual():hoy().slice(0,7));
   const diasPeriodo=diasDelPeriodo(mesAct);   // horizonte del pronóstico (30/31/28 días 26→25)
-  const rgMes=(state.reportesGuardia||[]).filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mesAct):((r.fecha||'').slice(0,7)===mesAct));
+  const rgMes=(state.reportesGuardia||[]).filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mesAct,AREA_OP):((r.fecha||'').slice(0,7)===mesAct));
   // Gasto de explosivo del mes por frente (fuente: reportes del Compresorista; solo Brenda/CRNE
   // tienen desglose rampa/galería por ahora)
   const preciosExpD=(typeof compGetPreciosExp==='function')?compGetPreciosExp():(typeof COMP_PRECIOS_EXP_DEFAULT!=='undefined'?COMP_PRECIOS_EXP_DEFAULT:{});
@@ -20355,7 +20356,7 @@ function eqopCiclo(fecha){
 }
 function eqopCicloLbl(m){
   const n=(typeof finNombreMes==='function')?finNombreMes(m):m;
-  try{ const v=ventanaMes(m); return n+' · '+v.ini.slice(8)+'/'+v.ini.slice(5,7)+'→'+v.fin.slice(8)+'/'+v.fin.slice(5,7); }
+  try{ const v=ventanaMes(m, AREA_OP); return n+' · '+v.ini.slice(8)+'/'+v.ini.slice(5,7)+'→'+v.fin.slice(8)+'/'+v.fin.slice(5,7); }
   catch(e){ return n; }
 }
 function renderEquiposOp(){
@@ -23258,7 +23259,14 @@ function combFormHtml(tipo){
   const label=tipo==='pet'?'Petróleo':'Gasolina';
   const maxGln=tipo==='pet'?COMB_CAP_PET:COMB_CAP_GAS;
   return `<div style="background:var(--coal3);border-radius:10px;padding:16px">
-    <div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:12px">+ Registrar Ingreso — ${label}</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      <div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase">Registrar movimiento — ${label}</div>
+      <div style="display:flex;gap:6px;margin-left:auto">
+        <button id="comb-${tipo}-tab-in" onclick="combModo('${tipo}','in')" class="btn btn-outline" style="font-size:11px;padding:5px 12px">⬇ Ingreso</button>
+        <button id="comb-${tipo}-tab-out" onclick="combModo('${tipo}','out')" class="btn btn-outline" style="font-size:11px;padding:5px 12px">⬆ Salida</button>
+      </div>
+    </div>
+    <div id="comb-${tipo}-nota" style="font-size:11px;color:var(--text3);margin-bottom:10px"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Fecha</label>
         <input type="date" id="comb-${tipo}-fecha" value="${hoy()}" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:13px"></div>
@@ -23276,11 +23284,46 @@ function combFormHtml(tipo){
         <input type="text" id="comb-${tipo}-obs" placeholder="Opcional" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:13px"></div>
     </div>
     <div style="margin-top:12px">
-      <button onclick="combRegistrar('${tipo}')" class="btn btn-gold" style="width:100%">✅ Registrar Ingreso ${label}</button>
+      <button id="comb-${tipo}-btn" onclick="combRegistrar('${tipo}')" class="btn btn-gold" style="width:100%">✅ Registrar Ingreso ${label}</button>
     </div>
   </div>`;
 }
 
+/* INGRESO Y SALIDA MANUALES PARA LOGÍSTICA.
+   El ingreso lo carga Logística y la salida normal la descuenta sola el parte del Compresorista.
+   Pero para cuadrar el tanque a fin de mes hace falta poder registrar una SALIDA a mano: un trasvase,
+   una devolución, una merma o el ajuste contra la medición física. Esa salida se guarda como un
+   movimiento más, con cantidad negativa, así que entra en la misma resta sin tocar los partes del
+   compresorista ni inventar una estructura aparte. */
+const _combModo={pet:'in', gas:'in'};
+function combModo(tipo, modo){
+  _combModo[tipo] = (modo==='out') ? 'out' : 'in';
+  combPintarModo(tipo);
+}
+function combPintarModo(tipo){
+  const out=_combModo[tipo]==='out';
+  const label=tipo==='pet'?'Petróleo':'Gasolina';
+  const g=id=>document.getElementById(id);
+  const ti=g('comb-'+tipo+'-tab-in'), to=g('comb-'+tipo+'-tab-out');
+  if(ti){ ti.style.borderColor=out?'var(--border)':'var(--accent)'; ti.style.color=out?'var(--text3)':'var(--accent-light)'; }
+  if(to){ to.style.borderColor=out?'#f87171':'var(--border)'; to.style.color=out?'#f87171':'var(--text3)'; }
+  const b=g('comb-'+tipo+'-btn');
+  if(b){ b.textContent=(out?'⬆ Registrar Salida ':'✅ Registrar Ingreso ')+label;
+         b.style.background=out?'rgba(239,68,68,.18)':''; b.style.color=out?'#f87171':''; }
+  const nota=g('comb-'+tipo+'-nota');
+  if(nota) nota.textContent = out
+    ? 'Salida manual: trasvase, devolución, merma o ajuste contra la medición física del tanque. No reemplaza el consumo que descuenta el parte del compresorista.'
+    : 'Ingreso de combustible al tanque (abastecimiento de Logística).';
+  const pl=g('comb-'+tipo+'-placa'), ch=g('comb-'+tipo+'-chofer');
+  if(pl) pl.placeholder = out?'Ej: destino o equipo':'Ej: A5H-320';
+  if(ch) ch.placeholder = out?'Quién autoriza':'Nombre completo';
+}
+// Total de salidas manuales (se guardan en negativo).
+function combSalidasManuales(tipo, soloCiclo){
+  const v=soloCiclo?_combVentana():null;
+  return combCargar(tipo).filter(r=>Number(r&&r.cantidad)<0 && (!soloCiclo||_combEnCiclo(r&&r.fecha,v)))
+    .reduce((s,r)=>s+Math.abs(Number(r.cantidad)||0),0);
+}
 // ── Historial tabla ─────────────────────────────────────────
 /* HISTORIAL CONTINUO DE INGRESOS: todos los meses, no solo el ciclo vigente.
    El ingreso de combustible lo carga Logística y la salida la descuenta el parte del Compresorista;
@@ -23319,7 +23362,7 @@ function combHistorialHtml(tipo){
       <td style="padding:7px 10px;color:var(--text2)">${r.hora||'—'}</td>
       <td style="padding:7px 10px;color:#fbbf24;font-weight:700">${r.placa||'—'}</td>
       <td style="padding:7px 10px;color:var(--text)">${r.chofer||'—'}</td>
-      <td style="padding:7px 10px;text-align:right;font-weight:700;color:${ap?'#fbbf24':color}">+${fmtGl(r.cantidad)} gln</td>
+      <td style="padding:7px 10px;text-align:right;font-weight:700;color:${Number(r.cantidad)<0?'#f87171':(ap?'#fbbf24':color)}">${Number(r.cantidad)<0?'−'+fmtGl(Math.abs(r.cantidad)):'+'+fmtGl(r.cantidad)} gln</td>
       <td style="padding:7px 10px;color:var(--text3);font-size:11px">${r.obs||'—'}</td>
       <td style="padding:7px 10px">${ap?'<span style="color:var(--text3);font-size:11px" title="Saldo arrastrado del ciclo anterior: no se borra a mano">🔒</span>'
         :`<button onclick="combEliminar('${tipo}','${String(r.id||'').replace(/'/g,"")}',${r._i})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:12px;padding:2px 6px">✕</button>`}</td>
@@ -23340,6 +23383,7 @@ function combHistorialHtml(tipo){
 function renderCombustible(){
   const el=document.getElementById('log-combustible');
   if(!el) return;
+  setTimeout(()=>{ try{ combPintarModo('pet'); combPintarModo('gas'); }catch(e){} },0);
 
   const stPet=combStockVista('pet'), stGas=combStockVista('gas');
   const dqPet=combDescuadre('pet'), dqGas=combDescuadre('gas');
@@ -23451,13 +23495,21 @@ function combRegistrar(tipo){
   const precio=parseFloat(document.getElementById(`comb-${tipo}-precio`)?.value||'0');
   const obs=(document.getElementById(`comb-${tipo}-obs`)?.value||'').trim();
   if(!fecha||!placa||!chofer||cantidad<=0){showNotif('Completa todos los campos requeridos','warn');return;}
+  const esSalida=(_combModo[tipo]==='out');
+  const nombre=tipo==='pet'?'petróleo':'gasolina';
+  // Una salida no puede dejar el tanque en negativo: eso sería inventar combustible que no estaba.
+  if(esSalida && cantidad>combStockTipo(tipo)+1e-9){
+    showNotif('⚠ No puedes sacar '+cantidad+' gln: en el tanque hay '+combStockVista(tipo).toFixed(1)+' gln','error'); return;
+  }
   const arr=combCargar(tipo);
-  arr.push({fecha,hora,placa,chofer,cantidad,precio,obs});
+  arr.push({ id:'CM'+Date.now()+Math.random().toString(36).slice(2,6), fecha, hora, placa, chofer,
+             cantidad: esSalida ? -cantidad : cantidad, precio, obs,
+             tipoMov: esSalida?'salida':'ingreso' });
   combGuardar(tipo,arr);
   const stock=combStockVista(tipo);
   const alerta=tipo==='pet'?COMB_ALERTA_PET:COMB_ALERTA_GAS;
-  const nombre=tipo==='pet'?'petróleo':'gasolina';
-  if(stock<=alerta) showNotif(`⚠️ Stock crítico de ${nombre}: ${stock.toFixed(0)} gln`,'warn');
+  if(esSalida) showNotif(`⬆ Salida registrada: −${cantidad} gln de ${nombre} | Stock: ${stock.toFixed(0)} gln`,'ok');
+  else if(stock<=alerta) showNotif(`⚠️ Stock crítico de ${nombre}: ${stock.toFixed(0)} gln`,'warn');
   else showNotif(`✅ Ingreso registrado: +${cantidad} gln de ${nombre} | Stock: ${stock.toFixed(0)} gln`,'ok');
   renderCombustible();
   try{ if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
@@ -27754,23 +27806,23 @@ window.onload=init;
 // Periodo operativo 26→25 cuando el ciclo está activo (a partir del 26/07/2026), mes calendario antes.
 // TODAS las vistas (Dashboard, Finanzas, NIA, Operaciones) filtran "el mes" por esta misma ventana
 // para que las cifras coincidan y calcen con el cierre de periodo.
-function ventanaMes(mesYM){
-  mesYM = mesYM || finMesActual();
+function ventanaMes(mesYM, area){
+  mesYM = mesYM || finMesActual(area);
   if(typeof mesYM==='string' && mesYM.length===7 && typeof cicloActivo==='function' && cicloActivo() && typeof periodoRango==='function'){
-    try{ return periodoRango(mesYM); }catch(e){}
+    try{ return periodoRango(mesYM, area); }catch(e){}
   }
   const p=String(mesYM||'').slice(0,7);
   return { ini:p+'-01', fin:p+'-31' };
 }
-function enVentana(fecha, mesYM){ const f=(fecha||'').slice(0,10); if(!f) return false; const w=ventanaMes(mesYM); return f>=w.ini && f<=w.fin; }
+function enVentana(fecha, mesYM, area){ const f=(fecha||'').slice(0,10); if(!f) return false; const w=ventanaMes(mesYM, area); return f>=w.ini && f<=w.fin; }
 // Filtro de mes UNIFORME para toda la app: si 'mes' es un periodo YYYY-MM respeta la ventana
 // del ciclo 26→25 (activo desde jul-2026: cada periodo va del 26 del mes anterior al 25 del mes
 // de cierre). Si es un prefijo más largo (un día YYYY-MM-DD) compara por prefijo. Reemplaza los
 // antiguos startsWith(mes) que se desalineaban del resto de vistas.
-function filtroMes(fecha, mes){
+function filtroMes(fecha, mes, area){
   const m=String(mes||''); if(!m) return true;
   const f=String(fecha||'');
-  if(m.length===7) return enVentana(f, m);
+  if(m.length===7) return enVentana(f, m, area);
   return f.startsWith(m);
 }
 // Predicado que acepta prefijo de día (YYYY-MM-DD → ese día exacto) o de mes/periodo (YYYY-MM → ventana)
@@ -27786,7 +27838,7 @@ function enMesTareo(fecha, pre){
   if(p.length>7) return f.startsWith(p);
   return f.slice(0,7)===p.slice(0,7);
 }
-function finMesActual(){ return (typeof periodoActual==='function')?periodoActual():hoy().slice(0,7); }
+function finMesActual(area){ return (typeof periodoActual==='function')?periodoActual(area):hoy().slice(0,7); }
 function finFiltrarMes(arr,mesYM){ if(!mesYM) return arr||[]; if(String(mesYM).length>7) return (arr||[]).filter(r=>(r.fecha||'').startsWith(mesYM)); return (arr||[]).filter(r=>enVentana(r.fecha,mesYM)); }
 function finCostoKits(mesYM){ return finFiltrarMes(state.mantenimiento||[],mesYM).filter(k=>k.aprobLog&&k.aprobLog.ok).reduce((s,k)=>s+(k.costo||0),0); }
 function finCostoMantenimiento(mesYM){ return finCostoKits(mesYM); }
@@ -33254,15 +33306,37 @@ function actualizarPlanillaOficial(auto){
 const CICLO_2625_DESDE = '2026-07';   // periodo (YYYY-MM) desde el que el ciclo 26→25 está activo
                                       // Julio 2026 = 26 jun → 25 jul (calendario operativo real de la mina)
 function cicloActivo(){ try{ return periodoActual() >= CICLO_2625_DESDE; }catch(e){ return false; } }
-function periodoActual(){
-  const d=new Date(); let y=d.getFullYear(), m=d.getMonth(); // m 0-indexado
-  if(d.getDate()>=26){ m++; if(m>11){m=0;y++;} }
-  return y+'-'+String(m+1).padStart(2,'0'); // YYYY-MM del mes de cierre
+function periodoActual(area){
+  const d=new Date();
+  return periodoDeFecha(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'), area);
 }
-function periodoRango(pYM){
-  const [y,m]=pYM.split('-').map(Number);
+/* ════════ CIERRE MENSUAL PARA TODO, SALVO OPERACIONES ════════
+   Desde MENSUAL_DESDE cada área cierra por MES CALENDARIO (1 al último día). La única excepción es
+   OPERACIONES y sus reportes de avance, que siguen con el ciclo 26→25: lo del 26 de setiembre en
+   adelante pertenece al ciclo de octubre, hasta el 25.
+
+   Lo ya cerrado NO se toca: los periodos anteriores a MENSUAL_DESDE conservan su significado 26→25,
+   así que ningún gasto ni metro cambia de mes hacia atrás ni descuadra un cierre ya rendido.
+
+   PERIODO PUENTE. Al pasar de 26→25 a mes calendario quedarían huérfanos los días 26–31 del mes
+   anterior al corte: hoy pertenecen al primer periodo mensual y mañana no caerían en ninguno. Por
+   eso ESE primer periodo arranca el 26 del mes previo y termina el último día de su mes. Una sola
+   vez; de ahí en adelante son meses limpios. */
+const MENSUAL_DESDE = '2026-11';   // primer periodo que se mide por mes calendario
+const AREA_OP = 'op';              // Operaciones: siempre ciclo 26→25
+function _esOp(area){ return String(area||'')===AREA_OP; }
+function _mensual(pYM){ try{ return String(pYM||'')>=MENSUAL_DESDE; }catch(e){ return false; } }
+function _ultDia(y,m){ return new Date(y,m,0).getDate(); }   // m es 1-indexado
+function periodoRango(pYM, area){
+  const [y,m]=String(pYM).split('-').map(Number);
   const f=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-  return { ini:f(new Date(y,m-2,26)), fin:f(new Date(y,m-1,25)) };  // 26 mes anterior → 25 mes de cierre
+  if(_esOp(area) || !_mensual(pYM)){
+    return { ini:f(new Date(y,m-2,26)), fin:f(new Date(y,m-1,25)) };  // 26 mes anterior → 25 de cierre
+  }
+  const dd=String(_ultDia(y,m)).padStart(2,'0');
+  const fin=pYM+'-'+dd;
+  if(pYM===MENSUAL_DESDE) return { ini:f(new Date(y,m-2,26)), fin };   // puente: 26 del mes previo → fin de mes
+  return { ini:pYM+'-01', fin };
 }
 function periodoLabel(pYM){ return (typeof finNombreMes==='function')?finNombreMes(pYM):pYM; }
 
@@ -33361,13 +33435,21 @@ function histPeriodosSave(arr){ try{ localStorage.setItem(HIST_PERIODOS_KEY,JSON
 
 function enRango(fecha,r){ const f=(fecha||'').slice(0,10); return !!f && f>=r.ini && f<=r.fin; }
 // Periodo 26→25 al que pertenece una fecha (con el ciclo activo; si no, el mes de calendario).
-function periodoDeFecha(fecha){
+// A qué periodo pertenece una fecha. Espejo exacto de periodoRango: si uno cambia, el otro también.
+function periodoDeFecha(fecha, area){
   const d=String(fecha||'').slice(0,10);
   if(!/^\d{4}-\d{2}-\d{2}$/.test(d)) return '';
-  try{ if(typeof cicloActivo==='function' && !cicloActivo()) return d.slice(0,7); }catch(e){}
   let y=+d.slice(0,4), m=+d.slice(5,7); const dd=+d.slice(8,10);
-  if(dd>=26){ m++; if(m>12){ m=1; y++; } }
-  return y+'-'+String(m).padStart(2,'0');
+  // Candidato con la regla 26→25, que es la que rige antes del corte y siempre en Operaciones.
+  let cy=y, cm=m; if(dd>=26){ cm++; if(cm>12){ cm=1; cy++; } }
+  const ciclo=cy+'-'+String(cm).padStart(2,'0');
+  if(_esOp(area)) return ciclo;
+  const mes=d.slice(0,7);
+  // Antes del corte manda el ciclo; desde el corte manda el mes calendario, salvo los días 26–31
+  // del mes previo al corte, que caen en el periodo puente.
+  if(!_mensual(ciclo)) return ciclo;
+  if(ciclo===MENSUAL_DESDE && dd>=26 && mes<MENSUAL_DESDE) return MENSUAL_DESDE;
+  return _mensual(mes) ? mes : ciclo;
 }
 // Un periodo CERRADO ya rindió cuentas: se puede consultar, pero no admite montos nuevos.
 // Ojo: se compara por PERIODO, no por mes de calendario — el 28 de julio pertenece al ciclo
