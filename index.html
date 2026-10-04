@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-197</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-198</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-197</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-198</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.04-197</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.04-198</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -14953,16 +14953,27 @@ function previsualizarFoto(inputId,previewId){
   };
   reader.readAsDataURL(inp.files[0]);
 }
+/* CANTIDADES SUELTAS: enteras en unidades, con decimales en metros.
+   Un cartucho no se parte: ahí `parseInt` es correcto. Pero la mecha se mide en METROS, y medio
+   metro es medio metro. Con `parseInt` en todos lados, escribir 0.1 m daba 0 y el sistema
+   respondía "le falta cantidad" con el número a la vista. Se redondea a dos decimales -un
+   centímetro- para que no entren colas de coma flotante al stock. */
+function exploCant(v, decimales){
+  if(!decimales) return parseInt(v)||0;
+  const n=parseFloat(String(v==null?'':v).replace(',','.'));
+  return (isFinite(n)&&n>0) ? Math.round(n*100)/100 : 0;
+}
 function calcTotalExplo(pfx){
   const prodId=document.getElementById(pfx+'-producto')?.value;
+  const c0=exploGetCat(prodId);
   const cajas=parseInt(document.getElementById(pfx+'-cajas')?.value)||0;
-  const und=parseInt(document.getElementById(pfx+'-unidades')?.value)||0;
-  const c=exploGetCat(prodId);
+  const und=exploCant(document.getElementById(pfx+'-unidades')?.value, exploEsMetros(c0));
+  const c=c0;
   // Mecha rápida (NEITHER): el stock vive en METROS → "Cajas" se interpreta como ROLLOS
   // (1 rollo = mPorRollo m) y "Unidades" como METROS sueltos. Antes usaba upCaja=10 y
   // registraba cantidades absurdas (1 rollo entraba como 10 "unidades" contra un stock en metros).
   const esMecha=exploEsMetros(c);
-  const total=c?(esMecha?cajas*(c.mPorRollo||150)+und:cajas*c.upCaja+und):0;
+  const total=c?(esMecha?Math.round((cajas*(c.mPorRollo||150)+und)*100)/100:cajas*c.upCaja+und):0;
   const el=document.getElementById(pfx+'-total');
   if(el)el.textContent=c?(esMecha?`${total} m (${cajas} rollo${cajas!==1?'s':''} + ${und} m)`:`${total} ${c.unidad}`):'Selecciona producto y cantidad';
   return total;
@@ -14997,7 +15008,7 @@ function agregarExploAlVale(pfx){
   }
   const arr=_exploCart(pfx);
   arr.push({ producto:prodId, cajas:parseInt(g(pfx+'-cajas').value)||0,
-    unidades:parseInt(g(pfx+'-unidades').value)||0, total });
+    unidades:exploCant(g(pfx+'-unidades').value, exploEsMetros(prodId)), total });
   _exploSetCart(pfx,arr);
   // Limpiar para el siguiente tipo (la fecha y el vale se mantienen)
   g(pfx+'-producto').value=''; g(pfx+'-cajas').value=''; g(pfx+'-unidades').value='';
@@ -15042,10 +15053,10 @@ function exploMultiRender(pfx){
         +'<span style="font-size:12px;color:var(--text)">'+nom+'</span></label></td>'
       +'<td style="padding:5px 6px"><input type="number" min="0" step="1" placeholder="0" class="'+pfx+'-mc" data-id="'+o.id+'" '
         +(sinStock?'disabled':'')+' oninput="exploMultiCuenta(\''+pfx+'\')" style="width:78px;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 8px;font-size:12px;text-align:right"></td>'
-      +'<td style="padding:5px 6px"><input type="number" min="0" step="1" placeholder="0" class="'+pfx+'-mu" data-id="'+o.id+'" '
+      +'<td style="padding:5px 6px"><input type="number" min="0" step="'+(mecha?'0.1':'1')+'" placeholder="0" class="'+pfx+'-mu" data-id="'+o.id+'" data-dec="'+(mecha?'1':'')+'" '
         +(sinStock?'disabled':'')+' oninput="exploMultiCuenta(\''+pfx+'\')" style="width:78px;background:var(--coal4);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 8px;font-size:12px;text-align:right"></td>'
       +'<td style="padding:5px 6px;font-size:11px;color:var(--text3);white-space:nowrap">'
-        +(esSalida?('quedan <b style="color:'+(disp>0?'#22c55e':'#f87171')+'">'+(disp||0)+'</b> '+(mecha?'m':((c&&c.unidad)||'und')))
+        +(esSalida?('quedan <b style="color:'+(disp>0?'#22c55e':'#f87171')+'">'+(Math.round((disp||0)*100)/100)+'</b> '+(mecha?'m':((c&&c.unidad)||'und')))
                   :(mecha?'rollos + metros':(c?c.upCaja+' / caja':'')))+'</td>'
       +'</tr>';
   }).join('');
@@ -15080,7 +15091,7 @@ function exploMultiCuenta(pfx){
     const id=ch.dataset.id;
     const caj=document.querySelector('.'+pfx+'-mc[data-id="'+id+'"]');
     const und=document.querySelector('.'+pfx+'-mu[data-id="'+id+'"]');
-    if(((parseInt(caj&&caj.value)||0)+(parseInt(und&&und.value)||0))>0) conCantidad++;
+    if(((parseInt(caj&&caj.value)||0)+exploCant(und&&und.value, !!(und&&und.dataset.dec)))>0) conCantidad++;
   });
   el.innerHTML = !marcados ? 'Marca uno o varios y escribe sus cantidades.'
     : marcados+' marcado'+(marcados!==1?'s':'')+' · '+conCantidad+' con cantidad'
@@ -15094,7 +15105,8 @@ function exploMultiAgregar(pfx){
   marcados.forEach(ch=>{
     const id=ch.dataset.id;
     const caj=parseInt((document.querySelector('.'+pfx+'-mc[data-id="'+id+'"]')||{}).value)||0;
-    const und=parseInt((document.querySelector('.'+pfx+'-mu[data-id="'+id+'"]')||{}).value)||0;
+    const elU=document.querySelector('.'+pfx+'-mu[data-id="'+id+'"]');
+    const und=exploCant(elU&&elU.value, !!(elU&&elU.dataset.dec));
     const c=exploGetCat(id);
     if(caj<=0 && und<=0){ sinCantidad.push((c&&c.nombre)||id); return; }
     // Se reusa el mismo camino que el alta de uno en uno: misma validación de stock, mismo
