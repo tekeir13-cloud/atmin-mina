@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-202</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.05-203</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.04-202</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.05-203</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.04-202</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.05-203</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -10401,7 +10401,13 @@ const MANT_CONTEO_FECHA = '2026-09-30';
 // y la cantidad del conteo, y la ficha repetida se retira del maestro.
 // 'ANILLO RNOR-7' estaba dos veces en el maestro (códigos 63 y 107), diferenciadas solo por un
 // espacio de más. Al coincidir el nombre normalizado, las dos salen y el conteo crea una sola.
-const MANT_CONTEO_DUPLICADOS = ['ANILLO (2)   RNOR-21', 'ANILLO  RNOR-7'];
+// `de` es la ficha que se retira; `a`, el nombre del conteo que se queda con todo. Los movimientos
+// que apuntaban a la ficha retirada se repuntan a la que queda: si no, su código desaparece del
+// maestro y quedan HUÉRFANOS —el almacén los acusa en rojo y su stock no se cuenta en ninguna parte.
+const MANT_CONTEO_DUPLICADOS = [
+  { de:'ANILLO (2)   RNOR-21', a:'ANILLO   RNOR-21' },
+  { de:'ANILLO  RNOR-7',       a:'ANILLO  RNOR-7'   },   // estaba dos veces (códigos 63 y 107)
+];
 const MANT_CONTEO = [
   {n:"ACEITE MOOTUL 20 W 50 7100",u:"PZA",p:0,s:0},
   {n:"ACEITE MOVIL 85W 140",u:"PZA",p:348.6,s:8},
@@ -10579,8 +10585,15 @@ function almacenAplicarConteoMant(){
     if(ids.length && typeof _tombAddMuchos==='function') _tombAddMuchos(ids);
     state.almacen.inventarioInicial=(state.almacen.inventarioInicial||[]).filter(x=>!(x&&x.almacen==='Mantenimiento'));
     // 2) Fichas duplicadas que el conteo unifica
-    const dup=new Set(MANT_CONTEO_DUPLICADOS.map(_mantNN));
-    state.almacen.productos=(state.almacen.productos||[]).filter(p=>!(p&&p.almacen==='Mantenimiento'&&dup.has(_mantNN(p.nombre))));
+    const dup={}; MANT_CONTEO_DUPLICADOS.forEach(d=>{ dup[_mantNN(d.de)]=_mantNN(d.a); });
+    const repunte={};                       // código retirado → nombre normalizado que se lo queda
+    (state.almacen.productos||[]).forEach(p=>{
+      if(p && p.almacen==='Mantenimiento' && dup[_mantNN(p.nombre)]!==undefined){
+        const c=String(p.codigo||'').trim();
+        if(c) repunte[c.toUpperCase()]=dup[_mantNN(p.nombre)];
+      }
+    });
+    state.almacen.productos=(state.almacen.productos||[]).filter(p=>!(p&&p.almacen==='Mantenimiento'&&dup[_mantNN(p.nombre)]!==undefined));
     // 3) Maestro indexado por nombre: se reusa la ficha que ya existe (con su código) y solo se
     //    crean las que faltan, para no partir en dos un repuesto que ya tenía historia.
     const porNom={};
@@ -10602,6 +10615,23 @@ function almacenAplicarConteoMant(){
         codigo:String((p&&p.codigo)||''), producto:p.nombre, descripcion:p.nombre,
         unidad:p.unidad||e.u||'PZA', precio:Number(p.precio)||Number(e.p)||0, cantidad:Number(e.s)||0 });
     });
+    /* LOS MOVIMIENTOS DE LAS FICHAS RETIRADAS SE REPUNTAN A LA QUE QUEDA.
+       Retirar una ficha del maestro deja sin padre a sus ingresos y salidas: el almacén los marca
+       en rojo como "artículos que no se ven" y su stock no se cuenta en ninguna parte. Aquí se les
+       cambia el código al de la ficha que el conteo conserva, así que el movimiento sigue existiendo
+       —no se borra ni se altera su cantidad, su fecha ni su importe— pero vuelve a tener dueño. */
+    if(Object.keys(repunte).length){
+      const destino={};
+      Object.keys(repunte).forEach(cod=>{ const d=porNom[repunte[cod]]; if(d) destino[cod]=d; });
+      ['ingresos','salidas','inventarioInicial'].forEach(lista=>{
+        (state.almacen[lista]||[]).forEach(m=>{
+          if(!m || m.almacen!=='Mantenimiento') return;
+          const d=destino[String(m.codigo||'').trim().toUpperCase()];
+          if(!d) return;
+          m.codigo=String(d.codigo||''); m.producto=d.nombre; m.descripcion=d.nombre;
+        });
+      });
+    }
     /* LA APERTURA ABSORBE LOS MOVIMIENTOS YA REGISTRADOS.
        El stock que muestra la app es apertura + ingresos − salidas. Si la apertura se dejara en la
        cifra del conteo a secas, cada salida ya registrada volvería a descontarse encima y el
