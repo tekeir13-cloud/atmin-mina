@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.05-205</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.05-206</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.05-205</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.05-206</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.05-205</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.05-206</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -8352,7 +8352,8 @@ function _sbPendSave(){
   const escribir=()=>{ try{ localStorage.setItem(SBPEND_KEY, JSON.stringify(_sbPend)); return true; }catch(e){ return false; } };
   let ok=escribir();
   for(let n=1; !ok && n<=2; n++){ try{ if(typeof _lsLiberar==='function') _lsLiberar(n); }catch(e){} ok=escribir(); }
-  if(!ok){ try{ showNotif('⚠ No se pudo reservar el envío a la nube: la memoria del equipo está llena. Mantén la app abierta hasta que haya señal.','error'); }catch(e){} }
+  // Sin aviso: el chip de pendientes ya muestra lo que falta subir, y una alerta más por cada
+  // guardado solo enseña a la gente a ignorarlas.
   try{ if(typeof actualizarChipConexion==='function') actualizarChipConexion(); }catch(e){}
 }
 let _sbFallo=0;
@@ -29427,12 +29428,17 @@ function compGuardarLocal() {
   try { sbSyncModulo('compresorista', state.compresorista||[]); } catch(e){}
   let ok=escribir();
   for(let n=1; !ok && n<=4; n++){
-    const recorte=_lsLiberar(n);
-    ok=escribir(recorte);
-    if(ok && recorte && recorte.length<(state.compresorista||[]).length){
-      try{ showNotif('ℹ Memoria del equipo llena: se guardó el parte y se dejaron en el teléfono los últimos '+(n>=4?30:90)+' días. El historial completo sigue en el sistema.','warn'); }catch(e){}
-    }
+    ok=escribir(_lsLiberar(n));
   }
+  /* EL AVISO ROJO SOLO CUANDO EL PARTE DE VERDAD CORRE PELIGRO.
+     Si hay señal, el parte ya salió a la nube —que es la copia que vale— y no pasa nada porque el
+     teléfono no haya podido quedarse con una copia: se da por guardado y el hombre sigue con lo
+     suyo. La alarma se reserva para el único caso en que el parte puede perderse de verdad: sin
+     señal Y sin sitio en el equipo. Avisar en los demás casos solo enseña a ignorar los avisos. */
+  if(!ok){ try{ if(typeof SB_ONLINE!=='undefined' && SB_ONLINE) return true; }catch(e){} }
+  // Hacer sitio es trabajo interno y se hace EN SILENCIO. Al compresorista no se le avisa de la
+  // limpieza del teléfono: él llenó su parte, se guardó y subió, y eso es todo lo que le importa.
+  // Solo se habla cuando de verdad hay algo que el hombre deba hacer.
   return ok;
 }
 function compCargarLocal() {
