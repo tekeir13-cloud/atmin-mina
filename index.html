@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.05-203</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.05-204</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.05-203</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.05-204</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.05-203</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.05-204</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -10395,7 +10395,13 @@ function almacenAplicarExcelV1(){
    viaja a la nube. Si fuera un localStorage, el primer celular que abriera la app sin haberlo
    corrido volvería a aplicar el conteo encima de los consumos posteriores — que es exactamente el
    error que borró el combustible. Así, aplicado una vez, ningún equipo lo repite. */
-const MANT_CONTEO_V = 1;
+/* VERSIÓN 2. La 1 llegó a producción con el cálculo a medias: la apertura no absorbía los
+   movimientos ya registrados y el FRENO 7/8 quedó en 3 en vez de 5. Los arreglos posteriores no
+   servían de nada porque el candado seguía en 1 y el conteo ya no se volvía a aplicar: el número
+   malo quedaba congelado. Subir el número es lo que deja entrar la corrección.
+   Repetirlo es seguro: lo primero que hace es vaciar la apertura de Mantenimiento, así que el
+   conteo se recalcula desde cero contra los movimientos que haya en ese momento. */
+const MANT_CONTEO_V = 2;
 const MANT_CONTEO_FECHA = '2026-09-30';
 // Fichas que el conteo unifica: el mismo repuesto escrito de dos formas. Se quedan con el nombre
 // y la cantidad del conteo, y la ficha repetida se retira del maestro.
@@ -10586,13 +10592,6 @@ function almacenAplicarConteoMant(){
     state.almacen.inventarioInicial=(state.almacen.inventarioInicial||[]).filter(x=>!(x&&x.almacen==='Mantenimiento'));
     // 2) Fichas duplicadas que el conteo unifica
     const dup={}; MANT_CONTEO_DUPLICADOS.forEach(d=>{ dup[_mantNN(d.de)]=_mantNN(d.a); });
-    const repunte={};                       // código retirado → nombre normalizado que se lo queda
-    (state.almacen.productos||[]).forEach(p=>{
-      if(p && p.almacen==='Mantenimiento' && dup[_mantNN(p.nombre)]!==undefined){
-        const c=String(p.codigo||'').trim();
-        if(c) repunte[c.toUpperCase()]=dup[_mantNN(p.nombre)];
-      }
-    });
     state.almacen.productos=(state.almacen.productos||[]).filter(p=>!(p&&p.almacen==='Mantenimiento'&&dup[_mantNN(p.nombre)]!==undefined));
     // 3) Maestro indexado por nombre: se reusa la ficha que ya existe (con su código) y solo se
     //    crean las que faltan, para no partir en dos un repuesto que ya tenía historia.
@@ -10611,7 +10610,7 @@ function almacenAplicarConteoMant(){
             unidad:e.u||'PZA', precio:Number(e.p)||0, almacen:'Mantenimiento', minimo:0 };
         state.almacen.productos.push(p); porNom[k]=p;
       }else if(Number(e.p)>0){ p.precio=Number(e.p); }     // el conteo trae el precio al día
-      inv.push({ _n:k, id:'IMT1-'+String(i+1).padStart(3,'0'), fecha:MANT_CONTEO_FECHA, almacen:'Mantenimiento',
+      inv.push({ _n:k, id:'IMT'+MANT_CONTEO_V+'-'+String(i+1).padStart(3,'0'), fecha:MANT_CONTEO_FECHA, almacen:'Mantenimiento',
         codigo:String((p&&p.codigo)||''), producto:p.nombre, descripcion:p.nombre,
         unidad:p.unidad||e.u||'PZA', precio:Number(p.precio)||Number(e.p)||0, cantidad:Number(e.s)||0 });
     });
@@ -10620,18 +10619,21 @@ function almacenAplicarConteoMant(){
        en rojo como "artículos que no se ven" y su stock no se cuenta en ninguna parte. Aquí se les
        cambia el código al de la ficha que el conteo conserva, así que el movimiento sigue existiendo
        —no se borra ni se altera su cantidad, su fecha ni su importe— pero vuelve a tener dueño. */
-    if(Object.keys(repunte).length){
-      const destino={};
-      Object.keys(repunte).forEach(cod=>{ const d=porNom[repunte[cod]]; if(d) destino[cod]=d; });
-      ['ingresos','salidas','inventarioInicial'].forEach(lista=>{
-        (state.almacen[lista]||[]).forEach(m=>{
-          if(!m || m.almacen!=='Mantenimiento') return;
-          const d=destino[String(m.codigo||'').trim().toUpperCase()];
-          if(!d) return;
-          m.codigo=String(d.codigo||''); m.producto=d.nombre; m.descripcion=d.nombre;
-        });
+    const codsMaestro=new Set((state.almacen.productos||[])
+      .map(p=>String((p&&p.codigo)||'').trim().toUpperCase()).filter(Boolean));
+    let repuntados=0;
+    ['ingresos','salidas'].forEach(lista=>{
+      (state.almacen[lista]||[]).forEach(m=>{
+        if(!m || m.almacen!=='Mantenimiento') return;
+        const c=String(m.codigo||'').trim().toUpperCase();
+        if(c && codsMaestro.has(c)) return;                 // ya tiene dueño: no se toca
+        let k=_mantNN(m.producto||m.descripcion);
+        if(dup[k]!==undefined) k=dup[k];                    // la ficha que el conteo unifica
+        const d=porNom[k];
+        if(!d) return;                                      // no es del conteo: se deja como está
+        m.codigo=String(d.codigo||''); m.producto=d.nombre; m.descripcion=d.nombre; repuntados++;
       });
-    }
+    });
     /* LA APERTURA ABSORBE LOS MOVIMIENTOS YA REGISTRADOS.
        El stock que muestra la app es apertura + ingresos − salidas. Si la apertura se dejara en la
        cifra del conteo a secas, cada salida ya registrada volvería a descontarse encima y el
@@ -10660,7 +10662,7 @@ function almacenAplicarConteoMant(){
     state.almacen.mantConteoV=MANT_CONTEO_V;
     almacenSave();
     try{ if(typeof renderAlmacen==='function') renderAlmacen(); }catch(e){}
-    console.log('[conteoMant] aplicado:', inv.length, 'productos,', creados, 'fichas nuevas');
+    console.log('[conteoMant] v'+MANT_CONTEO_V+' aplicado:', inv.length, 'productos,', creados, 'fichas nuevas,', repuntados, 'movimientos repuntados');
     return true;
   }catch(e){ console.warn('[conteoMant]', e); return false; }
 }
