@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.05-204</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.05-205</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.05-204</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.05-205</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.05-204</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.05-205</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -8344,7 +8344,17 @@ function renderDashAlertas(){
 // celular se haya apagado en el camino a superficie.
 const SBPEND_KEY='atmin_sb_pend';
 const _sbPend=(function(){ try{ const d=JSON.parse(localStorage.getItem(SBPEND_KEY)||'{}'); return (d&&typeof d==='object')?d:{}; }catch(e){ return {}; } })();
-function _sbPendSave(){ try{ localStorage.setItem(SBPEND_KEY, JSON.stringify(_sbPend)); }catch(e){} try{ if(typeof actualizarChipConexion==='function') actualizarChipConexion(); }catch(e){} }
+/* La cola de pendientes es la red de seguridad de quien trabaja sin señal: lo que no se pudo subir
+   espera aquí hasta que haya cobertura. Guardarla con un `catch` vacío significaba que, con el
+   teléfono lleno, la cola NO se escribía y nadie se enteraba: al cerrar la app el parte se perdía
+   sin haber llegado nunca a la nube. Ahora, si no entra, se hace sitio y se reintenta. */
+function _sbPendSave(){
+  const escribir=()=>{ try{ localStorage.setItem(SBPEND_KEY, JSON.stringify(_sbPend)); return true; }catch(e){ return false; } };
+  let ok=escribir();
+  for(let n=1; !ok && n<=2; n++){ try{ if(typeof _lsLiberar==='function') _lsLiberar(n); }catch(e){} ok=escribir(); }
+  if(!ok){ try{ showNotif('⚠ No se pudo reservar el envío a la nube: la memoria del equipo está llena. Mantén la app abierta hasta que haya señal.','error'); }catch(e){} }
+  try{ if(typeof actualizarChipConexion==='function') actualizarChipConexion(); }catch(e){}
+}
 let _sbFallo=0;
 // Cómo se une cada módulo con lo que ya hay en la nube ANTES de subirlo. Misma regla que al bajar.
 const _MERGE_AL_SUBIR = {
@@ -29379,17 +29389,50 @@ function eliminarReporteCompDe(fecha, turno){
    si el almacenamiento del teléfono está lleno, `setItem` lanza QuotaExceededError, el reporte se
    quedaba SOLO en memoria y desaparecía al recargar —con el aviso de «guardado» ya dado—. Ahora
    se avisa si no se pudo escribir, se hace sitio tirando borradores viejos y se reintenta. */
-function compGuardarLocal() {
-  let ok=false;
-  const escribir=()=>{ try{ localStorage.setItem(COMP_STORAGE_KEY, JSON.stringify(state.compresorista)); return true; }
-                       catch(e){ return false; } };
-  ok=escribir();
-  if(!ok){
-    // Hacer sitio: los borradores son lo único prescindible aquí.
-    try{ Object.keys(localStorage).filter(k=>k.indexOf('atmin_borrador_')===0).forEach(k=>localStorage.removeItem(k)); }catch(e){}
-    ok=escribir();
+/* ── HACER SITIO EN UN TELÉFONO LLENO ────────────────────────────────────────────────────────
+   El compresorista termina su guardia, llena el parte y el teléfono se niega a guardarlo porque
+   el almacenamiento del navegador está lleno. Antes solo se tiraban los borradores, que pesan
+   nada, así que el aviso rojo salía igual y el hombre se quedaba con el parte en la mano.
+
+   La escalera va de lo más prescindible a lo más valioso, y NUNCA toca algo que solo exista en
+   este equipo:
+     1. Borradores a medio llenar.
+     2. Espejos de la nube —respaldo del historial, foto del personal, tareas, contador de
+        sincronía—. Se vuelven a bajar solos en el próximo arranque con señal.
+     3. Partes viejos de este mismo teléfono: primero más de 90 días, luego más de 30. El
+        historial completo vive en la nube y en las computadoras de oficina; el celular del
+        compresorista no necesita cargar seis meses de partes para escribir el de hoy.
+   Lo que NO se toca, por más apretado que esté: `atmin_almacen`. Borrarlo deja al equipo sin los
+   marcadores de migración, y en el siguiente arranque resiembra los 380 productos de fábrica y los
+   sube a la nube, resucitando lo borrado del maestro para toda la unidad. */
+const LS_ESPEJOS_NUBE = ['atmin_almacen_histbackup','atmin_personal_snap','atmin_tareas_snap','atmin_sync_bcast'];
+function _lsLiberar(nivel){
+  const borrar=k=>{ try{ localStorage.removeItem(k); }catch(e){} };
+  if(nivel>=1){ try{ Object.keys(localStorage).filter(k=>k.indexOf('atmin_borrador_')===0).forEach(borrar); }catch(e){} }
+  if(nivel>=2){ LS_ESPEJOS_NUBE.forEach(borrar); }
+  if(nivel>=3 || nivel>=4){
+    // Recorte del historial LOCAL. state.compresorista no se toca —lo que ya se subió sigue en la
+    // nube y en memoria—: solo se escribe al teléfono una ventana más corta.
+    const dias=(nivel>=4)?30:90;
+    const corte=new Date(Date.now()-dias*86400000).toISOString().slice(0,10);
+    return (state.compresorista||[]).filter(r=>String((r&&r.fecha)||'').slice(0,10)>=corte);
   }
-  try { sbSyncModulo('compresorista', state.compresorista||[]); } catch(e){}  // nube: trazabilidad NV2820 + combustible
+  return null;
+}
+function compGuardarLocal() {
+  const escribir=(arr)=>{ try{ localStorage.setItem(COMP_STORAGE_KEY, JSON.stringify(arr||state.compresorista)); return true; }
+                          catch(e){ return false; } };
+  // La subida a la nube va PRIMERO: es la copia que de verdad importa, y si el teléfono está
+  // lleno lo último que queremos es perderla por quedarnos peleando con el disco.
+  try { sbSyncModulo('compresorista', state.compresorista||[]); } catch(e){}
+  let ok=escribir();
+  for(let n=1; !ok && n<=4; n++){
+    const recorte=_lsLiberar(n);
+    ok=escribir(recorte);
+    if(ok && recorte && recorte.length<(state.compresorista||[]).length){
+      try{ showNotif('ℹ Memoria del equipo llena: se guardó el parte y se dejaron en el teléfono los últimos '+(n>=4?30:90)+' días. El historial completo sigue en el sistema.','warn'); }catch(e){}
+    }
+  }
   return ok;
 }
 function compCargarLocal() {
