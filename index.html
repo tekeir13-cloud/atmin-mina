@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-207</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-208</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-207</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-208</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.06-207</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.06-208</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -26026,12 +26026,30 @@ function sesionGuardar(user){
   }catch(e){}
 }
 function sesionOlvidar(){ try{ localStorage.removeItem(SESION_KEY); }catch(e){} }
+/* LOS PERMISOS SE VUELVEN A LEER EN CADA ENTRADA, NO SE HEREDAN DE LA SESIÓN GUARDADA.
+   La sesión se guarda con la lista de módulos dentro del usuario, y al volver a entrar se usaba
+   tal cual. Resultado: cambiar los accesos de un rol no le llegaba a quien ya tenía la sesión
+   abierta —hasta siete días— por más versiones que se publicaran. Así se le dio Logística al
+   ingeniero residente y le seguía saliendo «Acceso Denegado».
+   Ahora, si el usuario está en la tabla del sistema, su lista se recalcula desde ahí en cada
+   entrada: manda el rol, no lo que quedó grabado en el teléfono. A los perfiles que vienen de la
+   nube con módulos a medida no se les toca, porque esa lista sí es una decisión de alguien. */
+function _refrescarModulos(user){
+  try{
+    if(!user || !user.rol) return user;
+    const ficha=(typeof usuarios!=='undefined'?usuarios:[]).find(u=>u && u.usuario===user.usuario);
+    if(!ficha) return user;                                   // perfil de nube: su lista se respeta
+    user.modulos = Array.isArray(ficha.modulos) ? ficha.modulos.slice() : null;
+    user.rol = ficha.rol;                                     // el rol también puede haber cambiado
+  }catch(e){}
+  return user;
+}
 function sesionRecordada(){
   try{
     const d=JSON.parse(localStorage.getItem(SESION_KEY)||'null');
     if(!d || !d.user || !d.user.rol) return null;
     if(Date.now()-(Number(d.ts)||0) > SESION_DIAS*86400000){ sesionOlvidar(); return null; }
-    return d.user;
+    return _refrescarModulos(d.user);
   }catch(e){ return null; }
 }
 function iniciarSesion(user){
