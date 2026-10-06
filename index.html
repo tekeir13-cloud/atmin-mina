@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-210</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-211</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-210</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-211</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.06-210</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.06-211</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5742,7 +5742,7 @@ async function cargarAlmacenCombustibleSB(){
       // Conservar el valor MÁS ALTO de cada flag de migración (nube o local) para que las
       // migraciones de explosivos (apertura, ajuste, fijación) NO se vuelvan a ejecutar en
       // cada carga y borren las salidas nuevas registradas por Logística.
-      ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','almExcelV','stockCorteTs','mantConteoV']
+      ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','almExcelV','stockCorteTs','mantConteoV','codNuevosV']
         .forEach(k=>{ const mx=Math.max(Number(almNube[k]||0), Number(almLocalPrev[k]||0)); if(mx) state.almacen[k]=mx; });
       // Conservar el saldo/corte de apertura del remanente (objeto + timestamp), venga de nube o local.
       if(!state.almacen.remApertura && (almNube.remApertura||almLocalPrev.remApertura)) state.almacen.remApertura=almNube.remApertura||almLocalPrev.remApertura;
@@ -5774,6 +5774,9 @@ async function cargarAlmacenCombustibleSB(){
     try{ if(typeof fijarSalidasExplosivosDefinitivo==='function') fijarSalidasExplosivosDefinitivo(); }catch(e){}
     // Carga del Excel oficial de stock (maestro + existencias, una sola vez, sin tocar gasto)
     try{ if(typeof almacenAplicarExcelV1==='function' && almacenAplicarExcelV1()) await sbSyncModulo('almacen',(typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
+    // Reposición de los códigos que se perdieron del maestro. Va ANTES del conteo para que este
+    // encuentre las fichas por su nombre y use su código real.
+    try{ if(typeof almacenAplicarCodigosNuevos==='function' && almacenAplicarCodigosNuevos()) await sbSyncModulo('almacen',(typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
     // Conteo físico del almacén de mantenimiento (va DESPUÉS del Excel oficial: lo corrige)
     try{ if(typeof almacenAplicarConteoMant==='function' && almacenAplicarConteoMant()) await sbSyncModulo('almacen',(typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
     // Salida de PRUEBA reversible (se activa/desactiva con EXPLO_PRUEBA_ACTIVA)
@@ -8833,7 +8836,7 @@ function _almMergeSnaps(a,b){
     explosivos:{ ...exA, ...exB, ingresos:_exploMergeMov(exA.ingresos,exB.ingresos), salidas:_exploMergeMov(exA.salidas,exB.salidas) },
     mbAcopio:{ ...mbA, ...mbB, ingresos:_exploMergeMov(mbA.ingresos,mbB.ingresos), salidas:_exploMergeMov(mbA.salidas,mbB.salidas) },
     productos, productosTs };
-  ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','exploStockBaseV','catalogVersion','almExcelV','stockCorteTs','aguaFixV','mantConteoV']
+  ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','exploStockBaseV','catalogVersion','almExcelV','stockCorteTs','aguaFixV','mantConteoV','codNuevosV']
     .forEach(k=>{ const mx=Math.max(Number(a[k]||0), Number(b[k]||0)); if(mx) out[k]=mx; });
   if(a.exploLock||b.exploLock) out.exploLock=true;
   out.remApertura=a.remApertura||b.remApertura||out.remApertura;
@@ -10395,6 +10398,199 @@ function almacenAplicarExcelV1(){
     return true;
   }catch(e){ console.warn('[almExcelV1]', e); return false; }
 }
+/* ── CÓDIGOS QUE SE PERDIERON DEL MAESTRO ────────────────────────────────────────────────────
+   El logístico dio de alta estos productos y desaparecieron: su equipo tenía la memoria llena,
+   la escritura local fallaba y —con el orden que había antes— la subida a la nube ni siquiera se
+   intentaba. Se reponen desde el listado que trajo el usuario, con su código, almacén, nombre y
+   unidad.
+
+   SOLO AGREGA. No borra ni modifica ninguna ficha existente: si el producto ya está, por código o
+   por nombre dentro del mismo almacén, se deja exactamente como está. Tampoco crea movimientos,
+   así que no mueve ni un gramo de stock: son fichas de catálogo, y entran con existencia cero
+   hasta que alguien les registre un ingreso.
+
+   `a:'M'` es Mantenimiento y `a:'G'` es el almacén que la app muestra como «Insumos» —internamente
+   se llama General—. El listado traía las dos etiquetas y las dos caen aquí.
+
+   Va ANTES del conteo de mantenimiento a propósito: así el conteo encuentra estas fichas por su
+   nombre y reusa su código de verdad, en vez de inventarse uno. */
+const COD_NUEVOS_V = 1;
+const COD_NUEVOS = [
+  {c:"4627133",n:"FILTRO DE ACEITE",u:"PZA",a:"M",p:0},
+  {c:"21746575",n:"FILTRO DE PETROLEO",u:"PZA",a:"M",p:0},
+  {c:"24063074",n:"FILTRO DE ACEITE MARCA VOLVO",u:"PZA",a:"M",p:0},
+  {c:"60159323",n:"FILTRO DE AIRE SECUNDARIO",u:"PZA",a:"M",p:0},
+  {c:"60211330",n:"FILTRO DE ALTA",u:"PZA",a:"M",p:0},
+  {c:"60250669",n:"FILTRO DE AIRE ACONDICIONADO",u:"PZA",a:"M",p:0},
+  {c:"ART-00066",n:"GRAPA GALV.P/CABLE GROSBY",u:"PZA",a:"G",p:0},
+  {c:"ART-00067",n:"MENNEKE MONOFASICO 16A 200 A 250 V",u:"PZA",a:"G",p:0},
+  {c:"ART-00068",n:"OJOS DE GATO TRANSITO",u:"PZA",a:"G",p:0},
+  {c:"ART-00069",n:"CINTA REFLECTIVA VERDE LIMON",u:"PZA",a:"G",p:0},
+  {c:"ART-00070",n:"CINTA VULXCANIZANTE SCOTH",u:"PZA",a:"G",p:0},
+  {c:"ART-00001",n:"MAQUINA PICK HAMMER GL37B",u:"PZA",a:"G",p:0},
+  {c:"ART-00002",n:"CUCHILLA 25 AMPERIOS",u:"PZA",a:"G",p:0},
+  {c:"ART-00003",n:"NIVEL",u:"PZA",a:"G",p:0},
+  {c:"ART-00004",n:"SCOTCH BLUE",u:"PZA",a:"G",p:0},
+  {c:"ART-00005",n:"ACEITE MOVIL 85W 140",u:"PZA",a:"M",p:348.6},
+  {c:"ART-00071",n:"CINTA REFLECTIVA AMARILLA GRADO INGENIERIA",u:"PZA",a:"G",p:0},
+  {c:"ART-00007",n:"ACEITE SHELL 15W 40",u:"PZA",a:"M",p:350},
+  {c:"ART-00072",n:"CISAYA 18\"",u:"PZA",a:"G",p:0},
+  {c:"ART-00009",n:"BALDE DE GRASA COLOR AZUL VISTONY",u:"PZA",a:"M",p:337.9},
+  {c:"ART-00010",n:"BALDE DE ACEITE 15W 40 MARCA TOTAL",u:"PZA",a:"M",p:320},
+  {c:"ART-00073",n:"CISAYA 14\"",u:"PZA",a:"G",p:0},
+  {c:"ART-00074",n:"CINTA AISLANTE BLANCO",u:"PZA",a:"G",p:0},
+  {c:"ART-00016",n:"FILTRO SEPARADOR DE PETROLEO GLQ007357390",u:"PZA",a:"M",p:0},
+  {c:"ART-00017",n:"FILTRO DE PETROLEO 1606040255B",u:"PZA",a:"M",p:0},
+  {c:"ART-00018",n:"FILTRO DE PETROLEO 160603020043B",u:"PZA",a:"M",p:0},
+  {c:"ART-00019",n:"FILTRO DE AIRE ACONDICIONADO 6025069",u:"PZA",a:"M",p:0},
+  {c:"ART-00020",n:"FILTRO DE AIRE A6306",u:"PZA",a:"M",p:0},
+  {c:"ART-00021",n:"FILTRO DE AIRE A6305",u:"PZA",a:"M",p:0},
+  {c:"ART-00022",n:"FILTRO DE AIRE A5107",u:"PZA",a:"M",p:0},
+  {c:"ART-00023",n:"FILTRO DE AIRE AF26357",u:"PZA",a:"M",p:0},
+  {c:"ART-00024",n:"FILTRO DE AIRE AF26398",u:"PZA",a:"M",p:0},
+  {c:"ART-00025",n:"ACEITES MOTOOL 7100",u:"PZA",a:"M",p:0},
+  {c:"ART-00026",n:"COMBO DE 8 LIBRAS",u:"PZA",a:"G",p:53},
+  {c:"ART-00027",n:"BALDE DE ACEITE HIDRAULICO",u:"PZA",a:"M",p:0},
+  {c:"ART-00029",n:"FILTRO DE PETROLEO GLQ007074643",u:"PZA",a:"M",p:0},
+  {c:"ART-00030",n:"FILTRO DE PETROLEO GLQ007237341",u:"PZA",a:"M",p:0},
+  {c:"ART-00031",n:"FILTRO SEPARADOR DE PETROLEO 60242352",u:"PZA",a:"M",p:0},
+  {c:"ART-00032",n:"CALIPER",u:"PZA",a:"M",p:1600},
+  {c:"ART-00033",n:"PARCHE PARA LLANTA N°6",u:"PZA",a:"M",p:65},
+  {c:"ART-00035",n:"TARRO VIPAL PEGAMENTO",u:"PZA",a:"M",p:80},
+  {c:"ART-00036",n:"POLO CINTA REFLECTIVA TALLA S",u:"PZA",a:"G",p:21},
+  {c:"ART-00037",n:"UNION DE POLIPROPILENO C/ROSCA 110 MM",u:"PZA",a:"G",p:0},
+  {c:"ART-00038",n:"PUNTERA DE ENGRASE",u:"PZA",a:"M",p:40},
+  {c:"ART-00039",n:"COMBO 10 LIBRAS",u:"PZA",a:"G",p:80},
+  {c:"ART-00040",n:"LLAVE STILSON N° 12",u:"PZA",a:"G",p:20.8},
+  {c:"ART-00041",n:"LLAVE STILSON N°14",u:"PZA",a:"G",p:27.4},
+  {c:"ART-00075",n:"DISCO DE CORTE 14\"",u:"PZA",a:"G",p:0},
+  {c:"ART-00043",n:"MARTILLO T/CARPINTERO",u:"PZA",a:"G",p:0},
+  {c:"ART-00044",n:"ALAMBRE NEGRO NRO.8",u:"KGR",a:"G",p:0},
+  {c:"ART-00045",n:"VALVULA BOLA DE ACERO 1/2\"",u:"PZA",a:"G",p:0},
+  {c:"ART-00046",n:"CLAVO DE FE. NEGRO DE 4\"",u:"KGR",a:"G",p:0},
+  {c:"ART-00047",n:"CLAVO DE FE. NEGRO DE 5\"",u:"KGR",a:"G",p:0},
+  {c:"ART-00048",n:"CINTA TEFLON",u:"PZA",a:"G",p:0},
+  {c:"ART-00049",n:"LECHE GLORIA 390g ROJA",u:"PZA",a:"G",p:4.2},
+  {c:"ART-00050",n:"LECHE GLORIA 170g (ROJA)",u:"PZA",a:"G",p:2.8},
+  {c:"ART-00051",n:"COLCHON CON RESORTE 1.1/2 PLAZA",u:"PZA",a:"G",p:250},
+  {c:"ART-00052",n:"COLCHON DE ESPUMA 1.1/2 PLAZA",u:"PZA",a:"G",p:200},
+  {c:"ART-00053",n:"CUTER (CUCHILLA DE CORTE)",u:"PZA",a:"G",p:0},
+  {c:"ART-00054",n:"RODILLO PARA PINTAR 9\"",u:"PZA",a:"G",p:0},
+  {c:"ART-00055",n:"TUBO DE PVC P/AGUA 1/2\"",u:"PZA",a:"G",p:0},
+  {c:"ART-00056",n:"NEUMATICO 12.00X24 SET COMPLETO L5S MARCA TIANLI",u:"PZA",a:"M",p:4427},
+  {c:"ART-00057",n:"KIT FILTRO DE ADMISIÓN PRIMARIO Y SECUNDARIO A5105",u:"PZA",a:"M",p:202.8},
+  {c:"ART-00058",n:"KIT DE FILTRO DE ADMISION PRIMARIO Y SECUNDARIO A6705",u:"PZA",a:"M",p:185.9},
+  {c:"ART-00059",n:"FILTRO SEPARADOR PL4020",u:"PZA",a:"M",p:270.4},
+  {c:"ART-00060",n:"CAMARA DE DUMPER 10X20",u:"PZA",a:"M",p:180},
+  {c:"ART-00061",n:"CASACA DE JEBE TALLA 40",u:"PZA",a:"G",p:85},
+  {c:"ART-00062",n:"CASACA DE JEBE TALLA 42",u:"PZA",a:"G",p:85},
+  {c:"ART-00063",n:"UNIFORME PANTALON TALLA S",u:"PZA",a:"G",p:0},
+  {c:"ART-00064",n:"FILTRO PARA PARTICULAS P100",u:"PZA",a:"G",p:0},
+  {c:"ART-00065",n:"SOGA MANILA TORCIDA 3/4\"",u:"KG",a:"G",p:16},
+  {c:"EPP-003",n:"FILTRO HIDRAULICO ALFA PARA SCOOP",u:"PZA",a:"M",p:0},
+  {c:"EPP-005",n:"FILTRO HIDRAULICO DE FRENO",u:"PZA",a:"M",p:0},
+  {c:"EPP-036",n:"FILTRO DE AIRE EXTERNO",u:"PZA",a:"M",p:0},
+  {c:"EPP-037",n:"FILTRO DE AIRE INTERNO",u:"PZA",a:"M",p:0},
+  {c:"ART-00076",n:"LUNA OSCURA SOLDAR",u:"PZA",a:"G",p:0},
+  {c:"ART-00077",n:"LLAVE FRANCESA 24\"",u:"PZA",a:"G",p:0},
+  {c:"ART-00078",n:"COMBA 6 LBRS",u:"PZA",a:"G",p:0},
+  {c:"ART-00079",n:"CEMENTO CONDUCTIVO",u:"BLS",a:"G",p:0},
+  {c:"ART-00080",n:"VALVULA DE ACERO BOLA 4\"",u:"PZA",a:"G",p:0},
+  {c:"ART-00081",n:"VALVULA DE ACERO BOLA 3\"",u:"PZA",a:"G",p:0},
+  {c:"ART-00082",n:"VALVULA DE ACERO BOLA 2\"",u:"PZA",a:"G",p:0},
+  {c:"ART-00083",n:"VALVULA DE ACERO BOLA 1\"",u:"PZA",a:"G",p:0},
+  {c:"ART-00084",n:"VALVULA DE ACERO BOLA 1/2\"",u:"PZA",a:"G",p:0},
+  {c:"ART-00085",n:"NIPLE ROSCA/ROSACA 1\"",u:"PZA",a:"G",p:0},
+  {c:"ART-00086",n:"NIPLE ROSCA/ROSACA 3/4\"",u:"PZA",a:"G",p:0},
+  {c:"ART-00087",n:"NIPLE ROSCA/ROSACA 1/2\"",u:"PZA",a:"G",p:0},
+  {c:"ART-00088",n:"GUANTES HYCRON T/10",u:"PZA",a:"G",p:0},
+  {c:"ART-00089",n:"PINTURA SPRAY ROJO",u:"PZA",a:"G",p:0},
+  {c:"MTO-005",n:"PARCHE PARA LLANAT N° 05",u:"PZA",a:"M",p:45},
+  {c:"ART-00090",n:"VALVULA SEGURIDAD DE ALIVIO DE PRESION",u:"PZA",a:"G",p:0},
+  {c:"ART-00091",n:"NIPLE ESCAMA/ESCAMA 2\"",u:"PZA",a:"G",p:0},
+  {c:"ART-00092",n:"NIPLE ESCAMA/ESCAMA 1\"",u:"PZA",a:"G",p:0},
+  {c:"RT-00093",n:"NIPLE ESCAMA/ESCAMA 3/4\"",u:"PZA",a:"G",p:0},
+  {c:"ART-00094",n:"NIPLE ESCAMA/ESCAMA 1/2\"",u:"PZA",a:"G",p:0},
+  {c:"ART-00095",n:"LIJA DE AGUA",u:"PZA",a:"G",p:0},
+  {c:"ART-00096",n:"NIPLE MIXTO ESCAMA/ROSCA 1\"",u:"PZA",a:"G",p:0},
+  {c:"ART-00097",n:"NIPLE MIXTO ESCAMA/ROSCA 1/2\"",u:"PZA",a:"G",p:0},
+  {c:"ART-00098",n:"MACHETE",u:"PZA",a:"G",p:0},
+  {c:"ART-00099",n:"LINEA MENSAJERA",u:"MTR",a:"G",p:0},
+  {c:"ART-00100",n:"LETRERO MONITOREO DE LABOR",u:"PZA",a:"G",p:0},
+  {c:"ART-00101",n:"LETRERO REFUGIO R",u:"PZA",a:"G",p:0},
+  {c:"ART-00102",n:"LETRERO NV 2820 CRNE",u:"PZA",a:"G",p:0},
+  {c:"ART-00103",n:"LETRERO DE INGRESO",u:"PZA",a:"G",p:0},
+  {c:"ART-00104",n:"LETRERO DE SALIDA",u:"PZA",a:"G",p:0},
+  {c:"ART-00105",n:"LETRERO CUIDADO SCOOP EN MOVIMINETO",u:"PZA",a:"G",p:0},
+  {c:"ART-00106",n:"LETRERO AJUSTES",u:"PZA",a:"G",p:0},
+  {c:"ART-00107",n:"LETRERO GOLPE",u:"PZA",a:"G",p:0},
+  {c:"ART-00108",n:"LETRERO CORTE",u:"PZA",a:"G",p:0},
+  {c:"ART-00109",n:"CINTA PELIGRO NO PASAR HOMBRES TRABAJANDO (AMARILLO)",u:"PZA",a:"G",p:0},
+  {c:"ART-00110",n:"ABRAZADERA DOBLE PERNO GALV. 4\"",u:"PZA",a:"G",p:0},
+  {c:"ART-00111",n:"ABRAZADERA DOBLE PERNO GALV. 2\"",u:"PZA",a:"G",p:0},
+  {c:"ART-00112",n:"KIT ANTIDERRAME",u:"PZA",a:"G",p:0},
+  {c:"ART-00113",n:"VASO PORTALAPIZ",u:"PZA",a:"G",p:0},
+  {c:"ART-00114",n:"FASTER DE METAL",u:"PZA",a:"G",p:0},
+  {c:"ART-00115",n:"BINDER CLIPS",u:"PZA",a:"G",p:0},
+  {c:"ART-00116",n:"CLIPS METALICOS",u:"PZA",a:"G",p:0},
+  {c:"ART-00117",n:"TIJERA",u:"PZA",a:"G",p:0},
+  {c:"ART-00118",n:"PLUMON PUNTA FINA",u:"PZA",a:"G",p:0},
+  {c:"ART-00119",n:"ETIQUETAS FLEXOGRAFICAS",u:"PZA",a:"G",p:0},
+  {c:"ART-00120",n:"CINTA EMBALAJE",u:"PZA",a:"G",p:0},
+  {c:"ART-00121",n:"AF26400 FILTRO AIRE",u:"PZA",a:"G",p:0},
+  {c:"ART-00122",n:"60310784 FILTRO AIRE",u:"PZA",a:"G",p:0},
+  {c:"ART-00123",n:"60310783 FILTRO DE AIRE",u:"PZA",a:"G",p:0},
+  {c:"ART-00124",n:"2652C832 FILTRO DE AIRE",u:"PZA",a:"G",p:0},
+  {c:"ART-00125",n:"2652C831 FILTRO DE AIRE",u:"PZA",a:"G",p:0},
+  {c:"ART-00126",n:"6C526-39010 ACEITE",u:"PZA",a:"G",p:0},
+  {c:"ART-00127",n:"6C356-58330 PETROLEO",u:"PZA",a:"G",p:0},
+  {c:"ART-00128",n:"R7 N11 AIRE",u:"PZA",a:"G",p:0},
+  {c:"ART-00129",n:"KIT DE CILINDRO VOLTEO",u:"PZA",a:"G",p:0},
+  {c:"ART-00130",n:"P03336522C26A157",u:"PZA",a:"G",p:0},
+  {c:"ART-00131",n:"PASTILLAS CUATRIMOTO",u:"PZA",a:"G",p:0},
+  {c:"ART-00132",n:"BOQUILLA OXICORTE",u:"PZA",a:"G",p:0},
+  {c:"ART-00133",n:"FS19732 SEPARADOR",u:"PZA",a:"G",p:0},
+  {c:"ART-00134",n:"60242352 SEPARADOR",u:"PZA",a:"G",p:0},
+  {c:"ART-00135",n:"GLQ009244827 PILOTO",u:"PZA",a:"G",p:0},
+  {c:"ART-00136",n:"60333882FILTRO BOMBA",u:"PZA",a:"G",p:0},
+  {c:"ART-00137",n:"P164375",u:"PZA",a:"G",p:0},
+  {c:"ART-00138",n:"FS1095 SEPARADOR AGUA",u:"PZA",a:"G",p:0},
+  {c:"ART-00139",n:"EK-24130 CARTUCHO",u:"PZA",a:"G",p:0},
+  {c:"ART-00140",n:"EF5785",u:"PZA",a:"G",p:0},
+  {c:"ART-00141",n:"P553004",u:"PZA",a:"G",p:0},
+  {c:"ART-00142",n:"P550445",u:"PZA",a:"G",p:0},
+  {c:"ART-00143",n:"ORIN DE BOMBA DE INYECCION GRUPO 2321",u:"PZA",a:"G",p:0},
+];
+function almacenAplicarCodigosNuevos(){
+  try{
+    if(!state.almacen) return false;
+    if((Number(state.almacen.codNuevosV)||0) >= COD_NUEVOS_V) return false;
+    const N=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toUpperCase();
+    const alm=a=>(String(a||'')==='Mantenimiento')?'Mantenimiento':'General';
+    if(!Array.isArray(state.almacen.productos)) state.almacen.productos=[];
+    const porCod={}, porNom={};
+    state.almacen.productos.forEach(x=>{ if(!x) return;
+      const c=String(x.codigo||'').trim().toUpperCase(); if(c) porCod[c]=true;
+      porNom[N(x.nombre)+'|'+alm(x.almacen)]=true; });
+    let altas=0;
+    COD_NUEVOS.forEach((e,i)=>{
+      const almacen = e.a==='M' ? 'Mantenimiento' : 'General';
+      const c=String(e.c||'').trim().toUpperCase();
+      if(c && porCod[c]) return;                                  // ese código ya existe
+      if(porNom[N(e.n)+'|'+almacen]) return;                      // ese producto ya está
+      state.almacen.productos.push({ id:'PCN1-'+String(i+1).padStart(3,'0'), codigo:String(e.c),
+        nombre:e.n, descripcion:e.n, unidad:e.u||'PZA', precio:Number(e.p)||0, almacen, minimo:0 });
+      porCod[c]=true; porNom[N(e.n)+'|'+almacen]=true; altas++;
+    });
+    if(!altas){ state.almacen.codNuevosV=COD_NUEVOS_V; return false; }
+    state.almacen.productosTs=Date.now();
+    state.almacen.codNuevosV=COD_NUEVOS_V;
+    almacenSave();
+    try{ if(typeof renderProductos==='function') renderProductos(); }catch(e){}
+    console.log('[codigosNuevos] '+altas+' productos repuestos al maestro');
+    return true;
+  }catch(e){ console.warn('[codigosNuevos]', e); return false; }
+}
 /* ── CONTEO FÍSICO DEL ALMACÉN DE MANTENIMIENTO (setiembre 2026) ───────────────────────────
    El inventario que trajo el usuario es el conteo real del polvorín de repuestos, y manda sobre
    lo que tenía el sistema. Son 163 productos: 124 con existencias y 39 en cero.
@@ -10419,7 +10615,12 @@ function almacenAplicarExcelV1(){
    malo quedaba congelado. Subir el número es lo que deja entrar la corrección.
    Repetirlo es seguro: lo primero que hace es vaciar la apertura de Mantenimiento, así que el
    conteo se recalcula desde cero contra los movimientos que haya en ese momento. */
-const MANT_CONTEO_V = 2;
+/* VERSIÓN 3. Se repusieron al maestro los códigos que el logístico había dado de alta, y entre
+   ellos van repuestos de mantenimiento que el conteo había tenido que crear con un código
+   inventado (MTO-…). Al repetir el conteo ahora, encuentra esas fichas por su nombre y se apoya en
+   el código de verdad. Repetirlo no descuadra nada: lo primero que hace es vaciar la apertura de
+   Mantenimiento y recalcularla contra los movimientos que haya. */
+const MANT_CONTEO_V = 3;
 const MANT_CONTEO_FECHA = '2026-09-30';
 // Fichas que el conteo unifica: el mismo repuesto escrito de dos formas. Se quedan con el nombre
 // y la cantidad del conteo, y la ficha repetida se retira del maestro.
@@ -10609,8 +10810,19 @@ function almacenAplicarConteoMant(){
     if(ids.length && typeof _tombAddMuchos==='function') _tombAddMuchos(ids);
     state.almacen.inventarioInicial=(state.almacen.inventarioInicial||[]).filter(x=>!(x&&x.almacen==='Mantenimiento'));
     // 2) Fichas duplicadas que el conteo unifica
+    /* Cuando una ficha se funde con OTRA distinta, sale del maestro. Pero cuando lo repetido es la
+       MISMA ficha escrita dos veces —el anillo RNOR-7 con un espacio de más—, se conserva la
+       primera y solo salen las copias. Si se borraran todas, el conteo tendría que crear una nueva
+       con un código inventado y se perdería el código real del repuesto. */
     const dup={}; MANT_CONTEO_DUPLICADOS.forEach(d=>{ dup[_mantNN(d.de)]=_mantNN(d.a); });
-    state.almacen.productos=(state.almacen.productos||[]).filter(p=>!(p&&p.almacen==='Mantenimiento'&&dup[_mantNN(p.nombre)]!==undefined));
+    const _conservada={};
+    state.almacen.productos=(state.almacen.productos||[]).filter(p=>{
+      if(!p || p.almacen!=='Mantenimiento') return true;
+      const k=_mantNN(p.nombre), destino=dup[k];
+      if(destino===undefined) return true;
+      if(destino===k && !_conservada[k]){ _conservada[k]=true; return true; }   // la primera se queda
+      return false;
+    });
     // 3) Maestro indexado por nombre: se reusa la ficha que ya existe (con su código) y solo se
     //    crean las que faltan, para no partir en dos un repuesto que ya tenía historia.
     const porNom={};
