@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-212</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-213</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-212</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-213</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.06-212</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.06-213</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5740,7 +5740,7 @@ async function cargarAlmacenCombustibleSB(){
       // Conservar el valor MÁS ALTO de cada flag de migración (nube o local) para que las
       // migraciones de explosivos (apertura, ajuste, fijación) NO se vuelvan a ejecutar en
       // cada carga y borren las salidas nuevas registradas por Logística.
-      ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','almExcelV','stockCorteTs','mantConteoV','codNuevosV']
+      ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','almExcelV','stockCorteTs','mantConteoV','codNuevosV','insConteoV']
         .forEach(k=>{ const mx=Math.max(Number(almNube[k]||0), Number(almLocalPrev[k]||0)); if(mx) state.almacen[k]=mx; });
       // Conservar el saldo/corte de apertura del remanente (objeto + timestamp), venga de nube o local.
       if(!state.almacen.remApertura && (almNube.remApertura||almLocalPrev.remApertura)) state.almacen.remApertura=almNube.remApertura||almLocalPrev.remApertura;
@@ -5796,6 +5796,8 @@ async function cargarAlmacenCombustibleSB(){
     try{ if(typeof combResetTanques==='function') combResetTanques(); }catch(e){}
     // El historial de ingresos manda sobre el maestro: alinea nombres, une equivalentes y da de
     // alta lo que falte, para que ningún ingreso quede invisible. Corre una sola vez.
+    // Stock real de Insumos (conteo del 5 de octubre). Va tras el conteo de mantenimiento.
+    try{ if(typeof almacenAplicarStockInsumos==='function' && almacenAplicarStockInsumos()) await sbSyncModulo('almacen',(typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
     // Reposición de los ingresos de setiembre ANTES de reconciliar, para que el maestro los adopte.
     try{ if(typeof almacenReponerIngresosSep==='function') almacenReponerIngresosSep(); }catch(e){}
     try{ if(typeof almacenReconciliarIngresos==='function') await almacenReconciliarIngresos(); }catch(e){}
@@ -8880,7 +8882,7 @@ function _almMergeSnaps(a,b){
     explosivos:{ ...exA, ...exB, ingresos:_exploMergeMov(exA.ingresos,exB.ingresos), salidas:_exploMergeMov(exA.salidas,exB.salidas) },
     mbAcopio:{ ...mbA, ...mbB, ingresos:_exploMergeMov(mbA.ingresos,mbB.ingresos), salidas:_exploMergeMov(mbA.salidas,mbB.salidas) },
     productos, productosTs };
-  ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','exploStockBaseV','catalogVersion','almExcelV','stockCorteTs','aguaFixV','mantConteoV','codNuevosV']
+  ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','exploStockBaseV','catalogVersion','almExcelV','stockCorteTs','aguaFixV','mantConteoV','codNuevosV','insConteoV']
     .forEach(k=>{ const mx=Math.max(Number(a[k]||0), Number(b[k]||0)); if(mx) out[k]=mx; });
   if(a.exploLock||b.exploLock) out.exploLock=true;
   out.remApertura=a.remApertura||b.remApertura||out.remApertura;
@@ -10634,6 +10636,344 @@ function almacenAplicarCodigosNuevos(){
     console.log('[codigosNuevos] '+altas+' productos repuestos al maestro');
     return true;
   }catch(e){ console.warn('[codigosNuevos]', e); return false; }
+}
+/* ── STOCK REAL DE INSUMOS (conteo del 5 de octubre) ─────────────────────────────────────────
+   263 productos del almacén de Insumos con la existencia física contada. La cifra del conteo es la
+   que vale: no se suma ni se resta nada a lo que había.
+
+   CÓMO SE FIJA SIN FALSEAR EL HISTORIAL. El stock que muestra la app es apertura + ingresos −
+   salidas. Aquí se reemplaza SOLO la apertura de estos productos por la cantidad que hace que la
+   cuenta dé exactamente lo contado. Los ingresos y las salidas no se tocan: siguen enteros en el
+   historial y en el gasto, que es donde tienen que estar. Si no se descontaran los movimientos ya
+   registrados, cada salida volvería a restarse encima y el producto quedaría por debajo del conteo
+   —el mismo error que dejó el freno de mantenimiento en 3 cuando el conteo decía 5—.
+
+   QUÉ NO TOCA. El almacén de Mantenimiento, que tiene su propio conteo. Y los productos de Insumos
+   que el conteo no lista: se quedan como están, porque el usuario entregó la existencia de estos y
+   solo de estos; poner los demás en cero sería inventar una decisión que nadie tomó. */
+const INS_CONTEO_V = 1;
+const INS_CONTEO_FECHA = '2026-10-05';
+const INS_CONTEO = [
+  {c:"1200000022",n:"ACEITE AIR TOOL OIL S2 A 100",s:40},
+  {c:"1300000023",n:"BROCA DESCARTABLE DE BOTONES 32 MM",s:92},
+  {c:"1300000026",n:"BROCA DESCARTABLE DE BOTONES 36 MM",s:72},
+  {c:"1300000036",n:"BARRA CONICA 6' X 7/8''",s:0},
+  {c:"1300000037",n:"BARRA CONICA 4' X 7/8''",s:6},
+  {c:"1500000031",n:"ATACADORES DE MADERA 1\" X 2.5 MTR",s:0},
+  {c:"1500000032",n:"GUIADORES  DE MADERA 1\" X 1.30 MTR",s:0},
+  {c:"1500001431",n:"SPLIT SET CON PLATINA 5´ X 39MM",s:0},
+  {c:"1500001437",n:"ALCAYATA DE FE CORRUGADO T-G 5/8\"X29 CM",s:56},
+  {c:"1500001438",n:"ALCAYATA DE FE CORRUGADO T-L 3/4\"X70CM",s:80},
+  {c:"1500001441",n:"PERNO HELICOIDAL 19 MM X 7´(2.13MTR)",s:305},
+  {c:"1500001442",n:"PERNO HELICOIDAL 19 MM X 5´(1.52MTR)",s:87},
+  {c:"1500001443",n:"PERNO HELICOIDAL 19 MM X 6´(1.83MTR)",s:269},
+  {c:"1500001454",n:"ALCAYATA DE FE CORRUGADO 3/8\" X 35 CM",s:52},
+  {c:"1500001491",n:"PLANCHA ACANALADA T/ONDUL. 2X1100X1700MM",s:4},
+  {c:"1500002431",n:"GRAPA (HEBILLA) SERIE 201SS 1/2\" C-254",s:3},
+  {c:"1500002432",n:"GRAPA (HEBILLA) SERIE 201SS 3/4\" C-256",s:3},
+  {c:"1500002649",n:"MANGUERA DE JEBE Y LONA 1/2\"",s:100},
+  {c:"1500002650",n:"MANGUERA DE JEBE Y LONA 1\" 300 PSI",s:0},
+  {c:"1500002745",n:"BARRA DE ALUMINIO PARA ACUÑAR 1\" X 12",s:0},
+  {c:"1500002765",n:"BARRA DE ALUMINIO PARA ACUÑAR 1\" X 6´",s:0},
+  {c:"1500002766",n:"BARRA DE ALUMINIO PARA ACUÑAR 1\" X 4\"",s:0},
+  {c:"1500002859",n:"SACO METALERO POLIPROPILENO 20\" X 30\"",s:850},
+  {c:"1500003013",n:"BARRA DE ALUMINIO PARA ACUÑAR 1\" X 8´",s:0},
+  {c:"1500003022",n:"BARRA DE ALUMINIO PARA ACUÑAR 1\" X 10´",s:0},
+  {c:"1500003086",n:"CEMENTO GRIS ANTISALITRE PORTL. TIPO MS",s:60},
+  {c:"1500003087",n:"CARTUCHO DE CEMENTO 30MM X 305MM",s:900},
+  {c:"1500003149",n:"CARRETILLA C/RUEDAS DE JEBE 4 P3",s:0},
+  {c:"1500003164",n:"CINTA DE ACERO INOX.1/2\"X0.76MM L=30.5MT",s:3},
+  {c:"1500003165",n:"CINTA DE ACERO INOX.3/4\"X0.76MM L=30.5MT",s:2},
+  {c:"1500003182",n:"ADAPTADOR DE PERNO HELICOIDAL 22MM",s:0},
+  {c:"1500003208",n:"RESINA 28 MM X 305 MM 0-60 SECOND SET",s:2050},
+  {c:"1500003358",n:"ALAMBRE NEGRO N° 16",s:5},
+  {c:"1500003364",n:"CABLE DE ACERO ALMA D/ACERO 1/2\"X250MTR",s:0},
+  {c:"1500003378",n:"CABLE DE ACERO GALVANIZADO 5/32\" (6X19)",s:0},
+  {c:"ART-00066",n:"GRAPA GALV.P/CABLE GROSBY",s:10},
+  {c:"1500003424",n:"MALLA ELECTROSOLDADA 4\"X4\"-2.42 X 25 MTR",s:23},
+  {c:"1600000006",n:"ESCALERA DE MADERA  3.60 MTRX 11 PELD.",s:0},
+  {c:"1600000008",n:"LISTON  2\" X 3\" X 10´",s:0},
+  {c:"1600000009",n:"TABLA ASERRADA  2\" X 8\" X 10´",s:0},
+  {c:"1700000144",n:"CIMBRA AC (2C) 3.5X3.5 MTR W6\" X20 LB/FT",s:0},
+  {c:"1700000170",n:"CIMBRA AC (2C) 3 X 3M W6' X 20LB/FT",s:0},
+  {c:"1900000069",n:"UNION DE POLIPROPI. C/ROSCA 63 MM",s:0},
+  {c:"1900000088",n:"UNION DE POLIPROPILENO C/ROSCA 32 MM",s:15},
+  {c:"1900000106",n:"VALVULA BOLA PVC DOBLE ACOP PP 32MM",s:8},
+  {c:"1900000107",n:"VALVULA BOLA PVC DOBLE ACOP PP 63MM",s:1},
+  {c:"1900000108",n:"VALVULA BOLA PVC DOBLE ACOP PP 110MM",s:2},
+  {c:"1900000184",n:"TUBO POLIETILENO NEGRO 1\" PE 80 PN-10",s:100},
+  {c:"1900000187",n:"TUBO POLIETILENO NEGRO 4\" PE 80 PN-10",s:0},
+  {c:"1900000200",n:"TUBO POLIETILENO VERDE 2\" PE 80 PN-10",s:0},
+  {c:"1900000201",n:"TUBO POLIETILENO AZUL 4\" PE 80 PN-10",s:0},
+  {c:"1900000203",n:"TUBO POLIETILENO AZUL 2\" PE 80 PN-10",s:100},
+  {c:"1900000205",n:"TUBO POLIETILENO AZUL 1\" PE 80 PN-10",s:200},
+  {c:"1900000253",n:"TEE DE POLIPROP. C/ROSCA 63MM",s:1},
+  {c:"1900000254",n:"TEE DE POLIPROP. C/ROSCA 110MM",s:4},
+  {c:"1900000265",n:"ACOPLE VITAULIC P/TUBERIA HDPE 4\" 305",s:8},
+  {c:"1900000295",n:"REDUCCION POLIP.C/ROSCA 63 A 32 MM",s:7},
+  {c:"1900000296",n:"REDUCCION POLIP.C/ROSCA 110 A 63 MM",s:6},
+  {c:"2100000012",n:"MANGA DE VENT. 12\" X 10 MTR",s:90},
+  {c:"2100000014",n:"MANGA DE VENT. 30\" X 20 MTR",s:100},
+  {c:"2100000018",n:"MANGA DE VENT. 30\" X 100 MTR 600 GR/M2",s:0},
+  {c:"ALM-001",n:"COMBOS 4 LB",s:0},
+  {c:"ALM-002",n:"PEGAMENTO A + B",s:0},
+  {c:"ALM-003",n:"GALON PINTURA ROJA",s:0},
+  {c:"ALM-004",n:"GALON PINTURA NEGRA",s:0},
+  {c:"ALM-005",n:"GALON PINTURA AMARILLO",s:4},
+  {c:"ALM-006",n:"THINER ACRILICO",s:1},
+  {c:"ALM-007",n:"EXTINTOR 2 KG",s:1},
+  {c:"ART-00067",n:"MENNEKE MONOFASICO 16A 200 A 250 V",s:2},
+  {c:"ALM-009",n:"DISCO DE CORTE DE 7\"",s:0},
+  {c:"ALM-010",n:"DISCO DE CORTE DE 4\"",s:10},
+  {c:"ALM-011",n:"DISCO DE CORTE DE 9\"",s:1},
+  {c:"ALM-012",n:"DISCO DE DESBASTE DE 4\"",s:19},
+  {c:"ALM-013",n:"DISCO DE DESBASTE DE 7\"",s:21},
+  {c:"ALM-014",n:"DISCO DE DESBASTE DE 9\"",s:1},
+  {c:"ALM-015",n:"ADAPTADOR PERNO HELICOIDAL 19 MM",s:0},
+  {c:"ALM-016",n:"PRENSA",s:0},
+  {c:"ALM-017",n:"LLAVE FRANCESA 18\"",s:0},
+  {c:"ALM-018",n:"LLAVE FRANCESA 12\"",s:1},
+  {c:"ALM-019",n:"LLAVE STILSON 18\"",s:3},
+  {c:"ALM-020",n:"ADAPTADOR SPLIT SET",s:4},
+  {c:"ALM-021",n:"SACA BROCAS",s:4},
+  {c:"ALM-022",n:"CAMARAS CARRITO MINERO",s:12},
+  {c:"ALM-023",n:"CAMARA SCOOP",s:0},
+  {c:"ALM-024",n:"MEDIDOR DE AIRE",s:0},
+  {c:"ALM-025",n:"LLAVE TERMICA SCHNEIDER",s:0},
+  {c:"ALM-026",n:"BUJIA",s:4},
+  {c:"ALM-027",n:"HOROMETRO",s:0},
+  {c:"ALM-028",n:"LIMAS DE MOTOSIERRA",s:3},
+  {c:"ALM-029",n:"BROCHAS DE 6\"",s:2},
+  {c:"ALM-030",n:"FLEXOMETRO",s:4},
+  {c:"ALM-031",n:"ARCO SIERRA",s:0},
+  {c:"ALM-032",n:"HOJA SIERRA",s:12},
+  {c:"ALM-033",n:"MAQUINA BANDING",s:1},
+  {c:"ALM-034",n:"PALANAS",s:0},
+  {c:"ALM-035",n:"GALON DE PINTURA BLANCA",s:0},
+  {c:"ALM-036",n:"BALDE IMPRIMANTE BLANQUEADOR DE PAREDES BLANCO",s:1},
+  {c:"ALM-037",n:"SOLDADURA SUPERCITO 7018",s:20},
+  {c:"ALM-038",n:"SOLDADURA 6011 PUNTO AZUL",s:0},
+  {c:"ALM-040",n:"SOLDADURA ELECTRODOS PREMIUN NAZCA",s:4},
+  {c:"ALM-041",n:"RAFIA",s:0},
+  {c:"ART-00068",n:"OJOS DE GATO TRANSITO",s:52},
+  {c:"ALM-043",n:"CINTA REFLECTIVA ROJO",s:1},
+  {c:"ALM-044",n:"CINTA REFLECTIVA BLANCA",s:1},
+  {c:"ALM-045",n:"CINTA REFLECTIVA AZUL",s:2},
+  {c:"ART-00069",n:"CINTA REFLECTIVA VERDE LIMON",s:3},
+  {c:"ALM-047",n:"CHAPAS DE PUERTA",s:3},
+  {c:"ALM-048",n:"TOMA CORRIENTE",s:0},
+  {c:"ALM-049",n:"INTERRUPTOR",s:3},
+  {c:"ART-00070",n:"CINTA VULXCANIZANTE SCOTH",s:6},
+  {c:"ALM-051",n:"REFLECTORES 50W",s:2},
+  {c:"ALM-052",n:"LLAVE GALVANIZADA  (DUCHA)",s:2},
+  {c:"ALM-053",n:"CARBURADOR TROMPO",s:1},
+  {c:"ALM-054",n:"FILTRO DE AIRE DEL MOTOR MEBA",s:0},
+  {c:"ALM-055",n:"FOCOS LED",s:1},
+  {c:"ALM-056",n:"CINTA AISLANTE NEGRA",s:5},
+  {c:"ALM-057",n:"BOTAS DE JEBE TALLA 44",s:1},
+  {c:"ALM-058",n:"CARGADOR MAKITA",s:1},
+  {c:"ALM-059",n:"BATERIA MAKITA",s:1},
+  {c:"ALM-060",n:"TALADRO MAKITA",s:1},
+  {c:"ALM-061",n:"JUEGO BROCAS MAKITA",s:1},
+  {c:"ALM-062",n:"AGUA",s:6},
+  {c:"ART-00001",n:"MAQUINA PICK HAMMER GL37B",s:1},
+  {c:"ART-00002",n:"CUCHILLA 25 AMPERIOS",s:0},
+  {c:"ART-00003",n:"NIVEL",s:2},
+  {c:"ART-00004",n:"SCOTCH BLUE",s:0},
+  {c:"ART-00071",n:"CINTA REFLECTIVA AMARILLA GRADO INGENIERIA",s:5},
+  {c:"ART-00072",n:"CISAYA 18\"",s:3},
+  {c:"ART-00073",n:"CISAYA 14\"",s:2},
+  {c:"ART-00074",n:"CINTA AISLANTE BLANCO",s:3},
+  {c:"ART-00026",n:"COMBO DE 8 LIBRAS",s:0},
+  {c:"ART-00036",n:"POLO CINTA REFLECTIVA TALLA S",s:12},
+  {c:"ART-00037",n:"UNION DE POLIPROPILENO C/ROSCA 110 MM",s:9},
+  {c:"ART-00039",n:"COMBO 10 LIBRAS",s:0},
+  {c:"ART-00040",n:"LLAVE STILSON N° 12",s:0},
+  {c:"ART-00041",n:"LLAVE STILSON N°14",s:0},
+  {c:"ART-00075",n:"DISCO DE CORTE 14\"",s:1},
+  {c:"ART-00043",n:"MARTILLO T/CARPINTERO",s:0},
+  {c:"ART-00044",n:"ALAMBRE NEGRO NRO.8",s:65},
+  {c:"ART-00045",n:"VALVULA BOLA DE ACERO 1/2\"",s:1},
+  {c:"ART-00046",n:"CLAVO DE FE. NEGRO DE 4\"",s:0},
+  {c:"ART-00047",n:"CLAVO DE FE. NEGRO DE 5\"",s:0},
+  {c:"ART-00048",n:"CINTA TEFLON",s:17},
+  {c:"ART-00049",n:"LECHE GLORIA 390g ROJA",s:0},
+  {c:"ART-00050",n:"LECHE GLORIA 170g (ROJA)",s:0},
+  {c:"ART-00051",n:"COLCHON CON RESORTE 1.1/2 PLAZA",s:0},
+  {c:"ART-00052",n:"COLCHON DE ESPUMA 1.1/2 PLAZA",s:0},
+  {c:"ART-00053",n:"CUTER (CUCHILLA DE CORTE)",s:3},
+  {c:"ART-00054",n:"RODILLO PARA PINTAR 9\"",s:0},
+  {c:"ART-00055",n:"TUBO DE PVC P/AGUA 1/2\"",s:0},
+  {c:"ART-00061",n:"CASACA DE JEBE TALLA 40",s:0},
+  {c:"ART-00062",n:"CASACA DE JEBE TALLA 42",s:0},
+  {c:"ART-00063",n:"UNIFORME PANTALON TALLA S",s:8},
+  {c:"ART-00064",n:"FILTRO PARA PARTICULAS P100",s:0},
+  {c:"ART-00065",n:"SOGA MANILA TORCIDA 3/4\"",s:0},
+  {c:"EPP-038",n:"CASCO TIPO SOMBRERO V-GARD C/PORTALAMP. - VERDE",s:0},
+  {c:"EPP-039",n:"CASCO TIPO SOMBRERO V-GARD C/PORTALAMP. - BLANCO",s:1},
+  {c:"EPP-040",n:"BARBIQUEJO PARA CASCO",s:43},
+  {c:"EPP-041",n:"TAFILETE P/CASCO MINERO 1-06-00286266",s:17},
+  {c:"EPP-042",n:"TAPON AUDITIVO T/COPA EP01AS",s:115},
+  {c:"EPP-043",n:"LENTE CON MALLA FORESTER NORTH",s:4},
+  {c:"EPP-044",n:"RESPIRADOR 3M",s:0},
+  {c:"EPP-045",n:"FILTRO CONTRA POLVO",s:0},
+  {c:"EPP-046",n:"FILTRO CONTRA GASES",s:20},
+  {c:"EPP-049",n:"UNIFORME CAMISA TALLA M",s:0},
+  {c:"EPP-050",n:"UNIFORME CAMISA TALLA L",s:3},
+  {c:"EPP-051",n:"UNIFORME CAMISA TALLA XL",s:0},
+  {c:"EPP-052",n:"UNIFORME CAMISA TALLA XXL",s:2},
+  {c:"EPP-053",n:"UNIFORME PANTALON TALLA M",s:0},
+  {c:"EPP-054",n:"UNIFORME PANTALON TALLA L",s:0},
+  {c:"EPP-055",n:"UNIFORME PANTALON TALLA XL",s:0},
+  {c:"EPP-056",n:"UNIFORME PANTALON TALLA XXL",s:0},
+  {c:"EPP-057",n:"UNIFORME PANTALON TALLA XXXL",s:0},
+  {c:"ART-00076",n:"LUNA OSCURA SOLDAR",s:7},
+  {c:"ART-00077",n:"LLAVE FRANCESA 24\"",s:1},
+  {c:"ART-00078",n:"COMBA 6 LBRS",s:2},
+  {c:"ART-00079",n:"CEMENTO CONDUCTIVO",s:4},
+  {c:"ART-00080",n:"VALVULA DE ACERO BOLA 4\"",s:32},
+  {c:"ART-00081",n:"VALVULA DE ACERO BOLA 3\"",s:1},
+  {c:"ART-00082",n:"VALVULA DE ACERO BOLA 2\"",s:7},
+  {c:"ART-00083",n:"VALVULA DE ACERO BOLA 1\"",s:2},
+  {c:"ART-00084",n:"VALVULA DE ACERO BOLA 1/2\"",s:1},
+  {c:"EPP-067",n:"PANTALON DE JEBE TALLA 40",s:0},
+  {c:"ART-00085",n:"NIPLE ROSCA/ROSACA 1\"",s:5},
+  {c:"EPP-069",n:"PANTALON DE JEBE TALLA 42",s:3},
+  {c:"ART-00086",n:"NIPLE ROSCA/ROSACA 3/4\"",s:5},
+  {c:"ART-00087",n:"NIPLE ROSCA/ROSACA 1/2\"",s:5},
+  {c:"EPP-072",n:"CHALECO VERDE TALLA M",s:0},
+  {c:"EPP-073",n:"CHALECO VERDE TALLA L",s:0},
+  {c:"EPP-074",n:"CHALECO VERDE TALLA XL",s:0},
+  {c:"EPP-075",n:"CHALECO VERDE TALLA XXL",s:0},
+  {c:"EPP-076",n:"CORREA PORTA LAMPARA",s:16},
+  {c:"EPP-077",n:"GUANTE BADANA",s:0},
+  {c:"ART-00088",n:"GUANTES HYCRON T/10",s:8},
+  {c:"EPP-079",n:"BOTAS DE JEBE TALLA 38",s:0},
+  {c:"EPP-080",n:"BOTAS DE JEBE TALLA 39",s:2},
+  {c:"EPP-081",n:"BOTAS DE JEBE TALLA 40",s:0},
+  {c:"EPP-082",n:"BOTAS DE JEBE TALLA 41",s:0},
+  {c:"EPP-083",n:"BOTAS DE JEBE TALLA 42",s:0},
+  {c:"EPP-084",n:"BOTAS DE JEBE TALLA 43",s:0},
+  {c:"EPP-085",n:"OREJERAS PARA CASCO",s:0},
+  {c:"EPP-087",n:"ADAPTADOR PARA FILTROS 3M",s:18},
+  {c:"EPP-088",n:"LENTES TRANSPARENTES",s:10},
+  {c:"ART-00089",n:"PINTURA SPRAY ROJO",s:45},
+  {c:"EPP-090",n:"MOCHILAS SPLOSIVOS",s:0},
+  {c:"EPP-91",n:"POLO CINTA REFLECTIVA TALLA L",s:0},
+  {c:"EPP-92",n:"POLO CINTA REFLECTIVA TALLA XL",s:0},
+  {c:"EPP-93",n:"POLO CINTA REFLECTIVA TALLA M",s:0},
+  {c:"EPP-129",n:"SOLDADURA SELLOCORT",s:0},
+  {c:"ART-00090",n:"VALVULA SEGURIDAD DE ALIVIO DE PRESION",s:1},
+  {c:"ART-00091",n:"NIPLE ESCAMA/ESCAMA 2\"",s:32},
+  {c:"ART-00092",n:"NIPLE ESCAMA/ESCAMA 1\"",s:3},
+  {c:"RT-00093",n:"NIPLE ESCAMA/ESCAMA 3/4\"",s:4},
+  {c:"ART-00094",n:"NIPLE ESCAMA/ESCAMA 1/2\"",s:2},
+  {c:"ART-00095",n:"LIJA DE AGUA",s:21},
+  {c:"ART-00096",n:"NIPLE MIXTO ESCAMA/ROSCA 1\"",s:2},
+  {c:"ART-00097",n:"NIPLE MIXTO ESCAMA/ROSCA 1/2\"",s:2},
+  {c:"ART-00098",n:"MACHETE",s:3},
+  {c:"ART-00099",n:"LINEA MENSAJERA",s:200},
+  {c:"ART-00100",n:"LETRERO MONITOREO DE LABOR",s:1},
+  {c:"ART-00101",n:"LETRERO REFUGIO R",s:2},
+  {c:"ART-00102",n:"LETRERO NV 2820 CRNE",s:1},
+  {c:"ART-00103",n:"LETRERO DE INGRESO",s:8},
+  {c:"ART-00104",n:"LETRERO DE SALIDA",s:4},
+  {c:"ART-00105",n:"LETRERO CUIDADO SCOOP EN MOVIMINETO",s:2},
+  {c:"ART-00106",n:"LETRERO AJUSTES",s:1},
+  {c:"ART-00107",n:"LETRERO GOLPE",s:1},
+  {c:"ART-00108",n:"LETRERO CORTE",s:1},
+  {c:"ART-00109",n:"CINTA PELIGRO NO PASAR HOMBRES TRABAJANDO (AMARILLO)",s:1},
+  {c:"ART-00110",n:"ABRAZADERA DOBLE PERNO GALV. 4\"",s:6},
+  {c:"ART-00111",n:"ABRAZADERA DOBLE PERNO GALV. 2\"",s:2},
+  {c:"ART-00112",n:"KIT ANTIDERRAME",s:1},
+  {c:"ART-00113",n:"VASO PORTALAPIZ",s:4},
+  {c:"ART-00114",n:"FASTER DE METAL",s:2},
+  {c:"ART-00115",n:"BINDER CLIPS",s:6},
+  {c:"ART-00116",n:"CLIPS METALICOS",s:2},
+  {c:"ART-00117",n:"TIJERA",s:1},
+  {c:"ART-00118",n:"PLUMON PUNTA FINA",s:2},
+  {c:"ART-00119",n:"ETIQUETAS FLEXOGRAFICAS",s:2},
+  {c:"ART-00120",n:"CINTA EMBALAJE",s:2},
+  {c:"ART-00121",n:"AF26400 FILTRO AIRE",s:1},
+  {c:"ART-00122",n:"60310784 FILTRO AIRE",s:1},
+  {c:"ART-00123",n:"60310783 FILTRO DE AIRE",s:1},
+  {c:"ART-00124",n:"2652C832 FILTRO DE AIRE",s:1},
+  {c:"ART-00125",n:"2652C831 FILTRO DE AIRE",s:1},
+  {c:"ART-00126",n:"6C526-39010 ACEITE",s:1},
+  {c:"ART-00127",n:"6C356-58330 PETROLEO",s:2},
+  {c:"ART-00128",n:"R7 N11 AIRE",s:1},
+  {c:"ART-00129",n:"KIT DE CILINDRO VOLTEO",s:1},
+  {c:"ART-00130",n:"P03336522C26A157",s:1},
+  {c:"ART-00131",n:"PASTILLAS CUATRIMOTO",s:4},
+  {c:"ART-00132",n:"BOQUILLA OXICORTE",s:3},
+  {c:"ART-00133",n:"FS19732 SEPARADOR",s:1},
+  {c:"ART-00134",n:"60242352 SEPARADOR",s:1},
+  {c:"ART-00135",n:"GLQ009244827 PILOTO",s:6},
+  {c:"ART-00136",n:"60333882FILTRO BOMBA",s:1},
+  {c:"ART-00137",n:"P164375",s:2},
+  {c:"ART-00138",n:"FS1095 SEPARADOR AGUA",s:2},
+  {c:"ART-00139",n:"EK-24130 CARTUCHO",s:2},
+  {c:"ART-00140",n:"EF5785",s:3},
+  {c:"ART-00141",n:"P553004",s:12},
+  {c:"ART-00142",n:"P550445",s:0},
+  {c:"ART-00143",n:"ORIN DE BOMBA DE INYECCION GRUPO 2321",s:2},
+];
+function almacenAplicarStockInsumos(){
+  try{
+    if(!state.almacen) return false;
+    if((Number(state.almacen.insConteoV)||0) >= INS_CONTEO_V) return false;
+    const U=s=>String(s||'').trim().toUpperCase();
+    const esIns=a=>String(a||'General')!=='Mantenimiento';
+    // Ficha de cada producto del conteo (ya están todos en el maestro).
+    const N=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toUpperCase();
+    const porCod={}, porNom={};
+    (state.almacen.productos||[]).forEach(p=>{ if(p&&esIns(p.almacen)){
+      const c=U(p.codigo); if(c&&!porCod[c]) porCod[c]=p;
+      const n=N(p.nombre); if(n&&!porNom[n]) porNom[n]=p; } });
+    const objetivo={}, fichas={};
+    // Se busca por código y, si no aparece, por nombre: el conteo trae algún producto con un código
+    // distinto al que tiene en el sistema (SOLDADURA SELLOCORT figura como EPP-129 y en el maestro
+    // es ALM-039). Lo que manda es el producto, no la etiqueta con que vino escrito.
+    INS_CONTEO.forEach(e=>{
+      const f=porCod[U(e.c)]||porNom[N(e.n)];
+      if(!f) return;
+      const k=U(f.codigo);                       // se indexa por el código REAL de la ficha
+      if(objetivo[k]!==undefined) return;        // ya fijado: no se pisa
+      objetivo[k]=Number(e.s)||0; fichas[k]=f;
+    });
+    const cods=Object.keys(objetivo);
+    if(!cods.length){ state.almacen.insConteoV=INS_CONTEO_V; return false; }
+    // 1) Fuera la apertura anterior de ESTOS productos (lápida para que la nube no la resucite).
+    const quitar=(state.almacen.inventarioInicial||[]).filter(x=>x&&esIns(x.almacen)&&objetivo[U(x.codigo)]!==undefined);
+    const ids=quitar.map(x=>x&&x.id).filter(Boolean);
+    if(ids.length && typeof _tombAddMuchos==='function') _tombAddMuchos(ids);
+    state.almacen.inventarioInicial=(state.almacen.inventarioInicial||[])
+      .filter(x=>!(x&&esIns(x.almacen)&&objetivo[U(x.codigo)]!==undefined));
+    // 2) Sin apertura, lo que queda de estos productos son SOLO sus movimientos.
+    const neto={};
+    try{
+      (typeof calcStock==='function'?calcStock():[]).forEach(r=>{
+        if(!r||!esIns(r.almacen)) return;
+        const c=U(r.codigo); if(objetivo[c]===undefined) return;
+        neto[c]=(neto[c]||0)+((Number(r.ingreso)||0)-(Number(r.salida)||0));
+      });
+    }catch(err){}
+    // 3) Apertura que deja el saldo exactamente en lo contado.
+    const inv=[];
+    cods.forEach((c,i)=>{
+      const f=fichas[c];
+      inv.push({ id:'IINS'+INS_CONTEO_V+'-'+String(i+1).padStart(3,'0'), fecha:INS_CONTEO_FECHA,
+        almacen:f.almacen||'General', codigo:String(f.codigo||''), producto:f.nombre, descripcion:f.nombre,
+        unidad:f.unidad||'UND', precio:Number(f.precio)||0,
+        cantidad:Math.round((objetivo[c]-(Number(neto[c])||0))*100)/100 });
+    });
+    state.almacen.inventarioInicial=(state.almacen.inventarioInicial||[]).concat(inv);
+    state.almacen.insConteoV=INS_CONTEO_V;
+    almacenSave();
+    try{ if(typeof renderAlmacen==='function') renderAlmacen(); }catch(e){}
+    console.log('[stockInsumos] '+inv.length+' productos fijados al conteo');
+    return true;
+  }catch(e){ console.warn('[stockInsumos]', e); return false; }
 }
 /* ── CONTEO FÍSICO DEL ALMACÉN DE MANTENIMIENTO (setiembre 2026) ───────────────────────────
    El inventario que trajo el usuario es el conteo real del polvorín de repuestos, y manda sobre
