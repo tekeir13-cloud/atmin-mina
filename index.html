@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-209</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-210</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-209</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-210</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.06-209</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.06-210</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -8857,21 +8857,28 @@ function _almRestaurarFotos(alm){
   alm.explosivos={...exC, ingresos:restore(exC.ingresos, exL.ingresos), salidas:restore(exC.salidas, exL.salidas)};
   return alm;
 }
+/* LA NUBE VA PRIMERO. Aquí estaba el agujero por el que se perdían las altas del maestro.
+   El orden era: escribir al disco y después subir. En un equipo con el almacenamiento lleno
+   `setItem` lanza, el `catch` se come el fallo y `sbSyncModulo` NUNCA llega a ejecutarse: el
+   producto recién dado de alta se queda solo en memoria y desaparece al recargar la página. El
+   logístico lo daba de alta, veía «Producto guardado» y al rato ya no estaba.
+   Ahora se sube primero —que es la copia que de verdad importa y no depende del disco— y luego se
+   escribe en el equipo, haciendo sitio y reintentando si hace falta, igual que el parte del
+   compresorista. */
 function almacenSave(){
-  try{
-    // Local: versión COMPLETA con fotos. Nube: versión LIGERA sin fotos (para que siempre suba).
-    localStorage.setItem(ALM_KEY,JSON.stringify({...state.almacen,productos:state.almacen.productos||[]}));
-    sbSyncModulo('almacen', _almClonLight(state.almacen));
-    return true;
-  }catch(e){
-    // Cuota excedida (típicamente por fotos en base64): avisar en vez de fallar en silencio
-    if(e&&(e.name==='QuotaExceededError'||e.code===22||e.code===1014)){
-      showNotif('⚠ Almacenamiento lleno: se guardó el registro pero sin la foto. Reduce fotos o migra a la base de datos.','error');
-    }else{
-      showNotif('⚠ Error al guardar el registro','error');
-    }
-    return false;
+  // Nube: versión LIGERA sin fotos, para que siempre suba.
+  try{ sbSyncModulo('almacen', _almClonLight(state.almacen)); }catch(e){ console.warn('almacen→nube', e); }
+  // Local: versión COMPLETA con fotos.
+  const escribir=()=>{ try{ localStorage.setItem(ALM_KEY,JSON.stringify({...state.almacen,productos:state.almacen.productos||[]})); return true; }
+                       catch(e){ return false; } };
+  let ok=escribir();
+  for(let n=1; !ok && n<=2; n++){ try{ if(typeof _lsLiberar==='function') _lsLiberar(n); }catch(e){} ok=escribir(); }
+  if(!ok){
+    // Sin sitio ni tras hacer limpieza. El registro ya salió a la nube, así que no se pierde; lo
+    // que no hay es copia local para trabajar sin señal, y eso sí conviene que alguien lo sepa.
+    showNotif('⚠ La memoria de este equipo está llena. El registro se envió al sistema, pero este equipo no puede guardar copia para trabajar sin señal.','error');
   }
+  return ok;
 }
 function almacenLoad(){
   try{
