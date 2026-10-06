@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-208</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-209</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-208</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-209</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.06-208</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.06-209</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -33201,6 +33201,9 @@ function _puntoResumen(snap){
   const alm=snap.almacen||{};
   return { personal:n(snap.personal), tareos:n(snap.tareas), valorizaciones:n(snap.valorizacionesLabor),
     reportesGuardia:n(snap.reportesGuardia), compresorista:n(snap.compresorista), mantenimiento:n(snap.mantenimiento),
+    // El maestro de productos es lo primero que se mira cuando se perdieron altas: sin este número
+    // había que restaurar a ciegas para saber si el punto traía los productos que faltan.
+    productos:n(alm.productos),
     ingresosAlmacen:n(alm.ingresos), salidasAlmacen:n(alm.salidas),
     explosivosIn:n((alm.explosivos||{}).ingresos), explosivosOut:n((alm.explosivos||{}).salidas),
     combustible:n((snap.combustible||{}).pet)+n((snap.combustible||{}).gas) };
@@ -33244,6 +33247,18 @@ async function abrirRestaurar(){
   cont.innerHTML='<div style="padding:24px;text-align:center;color:var(--text3)">Buscando puntos de restauración…</div>';
   abrirModal('modal-restaurar');
   const dias=_puntoUltimosDias(PUNTO_DIAS), encontrados=[];
+  /* EL PUNTO «ANTES DE RESTAURAR» TAMBIÉN SE OFRECE.
+     Cada restauración guarda primero cómo estaba todo justo antes de tocarla. Esa foto es la única
+     que contiene el trabajo de las últimas horas —productos recién dados de alta, movimientos del
+     día— y hasta ahora se guardaba sin que nadie pudiera llegar a ella: no salía en esta lista.
+     Si una restauración se llevó por delante algo reciente, deshacerla es exactamente esto, y va
+     primero porque es el más nuevo de todos. */
+  {
+    let snap=null;
+    try{ const r=await sbLoadModuloEstado(PUNTO_PREFIJO+'antes-de-restaurar'); if(r.estado==='ok'&&r.data) snap=r.data; }catch(e){}
+    if(!snap){ try{ const l=localStorage.getItem('atmin_punto_local_antes-de-restaurar'); if(l) snap=JSON.parse(l); }catch(e){} }
+    if(snap) encontrados.push({dia:'antes-de-restaurar', snap, res:_puntoResumen(snap)});
+  }
   for(const d of dias){
     let snap=null;
     try{ const r=await sbLoadModuloEstado(PUNTO_PREFIJO+d); if(r.estado==='ok'&&r.data) snap=r.data; }catch(e){}
@@ -33263,7 +33278,7 @@ async function abrirRestaurar(){
       Cada mañana se guarda una copia completa. Elige a qué momento volver.</div>`+
     encontrados.map((e,i)=>{
       const r=e.res;
-      const lin=[['Personal',r.personal],['Tareos',r.tareos],['Valorizaciones',r.valorizaciones],
+      const lin=[['Productos del maestro',r.productos],['Personal',r.personal],['Tareos',r.tareos],['Valorizaciones',r.valorizaciones],
         ['Reportes de guardia',r.reportesGuardia],['Compresorista',r.compresorista],
         ['Ingresos almacén',r.ingresosAlmacen],['Salidas almacén',r.salidasAlmacen],
         ['Explosivos (mov.)',r.explosivosIn+r.explosivosOut],['Combustible',r.combustible]]
@@ -33271,7 +33286,8 @@ async function abrirRestaurar(){
       return `<div style="background:var(--coal4);border:1px solid ${e.dia===hoyD?'var(--accent-border)':'var(--border)'};border-radius:10px;padding:12px 14px;margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
           <div>
-            <div style="font-weight:800;color:var(--text);font-size:14px">${e.dia===hoyD?'Esta mañana':fmt(e.dia)}</div>
+            <div style="font-weight:800;color:var(--text);font-size:14px">${e.dia==='antes-de-restaurar'?'↩ Justo antes de la última restauración':(e.dia===hoyD?'Esta mañana':fmt(e.dia))}</div>
+            ${e.dia==='antes-de-restaurar'?'<div style="font-size:11px;color:#f59e0b;margin-top:2px">Es la copia más reciente: incluye el trabajo de las últimas horas</div>':''}
             <div style="font-size:11px;color:var(--text3);margin-top:3px">${lin||'copia vacía'}</div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -33302,6 +33318,7 @@ async function restaurarPunto(dia, exacto){
 // los dos caminos se comporten igual y no haya dos versiones de la misma lógica.
 async function _restaurarSnap(snap, exacto, etiqueta){
   const r=_puntoResumen(snap);
+  let _repuestas=0;                       // fichas del maestro devueltas, para decirlo al final
   // Antes de tocar nada se guarda el estado actual, por si la restauración no era lo que se quería.
   try{ const ahora=snapshotEstado(); localStorage.setItem('atmin_punto_local_antes-de-restaurar', JSON.stringify(ahora));
        await sbSyncModulo(PUNTO_PREFIJO+'antes-de-restaurar', ahora); }catch(e){}
@@ -33327,6 +33344,37 @@ async function _restaurarSnap(snap, exacto, etiqueta){
     if(snap.almacen && state.almacen){
       state.almacen.ingresos=U(state.almacen.ingresos,snap.almacen.ingresos);
       state.almacen.salidas=U(state.almacen.salidas,snap.almacen.salidas);
+      /* EL MAESTRO DE PRODUCTOS TAMBIÉN VUELVE.
+         «Reponer lo que falte» devolvía movimientos pero no las fichas, así que el caso más común
+         de pérdida —se borró el maestro y con él las altas del día— no tenía arreglo por aquí: el
+         botón seguro no servía y solo quedaba «Volver exacto», que se lleva por delante el trabajo
+         posterior. Ahora se añaden las fichas del respaldo que hoy no están, sin pisar ninguna de
+         las actuales: si un producto se editó después, se queda la versión editada.
+         Se respetan las lápidas: un producto borrado a propósito no resucita. */
+      try{
+        const prodsAhora=state.almacen.productos||[];
+        const vistos=new Set();
+        prodsAhora.forEach(p=>{ if(!p) return;
+          const c=String(p.codigo||'').trim().toUpperCase(); if(c) vistos.add('c:'+c);
+          if(p.id!=null&&p.id!=='') vistos.add('id:'+String(p.id));
+          const n=String(p.nombre||'').trim().toUpperCase(); if(n) vistos.add('n:'+n+'|'+String(p.almacen||'General')); });
+        const faltan=(snap.almacen.productos||[]).filter(p=>{
+          if(!p) return false;
+          if(typeof tombHas==='function' && p.id!=null && tombHas('prod:'+p.id)) return false;  // borrado a propósito
+          const c=String(p.codigo||'').trim().toUpperCase();
+          const n=String(p.nombre||'').trim().toUpperCase();
+          if(c && vistos.has('c:'+c)) return false;
+          if(p.id!=null && p.id!=='' && vistos.has('id:'+String(p.id))) return false;
+          if(n && vistos.has('n:'+n+'|'+String(p.almacen||'General'))) return false;
+          return true;
+        });
+        if(faltan.length){
+          state.almacen.productos=prodsAhora.concat(faltan);
+          state.almacen.productosTs=Date.now();
+        }
+        state.almacen.inventarioInicial=U(state.almacen.inventarioInicial, snap.almacen.inventarioInicial);
+        _repuestas=faltan.length;
+      }catch(e){ console.warn('reponer maestro',e); }
       const ex=state.almacen.explosivos||{ingresos:[],salidas:[]}, sx=snap.almacen.explosivos||{};
       state.almacen.explosivos={...ex, ingresos:U(ex.ingresos,sx.ingresos), salidas:U(ex.salidas,sx.salidas)};
     }else if(snap.almacen && !state.almacen){ state.almacen=snap.almacen; }
