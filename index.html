@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-216</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-217</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-216</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-217</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.06-216</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.06-217</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -22201,7 +22201,11 @@ function renderAvance(){
   reportesGuardiaLoad();
   if(typeof metasLoad==='function')metasLoad();
   const r1m=n=>Math.round((Number(n)||0)*10)/10;
-  const ts=hoy(), mesAct=(typeof finMesActual==='function')?finMesActual():ts.slice(0,7);
+  /* AVANCE Y TABLERO SON DE OPERACIONES: SU CICLO VA DEL 26 AL 25.
+     Los días ya se contaban sobre esa ventana —de ahí el «día 11 de 30»— pero los reportes se
+     filtraban por mes calendario, así que el avance del 26 al 30 del mes anterior se quedaba
+     fuera y el acumulado arrancaba en falso contra una meta que sí lo incluía. */
+  const ts=hoy(), mesAct=(typeof finMesActual==='function')?finMesActual(AREA_OP):ts.slice(0,7);
   const rg=state.reportesGuardia||[];
   // Solo reportes del día actual → suma ambos turnos. Cambia de día = se reinicia.
   const hoyRep=rg.filter(r=>r.fecha===ts);
@@ -22236,7 +22240,7 @@ function renderAvance(){
 
   // ── Acumulado del mes por frente (misma fuente y misma meta que el Tablero de Operaciones) ──
   const mesLbl=document.getElementById('op-mes-label');if(mesLbl)mesLbl.textContent='· '+finNombreMes(mesAct);
-  const rgMes=rg.filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mesAct):((r.fecha||'').slice(0,7)===mesAct));
+  const rgMes=rg.filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mesAct,AREA_OP):((r.fecha||'').slice(0,7)===mesAct));
   const diasM=(state.metas&&state.metas.dias)||26;
   const mesCard=(f)=>{
     const mes=r1m(sum(f.key,'metros',rgMes));
@@ -22776,9 +22780,13 @@ function renderTableroOp(){
   if(typeof metasLoad==='function')metasLoad();
   if(typeof distribLoad==='function')distribLoad();
   const r1m=n=>Math.round((Number(n)||0)*10)/10;
-  const ts=hoy(), mesAct=(typeof finMesActual==='function')?finMesActual():ts.slice(0,7);
+  /* AVANCE Y TABLERO SON DE OPERACIONES: SU CICLO VA DEL 26 AL 25.
+     Los días ya se contaban sobre esa ventana —de ahí el «día 11 de 30»— pero los reportes se
+     filtraban por mes calendario, así que el avance del 26 al 30 del mes anterior se quedaba
+     fuera y el acumulado arrancaba en falso contra una meta que sí lo incluía. */
+  const ts=hoy(), mesAct=(typeof finMesActual==='function')?finMesActual(AREA_OP):ts.slice(0,7);
   const rg=(state.reportesGuardia||[]);
-  const rgMes=rg.filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mesAct):((r.fecha||'').slice(0,7)===mesAct));
+  const rgMes=rg.filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mesAct,AREA_OP):((r.fecha||'').slice(0,7)===mesAct));
   const rgHoy=rg.filter(r=>r.fecha===ts);
   const sumF=(arr,key,k)=>arr.reduce((s,r)=>s+(r[key]?.[k]||0),0);
   const dias=state.metas.dias||26;
@@ -22788,7 +22796,11 @@ function renderTableroOp(){
   // Gasto de explosivo por frente (acumulado del mes) — solo Brenda/CRNE tienen desglose
   // rampa/galería en el reporte del Compresorista; los frentes nuevos aún no tienen esa fuente.
   const preciosExpT=(typeof compGetPreciosExp==='function')?compGetPreciosExp():(typeof COMP_PRECIOS_EXP_DEFAULT!=='undefined'?COMP_PRECIOS_EXP_DEFAULT:{});
-  const compMesT=(state.compresorista||[]).filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mesAct):((r.fecha||'').slice(0,7)===mesAct));
+  /* El parte del compresorista es MENSUAL, no sigue el 26→25. Entre el 26 y fin de mes el ciclo de
+     Operaciones ya es el del mes siguiente, así que aquí hay que preguntar por el mes calendario o
+     el combustible del tablero saltaría un mes antes de tiempo. */
+  const mesCal=(typeof finMesActual==='function')?finMesActual():ts.slice(0,7);
+  const compMesT=(state.compresorista||[]).filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mesCal):((r.fecha||'').slice(0,7)===mesCal));
   const gastoExpPorFrente={}; FRENTES.forEach(f=>gastoExpPorFrente[f.id]=0);
   compMesT.forEach(r=>(r.expFrente||[]).forEach(x=>{const pr=preciosExpT[x.codigo]||0; FRENTES.forEach(f=>{gastoExpPorFrente[f.id]+=compExpVal(x,f.key)*pr;});}));
   const fST=n=>'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:0,maximumFractionDigits:0});
