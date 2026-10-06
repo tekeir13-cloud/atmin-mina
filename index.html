@@ -12974,7 +12974,12 @@ function renderInventario(){
   const mes=(sel&&sel.value)||almMesConDatos();
   if(typeof poblarFiltroAlmacenes==='function') poblarFiltroAlmacenes('inv-filtro-alm');
   const filtroAlm=document.getElementById('inv-filtro-alm')?.value||'';
-  let stock=calcStock();
+  /* MISMA LECTURA QUE ALMACÉN GENERAL. Esta pestaña leía el stock en crudo mientras Almacén
+     General lo pasa por `filtrarPorMaestro`, así que aquí salían filas que allá no: artículos
+     cuyo código ya no está en el maestro, y el mismo producto repetido por venir de dos fichas
+     distintas. Dos pantallas del mismo almacén mostrando cantidades distintas para el mismo
+     repuesto. Manda Almacén General, que es la lectura con maestro vivo. */
+  let stock=(typeof filtrarPorMaestro==='function')?filtrarPorMaestro(calcStock()):calcStock();
   if(filtroAlm) stock=stock.filter(r=>r.almacen===filtroAlm);
   stock=stock.sort((a,b)=>a.almacen.localeCompare(b.almacen)||(a.producto||a.descripcion).localeCompare(b.producto||b.descripcion));
   const valorStock=stock.reduce((a,r)=>a+r.stock*r.precio,0);
@@ -34737,8 +34742,17 @@ function finCongelado(mesYM){
   }catch(e){}
   return null;
 }
-function periodoTotales(r){
+/* LOS METROS DE AVANCE SE CUENTAN EN EL CICLO DE OPERACIONES, NO EN EL MES.
+   Todo lo demás del cierre —consumos, combustible, tareos, almacén— va del 1 al último día. Pero
+   el avance lineal cierra el 25 y arranca el 26, y aquí se estaba sumando sobre la ventana
+   mensual: el metraje que quedaba congelado en el histórico de un periodo no era el mismo que
+   mostraban el tablero de avance y el dashboard de Operaciones para ese mismo mes.
+   `mesYM` es el periodo que se está cerrando; con él se arma la ventana 26→25 que le corresponde. */
+function periodoTotales(r, mesYM){
   const inRango=arr=>(arr||[]).filter(x=>enRango(x.fecha,r));
+  let rOp=r;
+  try{ if(mesYM && typeof periodoRango==='function') rOp=periodoRango(mesYM, AREA_OP); }catch(e){ rOp=r; }
+  const inOp=arr=>(arr||[]).filter(x=>enRango(x.fecha,rOp));
   const sal=inRango(state.almacen&&state.almacen.salidas);
   const ing=inRango(state.almacen&&state.almacen.ingresos);
   const consumoAlmacen=sal.reduce((a,s)=>a+(Number(s.importe)|| (Number(s.cantidad)||0)*(Number(s.precio)||0)),0);
@@ -34748,9 +34762,9 @@ function periodoTotales(r){
     gas+=(c.gasolina||[]).reduce((s,p)=>s+(p.gln||0),0);
   });
   const tareos=(state.tareas||[]).filter(x=>enRango(x.fecha,r)).length;
-  const reportes=(state.reportesGuardia||[]).filter(x=>enRango(x.fecha,r)).length;
+  const reportes=inOp(state.reportesGuardia).length;
   const mant=(state.mantenimiento||[]).filter(x=>enRango(x.fecha,r)).length;
-  const metros=(state.reportesGuardia||[]).filter(x=>enRango(x.fecha,r)).reduce((a,g)=>a+((g.brenda&&g.brenda.metros)||0)+((g.crne&&g.crne.metros)||0),0);
+  const metros=inOp(state.reportesGuardia).reduce((a,g)=>a+((g.brenda&&g.brenda.metros)||0)+((g.crne&&g.crne.metros)||0),0);
   // CIFRAS CONGELADAS DEL PERIODO. Sin esto, el tablero recalcula el costo de un mes cerrado
   // cada vez que se abre, con los datos que haya HOY: cualquier tareo corregido, un precio que
   // cambia o un cargo que pasa a sueldo reservado mueve el costo de un mes ya cerrado. Un
@@ -34786,7 +34800,7 @@ async function cerrarPeriodo(periodo){
   try{ snap=await respaldoCompleto(false); }catch(e){ console.warn('respaldo cierre',e); }
 
   // 2) Totales del periodo (para el índice)
-  const totales=periodoTotales(r);
+  const totales=periodoTotales(r, periodo);
 
   // 3) Arrastre de stocks de inicio de mes (lo que queda pasa a apertura del nuevo periodo)
   const fechaApertura=r.fin; // último día del periodo = saldo de apertura del siguiente
@@ -34861,7 +34875,7 @@ async function cerrarPeriodo(periodo){
 function abrirCerrarPeriodo(){
   let periodo; try{ periodo=periodoActual(); }catch(e){ periodo=new Date().toISOString().slice(0,7); }
   const r=periodoRango(periodo); const label=periodoLabel(periodo);
-  const t=periodoTotales(r);
+  const t=periodoTotales(r, periodo);
   const activo=(typeof cicloActivo==='function')?cicloActivo():false;
   const aviso=activo?'':'<div style="background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);border-radius:6px;padding:10px;font-size:12px;color:#f59e0b;margin-bottom:12px">⚠ El ciclo 26→25 se activa en agosto. En julio (modo prueba) puedes cerrar para validar el flujo, pero normalmente no es necesario.</div>';
   const html=`<div id="modal-cerrar-periodo" class="modal-overlay" style="display:flex" onclick="if(event.target===this)cerrarModal('modal-cerrar-periodo')">
