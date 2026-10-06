@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-215</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-216</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-215</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-216</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.06-215</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.06-216</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -21497,8 +21497,11 @@ function eqopSetFiltro(campo,valor){ _eqopFiltro[campo]=valor; renderEquiposOp()
 /* Las hojas se agrupan por el CICLO 26→25, igual que los reportes de guardia y el tareo: la del
    27 de agosto pertenece al ciclo de septiembre. Agruparlas por mes de calendario partiría el
    ciclo en dos y las hojas del cierre aparecerían con las del ciclo siguiente. */
+// Las hojas de equipo son de Operaciones: su ciclo va del 26 al 25. La etiqueta ya mostraba esa
+// ventana, pero el agrupado usaba el mes, así que una hoja del 27 aparecía en el ciclo anterior
+// al que decía su propio rótulo.
 function eqopCiclo(fecha){
-  try{ return (typeof periodoDeFecha==='function')?periodoDeFecha(fecha):String(fecha||'').slice(0,7); }
+  try{ return (typeof periodoDeFecha==='function')?periodoDeFecha(fecha,AREA_OP):String(fecha||'').slice(0,7); }
   catch(e){ return String(fecha||'').slice(0,7); }
 }
 function eqopCicloLbl(m){
@@ -21566,7 +21569,7 @@ function renderEquiposOp(){
 
   // ── HISTORIAL DEL CICLO ── las hojas ya cerradas de días anteriores, por ciclo 26→25.
   const meses=[...new Set((state.equiposOp||[]).map(f=>eqopCiclo(f.fecha)))].filter(m=>m&&m.length===7).sort().reverse();
-  const cicloHoy=(typeof periodoActual==='function')?periodoActual():String(hoy()).slice(0,7);
+  const cicloHoy=(typeof periodoActual==='function')?periodoActual(AREA_OP):String(hoy()).slice(0,7);
   if(!_eqopFiltro.mes || (_eqopFiltro.mes!=='__todos' && meses.indexOf(_eqopFiltro.mes)<0))
     _eqopFiltro.mes = meses.indexOf(cicloHoy)>=0 ? cicloHoy : (meses[0]||cicloHoy);
   let hist=(state.equiposOp||[]).slice();
@@ -22264,16 +22267,20 @@ function renderAvance(){
      curso y los cumplidos quedan archivados, disponibles en el selector.
      Antes esto se hacía con fecha.slice(0,7) y el ciclo de septiembre se leía como "agosto": se
      mezclaban los reportes del cierre con los del ciclo nuevo. */
-  const _cicloDe=f=>{ try{ return (typeof periodoDeFecha==='function')?periodoDeFecha(f):String(f||'').slice(0,7); }
+  /* ESTOS REPORTES SON DE OPERACIONES: SU CICLO VA DEL 26 AL 25.
+     Se agrupaba con la regla mensual, así que los reportes del 26 al 30 de setiembre quedaban
+     archivados en el ciclo de setiembre cuando pertenecen al de octubre, y sus metros no sumaban
+     donde debían. El área hay que decirla: `periodoDeFecha(f)` a secas responde por el mes. */
+  const _cicloDe=f=>{ try{ return (typeof periodoDeFecha==='function')?periodoDeFecha(f,AREA_OP):String(f||'').slice(0,7); }
                       catch(e){ return String(f||'').slice(0,7); } };
   const ciclosRep=[...new Set(todos.map(r=>_cicloDe(r.fecha)).filter(m=>m&&m.length===7))].sort().reverse();
-  const cicloHoy=(typeof periodoActual==='function')?periodoActual():ts.slice(0,7);
+  const cicloHoy=(typeof periodoActual==='function')?periodoActual(AREA_OP):ts.slice(0,7);
   if(!_rgMes || (_rgMes!=='__todos' && ciclosRep.indexOf(_rgMes)<0))
     _rgMes=ciclosRep.indexOf(cicloHoy)>=0?cicloHoy:(ciclosRep[0]||cicloHoy);
   const lista=(_rgMes==='__todos')?todos:todos.filter(r=>_cicloDe(r.fecha)===_rgMes);
   const _cicloLbl=m=>{
     const n=(typeof finNombreMes==='function')?finNombreMes(m):m;
-    try{ const v=ventanaMes(m); return n+' · '+v.ini.slice(8)+'/'+v.ini.slice(5,7)+'→'+v.fin.slice(8)+'/'+v.fin.slice(5,7); }
+    try{ const v=ventanaMes(m, AREA_OP); return n+' · '+v.ini.slice(8)+'/'+v.ini.slice(5,7)+'→'+v.fin.slice(8)+'/'+v.fin.slice(5,7); }
     catch(e){ return n; }
   };
   const barra=`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
@@ -29185,10 +29192,14 @@ function finMesesConDatos(){
   const set=new Set();
   const add=m=>{ const s=String(m||'').slice(0,7); if(s.length===7) set.add(s); };
   (state.valorizacionesLabor||[]).forEach(v=>{ if(v.mesNum&&v.anio) add(v.anio+'-'+String(v.mesNum).padStart(2,'0')); });
-  // Actividad de la operación: cada registro cae en el ciclo (26→25) que le corresponde.
+  // Cada registro cae en el ciclo que le corresponde SEGÚN SU ÁREA: los reportes de guardia son de
+  // Operaciones y cierran del 26 al 25; los partes del compresorista y los tareos van por mes. Con
+  // una sola regla para todos, un reporte del 27 ofrecía un ciclo que después salía vacío.
   const porFecha=f=>{ try{ return (typeof periodoDeFecha==='function')?periodoDeFecha(f):String(f||'').slice(0,7); }
                       catch(e){ return String(f||'').slice(0,7); } };
-  (state.reportesGuardia||[]).forEach(r=>add(porFecha(r.fecha)));
+  const porFechaOp=f=>{ try{ return (typeof periodoDeFecha==='function')?periodoDeFecha(f,AREA_OP):String(f||'').slice(0,7); }
+                        catch(e){ return String(f||'').slice(0,7); } };
+  (state.reportesGuardia||[]).forEach(r=>add(porFechaOp(r.fecha)));
   (state.compresorista||[]).forEach(r=>add(porFecha(r.fecha)));
   (state.tareas||[]).forEach(t=>add(porFecha(t.fecha)));
   try{ add(finMesActual()); }catch(e){}
