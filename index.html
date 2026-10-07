@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-218</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.07-219</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.06-218</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.07-219</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.06-218</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.07-219</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -2648,6 +2648,7 @@ select option{background:var(--coal3);}
   <!-- ── Resumen del día + avance + alertas (reconstruido, intuitivo) ── -->
   <div id="d-resumen-hoy"></div>
   <div id="d-avance-meta"></div>
+  <div id="d-alm-ing-gasto"></div>
   <div id="d-explo-ratios"></div>
   <div id="d-explosivo-metro"></div>
   <div id="d-ing-vs-cons"></div>
@@ -2743,6 +2744,7 @@ select option{background:var(--coal3);}
   <!-- ════ TAB 3: COSTO DE INVENTARIO ════ -->
   <div class="mod-pane" style="display:none" id="log-inventario">
     <div id="inv-semaforo"></div>
+    <div id="inv-ing-vs-gasto"></div>
     <div class="card" style="margin:16px 0;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
       <label style="font-size:11px;color:var(--text3)">Mes:</label>
       <input type="month" id="inv-mes-sel" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px" onchange="renderInventario()">
@@ -7357,6 +7359,12 @@ function renderDashboard(){
   renderDashEjecutivo();
   renderDashResumenHoy();
   renderDashAvanceMeta();
+  // Almacén: todo lo que entró contra todo lo que salió, del mes.
+  try{ const _c=document.getElementById('d-alm-ing-gasto');
+       if(_c && typeof almIngVsGastoHTML==='function'){
+         const _m=(typeof finMesActual==='function')?finMesActual():'';
+         _c.innerHTML=almIngVsGastoHTML(_m, true);
+       } }catch(e){ console.warn('almacen ing vs gasto',e); }
   // Explosivo: costo (ingreso) contra gasto en mina (salida), del mes. Va antes del costo por
   // metro porque es la cifra de la que cuelga: el gasto en mina es el numerador de ese ratio.
   try{ const _c=document.getElementById('d-explo-ratios');
@@ -12973,6 +12981,81 @@ function guardarEdicionSalida(){
 }
 
 // ── TAB: COSTO DE INVENTARIO ──
+/* ── ALMACÉN: LO QUE ENTRÓ CONTRA LO QUE SALIÓ ───────────────────────────────────────────────
+   Dos cifras del mes, en soles, de todo el almacén:
+
+     INGRESO = lo que entró. Compras y devoluciones que sumaron existencia. Es desembolso.
+     GASTO   = lo que salió a la operación. Es consumo: lo que de verdad se usó ese mes.
+
+   Que no coincidan es normal y es justo lo que interesa ver: la diferencia es existencia que se
+   acumula en el anaquel (entró más de lo que se gastó) o stock que se está comiendo sin reponer
+   (salió más de lo que entró). Un mes con compra fuerte y poco consumo no es un error.
+
+   El ciclo es MENSUAL, del 1 al último día, como el resto de Logística. El 26→25 es solo para los
+   avances lineales de Operaciones.
+
+   Cada movimiento se valoriza con el importe que quedó guardado y, si falta, con cantidad ×
+   precio: es la misma fórmula del historial, para que las cifras cuadren entre pantallas. */
+function _almValorMov(m){
+  if(!m) return 0;
+  const v = Number(m.importe) || Number(m.total) || 0;
+  return v || ((Number(m.cantidad)||0) * (Number(m.precio)||0));
+}
+function almIngresoGastoMes(mes, almacen){
+  const enMes=f=>(typeof filtroMes==='function')?filtroMes(f,mes):String(f||'').slice(0,7)===mes;
+  const ok=m=>m && enMes(m.fecha) && (!almacen || m.almacen===almacen);
+  const sum=lista=>{
+    let valor=0, n=0; const vales=new Set();
+    (lista||[]).forEach(m=>{ if(!ok(m)) return; valor+=_almValorMov(m); n++; if(m.vale) vales.add(String(m.vale)); });
+    return { valor:Math.round(valor*100)/100, n, vales:vales.size };
+  };
+  const A=(state.almacen||{});
+  return { ingreso:sum(A.ingresos), gasto:sum(A.salidas) };
+}
+// Un solo trozo de HTML para la pestaña de Costo de Inventario y para el dashboard: así las dos
+// pantallas no pueden mostrar cifras distintas del mismo mes.
+function almIngVsGastoHTML(mes, compacto, almacen){
+  const m = mes || ((typeof finMesActual==='function')?finMesActual():String(new Date().toISOString().slice(0,7)));
+  const d = almIngresoGastoMes(m, almacen);
+  const S = n => 'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const dif = Math.round((d.ingreso.valor - d.gasto.valor)*100)/100;
+  const lbl = (typeof finNombreMes==='function') ? finNombreMes(m) : m;
+  const v = (typeof ventanaMes==='function') ? ventanaMes(m) : null;
+  const rango = v ? (v.ini+' → '+v.fin) : '';
+  const maxV = Math.max(1, d.ingreso.valor, d.gasto.valor);
+  const barra = (val,color)=>'<div style="height:9px;background:var(--coal4);border-radius:5px;overflow:hidden;margin-top:6px">'
+    +'<div style="height:100%;width:'+Math.max(2,Math.round(val/maxV*100))+'%;background:'+color+';border-radius:5px"></div></div>';
+  const caja = (titulo,sub,o,color)=>
+    '<div style="background:var(--coal4);border:1px solid var(--border);border-radius:10px;padding:12px 14px">'
+    +'<div style="font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:1px">'+titulo+'</div>'
+    +'<div style="font-size:11px;color:var(--text3);margin-top:1px">'+sub+'</div>'
+    +'<div style="font-size:20px;font-weight:800;color:'+color+';margin-top:6px">'+S(o.valor)+'</div>'
+    +'<div style="font-size:11px;color:var(--text3);margin-top:2px">'+o.n+' movimiento'+(o.n===1?'':'s')
+      +(o.vales?(' · '+o.vales+' vale'+(o.vales===1?'':'s')):'')+'</div>'
+    +barra(o.valor,color)+'</div>';
+  const alm = almacen ? (almacen==='General'?'Insumos':almacen) : 'todos los almacenes';
+  return '<div class="card" id="alm-ing-vs-gasto" style="margin-bottom:16px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">'
+      +'<div class="section-title" style="margin:0;font-size:13px">📦 Almacén: ingreso contra gasto</div>'
+      +'<div style="font-size:11px;color:var(--text3)">'+lbl+(rango?' · '+rango:'')+' · '+alm+'</div></div>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-top:12px">'
+      + caja('Ingreso','Todo lo que entró al almacén', d.ingreso, '#60a5fa')
+      + caja('Gasto','Todo lo que salió a la operación', d.gasto, '#f87171')
+      +'<div style="background:var(--coal4);border:1px solid var(--border);border-radius:10px;padding:12px 14px">'
+        +'<div style="font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:1px">Diferencia</div>'
+        +'<div style="font-size:11px;color:var(--text3);margin-top:1px">'+(dif>=0?'Se acumuló en el anaquel':'Se consumió del stock')+'</div>'
+        +'<div style="font-size:20px;font-weight:800;color:'+(dif>=0?'#22d3a5':'#f59e0b')+';margin-top:6px">'+S(Math.abs(dif))+'</div>'
+        +'<div style="font-size:11px;color:var(--text3);margin-top:2px">'+(dif>=0?'entró más de lo gastado':'salió más de lo que entró')+'</div>'
+      +'</div>'
+    +'</div>'
+    + (compacto ? '' :
+      '<div style="font-size:11px;color:var(--text3);line-height:1.6;margin-top:10px;border-top:1px solid var(--border);padding-top:9px">'
+      +'<b style="color:var(--text2)">Ingreso</b> es lo que entró al almacén y sumó existencia. '
+      +'<b style="color:var(--text2)">Gasto</b> es lo que salió a la operación y se consumió. '
+      +'Que no coincidan es normal: la diferencia es stock que se acumula o que se está comiendo sin reponer. '
+      +'El mes va del 1 al último día.</div>')
+    +'</div>';
+}
 function renderInventario(){
   const sel=document.getElementById('inv-mes-sel'); if(sel&&!sel.value)sel.value=almMesConDatos();
   const mes=(sel&&sel.value)||almMesConDatos();
@@ -13004,6 +13087,9 @@ function renderInventario(){
   const verde=conStock.filter(r=>r.stock>=10).length;
   const amarillo=conStock.filter(r=>r.stock>0&&r.stock<10).length;
   const rojo=stock.filter(r=>r.stock<=0).length;
+  // Ingreso contra gasto del mes, con el mismo mes y el mismo filtro de almacén de esta pestaña.
+  try{ const _iv=g('inv-ing-vs-gasto');
+       if(_iv && typeof almIngVsGastoHTML==='function') _iv.innerHTML=almIngVsGastoHTML(mes, false, filtroAlm||''); }catch(e){}
   const sem=g('inv-semaforo');
   if(sem) sem.innerHTML=`
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px">
