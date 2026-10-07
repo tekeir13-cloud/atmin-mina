@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.07-221</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.07-222</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.07-221</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.07-222</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.07-221</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.07-222</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -12294,7 +12294,16 @@ function agregarItemIngreso(){
   const cant=parseFloat(g('in-cantidad').value)||0;
   if(!desc){showNotif('⚠ Ingresa la descripción del producto','error');return;}
   if(cant<=0){showNotif('⚠ Ingresa una cantidad válida','error');return;}
+  /* SIN PRECIO NO HAY INGRESO.
+     El precio del ingreso es ahora el que valoriza el stock, así que dejarlo vacío mete material
+     al almacén valorizado en cero: el valor del inventario queda corto y el gasto del mes también.
+     Antes se admitía y el maestro tapaba el hueco con su precio; ya no, y por eso se exige aquí. */
   const precio=parseFloat(g('in-precio').value)||0;
+  if(!(precio>0)){
+    showNotif('⚠ Ingresa el precio unitario: sin precio el material entraría valorizado en cero','error');
+    try{ g('in-precio').focus(); }catch(e){}
+    return;
+  }
   // Resolver el producto del maestro para capturar su CÓDIGO (clave para separar el stock)
   const pM=(typeof _prodResolverIngreso==='function')?_prodResolverIngreso(g('in-producto').value):null;
   const codigo=g('in-producto').dataset.codigo||(pM?String(pM.codigo||''):'');
@@ -12329,6 +12338,27 @@ function renderIngresoCart(){
   const tot=ingresoCart.reduce((a,i)=>a+i.total,0);
   const t=document.getElementById('in-cart-total');if(t)t.textContent=fmtS2(tot);
 }
+/* ── EL MAESTRO SE QUEDA CON EL ÚLTIMO PRECIO DE COMPRA ──────────────────────────────────────
+   La ficha del producto deja de ser un precio escrito a mano que envejece: cada ingreso valorizado
+   lo actualiza. Así la ficha sirve para pedir y para presupuestar con lo que de verdad cuesta hoy,
+   y coincide con lo que muestra el stock.
+   Solo avanza: un vale con fecha vieja —o uno que llegue tarde por sincronización— no pisa el
+   precio de una compra más reciente. La marca `precioTs` recuerda de cuándo es el que está puesto. */
+function almSyncPrecioMaestro(codigo, almacen, precio, ts){
+  try{
+    const px=Number(precio)||0; if(!(px>0)) return false;
+    const c=String(codigo||'').trim().toUpperCase(); if(!c) return false;
+    const marca=Number(ts)||Date.now();
+    const p=((state.almacen||{}).productos||[]).find(x=>x && String(x.codigo||'').trim().toUpperCase()===c
+              && (!almacen || (x.almacen||'General')===almacen));
+    if(!p) return false;
+    if(Number(p.precioTs)>marca) return false;          // ya tiene uno más nuevo
+    if(Number(p.precio)===px && Number(p.precioTs)) return false;
+    p.precio=px; p.precioTs=marca;
+    state.almacen.productosTs=Date.now();
+    return true;
+  }catch(e){ return false; }
+}
 function guardarIngreso(){
   const g=id=>document.getElementById(id);
   if(!ingresoCart.length){showNotif('⚠ Agrega al menos un ítem a la hoja','error');return;}
@@ -12341,6 +12371,8 @@ function guardarIngreso(){
   ingresoCart.forEach((i,idx)=>{
     state.almacen.ingresos.push({id:'I'+(base+idx),_ts:base+idx,grupo,fecha,vale:i.vale,detalle,almacen:i.almacen||almacen,codigo:i.codigo||'',
       producto:i.producto,descripcion:i.descripcion,unidad:i.unidad,cantidad:i.cantidad,precio:i.precio,total:i.total});
+    // La ficha del maestro se queda con este precio: es la compra más reciente de ese producto.
+    almSyncPrecioMaestro(i.codigo, i.almacen||almacen, i.precio, base+idx);
   });
   almacenSave();
   const n=ingresoCart.length;ingresoCart=[];
@@ -12941,7 +12973,12 @@ function guardarEdicionIngreso(){
   i.fecha=g('ei-fecha').value||hoy();i.vale=g('ei-vale').value.trim();i.detalle=g('ei-detalle').value;
   i.almacen=g('ei-almacen').value;i.producto=g('ei-producto').value.trim();i.descripcion=desc;
   i.unidad=g('ei-unidad').value;i.cantidad=cant;i.precio=parseFloat(g('ei-precio').value)||0;i.total=i.cantidad*i.precio;
-  almacenSave();cerrarModal('modal-edit-ingreso');renderHistorialAlmacen();renderAlmacen();showNotif('✓ Ingreso actualizado');
+  // Corregir el precio de un ingreso corrige también la ficha, que es de donde se pide y se
+  // presupuesta: si no, el maestro seguiría con la cifra equivocada que motivó la corrección.
+  almSyncPrecioMaestro(i.codigo, i.almacen, i.precio, Date.now());
+  almacenSave();cerrarModal('modal-edit-ingreso');renderHistorialAlmacen();renderAlmacen();
+  try{ if(typeof renderProductos==='function') renderProductos(); }catch(e){}
+  showNotif('✓ Ingreso actualizado');
 }
 
 function abrirEditarSalida(id){
