@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.07-222</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.07-223</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.07-222</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.07-223</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.07-222</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.07-223</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -12973,6 +12973,7 @@ function guardarEdicionIngreso(){
   i.fecha=g('ei-fecha').value||hoy();i.vale=g('ei-vale').value.trim();i.detalle=g('ei-detalle').value;
   i.almacen=g('ei-almacen').value;i.producto=g('ei-producto').value.trim();i.descripcion=desc;
   i.unidad=g('ei-unidad').value;i.cantidad=cant;i.precio=parseFloat(g('ei-precio').value)||0;i.total=i.cantidad*i.precio;
+  i._edit=Date.now();   // marca de edición: si la nube trae la versión vieja, gana esta
   // Corregir el precio de un ingreso corrige también la ficha, que es de donde se pide y se
   // presupuesta: si no, el maestro seguiría con la cifra equivocada que motivó la corrección.
   almSyncPrecioMaestro(i.codigo, i.almacen, i.precio, Date.now());
@@ -13037,6 +13038,7 @@ function guardarEdicionSalida(){
   s.unidad=g('es-unidad').value;s.precio=parseFloat(g('es-precio').value)||0;
   const cambioCantidad=(cantOriginal!==cant);
   s.cantidad=cant;s.importe=s.cantidad*s.precio;
+  s._edit=Date.now();   // marca de edición: si la nube trae la versión vieja, gana esta
   // Mantener coherente el flujo de confirmación NV2820 al editar:
   if(String(nuevoDestino)==='2820'){
     // Si pasó a ser NV2820, o cambió la cantidad de una salida NV2820, requiere (re)confirmación del compresorista
@@ -22264,9 +22266,24 @@ function tombPurgarState(){
     state.seguridad=(state.seguridad||[]).filter(r=>!(r&&typeof _segSig==='function'&&tombHas('seg:'+_segSig(r))));
   }catch(e){}
 }
+/* UNIÓN POR ID — Y GANA LA EDICIÓN MÁS RECIENTE.
+   Antes se conservaba la PRIMERA copia que aparecía de cada id. Como al sincronizar la nube va
+   primero, una corrección hecha en este equipo que todavía no había subido se descartaba en
+   silencio y volvía el valor viejo: se corregía el precio de un ingreso, se guardaba, y al rato
+   reaparecía el anterior sin que nadie avisara.
+   Ahora, cuando el mismo id viene dos veces, gana el que tenga la marca de edición más nueva. Las
+   filas que nadie tocó no llevan marca y se comportan igual que siempre: manda la primera. */
+function _editTs(r){ return Number(r && (r._edit||0)) || 0; }
 function mergeSnapById(a,b){
-  const out=[],seen=new Set();
-  const add=r=>{ if(!r)return; if(r.id!=null&&tombHas(r.id))return; const k=(r.id!=null)?('id:'+r.id):('j:'+JSON.stringify(r)); if(seen.has(k))return; seen.add(k); out.push(r); };
+  const out=[], pos=new Map();
+  const add=r=>{
+    if(!r) return;
+    if(r.id!=null && tombHas(r.id)) return;
+    const k=(r.id!=null)?('id:'+r.id):('j:'+JSON.stringify(r));
+    if(!pos.has(k)){ pos.set(k, out.length); out.push(r); return; }
+    const i=pos.get(k);
+    if(_editTs(r) > _editTs(out[i])) out[i]=r;      // esta copia se editó después: manda
+  };
   (a||[]).forEach(add); (b||[]).forEach(add);
   return out;
 }
