@@ -11335,7 +11335,23 @@ function calcStock(){
   const _corte=Number(state.almacen.stockCorteTs)||0;
   const _tsMov=it=>{ if(it&&it._ts) return Number(it._ts)||0; const m=/^[IS](\d{13})/.exec(String(it&&it.id||'')); return m?Number(m[1]):0; };
   const _cuenta=it=>!_corte || _tsMov(it)>_corte;
-  (state.almacen.ingresos||[]).forEach(it=>{ if(!_cuenta(it)) return; const r=ensure(it.almacen,it.codigo,it.producto,it.descripcion,it.unidad,it.precio);r.ingreso+=Number(it.cantidad)||0;if(it.precio)r.precio=Number(it.precio);if(it.producto&&!r.producto)r.producto=it.producto;});
+  /* EL PRECIO DEL ÚLTIMO INGRESO MANDA SOBRE EL DEL CATÁLOGO.
+     Si un insumo sube, la compra nueva entra con su precio y el almacén tiene que valorizarse con
+     ese, no con el que quedó escrito en la ficha hace meses. Antes el maestro se imponía al final,
+     así que corregir el precio de un ingreso no cambiaba nada en pantalla y parecía que la edición
+     no se guardaba —se guardaba, pero el stock la tapaba—.
+     Se guarda el precio del ingreso MÁS RECIENTE, no el del último de la lista: el orden del
+     arreglo depende de en qué equipo se registró cada uno, y un vale viejo que llegue después por
+     sincronización no puede mandar sobre una compra nueva. */
+  (state.almacen.ingresos||[]).forEach(it=>{ if(!_cuenta(it)) return;
+    const r=ensure(it.almacen,it.codigo,it.producto,it.descripcion,it.unidad,it.precio);
+    r.ingreso+=Number(it.cantidad)||0;
+    const px=Number(it.precio)||0;
+    if(px>0){
+      const ts=Number(it._ts)||Date.parse(String(it.fecha||'')+'T00:00:00')||0;
+      if(r._pxTs===undefined || ts>=r._pxTs){ r._pxTs=ts; r._pxMov=px; }
+    }
+    if(it.producto&&!r.producto)r.producto=it.producto;});
   (state.almacen.salidas||[]).forEach(it=>{ if(!_cuenta(it)) return; const r=ensure(it.almacen,it.codigo,it.producto,it.descripcion,it.unidad,it.precio);r.salida+=Number(it.cantidad)||0;});
   // EL PRECIO UNITARIO LO MANDA EL MAESTRO.
   // Cada inventario inicial e ingreso venía pisando r.precio con el precio de ESE movimiento, así
@@ -11362,12 +11378,22 @@ function calcStock(){
     let pm = c ? _pmCod[c] : undefined;
     if(pm===undefined) pm=_pmNom[String(r.producto||r.descripcion||'').trim().toUpperCase()];
     if(!pm) return;
-    if(pm.precio>0) r.precio=pm.precio;      // sin precio en catálogo se conserva el del movimiento
+    // El catálogo es el respaldo, no la última palabra: solo pone el precio cuando el producto no
+    // tiene ningún ingreso valorizado. Si lo tiene, manda la compra más reciente.
+    if(!(Number(r._pxMov)>0) && pm.precio>0) r.precio=pm.precio;
     if(pm.nombre){ r.producto=pm.nombre; r.descripcion=pm.nombre; }
     if(pm.unidad) r.unidad=pm.unidad;
     if(pm.minimo>0) r.minimo=pm.minimo;    // mínimo de reposición cargado a mano en el maestro
   });
-  Object.values(map).forEach(r=>r.stock=r.ingreso-r.salida);
+  /* Y el precio de la compra más reciente se impone al final, esté o no el producto en el maestro.
+     Va aquí, después del catálogo, porque es el dato más fresco que hay: lo que de verdad costó la
+     última vez que entró. El del maestro queda como referencia para pedir y para los productos que
+     aún no han tenido ningún ingreso. */
+  Object.values(map).forEach(r=>{
+    if(Number(r._pxMov)>0) r.precio=Number(r._pxMov);
+    delete r._pxMov; delete r._pxTs;
+    r.stock=r.ingreso-r.salida;
+  });
   return Object.values(map);
 }
 /* REPOSICIÓN DE LOS INGRESOS DE MATERIAL DEL CICLO DE SETIEMBRE.
