@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-224</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-225</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-224</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-225</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.08-224</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.08-225</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -10656,6 +10656,32 @@ function almacenAplicarCodigosNuevos(){
     return true;
   }catch(e){ console.warn('[codigosNuevos]', e); return false; }
 }
+/* ── EL CONTEO ES EL SALDO DE APERTURA DEL 1 DE OCTUBRE ──────────────────────────────────────
+   La cifra contada no es un stock congelado: es el punto de partida del mes. Lo que entre y salga
+   desde el 1 de octubre suma y resta encima, como en cualquier almacén. Si un producto se contó en
+   5 y el día 1 entraron 3 y el día 2 salieron 2, el sistema debe mostrar 6.
+
+   Lo que la apertura sí tiene que absorber son los movimientos ANTERIORES al corte: esos ya están
+   dentro de lo que se contó físicamente, y volver a sumarlos o restarlos duplicaría. De ahí que la
+   apertura se calcule como «lo contado menos lo que ya se movió antes del 1», y no a secas.
+
+   Antes se absorbía TODO el historial, así que el stock quedaba clavado en la cifra del conteo
+   pasara lo que pasara: un ingreso nuevo no lo subía y una salida no lo bajaba. */
+const CONTEO_DESDE = '2026-10-01';
+function _netoAntesDelCorte(filtro){
+  // Neto de los movimientos anteriores a CONTEO_DESDE, con la misma regla de corte que calcStock
+  // (los previos al corte de stock ya están dentro del inventario inicial y no se cuentan).
+  const A=(state.almacen||{});
+  const corte=Number(A.stockCorteTs)||0;
+  const ts=it=>{ if(it&&it._ts) return Number(it._ts)||0; const m=/^[IS](\d{13})/.exec(String((it&&it.id)||'')); return m?Number(m[1]):0; };
+  const cuenta=it=>(!corte || ts(it)>corte) && String((it&&it.fecha)||'').slice(0,10) < CONTEO_DESDE;
+  const out={};
+  const sum=(lista,signo)=>{ (lista||[]).forEach(m=>{ if(!m||!cuenta(m)) return;
+    const k=filtro(m); if(k==null) return;
+    out[k]=(out[k]||0)+signo*(Number(m.cantidad)||0); }); };
+  sum(A.ingresos, 1); sum(A.salidas, -1);
+  return out;
+}
 /* ── STOCK REAL DE INSUMOS (conteo del 5 de octubre) ─────────────────────────────────────────
    263 productos del almacén de Insumos con la existencia física contada. La cifra del conteo es la
    que vale: no se suma ni se resta nada a lo que había.
@@ -10675,13 +10701,14 @@ function almacenAplicarCodigosNuevos(){
    porque con el candado en 1 el sistema da el conteo por aplicado y no lo vuelve a tocar.
    Repetirlo es seguro: la rutina vacía primero la apertura de estos productos y la recalcula
    contra los movimientos que haya en ese momento, así que ningún consumo posterior se pierde. */
-const INS_CONTEO_V = 2;
-const INS_CONTEO_FECHA = '2026-10-05';
+const INS_CONTEO_V = 3;
+const INS_CONTEO_FECHA = '2026-10-01';   // saldo de apertura del mes
 const INS_CONTEO = [
   {c:"1200000022",n:"ACEITE AIR TOOL OIL S2 A 100",s:40},
   {c:"1300000023",n:"BROCA DESCARTABLE DE BOTONES 32 MM",s:92},
   {c:"1300000026",n:"BROCA DESCARTABLE DE BOTONES 36 MM",s:72},
   {c:"1300000036",n:"BARRA CONICA 6' X 7/8''",s:0},
+  {c:"1300000039",n:"BARRA CONICA 8' X 7/8''",s:0},   // su celda venia vacia en el Excel: arranca el mes en cero
   {c:"1300000037",n:"BARRA CONICA 4' X 7/8''",s:6},
   {c:"1500000031",n:"ATACADORES DE MADERA 1\" X 2.5 MTR",s:0},
   {c:"1500000032",n:"GUIADORES  DE MADERA 1\" X 1.30 MTR",s:0},
@@ -10974,14 +11001,10 @@ function almacenAplicarStockInsumos(){
     state.almacen.inventarioInicial=(state.almacen.inventarioInicial||[])
       .filter(x=>!(x&&esIns(x.almacen)&&objetivo[U(x.codigo)]!==undefined));
     // 2) Sin apertura, lo que queda de estos productos son SOLO sus movimientos.
-    const neto={};
-    try{
-      (typeof calcStock==='function'?calcStock():[]).forEach(r=>{
-        if(!r||!esIns(r.almacen)) return;
-        const c=U(r.codigo); if(objetivo[c]===undefined) return;
-        neto[c]=(neto[c]||0)+((Number(r.ingreso)||0)-(Number(r.salida)||0));
-      });
-    }catch(err){}
+    let neto={};
+    try{ neto=_netoAntesDelCorte(m=>{ if(!esIns(m.almacen)) return null; const c=U(m.codigo);
+                                      return (objetivo[c]!==undefined)?c:null; }); }
+    catch(err){ neto={}; }
     // 3) Apertura que deja el saldo exactamente en lo contado.
     const inv=[];
     cods.forEach((c,i)=>{
@@ -11028,8 +11051,8 @@ function almacenAplicarStockInsumos(){
    inventado (MTO-…). Al repetir el conteo ahora, encuentra esas fichas por su nombre y se apoya en
    el código de verdad. Repetirlo no descuadra nada: lo primero que hace es vaciar la apertura de
    Mantenimiento y recalcularla contra los movimientos que haya. */
-const MANT_CONTEO_V = 3;
-const MANT_CONTEO_FECHA = '2026-09-30';
+const MANT_CONTEO_V = 4;
+const MANT_CONTEO_FECHA = '2026-10-01';   // saldo de apertura del mes
 // Fichas que el conteo unifica: el mismo repuesto escrito de dos formas. Se quedan con el nombre
 // y la cantidad del conteo, y la ficha repetida se retira del maestro.
 // 'ANILLO RNOR-7' estaba dos veces en el maestro (códigos 63 y 107), diferenciadas solo por un
@@ -11282,14 +11305,8 @@ function almacenAplicarConteoMant(){
        exactamente el del conteo físico. Los movimientos no se tocan: siguen en el historial y en
        el gasto, que es donde tienen que estar. */
     let netos={};
-    try{
-      (typeof calcStock==='function'?calcStock():[]).forEach(r=>{
-        if(r&&r.almacen==='Mantenimiento'){
-          const kk=_mantNN(r.producto||r.descripcion);
-          netos[kk]=(netos[kk]||0)+((Number(r.ingreso)||0)-(Number(r.salida)||0));
-        }
-      });
-    }catch(err){ netos={}; }
+    try{ netos=_netoAntesDelCorte(m=> (m.almacen==='Mantenimiento') ? _mantNN(m.producto||m.descripcion) : null ); }
+    catch(err){ netos={}; }
     inv.forEach(it=>{
       const neto=Number(netos[it._n])||0;
       if(neto) it.cantidad=Math.round((it.cantidad-neto)*100)/100;
