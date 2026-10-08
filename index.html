@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-228</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-229</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-228</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-229</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.08-228</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.08-229</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -10718,7 +10718,7 @@ function _netoAntesDelCorte(filtro, desde){
    porque con el candado en 1 el sistema da el conteo por aplicado y no lo vuelve a tocar.
    Repetirlo es seguro: la rutina vacía primero la apertura de estos productos y la recalcula
    contra los movimientos que haya en ese momento, así que ningún consumo posterior se pierde. */
-const INS_CONTEO_V = 6;
+const INS_CONTEO_V = 7;
 const INS_CONTEO_FECHA = '2026-10-01';   // saldo de apertura del mes
 const INS_CONTEO = [
   {c:"1200000022",n:"ACEITE AIR TOOL OIL S2 A 100",s:40},
@@ -11019,8 +11019,19 @@ function almacenAplicarStockInsumos(){
       .filter(x=>!(x&&esIns(x.almacen)&&objetivo[U(x.codigo)]!==undefined));
     // 2) Sin apertura, lo que queda de estos productos son SOLO sus movimientos.
     let neto={};
-    try{ neto=_netoAntesDelCorte(m=>{ if(!esIns(m.almacen)) return null; const c=U(m.codigo);
-                                      return (objetivo[c]!==undefined)?c:null; }); }
+    /* UN MOVIMIENTO SE RECONOCE COMO LO HACE EL STOCK: POR CÓDIGO O, SI NO LO TRAE, POR NOMBRE.
+       Aquí estaba el agujero. Los ingresos repuestos de setiembre se guardaron SIN código, y
+       calcStock los asigna al producto por su nombre —así que cuentan en el stock— pero esta
+       absorción los buscaba solo por código y los dejaba fuera. Resultado: se sumaban encima de lo
+       contado. La barra cónica de 4' quedaba en 46 (10 de apertura + 56 con código + 25 sin
+       código − 45 de salidas) cuando lo contado más su ingreso de octubre son 21. */
+    try{ neto=_netoAntesDelCorte(m=>{
+      if(!esIns(m.almacen)) return null;
+      let c=U(m.codigo);
+      if(!c && typeof _codigoDesdeMaestro==='function'){
+        try{ c=U(_codigoDesdeMaestro('', m.producto, m.descripcion)); }catch(e){ c=''; }
+      }
+      return (c && objetivo[c]!==undefined)?c:null; }); }
     catch(err){ neto={}; }
     // 3) Apertura que deja el saldo exactamente en lo contado.
     const inv=[];
