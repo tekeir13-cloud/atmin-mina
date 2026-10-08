@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-231</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-232</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-231</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-232</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.08-231</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.08-232</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -10507,7 +10507,6 @@ const COD_NUEVOS = [
   {c:"ART-00007",n:"ACEITE SHELL 15W 40",u:"PZA",a:"M",p:350},
   {c:"ART-00072",n:"CISAYA 18\"",u:"PZA",a:"G",p:0},
   {c:"ART-00009",n:"BALDE DE GRASA COLOR AZUL VISTONY",u:"PZA",a:"M",p:337.9},
-  {c:"ART-00010",n:"BALDE DE ACEITE 15W 40 MARCA TOTAL",u:"PZA",a:"M",p:320},
   {c:"ART-00073",n:"CISAYA 14\"",u:"PZA",a:"G",p:0},
   {c:"ART-00074",n:"CINTA AISLANTE BLANCO",u:"PZA",a:"G",p:0},
   {c:"ART-00016",n:"FILTRO SEPARADOR DE PETROLEO GLQ007357390",u:"PZA",a:"M",p:0},
@@ -10715,7 +10714,7 @@ function _netoAntesDelCorte(filtro, desde){
 
    Son códigos duplicados —el mismo filtro dado de alta dos veces— y un anillo con el stock en
    negativo que el usuario decidió retirar. */
-const ALM_AJUSTE_V = 1;
+const ALM_AJUSTE_V = 2;
 const ALM_AJUSTE_FECHA = '2026-10-08';
 const ALM_AJUSTE_STOCK = [
   { cod:'FIL-035',   stock:12 },   // FILTRO DE PETROLEO P553004 — se queda con el stock de los dos
@@ -10725,6 +10724,7 @@ const ALM_AJUSTE_STOCK = [
 const ALM_AJUSTE_QUITAR = [
   'ART-00141',   // P553004 — duplicado de FIL-035
   '74',          // ANILLO RNOR-21 — stock negativo, se retira
+  'ART-00010',   // BALDE DE ACEITE 15W 40 MARCA TOTAL — v2: el usuario lo retira del almacén
 ];
 function almacenAplicarAjustes(){
   try{
@@ -10732,7 +10732,10 @@ function almacenAplicarAjustes(){
     if((Number(state.almacen.ajusteV)||0) >= ALM_AJUSTE_V) return false;
     const U=s=>String(s||'').trim().toUpperCase();
     const quitar=new Set(ALM_AJUSTE_QUITAR.map(U));
-    const fijar={}; ALM_AJUSTE_STOCK.forEach(x=>{ fijar[U(x.cod)]=Number(x.stock)||0; });
+    // Las cifras fijas son de la v1. Un equipo que ya la aplicó solo retira lo nuevo: volver a
+    // fijar borraría lo que entró o salió desde entonces.
+    const fijar={};
+    if((Number(state.almacen.ajusteV)||0) < 1) ALM_AJUSTE_STOCK.forEach(x=>{ fijar[U(x.cod)]=Number(x.stock)||0; });
 
     // 1) Fichas que salen del maestro, con lápida para que la nube no las devuelva.
     const fuera=(state.almacen.productos||[]).filter(p=>p&&quitar.has(U(p.codigo)));
