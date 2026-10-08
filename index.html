@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-237</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-238</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-237</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-238</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.08-237</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.08-238</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -13203,11 +13203,19 @@ function renderHistorialAlmacen(){
   if(q){
     const cal=(...xs)=>xs.some(x=>String(x||'').toLowerCase().includes(q));
     ings=ings.filter(i=>cal(i.producto,i.descripcion,i.vale,i.detalle,i.codigo,i.almacen));
-    sals=sals.filter(s=>cal(s.producto,s.descripcion,s.solicitante,s.maquina,s.operario,s.destino,s.codigo,s.almacen));
+    sals=sals.filter(s=>cal(s.producto,s.descripcion,s.solicitante,s.maquina,s.operario,s.destino,nivelLabel(s.destino),s.codigo,s.almacen));
   }
   if(tipo==='ing') sals=[];
   if(tipo==='sal') ings=[];
-  const _LIM=25;  // vista compacta: solo los 25 más recientes de cada uno (no borra nada)
+  /* Los despachos a NV2820 no se listan aquí. El material salió del almacén, sí, pero quien lo
+     administra desde ese punto es el Compresorista y su detalle vive en el subalmacén NV2820 y en
+     su propio módulo. Mezclarlos con el resto hacía leer dos veces el mismo movimiento.
+     Siguen contando en el stock y en el subalmacén: esto es la VISTA, no el dato.
+     Para corregir uno, basta buscar "NV2820" y la lista los vuelve a mostrar con sus botones. */
+  const _verNV=/2820/.test(q);
+  let _nvOcultas=0;
+  if(!_verNV){ const antes=sals.length; sals=sals.filter(s=>String(s.destino)!=='2820'); _nvOcultas=antes-sals.length; }
+  const _LIM=25; // vista compacta: solo los 25 más recientes de cada uno (no borra nada)
   // Solo DOS grupos: Ingresos y Salidas (tablas planas, más recientes arriba)
   // Se usa el importe guardado y, si falta, cantidad × precio (registros viejos sin total).
   const totIn=ings.reduce((a,i)=>a+(Number(i.total)||(Number(i.cantidad)||0)*(Number(i.precio)||0)),0);
@@ -13234,7 +13242,8 @@ function renderHistorialAlmacen(){
   const ingsV=_histVerTodo?ings.slice().reverse():ings.slice().reverse().slice(0,_LIM);
   const salsV=_histVerTodo?sals.slice().reverse():sals.slice().reverse().slice(0,_LIM);
   const notaIn=(!_histVerTodo&&ings.length>_LIM)?`<div style="font-size:10px;color:var(--text3);padding:6px 8px">Mostrando los ${_LIM} más recientes de ${ings.length}. Usa "👁 Ver todo" para ver el resto. (No se borra nada.)</div>`:'';
-  const notaSal=(!_histVerTodo&&sals.length>_LIM)?`<div style="font-size:10px;color:var(--text3);padding:6px 8px">Mostrando los ${_LIM} más recientes de ${sals.length}. Usa "👁 Ver todo" para ver el resto. (No se borra nada.)</div>`:'';
+  let notaSal=(!_histVerTodo&&sals.length>_LIM)?`<div style="font-size:10px;color:var(--text3);padding:6px 8px">Mostrando los ${_LIM} más recientes de ${sals.length}. Usa "👁 Ver todo" para ver el resto. (No se borra nada.)</div>`:'';
+  if(_nvOcultas) notaSal+=`<div style="font-size:10px;color:var(--text3);padding:6px 8px">${_nvOcultas} despacho${_nvOcultas!==1?'s':''} a NV2820 no se lista${_nvOcultas!==1?'n':''} aquí — su detalle lo lleva el Compresorista. Busca "NV2820" si necesitas corregir alguno.</div>`;
   const cIng=document.getElementById('hist-ing-count'); if(cIng) cIng.textContent=`· ${ings.length} ítem${ings.length!==1?'s':''} · ${fmtS2(totIn)}`;
   const cSal=document.getElementById('hist-sal-count'); if(cSal) cSal.textContent=`· ${sals.length} ítem${sals.length!==1?'s':''} · ${fmtS2(totSal)}`;
   // ── Tabla de INGRESOS ──
