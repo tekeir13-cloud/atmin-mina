@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-233</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-234</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-233</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-234</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.08-233</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.08-234</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5749,7 +5749,7 @@ async function cargarAlmacenCombustibleSB(){
       // Conservar el valor MÁS ALTO de cada flag de migración (nube o local) para que las
       // migraciones de explosivos (apertura, ajuste, fijación) NO se vuelvan a ejecutar en
       // cada carga y borren las salidas nuevas registradas por Logística.
-      ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','almExcelV','stockCorteTs','mantConteoV','codNuevosV','insConteoV','ajusteV']
+      ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','almExcelV','stockCorteTs','mantConteoV','codNuevosV','insConteoV','ajusteV','precioMantV']
         .forEach(k=>{ const mx=Math.max(Number(almNube[k]||0), Number(almLocalPrev[k]||0)); if(mx) state.almacen[k]=mx; });
       // Conservar el saldo/corte de apertura del remanente (objeto + timestamp), venga de nube o local.
       if(!state.almacen.remApertura && (almNube.remApertura||almLocalPrev.remApertura)) state.almacen.remApertura=almNube.remApertura||almLocalPrev.remApertura;
@@ -5812,6 +5812,8 @@ async function cargarAlmacenCombustibleSB(){
     // alta lo que falte, para que ningún ingreso quede invisible. Corre una sola vez.
     // Stock real de Insumos (conteo del 5 de octubre). Va tras el conteo de mantenimiento.
     try{ if(typeof almacenAplicarStockInsumos==='function' && almacenAplicarStockInsumos()) await sbSyncModulo('almacen',(typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
+    // Precios de mantenimiento al día (y recorte del almacén a la lista oficial)
+    try{ if(typeof almacenAplicarPreciosMant==='function' && almacenAplicarPreciosMant()) await sbSyncModulo('almacen',(typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
     // Ajustes puntuales de almacén (duplicados y stocks corregidos a mano)
     try{ if(typeof almacenAplicarAjustes==='function' && almacenAplicarAjustes()) await sbSyncModulo('almacen',(typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
     // Reposición de los ingresos de setiembre ANTES de reconciliar, para que el maestro los adopte.
@@ -8907,7 +8909,7 @@ function _almMergeSnaps(a,b){
     explosivos:{ ...exA, ...exB, ingresos:_exploMergeMov(exA.ingresos,exB.ingresos), salidas:_exploMergeMov(exA.salidas,exB.salidas) },
     mbAcopio:{ ...mbA, ...mbB, ingresos:_exploMergeMov(mbA.ingresos,mbB.ingresos), salidas:_exploMergeMov(mbA.salidas,mbB.salidas) },
     productos, productosTs };
-  ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','exploStockBaseV','catalogVersion','almExcelV','stockCorteTs','aguaFixV','mantConteoV','codNuevosV','insConteoV','ajusteV']
+  ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','exploStockBaseV','catalogVersion','almExcelV','stockCorteTs','aguaFixV','mantConteoV','codNuevosV','insConteoV','ajusteV','precioMantV']
     .forEach(k=>{ const mx=Math.max(Number(a[k]||0), Number(b[k]||0)); if(mx) out[k]=mx; });
   if(a.exploLock||b.exploLock) out.exploLock=true;
   out.remApertura=a.remApertura||b.remApertura||out.remApertura;
@@ -10700,6 +10702,326 @@ function _netoAntesDelCorte(filtro, desde){
   sum(A.ingresos, 1); sum(A.salidas, -1);
   return out;
 }
+/* ── PRECIOS DE MANTENIMIENTO (lista del 8 de octubre) ───────────────────────────────────────
+   261 productos con su precio al día. El precio del maestro es el que valoriza el stock, así que
+   con esto el valor del almacén pasa a calcularse con lo que cuestan hoy: 70 fichas cambian de
+   precio —42 suben y 28 bajan— y 191 ya coincidían.
+
+   LA LISTA TAMBIÉN DICE QUÉ PUEDE VIVIR EN MANTENIMIENTO. Un producto de ese almacén que no esté
+   aquí sale del maestro, con lápida para que la sincronización no lo devuelva, y sale su apertura
+   para que no quede arrastrando stock. Sus movimientos NO se borran: siguen en el historial y en
+   el gasto del mes en que ocurrieron.
+
+   SOLO MANTENIMIENTO. Insumos no se toca: la lista trae 36 productos que viven allá, y aplicar el
+   recorte a los dos almacenes habría borrado 263 fichas de Insumos —las barras cónicas, los split
+   set, las planchas—, justo lo que se acaba de cuadrar.
+
+   NO SE REESCRIBEN EXISTENCIAS. Lo pedido es multiplicar el stock ACTUAL por estos precios, y
+   además esta lista se exportó antes de los ajustes de hoy: trae los kits de admisión en 4 cuando
+   quedaron en 2, y el anillo RNOR-21 y el balde ART-00010 que se retiraron. Reponer sus cifras
+   habría deshecho esas tres decisiones. */
+const MANT_PRECIOS_V = 1;
+const MANT_PRECIOS = [
+  {c:"1200000022",p:48.626},
+  {c:"ALM-085",p:58},
+  {c:"ART-00005",p:348.6},
+  {c:"ART-00007",p:350},
+  {c:"ART-00025",p:0},
+  {c:"119",p:53.12},
+  {c:"121",p:221.41},
+  {c:"103",p:192.99},
+  {c:"ART-00044",p:0},
+  {c:"1500001454",p:4.17},
+  {c:"1500001437",p:7.82},
+  {c:"1500001438",p:12.2},
+  {c:"30",p:3.8},
+  {c:"47",p:3.8},
+  {c:"109",p:3.8},
+  {c:"74",p:3.45},
+  {c:"66",p:3.8},
+  {c:"11",p:3.8},
+  {c:"96",p:3.42},
+  {c:"64",p:3.8},
+  {c:"63",p:3.8},
+  {c:"112",p:3.8},
+  {c:"128",p:3.8},
+  {c:"124",p:3.8},
+  {c:"83",p:3.8},
+  {c:"78",p:3.8},
+  {c:"45",p:3.8},
+  {c:"58",p:3.8},
+  {c:"3",p:3.8},
+  {c:"61",p:3.8},
+  {c:"75",p:17.22},
+  {c:"105",p:1.84},
+  {c:"8",p:13.91},
+  {c:"44",p:11.63},
+  {c:"88",p:20},
+  {c:"MTO-002",p:320},
+  {c:"ART-00010",p:320},
+  {c:"EPP-029",p:320},
+  {c:"ALM-080",p:390},
+  {c:"ART-00027",p:0},
+  {c:"MTO-003",p:337.9},
+  {c:"ART-00009",p:337.9},
+  {c:"MTO-004",p:0},
+  {c:"EPP-030",p:0},
+  {c:"EPP-040",p:4.24},
+  {c:"27",p:149.31},
+  {c:"1300000023",p:76.719},
+  {c:"1300000026",p:90.1735},
+  {c:"14",p:120.54},
+  {c:"18",p:171.59},
+  {c:"91",p:0},
+  {c:"94",p:0},
+  {c:"85",p:0},
+  {c:"82",p:0},
+  {c:"97",p:127.47},
+  {c:"32",p:0},
+  {c:"1500003378",p:0.5401},
+  {c:"25",p:0},
+  {c:"130",p:20},
+  {c:"ART-00032",p:1600},
+  {c:"ART-00060",p:180},
+  {c:"12",p:96.6},
+  {c:"51",p:4.62},
+  {c:"129",p:3.59},
+  {c:"1500003087",p:1.0373},
+  {c:"1500003086",p:24.4986},
+  {c:"21",p:0},
+  {c:"102",p:664.85},
+  {c:"ART-00048",p:0},
+  {c:"71",p:52.13},
+  {c:"118",p:29.32},
+  {c:"79",p:139.02},
+  {c:"120",p:221.41},
+  {c:"126",p:36.23},
+  {c:"117",p:46.95},
+  {c:"33",p:9.27},
+  {c:"ALM-076",p:0},
+  {c:"ALM-012",p:0},
+  {c:"80",p:13.91},
+  {c:"ALM-071",p:4140},
+  {c:"100",p:30.93},
+  {c:"99",p:21.92},
+  {c:"43",p:7.22},
+  {c:"ALM-074",p:862.5},
+  {c:"ALM-072",p:12},
+  {c:"39",p:3.8},
+  {c:"92",p:25.26},
+  {c:"22",p:149.31},
+  {c:"89",p:30},
+  {c:"ALM-069",p:0},
+  {c:"ALM-068",p:0},
+  {c:"ALM-063",p:0},
+  {c:"95",p:0},
+  {c:"70",p:97.82},
+  {c:"EPP-046",p:44},
+  {c:"EPP-045",p:36},
+  {c:"4627133",p:0},
+  {c:"ART-00147",p:601},
+  {c:"FIL-034",p:0},
+  {c:"FIL-024",p:0},
+  {c:"24063074",p:0},
+  {c:"FIL-025",p:182.85},
+  {c:"ALM-066",p:47.32},
+  {c:"77",p:46.37},
+  {c:"ART-00022",p:3},
+  {c:"ART-00021",p:0},
+  {c:"ART-00020",p:0},
+  {c:"60250669",p:0},
+  {c:"ART-00019",p:0},
+  {c:"FIL-022",p:0},
+  {c:"FIL-005",p:110.4},
+  {c:"FIL-031",p:588},
+  {c:"ART-00023",p:0},
+  {c:"ART-00024",p:0},
+  {c:"FIL-017",p:0},
+  {c:"EPP-036",p:0},
+  {c:"EPP-037",p:0},
+  {c:"FIL-039",p:0},
+  {c:"FIL-026",p:0},
+  {c:"FIL-019",p:0},
+  {c:"FIL-038",p:0},
+  {c:"FIL-036",p:0},
+  {c:"FIL-032",p:0},
+  {c:"60159323",p:0},
+  {c:"FIL-027",p:331.2},
+  {c:"FIL-018",p:0},
+  {c:"FIL-037",p:0},
+  {c:"60211330",p:0},
+  {c:"FIL-020",p:0},
+  {c:"FIL-015",p:0},
+  {c:"FIL-028",p:0},
+  {c:"FIL-008",p:0},
+  {c:"FIL-003",p:0},
+  {c:"FIL-012",p:0},
+  {c:"21746575",p:0},
+  {c:"ART-00018",p:0},
+  {c:"ART-00017",p:0},
+  {c:"FIL-013",p:0},
+  {c:"FIL-004",p:0},
+  {c:"FIL-016",p:0},
+  {c:"ART-00029",p:0},
+  {c:"ART-00030",p:0},
+  {c:"FIL-035",p:42.25},
+  {c:"ALM-070",p:0},
+  {c:"ALM-073",p:0},
+  {c:"EPP-003",p:0},
+  {c:"FIL-011",p:0},
+  {c:"EPP-005",p:0},
+  {c:"ALM-064",p:0},
+  {c:"123",p:0},
+  {c:"FIL-001",p:0},
+  {c:"FIL-002",p:234.6},
+  {c:"FIL-006",p:325},
+  {c:"FIL-007",p:0},
+  {c:"FIL-023",p:0},
+  {c:"FIL-030",p:0},
+  {c:"ART-00031",p:0},
+  {c:"ART-00016",p:0},
+  {c:"ART-00059",p:270.4},
+  {c:"1",p:221.41},
+  {c:"46",p:234.25},
+  {c:"13",p:5.76},
+  {c:"ART-00145",p:37.7},
+  {c:"ART-00144",p:29.3233},
+  {c:"127",p:221.41},
+  {c:"ART-00149",p:6175.5},
+  {c:"ART-00058",p:185.9},
+  {c:"ART-00057",p:202.8},
+  {c:"ART-00156",p:1.0019},
+  {c:"ART-00099",p:0},
+  {c:"125",p:1328.25},
+  {c:"ART-00148",p:1380},
+  {c:"1500003424",p:330.566},
+  {c:"62",p:18.53},
+  {c:"54",p:0},
+  {c:"2100000012",p:21.3},
+  {c:"2100000014",p:36.0569},
+  {c:"1500002650",p:6.9069},
+  {c:"1500002649",p:3.2144},
+  {c:"34",p:226.21},
+  {c:"59",p:199},
+  {c:"131",p:271.7},
+  {c:"ART-00056",p:4427},
+  {c:"ART-00068",p:0},
+  {c:"MTO-005",p:45},
+  {c:"ART-00033",p:65},
+  {c:"5",p:2208},
+  {c:"17",p:0},
+  {c:"29",p:15},
+  {c:"26",p:10.06},
+  {c:"60",p:5.14},
+  {c:"9",p:45.29},
+  {c:"1500001442",p:21.672},
+  {c:"1500001443",p:24.024},
+  {c:"1500001441",p:27.2253},
+  {c:"53",p:9.27},
+  {c:"6",p:18.53},
+  {c:"2",p:149.31},
+  {c:"111",p:8},
+  {c:"101",p:252.32},
+  {c:"ART-00089",p:0},
+  {c:"19",p:221.41},
+  {c:"110",p:221.41},
+  {c:"15",p:386.78},
+  {c:"93",p:39.61},
+  {c:"ART-00038",p:40},
+  {c:"1500003208",p:2.707},
+  {c:"37",p:8.83},
+  {c:"28",p:4},
+  {c:"49",p:15.96},
+  {c:"56",p:20},
+  {c:"67",p:18.53},
+  {c:"115",p:55.2},
+  {c:"10",p:26},
+  {c:"38",p:18.04},
+  {c:"42",p:49.47},
+  {c:"ALM-077",p:0},
+  {c:"50",p:36.55},
+  {c:"68",p:18.53},
+  {c:"72",p:11.31},
+  {c:"114",p:9.04},
+  {c:"35",p:9.27},
+  {c:"40",p:9.27},
+  {c:"1500002859",p:1.02},
+  {c:"84",p:0},
+  {c:"ALM-037",p:0},
+  {c:"108",p:601.97},
+  {c:"ALM-067",p:0},
+  {c:"98",p:0},
+  {c:"23",p:413.65},
+  {c:"86",p:0},
+  {c:"EPP-042",p:0},
+  {c:"ART-00035",p:80},
+  {c:"57",p:6.67},
+  {c:"104",p:6.67},
+  {c:"52",p:196.65},
+  {c:"31",p:303},
+  {c:"90",p:110.34},
+  {c:"41",p:20.48},
+  {c:"1900000205",p:1},
+  {c:"1900000203",p:6.07},
+  {c:"1900000184",p:1},
+  {c:"36",p:30.9},
+  {c:"16",p:221.41},
+  {c:"76",p:80.31},
+  {c:"73",p:0},
+  {c:"4",p:20.48},
+  {c:"106",p:3.62},
+  {c:"87",p:0},
+  {c:"122",p:0},
+  {c:"20",p:149.31},
+  {c:"81",p:128.76},
+  {c:"113",p:42.66},
+  {c:"116",p:57.83},
+  {c:"7",p:52.13},
+  {c:"24",p:149.31},
+  {c:"ALM-075",p:690},
+  {c:"65",p:0},
+  {c:"69",p:0},
+  {c:"55",p:0},
+  {c:"48",p:44.82},
+];
+const MANT_PERMITIDOS = ["1200000022","ALM-085","ART-00005","ART-00007","ART-00025","119","121","103","ART-00044","1500001454","1500001437","1500001438","30","47","109","74","66","11","96","64","63","112","128","124","83","78","45","58","3","61","75","105","8","44","88","MTO-002","ART-00010","EPP-029","ALM-080","ART-00027","MTO-003","ART-00009","MTO-004","EPP-030","EPP-040","27","1300000023","1300000026","14","18","91","94","85","82","97","32","1500003378","25","130","ART-00032","ART-00060","12","51","129","1500003087","1500003086","21","102","ART-00048","71","118","79","120","126","117","33","ALM-076","ALM-012","80","ALM-071","100","99","43","ALM-074","ALM-072","39","92","22","89","ALM-069","ALM-068","ALM-063","95","70","EPP-046","EPP-045","4627133","ART-00147","FIL-034","FIL-024","24063074","FIL-025","ALM-066","77","ART-00022","ART-00021","ART-00020","60250669","ART-00019","FIL-022","FIL-005","FIL-031","ART-00023","ART-00024","FIL-017","EPP-036","EPP-037","FIL-039","FIL-026","FIL-019","FIL-038","FIL-036","FIL-032","60159323","FIL-027","FIL-018","FIL-037","60211330","FIL-020","FIL-015","FIL-028","FIL-008","FIL-003","FIL-012","21746575","ART-00018","ART-00017","FIL-013","FIL-004","FIL-016","ART-00029","ART-00030","FIL-035","ALM-070","ALM-073","EPP-003","FIL-011","EPP-005","ALM-064","123","FIL-001","FIL-002","FIL-006","FIL-007","FIL-023","FIL-030","ART-00031","ART-00016","ART-00059","1","46","13","ART-00145","ART-00144","127","ART-00149","ART-00058","ART-00057","ART-00156","ART-00099","125","ART-00148","1500003424","62","54","2100000012","2100000014","1500002650","1500002649","34","59","131","ART-00056","ART-00068","MTO-005","ART-00033","5","17","29","26","60","9","1500001442","1500001443","1500001441","53","6","2","111","101","ART-00089","19","110","15","93","ART-00038","1500003208","37","28","49","56","67","115","10","38","42","ALM-077","50","68","72","114","35","40","1500002859","84","ALM-037","108","ALM-067","98","23","86","EPP-042","ART-00035","57","104","52","31","90","41","1900000205","1900000203","1900000184","36","16","76","73","4","106","87","122","20","81","113","116","7","24","ALM-075","65","69","55","48"];
+function almacenAplicarPreciosMant(){
+  try{
+    if(!state.almacen) return false;
+    if((Number(state.almacen.precioMantV)||0) >= MANT_PRECIOS_V) return false;
+    const U=s=>String(s||'').trim().toUpperCase();
+    // 1) Precios al día. Se marca `precioTs` para que un vale viejo no los pise después.
+    const px={}; MANT_PRECIOS.forEach(e=>{ px[U(e.c)]=Number(e.p)||0; });
+    let cambiados=0;
+    (state.almacen.productos||[]).forEach(p=>{
+      if(!p) return;
+      const v=px[U(p.codigo)];
+      if(v===undefined || !(v>0)) return;
+      if(Math.abs((Number(p.precio)||0)-v)<0.0001) return;
+      p.precio=v; p.precioTs=Date.now(); cambiados++;
+    });
+    // 2) En Mantenimiento solo vive lo que está en la lista.
+    const ok=new Set(MANT_PERMITIDOS.map(U));
+    const fuera=(state.almacen.productos||[]).filter(p=>p && (p.almacen||'General')==='Mantenimiento' && !ok.has(U(p.codigo)));
+    fuera.forEach(p=>{ try{ if(typeof tombAdd==='function' && p.id!=null) tombAdd('prod:'+p.id); }catch(e){} });
+    if(fuera.length){
+      const codsFuera=new Set(fuera.map(p=>U(p.codigo)));
+      state.almacen.productos=(state.almacen.productos||[]).filter(p=>!(p && (p.almacen||'General')==='Mantenimiento' && !ok.has(U(p.codigo))));
+      const ap=(state.almacen.inventarioInicial||[]).filter(x=>x && (x.almacen||'General')==='Mantenimiento' && codsFuera.has(U(x.codigo)));
+      const ids=ap.map(x=>x&&x.id).filter(Boolean);
+      if(ids.length && typeof _tombAddMuchos==='function') _tombAddMuchos(ids);
+      state.almacen.inventarioInicial=(state.almacen.inventarioInicial||[])
+        .filter(x=>!(x && (x.almacen||'General')==='Mantenimiento' && codsFuera.has(U(x.codigo))));
+    }
+    state.almacen.productosTs=Date.now();
+    state.almacen.precioMantV=MANT_PRECIOS_V;
+    almacenSave();
+    try{ if(typeof renderAlmacen==='function') renderAlmacen(); }catch(e){}
+    try{ if(typeof renderProductos==='function') renderProductos(); }catch(e){}
+    console.log('[preciosMant] '+cambiados+' precios actualizados, '+fuera.length+' fichas fuera de Mantenimiento');
+    return true;
+  }catch(e){ console.warn('[preciosMant]', e); return false; }
+}
 /* ── AJUSTES PUNTUALES DE ALMACÉN (8 de octubre) ─────────────────────────────────────────────
    Correcciones pedidas una por una tras revisar el almacén en pantalla. Dos cosas distintas:
 
@@ -11514,19 +11836,21 @@ function calcStock(){
     let pm = c ? _pmCod[c] : undefined;
     if(pm===undefined) pm=_pmNom[String(r.producto||r.descripcion||'').trim().toUpperCase()];
     if(!pm) return;
-    // El catálogo es el respaldo, no la última palabra: solo pone el precio cuando el producto no
-    // tiene ningún ingreso valorizado. Si lo tiene, manda la compra más reciente.
-    if(!(Number(r._pxMov)>0) && pm.precio>0) r.precio=pm.precio;
+    /* MANDA EL PRECIO DEL MAESTRO.
+       Es el que el usuario mantiene al día —cada ingreso lo actualiza y las listas de precios lo
+       reescriben—, así que el almacén se valoriza con lo que cuesta hoy y no con el papel de la
+       última compra, que puede ser de hace meses o traer un precio mal digitado. El del movimiento
+       queda de respaldo para los productos que aún no tienen precio en catálogo. */
+    if(pm.precio>0) r.precio=pm.precio;
     if(pm.nombre){ r.producto=pm.nombre; r.descripcion=pm.nombre; }
     if(pm.unidad) r.unidad=pm.unidad;
     if(pm.minimo>0) r.minimo=pm.minimo;    // mínimo de reposición cargado a mano en el maestro
   });
-  /* Y el precio de la compra más reciente se impone al final, esté o no el producto en el maestro.
-     Va aquí, después del catálogo, porque es el dato más fresco que hay: lo que de verdad costó la
-     última vez que entró. El del maestro queda como referencia para pedir y para los productos que
-     aún no han tenido ningún ingreso. */
+  /* El precio de la última compra solo entra donde el catálogo no tiene precio: así un producto
+     sin precio en la ficha no se valoriza en cero, pero tampoco le gana al maestro cuando este sí
+     lo tiene. El maestro se mantiene al día solo, porque cada ingreso lo actualiza. */
   Object.values(map).forEach(r=>{
-    if(Number(r._pxMov)>0) r.precio=Number(r._pxMov);
+    if(!(Number(r.precio)>0) && Number(r._pxMov)>0) r.precio=Number(r._pxMov);
     delete r._pxMov; delete r._pxTs;
     r.stock=r.ingreso-r.salida;
   });
