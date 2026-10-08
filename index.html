@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.07-223</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-224</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.07-223</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-224</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.07-223</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.08-224</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -2673,6 +2673,12 @@ select option{background:var(--coal3);}
     <button class="mod-tab" onclick="modTab('log','solicitudmantlog',this)">📋 Solic. Mantenimiento</button>
     <button class="mod-tab" onclick="modTab('log','combustible',this)">🛢 Combustible</button>
     <button class="mod-tab" onclick="modTab('log','estadisticas',this)">📈 Estadísticas</button>
+  </div>
+
+  <!-- Guardado manual: la app ya sube sola, esto es para quedarse tranquilo y saberlo -->
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 14px">
+    <button id="log-guardar-btn" class="btn btn-gold" style="font-size:13px;padding:10px 20px" onclick="logGuardarTodo()">☁ Guardar en el sistema</button>
+    <span id="log-guardar-estado" style="font-size:12px;color:var(--text3)"></span>
   </div>
 
   <!-- ════ TAB 1: ALMACÉN GENERAL ════ -->
@@ -13126,6 +13132,55 @@ function almIngVsGastoHTML(mes, compacto, almacen){
       +'Que no coincidan es normal: la diferencia es stock que se acumula o que se está comiendo sin reponer. '
       +'El mes va del 1 al último día.</div>')
     +'</div>';
+}
+/* ── GUARDAR EN EL SISTEMA (botón de Logística) ──────────────────────────────────────────────
+   La app ya sube sola cada cambio: esto no es un "guardar" que falte, es una CONFIRMACIÓN. El
+   logístico pasa dos horas cargando vales y necesita poder decir, antes de cerrar el equipo, que
+   todo está arriba. Hasta ahora eso solo se podía deducir del chip de pendientes, y no basta
+   cuando lo que está en juego es un día de trabajo.
+
+   Qué hace: reenvía a la nube el almacén completo y los dos tanques, vacía la cola de lo que
+   quedó pendiente de subidas anteriores, y después COMPRUEBA que no quede nada en cola. Recién
+   entonces dice que está guardado. Si queda algo, lo dice con nombre y apellido en vez de cantar
+   victoria: sin señal el dato sigue a salvo en el equipo y sube solo al recuperar cobertura.
+
+   No toca los datos: solo los vuelve a enviar. Pulsarlo de más no rompe nada. */
+async function logGuardarTodo(){
+  const btn=document.getElementById('log-guardar-btn');
+  const est=document.getElementById('log-guardar-estado');
+  const di=(txt,color)=>{ if(est){ est.textContent=txt; est.style.color=color||'var(--text3)'; } };
+  if(btn){ btn.disabled=true; btn.style.opacity='.6'; }
+  di('Guardando…');
+  try{
+    if(typeof SB_ONLINE!=='undefined' && !SB_ONLINE){
+      di('⚠ Sin conexión: los cambios están guardados en este equipo y subirán solos al recuperar señal','#f59e0b');
+      return;
+    }
+    // 1) Reenviar lo de Logística, venga de donde venga
+    try{ if(typeof almacenSave==='function') almacenSave(); }catch(e){}
+    try{ if(typeof combGuardar==='function'){ combGuardar('pet', combCargar('pet')); combGuardar('gas', combCargar('gas')); } }catch(e){}
+    try{ if(typeof state!=='undefined' && state.compras && typeof sbSyncModulo==='function') await sbSyncModulo('compras', state.compras); }catch(e){}
+    // 2) Vaciar la cola de pendientes de subidas anteriores
+    try{ if(typeof sbFlushPendientes==='function') await sbFlushPendientes(); }catch(e){}
+    await new Promise(r=>setTimeout(r,600));          // dar tiempo a que cierren los envíos
+    try{ if(typeof sbFlushPendientes==='function') await sbFlushPendientes(); }catch(e){}
+    // 3) Comprobar: solo se canta victoria si la cola quedó vacía
+    const faltan=(typeof _sbPend!=='undefined')?Object.keys(_sbPend):[];
+    const hora=new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'});
+    if(faltan.length){
+      di('⚠ Falta subir: '+faltan.join(', ')+' — quedó en cola y se reintenta solo','#f59e0b');
+      showNotif('⚠ No todo pudo subir: '+faltan.length+' módulo'+(faltan.length>1?'s':'')+' en cola. El dato está a salvo en este equipo.','error');
+    }else{
+      di('✓ Todo guardado en el sistema · '+hora,'#22d3a5');
+      showNotif('✓ Todo guardado en el sistema');
+    }
+  }catch(e){
+    console.warn('logGuardarTodo',e);
+    di('⚠ No se pudo confirmar el guardado — vuelve a intentarlo','#f87171');
+  }finally{
+    if(btn){ btn.disabled=false; btn.style.opacity='1'; }
+    try{ if(typeof actualizarChipConexion==='function') actualizarChipConexion(); }catch(e){}
+  }
 }
 function renderInventario(){
   const sel=document.getElementById('inv-mes-sel'); if(sel&&!sel.value)sel.value=almMesConDatos();
