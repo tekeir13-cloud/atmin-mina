@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-226</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-227</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-226</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-227</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.08-226</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.08-227</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5781,6 +5781,11 @@ async function cargarAlmacenCombustibleSB(){
     try{ if(typeof fijarSalidasExplosivosDefinitivo==='function') fijarSalidasExplosivosDefinitivo(); }catch(e){}
     // Carga del Excel oficial de stock (maestro + existencias, una sola vez, sin tocar gasto)
     try{ if(typeof almacenAplicarExcelV1==='function' && almacenAplicarExcelV1()) await sbSyncModulo('almacen',(typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
+    /* La reposición de los 46 ingresos de agosto-setiembre va ANTES de los conteos.
+       Son movimientos ANTERIORES al conteo físico, así que la apertura tiene que absorberlos; si se
+       insertan después, la absorción ya está calculada y esos ingresos se suman encima de lo
+       contado. Eso es lo que inflaba el stock de los barrenos. */
+    try{ if(typeof almacenReponerIngresosSep==='function') almacenReponerIngresosSep(); }catch(e){}
     // Reposición de los códigos que se perdieron del maestro. Va ANTES del conteo para que este
     // encuentre las fichas por su nombre y use su código real.
     try{ if(typeof almacenAplicarCodigosNuevos==='function' && almacenAplicarCodigosNuevos()) await sbSyncModulo('almacen',(typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
@@ -5808,7 +5813,6 @@ async function cargarAlmacenCombustibleSB(){
     // Stock real de Insumos (conteo del 5 de octubre). Va tras el conteo de mantenimiento.
     try{ if(typeof almacenAplicarStockInsumos==='function' && almacenAplicarStockInsumos()) await sbSyncModulo('almacen',(typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
     // Reposición de los ingresos de setiembre ANTES de reconciliar, para que el maestro los adopte.
-    try{ if(typeof almacenReponerIngresosSep==='function') almacenReponerIngresosSep(); }catch(e){}
     try{ if(typeof almacenReconciliarIngresos==='function') await almacenReconciliarIngresos(); }catch(e){}
     // ── COMPRAS (módulo de control, independiente del costeo) ──
     try{
@@ -10711,7 +10715,7 @@ function _netoAntesDelCorte(filtro, desde){
    porque con el candado en 1 el sistema da el conteo por aplicado y no lo vuelve a tocar.
    Repetirlo es seguro: la rutina vacía primero la apertura de estos productos y la recalcula
    contra los movimientos que haya en ese momento, así que ningún consumo posterior se pierde. */
-const INS_CONTEO_V = 4;
+const INS_CONTEO_V = 5;
 const INS_CONTEO_FECHA = '2026-10-05';   // fecha del conteo fisico
 const INS_CONTEO = [
   {c:"1200000022",n:"ACEITE AIR TOOL OIL S2 A 100",s:40},
@@ -11061,7 +11065,7 @@ function almacenAplicarStockInsumos(){
    inventado (MTO-…). Al repetir el conteo ahora, encuentra esas fichas por su nombre y se apoya en
    el código de verdad. Repetirlo no descuadra nada: lo primero que hace es vaciar la apertura de
    Mantenimiento y recalcularla contra los movimientos que haya. */
-const MANT_CONTEO_V = 4;
+const MANT_CONTEO_V = 5;
 const MANT_CONTEO_FECHA = '2026-10-01';   // saldo de apertura del mes
 // Fichas que el conteo unifica: el mismo repuesto escrito de dos formas. Se quedan con el nombre
 // y la cantidad del conteo, y la ficha repetida se retira del maestro.
