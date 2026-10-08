@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-225</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-226</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-225</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-226</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.08-225</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.08-226</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -10667,14 +10667,24 @@ function almacenAplicarCodigosNuevos(){
 
    Antes se absorbía TODO el historial, así que el stock quedaba clavado en la cifra del conteo
    pasara lo que pasara: un ingreso nuevo no lo subía y una salida no lo bajaba. */
-const CONTEO_DESDE = '2026-10-01';
-function _netoAntesDelCorte(filtro){
+const CONTEO_DESDE = '2026-10-06';        // insumos: el conteo es del 5, cuenta desde el 6
+const CONTEO_DESDE_MANT = '2026-10-01';  // mantenimiento: el conteo es del 30/09, cuenta desde el 1
+function _netoAntesDelCorte(filtro, desde){
   // Neto de los movimientos anteriores a CONTEO_DESDE, con la misma regla de corte que calcStock
   // (los previos al corte de stock ya están dentro del inventario inicial y no se cuentan).
   const A=(state.almacen||{});
   const corte=Number(A.stockCorteTs)||0;
   const ts=it=>{ if(it&&it._ts) return Number(it._ts)||0; const m=/^[IS](\d{13})/.exec(String((it&&it.id)||'')); return m?Number(m[1]):0; };
-  const cuenta=it=>(!corte || ts(it)>corte) && String((it&&it.fecha)||'').slice(0,10) < CONTEO_DESDE;
+  const lim=desde||CONTEO_DESDE;
+  /* Un movimiento sin fecha legible no se puede situar a un lado ni al otro del conteo. Se trata
+     como ANTERIOR —o sea, se absorbe— porque el conteo físico es la verdad: dejarlo fuera lo
+     sumaría encima de lo contado y abultaría el stock sin que nadie sepa de dónde salió. */
+  const cuenta=it=>{
+    if(corte && !(ts(it)>corte)) return false;
+    const f=String((it&&it.fecha)||'').slice(0,10);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(f)) return true;
+    return f < lim;
+  };
   const out={};
   const sum=(lista,signo)=>{ (lista||[]).forEach(m=>{ if(!m||!cuenta(m)) return;
     const k=filtro(m); if(k==null) return;
@@ -10701,8 +10711,8 @@ function _netoAntesDelCorte(filtro){
    porque con el candado en 1 el sistema da el conteo por aplicado y no lo vuelve a tocar.
    Repetirlo es seguro: la rutina vacía primero la apertura de estos productos y la recalcula
    contra los movimientos que haya en ese momento, así que ningún consumo posterior se pierde. */
-const INS_CONTEO_V = 3;
-const INS_CONTEO_FECHA = '2026-10-01';   // saldo de apertura del mes
+const INS_CONTEO_V = 4;
+const INS_CONTEO_FECHA = '2026-10-05';   // fecha del conteo fisico
 const INS_CONTEO = [
   {c:"1200000022",n:"ACEITE AIR TOOL OIL S2 A 100",s:40},
   {c:"1300000023",n:"BROCA DESCARTABLE DE BOTONES 32 MM",s:92},
@@ -11305,7 +11315,7 @@ function almacenAplicarConteoMant(){
        exactamente el del conteo físico. Los movimientos no se tocan: siguen en el historial y en
        el gasto, que es donde tienen que estar. */
     let netos={};
-    try{ netos=_netoAntesDelCorte(m=> (m.almacen==='Mantenimiento') ? _mantNN(m.producto||m.descripcion) : null ); }
+    try{ netos=_netoAntesDelCorte(m=> (m.almacen==='Mantenimiento') ? _mantNN(m.producto||m.descripcion) : null, CONTEO_DESDE_MANT ); }
     catch(err){ netos={}; }
     inv.forEach(it=>{
       const neto=Number(netos[it._n])||0;
