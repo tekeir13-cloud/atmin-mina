@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-230</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-231</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-230</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.08-231</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.08-230</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.08-231</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5749,7 +5749,7 @@ async function cargarAlmacenCombustibleSB(){
       // Conservar el valor MÁS ALTO de cada flag de migración (nube o local) para que las
       // migraciones de explosivos (apertura, ajuste, fijación) NO se vuelvan a ejecutar en
       // cada carga y borren las salidas nuevas registradas por Logística.
-      ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','almExcelV','stockCorteTs','mantConteoV','codNuevosV','insConteoV']
+      ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','almExcelV','stockCorteTs','mantConteoV','codNuevosV','insConteoV','ajusteV']
         .forEach(k=>{ const mx=Math.max(Number(almNube[k]||0), Number(almLocalPrev[k]||0)); if(mx) state.almacen[k]=mx; });
       // Conservar el saldo/corte de apertura del remanente (objeto + timestamp), venga de nube o local.
       if(!state.almacen.remApertura && (almNube.remApertura||almLocalPrev.remApertura)) state.almacen.remApertura=almNube.remApertura||almLocalPrev.remApertura;
@@ -5812,6 +5812,8 @@ async function cargarAlmacenCombustibleSB(){
     // alta lo que falte, para que ningún ingreso quede invisible. Corre una sola vez.
     // Stock real de Insumos (conteo del 5 de octubre). Va tras el conteo de mantenimiento.
     try{ if(typeof almacenAplicarStockInsumos==='function' && almacenAplicarStockInsumos()) await sbSyncModulo('almacen',(typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
+    // Ajustes puntuales de almacén (duplicados y stocks corregidos a mano)
+    try{ if(typeof almacenAplicarAjustes==='function' && almacenAplicarAjustes()) await sbSyncModulo('almacen',(typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
     // Reposición de los ingresos de setiembre ANTES de reconciliar, para que el maestro los adopte.
     try{ if(typeof almacenReconciliarIngresos==='function') await almacenReconciliarIngresos(); }catch(e){}
     // ── COMPRAS (módulo de control, independiente del costeo) ──
@@ -8905,7 +8907,7 @@ function _almMergeSnaps(a,b){
     explosivos:{ ...exA, ...exB, ingresos:_exploMergeMov(exA.ingresos,exB.ingresos), salidas:_exploMergeMov(exA.salidas,exB.salidas) },
     mbAcopio:{ ...mbA, ...mbB, ingresos:_exploMergeMov(mbA.ingresos,mbB.ingresos), salidas:_exploMergeMov(mbA.salidas,mbB.salidas) },
     productos, productosTs };
-  ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','exploStockBaseV','catalogVersion','almExcelV','stockCorteTs','aguaFixV','mantConteoV','codNuevosV','insConteoV']
+  ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','exploStockBaseV','catalogVersion','almExcelV','stockCorteTs','aguaFixV','mantConteoV','codNuevosV','insConteoV','ajusteV']
     .forEach(k=>{ const mx=Math.max(Number(a[k]||0), Number(b[k]||0)); if(mx) out[k]=mx; });
   if(a.exploLock||b.exploLock) out.exploLock=true;
   out.remApertura=a.remApertura||b.remApertura||out.remApertura;
@@ -10698,6 +10700,86 @@ function _netoAntesDelCorte(filtro, desde){
     out[k]=(out[k]||0)+signo*(Number(m.cantidad)||0); }); };
   sum(A.ingresos, 1); sum(A.salidas, -1);
   return out;
+}
+/* ── AJUSTES PUNTUALES DE ALMACÉN (8 de octubre) ─────────────────────────────────────────────
+   Correcciones pedidas una por una tras revisar el almacén en pantalla. Dos cosas distintas:
+
+   FIJAR EL STOCK. Se deja una apertura que hace que el producto muestre exactamente la cifra
+   indicada HOY. No se borra ni un movimiento: el historial y el gasto quedan intactos, y lo que
+   entre o salga a partir de ahora suma y resta encima con normalidad.
+
+   RETIRAR DEL MAESTRO. La ficha sale del catálogo, con lápida para que la sincronización no la
+   resucite en otro equipo, y se le quita su apertura para que no quede arrastrando stock. Sus
+   movimientos NO se borran: siguen en el historial y en el gasto del mes en que ocurrieron, que es
+   donde deben estar. Dejan de verse en el stock porque su código ya no está en el maestro.
+
+   Son códigos duplicados —el mismo filtro dado de alta dos veces— y un anillo con el stock en
+   negativo que el usuario decidió retirar. */
+const ALM_AJUSTE_V = 1;
+const ALM_AJUSTE_FECHA = '2026-10-08';
+const ALM_AJUSTE_STOCK = [
+  { cod:'FIL-035',   stock:12 },   // FILTRO DE PETROLEO P553004 — se queda con el stock de los dos
+  { cod:'ART-00057', stock:2  },   // KIT FILTRO DE ADMISIÓN A5105
+  { cod:'ART-00058', stock:2  },   // KIT DE FILTRO DE ADMISION A6705
+];
+const ALM_AJUSTE_QUITAR = [
+  'ART-00141',   // P553004 — duplicado de FIL-035
+  '74',          // ANILLO RNOR-21 — stock negativo, se retira
+];
+function almacenAplicarAjustes(){
+  try{
+    if(!state.almacen) return false;
+    if((Number(state.almacen.ajusteV)||0) >= ALM_AJUSTE_V) return false;
+    const U=s=>String(s||'').trim().toUpperCase();
+    const quitar=new Set(ALM_AJUSTE_QUITAR.map(U));
+    const fijar={}; ALM_AJUSTE_STOCK.forEach(x=>{ fijar[U(x.cod)]=Number(x.stock)||0; });
+
+    // 1) Fichas que salen del maestro, con lápida para que la nube no las devuelva.
+    const fuera=(state.almacen.productos||[]).filter(p=>p&&quitar.has(U(p.codigo)));
+    fuera.forEach(p=>{ try{ if(typeof tombAdd==='function' && p.id!=null) tombAdd('prod:'+p.id); }catch(e){} });
+    state.almacen.productos=(state.almacen.productos||[]).filter(p=>!(p&&quitar.has(U(p.codigo))));
+
+    // 2) Sus aperturas también salen: si no, seguirían arrastrando stock sin ficha.
+    const apFuera=(state.almacen.inventarioInicial||[]).filter(x=>x&&quitar.has(U(x.codigo)));
+    const ids=apFuera.map(x=>x&&x.id).filter(Boolean);
+    if(ids.length && typeof _tombAddMuchos==='function') _tombAddMuchos(ids);
+    state.almacen.inventarioInicial=(state.almacen.inventarioInicial||[])
+      .filter(x=>!(x&&quitar.has(U(x.codigo))));
+
+    // 3) Fuera la apertura anterior de los que se van a fijar, para no apilar dos.
+    const apVieja=(state.almacen.inventarioInicial||[]).filter(x=>x&&fijar[U(x.codigo)]!==undefined);
+    const ids2=apVieja.map(x=>x&&x.id).filter(Boolean);
+    if(ids2.length && typeof _tombAddMuchos==='function') _tombAddMuchos(ids2);
+    state.almacen.inventarioInicial=(state.almacen.inventarioInicial||[])
+      .filter(x=>!(x&&fijar[U(x.codigo)]!==undefined));
+
+    // 4) Sin apertura, lo que queda de estos productos son solo sus movimientos. La nueva apertura
+    //    es la diferencia hasta la cifra pedida, de modo que hoy muestren exactamente eso.
+    const neto={};
+    try{
+      (typeof calcStock==='function'?calcStock():[]).forEach(r=>{
+        const c=U(r&&r.codigo); if(fijar[c]===undefined) return;
+        neto[c]=(neto[c]||0)+((Number(r.ingreso)||0)-(Number(r.salida)||0));
+      });
+    }catch(e){}
+    const inv=[];
+    Object.keys(fijar).forEach((c,i)=>{
+      const f=(state.almacen.productos||[]).find(p=>p&&U(p.codigo)===c);
+      if(!f) return;
+      inv.push({ id:'IAJ'+ALM_AJUSTE_V+'-'+String(i+1).padStart(3,'0'), fecha:ALM_AJUSTE_FECHA,
+        almacen:f.almacen||'General', codigo:String(f.codigo||''), producto:f.nombre, descripcion:f.nombre,
+        unidad:f.unidad||'UND', precio:Number(f.precio)||0,
+        cantidad:Math.round((fijar[c]-(Number(neto[c])||0))*100)/100 });
+    });
+    state.almacen.inventarioInicial=(state.almacen.inventarioInicial||[]).concat(inv);
+    state.almacen.productosTs=Date.now();
+    state.almacen.ajusteV=ALM_AJUSTE_V;
+    almacenSave();
+    try{ if(typeof renderAlmacen==='function') renderAlmacen(); }catch(e){}
+    try{ if(typeof renderProductos==='function') renderProductos(); }catch(e){}
+    console.log('[ajustes] '+inv.length+' stocks fijados, '+fuera.length+' fichas retiradas');
+    return true;
+  }catch(e){ console.warn('[ajustes]', e); return false; }
 }
 /* ── STOCK REAL DE INSUMOS (conteo del 5 de octubre) ─────────────────────────────────────────
    263 productos del almacén de Insumos con la existencia física contada. La cifra del conteo es la
