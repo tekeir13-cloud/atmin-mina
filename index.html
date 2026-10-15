@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.14-242</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.15-243</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.14-242</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.15-243</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.14-242</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.15-243</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -2865,6 +2865,12 @@ select option{background:var(--coal3);}
     <button class="mod-tab" onclick="modTab('rrhh','costorrhh',this)">👷 Planilla Operarios</button>
     <button class="mod-tab" id="tab-planillaint" style="display:none" onclick="modTab('rrhh','planillaint',this)">🧾 Planilla Integrada</button>
     <button class="mod-tab" onclick="modTab('rrhh','servicios',this)">🤝 Servicios Terceros</button>
+  </div>
+
+  <!-- Guardado manual: la app ya sube sola, esto es para quedarse tranquilo y saberlo -->
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 14px">
+    <button id="rh-guardar-btn" class="btn btn-gold" style="font-size:13px;padding:10px 20px" onclick="rhGuardarTodo()">☁ Guardar en el sistema</button>
+    <span id="rh-guardar-estado" style="font-size:12px;color:var(--text3)"></span>
   </div>
 
   <div class="mod-pane active" style="display:block" id="rrhh-tareomes"></div>
@@ -13686,6 +13692,48 @@ async function logGuardarTodo(){
     }
   }catch(e){
     console.warn('logGuardarTodo',e);
+    di('⚠ No se pudo confirmar el guardado — vuelve a intentarlo','#f87171');
+  }finally{
+    if(btn){ btn.disabled=false; btn.style.opacity='1'; }
+    try{ if(typeof actualizarChipConexion==='function') actualizarChipConexion(); }catch(e){}
+  }
+}
+/* GUARDAR EN EL SISTEMA — Recursos Humanos. El mismo botón de Logística, con lo que es de aquí:
+   el personal, el tareo, la planilla de supervisión y los servicios de terceros. Reenvía, vacía
+   la cola de lo que quedó pendiente de antes y recién entonces confirma — si algo no subió, lo
+   dice en vez de cantar victoria. No toca los datos: solo los vuelve a enviar. */
+async function rhGuardarTodo(){
+  const btn=document.getElementById('rh-guardar-btn');
+  const est=document.getElementById('rh-guardar-estado');
+  const di=(txt,color)=>{ if(est){ est.textContent=txt; est.style.color=color||'var(--text3)'; } };
+  if(btn){ btn.disabled=true; btn.style.opacity='.6'; }
+  di('Guardando…');
+  try{
+    if(typeof SB_ONLINE!=='undefined' && !SB_ONLINE){
+      di('⚠ Sin conexión: los cambios están guardados en este equipo y subirán solos al recuperar señal','#f59e0b');
+      return;
+    }
+    // 1) Reenviar lo de RRHH
+    try{ if(typeof personalSave==='function') personalSave(); }catch(e){}
+    try{ if(typeof tareasSave==='function') tareasSave(); }catch(e){}
+    try{ if(typeof planillaSupSave==='function' && typeof planillaSupLoad==='function') planillaSupSave(planillaSupLoad()); }catch(e){}
+    try{ if(typeof servGuardar==='function' && typeof servCargar==='function') servGuardar(servCargar()); }catch(e){}
+    // 2) Vaciar la cola de pendientes de subidas anteriores
+    try{ if(typeof sbFlushPendientes==='function') await sbFlushPendientes(); }catch(e){}
+    await new Promise(r=>setTimeout(r,600));          // dar tiempo a que cierren los envíos
+    try{ if(typeof sbFlushPendientes==='function') await sbFlushPendientes(); }catch(e){}
+    // 3) Comprobar: solo se canta victoria si la cola quedó vacía
+    const faltan=(typeof _sbPend!=='undefined')?Object.keys(_sbPend):[];
+    const hora=new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'});
+    if(faltan.length){
+      di('⚠ Falta subir: '+faltan.join(', ')+' — quedó en cola y se reintenta solo','#f59e0b');
+      showNotif('⚠ No todo pudo subir: '+faltan.length+' módulo'+(faltan.length>1?'s':'')+' en cola. El dato está a salvo en este equipo.','error');
+    }else{
+      di('✓ Todo guardado en el sistema · '+hora,'#22d3a5');
+      showNotif('✓ Todo guardado en el sistema');
+    }
+  }catch(e){
+    console.warn('rhGuardarTodo',e);
     di('⚠ No se pudo confirmar el guardado — vuelve a intentarlo','#f87171');
   }finally{
     if(btn){ btn.disabled=false; btn.style.opacity='1'; }
