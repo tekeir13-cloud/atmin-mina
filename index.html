@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.18-246</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.18-247</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.18-246</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.18-247</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.18-246</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.18-247</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -11172,7 +11172,7 @@ function almacenAplicarAjustes(){
    porque con el candado en 1 el sistema da el conteo por aplicado y no lo vuelve a tocar.
    Repetirlo es seguro: la rutina vacía primero la apertura de estos productos y la recalcula
    contra los movimientos que haya en ese momento, así que ningún consumo posterior se pierde. */
-const INS_CONTEO_V = 7;
+const INS_CONTEO_V = 8;
 const INS_CONTEO_FECHA = '2026-10-01';   // saldo de apertura del mes
 const INS_CONTEO = [
   {c:"1200000022",n:"ACEITE AIR TOOL OIL S2 A 100",s:40},
@@ -11494,7 +11494,8 @@ function almacenAplicarStockInsumos(){
       inv.push({ id:'IINS'+INS_CONTEO_V+'-'+String(i+1).padStart(3,'0'), fecha:INS_CONTEO_FECHA,
         almacen:f.almacen||'General', codigo:String(f.codigo||''), producto:f.nombre, descripcion:f.nombre,
         unidad:f.unidad||'UND', precio:Number(f.precio)||0,
-        cantidad:Math.round((objetivo[c]-(Number(neto[c])||0))*100)/100 });
+        desde:INS_CONTEO_FECHA,            // lo anterior a esta fecha no entra en el stock
+        cantidad:Math.round(objetivo[c]*100)/100 });
     });
     state.almacen.inventarioInicial=(state.almacen.inventarioInicial||[]).concat(inv);
     state.almacen.insConteoV=INS_CONTEO_V;
@@ -11533,7 +11534,7 @@ function almacenAplicarStockInsumos(){
    inventado (MTO-…). Al repetir el conteo ahora, encuentra esas fichas por su nombre y se apoya en
    el código de verdad. Repetirlo no descuadra nada: lo primero que hace es vaciar la apertura de
    Mantenimiento y recalcularla contra los movimientos que haya. */
-const MANT_CONTEO_V = 5;
+const MANT_CONTEO_V = 6;
 const MANT_CONTEO_FECHA = '2026-10-01';   // saldo de apertura del mes
 // Fichas que el conteo unifica: el mismo repuesto escrito de dos formas. Se quedan con el nombre
 // y la cantidad del conteo, y la ficha repetida se retira del maestro.
@@ -11786,14 +11787,9 @@ function almacenAplicarConteoMant(){
        ahora para este almacén son SOLO los movimientos. Se les resta, y así el stock resultante es
        exactamente el del conteo físico. Los movimientos no se tocan: siguen en el historial y en
        el gasto, que es donde tienen que estar. */
-    let netos={};
-    try{ netos=_netoAntesDelCorte(m=> (m.almacen==='Mantenimiento') ? _mantNN(m.producto||m.descripcion) : null, CONTEO_DESDE_MANT ); }
-    catch(err){ netos={}; }
-    inv.forEach(it=>{
-      const neto=Number(netos[it._n])||0;
-      if(neto) it.cantidad=Math.round((it.cantidad-neto)*100)/100;
-      delete it._n;
-    });
+    // Ya no se descuenta nada: la apertura ES lo contado y `desde` deja fuera del stock todo lo
+    // anterior al 1 de octubre. Ver la nota del corte por conteo físico en calcStock.
+    inv.forEach(it=>{ it.desde=CONTEO_DESDE_MANT; delete it._n; });
     state.almacen.inventarioInicial=(state.almacen.inventarioInicial||[]).concat(inv);
     state.almacen.productosTs=Date.now();
     state.almacen.mantConteoV=MANT_CONTEO_V;
@@ -11840,6 +11836,30 @@ function calcStock(){
   const _corte=Number(state.almacen.stockCorteTs)||0;
   const _tsMov=it=>{ if(it&&it._ts) return Number(it._ts)||0; const m=/^[IS](\d{13})/.exec(String(it&&it.id||'')); return m?Number(m[1]):0; };
   const _cuenta=it=>!_corte || _tsMov(it)>_corte;
+  /* CORTE POR CONTEO FÍSICO. Un producto contado a mano arranca el mes en la cifra del anaquel, y
+     desde esa fecha —ni un día antes— los movimientos suman y restan encima.
+     Antes esto se hacía con aritmética: la apertura se guardaba como "lo contado MENOS lo que ya se
+     había movido", de modo que al volver a sumar esos movimientos el resultado diera lo contado.
+     Cuadraba en el momento de calcularla y se rompía después: bastaba que un movimiento viejo
+     llegara más tarde —una sincronización, un vale repuesto, la misma guía cargada dos veces— para
+     que se sumara encima de un descuento que ya estaba hecho. Nadie tocaba nada y el stock subía.
+     Ahora no se descuenta nada: la apertura ES lo contado, y lo anterior a esa fecha no entra en el
+     cálculo. Lo que llegue tarde de setiembre ya no puede mover el stock de octubre. Sigue entero
+     en el historial y en el gasto del mes en que ocurrió, que es donde debe estar. */
+  const _desde={};
+  _invFinal.forEach(it=>{
+    if(!it || !it.desde) return;
+    const r=ensure(it.almacen,it.codigo,it.producto,it.descripcion,it.unidad,it.precio);
+    const d=String(it.desde).slice(0,10);
+    if(!_desde[r.key] || d>_desde[r.key]) _desde[r.key]=d;
+  });
+  const _antesDelConteo=(r,it)=>{
+    const d=_desde[r.key]; if(!d) return false;
+    const f=String((it&&it.fecha)||'').slice(0,10);
+    // Sin fecha legible no se puede situar: se trata como anterior, porque el conteo es la verdad.
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(f)) return true;
+    return f < d;
+  };
   /* EL PRECIO DEL ÚLTIMO INGRESO MANDA SOBRE EL DEL CATÁLOGO.
      Si un insumo sube, la compra nueva entra con su precio y el almacén tiene que valorizarse con
      ese, no con el que quedó escrito en la ficha hace meses. Antes el maestro se imponía al final,
@@ -11850,6 +11870,7 @@ function calcStock(){
      sincronización no puede mandar sobre una compra nueva. */
   (state.almacen.ingresos||[]).forEach(it=>{ if(!_cuenta(it)) return;
     const r=ensure(it.almacen,it.codigo,it.producto,it.descripcion,it.unidad,it.precio);
+    if(_antesDelConteo(r,it)) return;
     r.ingreso+=Number(it.cantidad)||0;
     const px=Number(it.precio)||0;
     if(px>0){
@@ -11857,7 +11878,7 @@ function calcStock(){
       if(r._pxTs===undefined || ts>=r._pxTs){ r._pxTs=ts; r._pxMov=px; }
     }
     if(it.producto&&!r.producto)r.producto=it.producto;});
-  (state.almacen.salidas||[]).forEach(it=>{ if(!_cuenta(it)) return; const r=ensure(it.almacen,it.codigo,it.producto,it.descripcion,it.unidad,it.precio);r.salida+=Number(it.cantidad)||0;});
+  (state.almacen.salidas||[]).forEach(it=>{ if(!_cuenta(it)) return; const r=ensure(it.almacen,it.codigo,it.producto,it.descripcion,it.unidad,it.precio); if(_antesDelConteo(r,it)) return; r.salida+=Number(it.cantidad)||0;});
   // EL PRECIO UNITARIO LO MANDA EL MAESTRO.
   // Cada inventario inicial e ingreso venía pisando r.precio con el precio de ESE movimiento, así
   // que el P.U. del stock era el del último papel registrado y no el del catálogo: un precio viejo
