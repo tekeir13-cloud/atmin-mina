@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.17-245</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.18-246</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.17-245</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.18-246</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2536,7 +2536,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.17-245</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.18-246</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5785,7 +5785,7 @@ async function cargarAlmacenCombustibleSB(){
       // Conservar el valor MÁS ALTO de cada flag de migración (nube o local) para que las
       // migraciones de explosivos (apertura, ajuste, fijación) NO se vuelvan a ejecutar en
       // cada carga y borren las salidas nuevas registradas por Logística.
-      ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','almExcelV','stockCorteTs','mantConteoV','codNuevosV','insConteoV','ajusteV','precioMantV']
+      ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','almExcelV','stockCorteTs','mantConteoV','codNuevosV','insConteoV','ajusteV','precioMantV','trimMantV']
         .forEach(k=>{ const mx=Math.max(Number(almNube[k]||0), Number(almLocalPrev[k]||0)); if(mx) state.almacen[k]=mx; });
       // Conservar el saldo/corte de apertura del remanente (objeto + timestamp), venga de nube o local.
       if(!state.almacen.remApertura && (almNube.remApertura||almLocalPrev.remApertura)) state.almacen.remApertura=almNube.remApertura||almLocalPrev.remApertura;
@@ -8945,7 +8945,7 @@ function _almMergeSnaps(a,b){
     explosivos:{ ...exA, ...exB, ingresos:_exploMergeMov(exA.ingresos,exB.ingresos), salidas:_exploMergeMov(exA.salidas,exB.salidas) },
     mbAcopio:{ ...mbA, ...mbB, ingresos:_exploMergeMov(mbA.ingresos,mbB.ingresos), salidas:_exploMergeMov(mbA.salidas,mbB.salidas) },
     productos, productosTs };
-  ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','exploStockBaseV','catalogVersion','almExcelV','stockCorteTs','aguaFixV','mantConteoV','codNuevosV','insConteoV','ajusteV','precioMantV']
+  ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','exploStockBaseV','catalogVersion','almExcelV','stockCorteTs','aguaFixV','mantConteoV','codNuevosV','insConteoV','ajusteV','precioMantV','trimMantV']
     .forEach(k=>{ const mx=Math.max(Number(a[k]||0), Number(b[k]||0)); if(mx) out[k]=mx; });
   if(a.exploLock||b.exploLock) out.exploLock=true;
   out.remApertura=a.remApertura||b.remApertura||out.remApertura;
@@ -11038,9 +11038,17 @@ function almacenAplicarPreciosMant(){
       if(Math.abs((Number(p.precio)||0)-v)<0.0001) return;
       p.precio=v; p.precioTs=Date.now(); cambiados++;
     });
-    // 2) En Mantenimiento solo vive lo que está en la lista.
+    /* 2) En Mantenimiento solo vive lo que está en la lista. UNA SOLA VEZ EN LA VIDA DEL EQUIPO.
+       Esto estaba colgado de la misma versión que los precios, y ahí estuvo el daño: cada vez que
+       corregíamos el precio de un filtro había que subir la versión, el recorte volvía a correr, y
+       se llevaba por delante —con lápida, o sea en todos los equipos— cualquier ficha que el
+       logístico hubiera creado en Mantenimiento después. Él daba de alta un repuesto, y al
+       siguiente despliegue desaparecía con su stock sin que nadie hubiera borrado nada.
+       Ahora el recorte tiene su propio sello: ya corrió el 8 de octubre y no vuelve a correr. Los
+       precios se pueden seguir actualizando cuantas veces haga falta sin tocar el maestro. */
+    const yaRecorto = !!state.almacen.trimMantV || (Number(state.almacen.precioMantV)||0) > 0;
     const ok=new Set(MANT_PERMITIDOS.map(U));
-    const fuera=(state.almacen.productos||[]).filter(p=>p && (p.almacen||'General')==='Mantenimiento' && !ok.has(U(p.codigo)));
+    const fuera=yaRecorto ? [] : (state.almacen.productos||[]).filter(p=>p && (p.almacen||'General')==='Mantenimiento' && !ok.has(U(p.codigo)));
     fuera.forEach(p=>{ try{ if(typeof tombAdd==='function' && p.id!=null) tombAdd('prod:'+p.id); }catch(e){} });
     if(fuera.length){
       const codsFuera=new Set(fuera.map(p=>U(p.codigo)));
@@ -11053,6 +11061,7 @@ function almacenAplicarPreciosMant(){
     }
     state.almacen.productosTs=Date.now();
     state.almacen.precioMantV=MANT_PRECIOS_V;
+    state.almacen.trimMantV=1;          // el recorte queda cerrado para siempre
     almacenSave();
     try{ if(typeof renderAlmacen==='function') renderAlmacen(); }catch(e){}
     try{ if(typeof renderProductos==='function') renderProductos(); }catch(e){}
