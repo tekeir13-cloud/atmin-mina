@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.21-250</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.21-251</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.21-250</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.21-251</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2535,7 +2535,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.21-250</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.21-251</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -36399,16 +36399,38 @@ function _aplicarBroadcastSync(data){
   try{ showNotif('🔄 Sincronizando con el equipo oficial…'); }catch(e){}
   setTimeout(()=>{ try{ location.reload(); }catch(e){} }, 2000);  // recarga → arranque jala la nube
 }
+/* JALAR LA NUBE A ESTE EQUIPO.
+   Antes solo traía el almacén, el combustible y las configuraciones. Los reportes de jefe de
+   guardia, las hojas de equipo, el tareo, el personal y los kits NO se volvían a bajar: esos se
+   leen una sola vez, al arrancar la app. Así que un celular que llevaba horas abierto no veía los
+   reportes que habían subido los demás, y el botón que existe justo para eso no lo arreglaba —
+   había que cerrar la aplicación y volver a entrar, que es lo que nadie hace.
+   Ahora se baja módulo por módulo y se aplica con la misma unión que usa el arranque: nada se
+   pisa, y lo que este equipo tenga sin subir se respeta. */
 async function forzarSincronizacion(){
   showNotif('🔄 Sincronizando todo…');
   try{ if(typeof sbFlushPendientes==='function') await sbFlushPendientes(); }catch(e){}
+  const MODULOS=['personal','tareas','reportes_guardia','equipos_operacion','compresorista',
+                 'mant_kits','mant_repuestos','remanente_salidas','remanente_ingresos',
+                 'reuniones','servicios_terceros','metas','distribucion','val_labor'];
+  let traidos=0;
+  for(const m of MODULOS){
+    try{
+      const d=await sbLoadModulo(m);
+      if(d==null) continue;
+      if(typeof _rtAplicarModulo==='function'){ _rtAplicarModulo(m,d); traidos++; }
+    }catch(e){ console.warn('[sync]', m, e); }
+  }
   try{ if(typeof cargarAlmacenCombustibleSB==='function') await cargarAlmacenCombustibleSB(); }catch(e){}
   try{ if(typeof cargarConfigsSimplesSB==='function') await cargarConfigsSimplesSB(); }catch(e){}
   try{ if(typeof tombPurgarState==='function') tombPurgarState(); }catch(e){}
-  try{ if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
-  try{ if(typeof renderAlmacen==='function') renderAlmacen(); }catch(e){}
-  try{ if(typeof renderStockVigente==='function') renderStockVigente(); }catch(e){}
-  showNotif('✓ Sincronización completa terminada');
+  try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){}
+  // Repintar lo que acaba de cambiar, para no tener que cambiar de pestaña a mano.
+  ['renderDashboard','renderAlmacen','renderStockVigente','renderAvance','renderOperaciones',
+   'renderTableroOp','renderPersonal','renderCostosMant'].forEach(f=>{
+    try{ if(typeof window[f]==='function') window[f](); }catch(e){}
+  });
+  showNotif('✓ Sincronización completa · '+traidos+' módulos traídos de la nube');
   try{ abrirDiagSync(); }catch(e){}   // refrescar el panel con los números nuevos
 }
 
