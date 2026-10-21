@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.18-247</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.21-248</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.18-247</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.21-248</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2426,7 +2426,6 @@ select option{background:var(--coal3);}
           <option value="1">Rampa</option><option value="2">Cortada</option>
         </select>
       </div>
-      <div class="form-group"><label class="form-label">Jornal diario (S/)</label><input class="form-input" type="number" id="edit-p-jornal" min="0" step="0.01"></div>
       <div class="form-group"><label class="form-label">Fecha de ingreso</label><input class="form-input" type="date" id="edit-p-ingreso"></div>
     </div>
     <div style="display:flex;gap:10px;margin-top:18px">
@@ -2536,7 +2535,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.18-247</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.21-248</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -3009,7 +3008,6 @@ select option{background:var(--coal3);}
         <div class="form-group"><label>Nombre Completo</label><input type="text" id="p-nombre" placeholder="Ej: Juan Quispe"></div>
         <div class="form-group"><label>DNI</label><input type="text" id="p-dni" placeholder="12345678"></div>
         <div class="form-group"><label>Rol / Cargo</label><select id="p-rol"></select></div>
-        <div class="form-group"><label>Jornal diario (S/)</label><input type="number" id="p-jornal" placeholder="80"></div>
         <div class="form-group"><label>Fecha de ingreso</label><input type="date" id="p-ingreso"></div>
         <div class="form-group"><label>Foto del trabajador</label>
           <div style="display:flex;align-items:center;gap:10px">
@@ -5785,7 +5783,7 @@ async function cargarAlmacenCombustibleSB(){
       // Conservar el valor MÁS ALTO de cada flag de migración (nube o local) para que las
       // migraciones de explosivos (apertura, ajuste, fijación) NO se vuelvan a ejecutar en
       // cada carga y borren las salidas nuevas registradas por Logística.
-      ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','almExcelV','stockCorteTs','mantConteoV','codNuevosV','insConteoV','ajusteV','precioMantV','trimMantV']
+      ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','almExcelV','stockCorteTs','mantConteoV','codNuevosV','insConteoV','ajusteV','precioMantV','trimMantV','sinSueldoV']
         .forEach(k=>{ const mx=Math.max(Number(almNube[k]||0), Number(almLocalPrev[k]||0)); if(mx) state.almacen[k]=mx; });
       // Conservar el saldo/corte de apertura del remanente (objeto + timestamp), venga de nube o local.
       if(!state.almacen.remApertura && (almNube.remApertura||almLocalPrev.remApertura)) state.almacen.remApertura=almNube.remApertura||almLocalPrev.remApertura;
@@ -5895,6 +5893,7 @@ async function cargarAlmacenCombustibleSB(){
         if(pLocal.length) state.personal=pLocal;
         if((state.personal||[]).length) await _sbSubirSiNubeVacia('personal', state.personal);
       }
+      try{ if(typeof personalQuitarSueldos==='function') await personalQuitarSueldos(); }catch(e){}
     }
     // ── TAREOS — snapshot confiable (todos los meses), independiente del mes_id de la tabla ──
     {
@@ -8945,7 +8944,7 @@ function _almMergeSnaps(a,b){
     explosivos:{ ...exA, ...exB, ingresos:_exploMergeMov(exA.ingresos,exB.ingresos), salidas:_exploMergeMov(exA.salidas,exB.salidas) },
     mbAcopio:{ ...mbA, ...mbB, ingresos:_exploMergeMov(mbA.ingresos,mbB.ingresos), salidas:_exploMergeMov(mbA.salidas,mbB.salidas) },
     productos, productosTs };
-  ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','exploStockBaseV','catalogVersion','almExcelV','stockCorteTs','aguaFixV','mantConteoV','codNuevosV','insConteoV','ajusteV','precioMantV','trimMantV']
+  ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','exploStockBaseV','catalogVersion','almExcelV','stockCorteTs','aguaFixV','mantConteoV','codNuevosV','insConteoV','ajusteV','precioMantV','trimMantV','sinSueldoV']
     .forEach(k=>{ const mx=Math.max(Number(a[k]||0), Number(b[k]||0)); if(mx) out[k]=mx; });
   if(a.exploLock||b.exploLock) out.exploLock=true;
   out.remApertura=a.remApertura||b.remApertura||out.remApertura;
@@ -19571,7 +19570,7 @@ async function agregarPersonal(){
   const nombre=document.getElementById('p-nombre').value.trim();
   if(!nombre){showNotif('⚠ Ingresa el nombre','error');return;}
   const jefe=document.getElementById('p-jefe')?.value||'';
-  const nv={nombre,dni:document.getElementById('p-dni').value,rol:document.getElementById('p-rol').value,frente:null,estado:'activo',jornal:parseFloat(document.getElementById('p-jornal').value)||80,ingreso:document.getElementById('p-ingreso').value||hoy(),_ts:Date.now()};
+  const nv={nombre,dni:document.getElementById('p-dni').value,rol:document.getElementById('p-rol').value,frente:null,estado:'activo',jornal:0,ingreso:document.getElementById('p-ingreso').value||hoy(),_ts:Date.now()};
   // 'jefe' (hoja del Jefe de Guardia) se guarda localmente; no se envía al insert para no romper si la columna no existe en la BD
   // 'foto' tampoco se envía al insert (columna opcional): se guarda en el módulo 'personal'
   const foto=_pFotoTmp||'';
@@ -19588,7 +19587,7 @@ async function agregarPersonal(){
   // delante. Se puede cerrar y completarla luego desde el botón Ficha de su fila.
   if(_nuevo&&_nuevo.id!=null){ try{ abrirFichaTrabajador(_nuevo.id); }catch(e){} }
 }
-function limpiarFormPersonal(){['p-nombre','p-dni','p-jornal','p-ingreso'].forEach(id=>document.getElementById(id).value='');const j=document.getElementById('p-jefe');if(j)j.value='';
+function limpiarFormPersonal(){['p-nombre','p-dni','p-ingreso'].forEach(id=>document.getElementById(id).value='');const j=document.getElementById('p-jefe');if(j)j.value='';
   _pFotoTmp=''; const f=document.getElementById('p-foto'); if(f) f.value=''; const pv=document.getElementById('p-foto-prev'); if(pv) pv.innerHTML='';}
 
 /* ── FOTO DEL TRABAJADOR ──────────────────────────────────────────────────────
@@ -20045,7 +20044,6 @@ function abrirEditarPersonal(id){
   try{ poblarSelectCargos('edit-p-rol'); }catch(e){}
   document.getElementById('edit-p-rol').value=p.rol||'';
   document.getElementById('edit-p-frente').value=(p.frente===1||p.frente===2)?p.frente:'';
-  document.getElementById('edit-p-jornal').value=p.jornal||80;
   document.getElementById('edit-p-ingreso').value=p.ingreso||'';
   abrirModal('modal-editar-personal');
 }
@@ -20060,7 +20058,6 @@ async function guardarEditarPersonal(){
   p.dni=document.getElementById('edit-p-dni').value.trim();
   p.rol=document.getElementById('edit-p-rol').value;
   { const fr=parseInt(document.getElementById('edit-p-frente').value); p.frente=isNaN(fr)?null:fr; }
-  p.jornal=parseFloat(document.getElementById('edit-p-jornal').value)||80;
   p.ingreso=document.getElementById('edit-p-ingreso').value;
   p._ts=Date.now();   // marca la edición como la más reciente para que gane al sincronizar
   try{ await sb.from('personal').update({nombre:p.nombre,dni:p.dni,rol:p.rol,frente:p.frente,jornal:p.jornal,ingreso:p.ingreso}).eq('id',id); }catch(e){}
@@ -22991,6 +22988,35 @@ function mergeMantKits(local,nube){
   (local||[]).forEach(r=>{ if(r&&r.id==null) out.push(r); });
   (nube||[]).forEach(r=>{ if(r&&r.id==null) out.push(r); });
   return out.filter(r=>!(r&&r.id!=null&&typeof tombHas==='function'&&tombHas(r.id)));
+}
+/* ── FUERA LOS SUELDOS DE LAS FICHAS ────────────────────────────────────────────────────────
+   Por decisión del usuario, la ficha del trabajador deja de llevar jornal: a nadie se le carga un
+   sueldo en el sistema. Los TRABAJADORES NO SE TOCAN —nombre, DNI, cargo, guardia, frente, fecha
+   de ingreso y estado quedan igual—; lo único que se va es la cifra de dinero.
+   Corre una sola vez, con sello guardado en la data sincronizada (no en el equipo), y marca cada
+   ficha con `_ts` para que la fusión la tome como la edición más reciente y el sueldo no vuelva
+   desde una copia vieja de otro dispositivo.
+   El tareo ya registrado conserva el jornal con que se calculó cada día: es el historial de lo que
+   se pagó y borrarlo cambiaría planillas de meses cerrados. */
+const SIN_SUELDO_V = 1;
+async function personalQuitarSueldos(){
+  try{
+    if(!Array.isArray(state.personal)) return false;
+    if(!state.almacen) state.almacen={};
+    if((Number(state.almacen.sinSueldoV)||0) >= SIN_SUELDO_V) return false;
+    let n=0;
+    state.personal.forEach(p=>{
+      if(!p) return;
+      if(Number(p.jornal)||0){ p.jornal=0; p._ts=Date.now(); n++; }
+      else if(p.jornal!==0) p.jornal=0;
+    });
+    state.almacen.sinSueldoV=SIN_SUELDO_V;
+    try{ personalSave(); }catch(e){}
+    try{ almacenSave(); }catch(e){}
+    try{ await sbSyncModulo('personal', state.personal); }catch(e){}
+    console.log('[sinSueldo] '+n+' fichas sin jornal');
+    return true;
+  }catch(e){ console.warn('[sinSueldo]', e); return false; }
 }
 function personalSave(){try{ if(typeof personalOrdenar==='function') personalOrdenar(); }catch(e){} try{localStorage.setItem(PERSONAL_KEY,JSON.stringify(state.personal||[]));}catch(e){} try{ sbSyncModulo('personal', state.personal||[]); }catch(e){}}
 function tareasSave(){try{localStorage.setItem(TAREAS_KEY,JSON.stringify(state.tareas||[]));}catch(e){} try{ sbSyncModulo('tareas', state.tareas||[]); }catch(e){}}
