@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.21-249</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.21-250</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.21-249</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.21-250</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2535,7 +2535,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.21-249</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.21-250</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -13622,16 +13622,48 @@ function _almValorMov(m){
   const v = Number(m.importe) || Number(m.total) || 0;
   return v || ((Number(m.cantidad)||0) * (Number(m.precio)||0));
 }
+/* El total solo dice cuánto. Para decidir hace falta saber de DÓNDE vino y en QUÉ se fue, así que
+   la misma pasada reparte el ingreso por origen (Poderosa, Trujillo, devolución) y por almacén, y
+   el gasto por almacén. Son cortes del mismo número: cada reparto suma exactamente el total. */
+const ALM_ORIGENES = ['Almacen Poderosa','Logistica Trujillo'];
+function _almOrigen(m){
+  const d=String((m&&m.detalle)||'').trim();
+  if(!d) return 'Sin origen';
+  const n=d.toLowerCase();
+  if(n.indexOf('poderosa')>=0) return 'Almacen Poderosa';
+  if(n.indexOf('trujillo')>=0) return 'Logistica Trujillo';
+  return d;                                   // devolución y cualquier origen escrito a mano
+}
+function _almNom(a){ return (String(a||'General')==='Mantenimiento')?'Mantenimiento':'Insumos'; }
 function almIngresoGastoMes(mes, almacen){
   const enMes=f=>(typeof filtroMes==='function')?filtroMes(f,mes):String(f||'').slice(0,7)===mes;
   const ok=m=>m && enMes(m.fecha) && (!almacen || m.almacen===almacen);
-  const sum=lista=>{
-    let valor=0, n=0; const vales=new Set();
-    (lista||[]).forEach(m=>{ if(!ok(m)) return; valor+=_almValorMov(m); n++; if(m.vale) vales.add(String(m.vale)); });
-    return { valor:Math.round(valor*100)/100, n, vales:vales.size };
+  const sum=(lista,clave)=>{
+    let valor=0, n=0; const vales=new Set(); const por={};
+    (lista||[]).forEach(m=>{ if(!ok(m)) return;
+      const v=_almValorMov(m);
+      valor+=v; n++; if(m.vale) vales.add(String(m.vale));
+      if(clave){ const k=clave(m); if(!por[k]) por[k]={valor:0,n:0}; por[k].valor+=v; por[k].n++; }
+    });
+    Object.values(por).forEach(o=>{ o.valor=Math.round(o.valor*100)/100; });
+    return { valor:Math.round(valor*100)/100, n, vales:vales.size, por };
   };
   const A=(state.almacen||{});
-  return { ingreso:sum(A.ingresos), gasto:sum(A.salidas) };
+  const ing=sum(A.ingresos, m=>_almOrigen(m)+' | '+_almNom(m.almacen));
+  const gas=sum(A.salidas,  m=>_almNom(m.almacen));
+  return { ingreso:ing, gasto:gas };
+}
+// Lo que entró de un origen a un almacén. Sin almacén, todo lo de ese origen.
+function almIngresoDe(d, origen, alm){
+  const por=(d&&d.ingreso&&d.ingreso.por)||{};
+  let valor=0, n=0;
+  Object.keys(por).forEach(k=>{
+    const p=k.split(' | ');
+    if(p[0]!==origen) return;
+    if(alm && p[1]!==alm) return;
+    valor+=por[k].valor; n+=por[k].n;
+  });
+  return { valor:Math.round(valor*100)/100, n };
 }
 // Un solo trozo de HTML para la pestaña de Costo de Inventario y para el dashboard: así las dos
 // pantallas no pueden mostrar cifras distintas del mismo mes.
@@ -13669,6 +13701,37 @@ function almIngVsGastoHTML(mes, compacto, almacen){
         +'<div style="font-size:11px;color:var(--text3);margin-top:2px">'+(dif>=0?'entró más de lo gastado':'salió más de lo que entró')+'</div>'
       +'</div>'
     +'</div>'
+    /* EL DESGLOSE. Arriba está el total; aquí, de dónde vino y en qué se fue. Las columnas son los
+       dos almacenes, y se omite la que no corresponde cuando la pantalla ya está filtrada por uno.
+       Las filas del ingreso suman el total del ingreso, y las del gasto el del gasto: si alguna
+       vez no cuadra, es que hay un movimiento con un almacén u origen que no esperábamos. */
+    + (function(){
+        const cols = almacen ? [_almNom(almacen)] : ['Insumos','Mantenimiento'];
+        const th = t=>'<th style="text-align:right;padding:5px 8px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;font-weight:700">'+t+'</th>';
+        const td = (v,col)=>'<td style="text-align:right;padding:5px 8px;font-family:\'DM Mono\',monospace;font-size:12px;color:'+(v?(col||'var(--text2)'):'var(--text3)')+'">'+(v?S(v):'—')+'</td>';
+        const lbl= t=>'<td style="padding:5px 8px;font-size:12px;color:var(--text2)">'+t+'</td>';
+        const origenes = ALM_ORIGENES.slice();
+        Object.keys(d.ingreso.por||{}).forEach(k=>{ const o=k.split(' | ')[0];
+          if(origenes.indexOf(o)<0) origenes.push(o); });                 // devoluciones y demás
+        const filasIng = origenes.map(o=>{
+          const tot=almIngresoDe(d,o);
+          if(!tot.valor && !tot.n) return '';
+          return '<tr>'+lbl(o)+cols.map(c=>td(almIngresoDe(d,o,c).valor,'#60a5fa')).join('')
+                 +td(tot.valor,'#60a5fa')+'</tr>';
+        }).join('');
+        const gp=d.gasto.por||{};
+        const filaGas = '<tr>'+lbl('Salió a la operación')
+          +cols.map(c=>td((gp[c]||{}).valor||0,'#f87171')).join('')
+          +td(d.gasto.valor,'#f87171')+'</tr>';
+        const tabla = (titulo,filas)=>
+          '<div style="margin-top:12px">'
+          +'<div style="font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">'+titulo+'</div>'
+          +'<table style="width:100%;border-collapse:collapse">'
+          +'<thead><tr><th></th>'+cols.map(th).join('')+th('Total')+'</tr></thead>'
+          +'<tbody>'+filas+'</tbody></table></div>';
+        return tabla('De dónde vino el ingreso', filasIng||('<tr>'+lbl('Sin ingresos este mes')+cols.map(()=>td(0)).join('')+td(0)+'</tr>'))
+             + tabla('En qué se gastó', filaGas);
+      })()
     + (compacto ? '' :
       '<div style="font-size:11px;color:var(--text3);line-height:1.6;margin-top:10px;border-top:1px solid var(--border);padding-top:9px">'
       +'<b style="color:var(--text2)">Ingreso</b> es lo que entró al almacén y sumó existencia. '
