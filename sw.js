@@ -4,12 +4,16 @@
 //    si no hay señal, se sirve la última copia buena desde caché → la app abre en interior mina.
 //  · Supabase y demás peticiones de datos: solo red (la app ya maneja sus fallos y su cola offline).
 // Al desplegar una versión nueva basta con cambiar CACHE_V: el SW viejo se limpia solo.
-const CACHE_V = 'mukicloud-v2026.10.21-253';
+const CACHE_V = 'mukicloud-v2026.10.21-254';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_V)
-      .then(c => c.addAll(['./', './index.html']).catch(() => {}))
+      .then(c => c.addAll(['./', './index.html']).catch(() => {})
+        // El cliente de nube se baja ya, mientras hay señal buena —normalmente al instalar la
+        // app en el campamento—, para que no dependa de que el CDN conteste en bocamina.
+        .then(() => fetch('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2', { mode: 'no-cors' })
+          .then(r => c.put('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2', r)).catch(() => {})))
       .then(() => self.skipWaiting())
   );
 });
@@ -30,10 +34,21 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // Chart.js viene de un CDN y es el ÚNICO recurso de fuera que se guarda. Sin él la app se queda
-  // sin gráficos justo donde peor cae: en interior mina, sin señal. Caché primero, red de respaldo.
-  // (Los datos de la operación nunca se cachean: eso sigue igual, en la línea de abajo.)
-  if (url.href.indexOf('cdn.jsdelivr.net/npm/chart.js') >= 0) {
+  // Las DOS librerías de fuera que se guardan. Los datos de la operación nunca se cachean: eso
+  // sigue igual, en la línea de abajo.
+  //
+  //  · Chart.js — sin él la app se queda sin gráficos justo donde peor cae: en interior mina.
+  //
+  //  · supabase-js — ESTA es la que importa. Es el cliente de nube, y venía de internet sin
+  //    guardarse: si el celular abre la app con mala señal, el archivo no baja, el cliente nunca
+  //    se crea, y la app arranca CIEGA. No descarga los reportes de los demás y los propios se
+  //    quedan en la cola. El equipo no avisa de nada raro —abre y funciona— y el hombre ve su
+  //    listado parado en el último día que sí alcanzó a sincronizar. Fue justo lo que le pasó a
+  //    un jefe de guardia: su teléfono decía "no se pudo leer la nube desde este equipo".
+  //    Guardada, basta con que haya bajado UNA vez para que el teléfono vuelva a tener nube
+  //    siempre que haya señal, aunque el CDN no responda.
+  if (url.href.indexOf('cdn.jsdelivr.net/npm/chart.js') >= 0 ||
+      url.href.indexOf('@supabase/supabase-js') >= 0) {
     e.respondWith(
       caches.match(req).then(hit => hit || fetch(req).then(res => {
         if (res && (res.ok || res.type === 'opaque')) {
