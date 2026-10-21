@@ -2322,7 +2322,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.21-251</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.21-252</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2367,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.21-251</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.21-252</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2535,7 +2535,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.21-251</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.21-252</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5914,7 +5914,7 @@ async function cargarAlmacenCombustibleSB(){
       const merged=mergeById_ts(mergeById_ts(state.reportesGuardia||[], rLocal, _rgMetros), Array.isArray(rNube)?rNube:[], _rgMetros);
       if(merged.length){
         state.reportesGuardia=merged;
-        try{localStorage.setItem(RG_KEY,JSON.stringify(merged));}catch(e){}
+        _lsEscribir(RG_KEY, merged);
         // Re-sube el conjunto COMPLETO para que la nube tenga todos los reportes
         await sbSyncModulo('reportes_guardia', merged);
       }
@@ -8486,7 +8486,23 @@ const _GUARDAR_TRAS_FUSION = {
   remanente_ingresos: m=>{ state.remanenteIngresos=m; _lsSet('atmin_remanente_ingresos', m); },
   reuniones:          m=>{ state.reuniones=m;         _lsSet('atmin_reuniones', m); },
 };
-function _lsSet(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+/* ESCRITURA LOCAL QUE NO SE RINDE CON EL TELÉFONO LLENO.
+   `localStorage` de un celular se llena, y entonces `setItem` lanza. Como el error se tragaba en
+   silencio, el equipo seguía funcionando con lo ÚLTIMO que sí pudo escribir: el jefe de guardia
+   registraba su reporte, este subía bien a la nube, pero el teléfono no se quedaba con la copia —
+   y al volver a abrir la app mostraba el listado viejo, parado en el último día que cupo. En la
+   laptop se veía todo y en el celular no, sin que nada diera error.
+   Ahora, si no entra, se hace sitio igual que con el parte del compresorista —borradores primero,
+   después los espejos de la nube— y se reintenta. Lo que se borra son copias de apoyo que se
+   vuelven a bajar solas; ningún dato propio se pierde. */
+function _lsEscribir(k, v){
+  const intentar=()=>{ try{ localStorage.setItem(k, JSON.stringify(v)); return true; }catch(e){ return false; } };
+  if(intentar()) return true;
+  for(let n=1; n<=2; n++){ try{ _lsLiberar(n); }catch(e){} if(intentar()) return true; }
+  console.warn('[almacenamiento] no cupo en este equipo:', k);
+  return false;
+}
+function _lsSet(k,v){ _lsEscribir(k,v); }
 async function _sbSubirModulo(modulo){
   if(!SB_ONLINE || !CLOUD_SYNC_READY) return false;
   if(!(modulo in _sbPend)) return true;
@@ -21675,7 +21691,7 @@ function exportarPlanillaExcel(){
 }
 // ── OPERACIONES ──
 const RG_KEY='atmin_reportes_guardia';
-function reportesGuardiaSave(){try{localStorage.setItem(RG_KEY,JSON.stringify(state.reportesGuardia||[]));}catch(e){} try{ sbSyncModulo('reportes_guardia', state.reportesGuardia||[]); }catch(e){}}
+function reportesGuardiaSave(){_lsEscribir(RG_KEY, state.reportesGuardia||[]); try{ sbSyncModulo('reportes_guardia', state.reportesGuardia||[]); }catch(e){}}
 function reportesGuardiaLoad(){try{const d=localStorage.getItem(RG_KEY);if(d)state.reportesGuardia=JSON.parse(d)||[];}catch(e){}}
 
 /* ═══ REPORTES DIARIOS DE EQUIPO (Scoop y Dumpers) ══════════════════════════════════
@@ -21918,7 +21934,7 @@ function eqopLoad(){
   if(porClave.size!==state.equiposOp.length) state.equiposOp=[...porClave.values()];
   return state.equiposOp;
 }
-function eqopSave(){ try{ localStorage.setItem(EQOP_KEY,JSON.stringify(state.equiposOp||[])); }catch(e){} try{ sbSyncModulo('equipos_operacion', state.equiposOp||[]); }catch(e){} }
+function eqopSave(){ _lsEscribir(EQOP_KEY, state.equiposOp||[]); try{ sbSyncModulo('equipos_operacion', state.equiposOp||[]); }catch(e){} }
 function eqopFicha(fecha,turno,equipo){ return (state.equiposOp||[]).find(f=>f.fecha===fecha&&f.turno===turno&&f.equipo===equipo); }
 function eqopItemVacio(){ return {cod:'',hi:'',hf:'',m:'',d:'',cant:'',oLabor:'',oNv:'2820',dLabor:'',dNv:'2820'}; }
 /* Puente con el reporte del jefe de guardia: en cuanto él anota horómetros, la hoja del equipo
@@ -23075,8 +23091,8 @@ async function personalQuitarSueldos(){
     return true;
   }catch(e){ console.warn('[sinSueldo]', e); return false; }
 }
-function personalSave(){try{ if(typeof personalOrdenar==='function') personalOrdenar(); }catch(e){} try{localStorage.setItem(PERSONAL_KEY,JSON.stringify(state.personal||[]));}catch(e){} try{ sbSyncModulo('personal', state.personal||[]); }catch(e){}}
-function tareasSave(){try{localStorage.setItem(TAREAS_KEY,JSON.stringify(state.tareas||[]));}catch(e){} try{ sbSyncModulo('tareas', state.tareas||[]); }catch(e){}}
+function personalSave(){try{ if(typeof personalOrdenar==='function') personalOrdenar(); }catch(e){} _lsEscribir(PERSONAL_KEY, state.personal||[]); try{ sbSyncModulo('personal', state.personal||[]); }catch(e){}}
+function tareasSave(){_lsEscribir(TAREAS_KEY, state.tareas||[]); try{ sbSyncModulo('tareas', state.tareas||[]); }catch(e){}}
 // Salidas del Stock Remanente (movimientos que controla Logística, NO afectan NV3190)
 const REMSAL_KEY='atmin_remanente_salidas';
 function remSalLoad(){try{const d=localStorage.getItem(REMSAL_KEY);if(d)state.remanenteSalidas=JSON.parse(d)||[];}catch(e){} if(!Array.isArray(state.remanenteSalidas))state.remanenteSalidas=[];}
