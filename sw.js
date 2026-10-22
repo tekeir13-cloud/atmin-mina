@@ -4,12 +4,12 @@
 //    si no hay señal, se sirve la última copia buena desde caché → la app abre en interior mina.
 //  · Supabase y demás peticiones de datos: solo red (la app ya maneja sus fallos y su cola offline).
 // Al desplegar una versión nueva basta con cambiar CACHE_V: el SW viejo se limpia solo.
-const CACHE_V = 'mukicloud-v2026.10.22-255';
+const CACHE_V = 'mukicloud-v2026.10.22-256';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_V)
-      .then(c => c.addAll(['./', './index.html', './vendor/supabase-js-2.118.0.js']).catch(() => {})
+      .then(c => c.addAll(['./', './index.html', './vendor/supabase-js-2.118.0.js', './vendor/xlsx-js-style-1.2.0.js']).catch(() => {})
         // El cliente de nube se baja ya, mientras hay señal buena —normalmente al instalar la
         // app en el campamento—, para que no dependa de que el CDN conteste en bocamina.
         .then(() => fetch('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2', { mode: 'no-cors' })

@@ -2292,7 +2292,14 @@ select option{background:var(--coal3);}
 }
 
 </style>
-<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<!-- Excel, servido desde el proyecto por lo mismo que el cliente de nube: en un celular de mina la
+     descarga de fuera puede no entrar, y entonces los botones de Excel fallan sin explicación. -->
+<script src="vendor/xlsx-js-style-1.2.0.js"></script>
+<script>
+  if (typeof XLSX === 'undefined') {
+    document.write('<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"><\/script>');
+  }
+</script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 </head>
 <body>
@@ -2322,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.22-255</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.22-256</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2367,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.22-255</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.22-256</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2535,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.22-255</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.22-256</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -3003,6 +3010,11 @@ select option{background:var(--coal3);}
           title="Deja una sola ficha por trabajador. Conserva la que tiene tareos y le reasigna los de las demas.">🧹 Quitar duplicados</button>
         <button class="btn btn-outline" onclick="actualizarPlanillaOficial()" style="border-color:#60a5fa;color:#60a5fa;font-size:12px;padding:7px 14px"
           title="Concilia el listado con la planilla oficial: actualiza jornal, cargo y guardia, y da de alta a quien falte. No borra a nadie.">📋 Actualizar planilla oficial</button>
+        <button class="btn btn-outline" onclick="personalExportarExcel()" style="border-color:#22d3a5;color:#22d3a5;font-size:12px;padding:7px 14px"
+          title="Un Excel con todos los trabajadores y todos los campos de su ficha, tal como están hoy.">⬇ Descargar Excel</button>
+        <button class="btn btn-outline" onclick="document.getElementById('personal-excel-file').click()" style="border-color:#c9a84c;color:#c9a84c;font-size:12px;padding:7px 14px"
+          title="Sube el mismo Excel con los campos llenados: actualiza las fichas y da de alta a los trabajadores nuevos.">⬆ Subir Excel</button>
+        <input type="file" id="personal-excel-file" accept=".xlsx,.xls" style="display:none" onchange="personalImportarExcel(this)">
       </div>
       <div class="form-grid">
         <div class="form-group"><label>Nombre Completo</label><input type="text" id="p-nombre" placeholder="Ej: Juan Quispe"></div>
@@ -35466,6 +35478,202 @@ const _plNorm=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').t
 // es el que aparece en la planilla y en el historial. Si se borrara esa, los tareos quedarían
 // apuntando a nadie y se perdería el costo de planilla ya registrado. Los tareos de las fichas
 // eliminadas se reasignan a la que se conserva, así no se pierde ni un día trabajado.
+/* ═══ PERSONAL EN EXCEL — BAJAR, LLENAR, SUBIR ═══════════════════════════════════════════════
+   Llenar 63 fichas a mano, campo por campo y en el navegador, es trabajo de días. Aquí se baja
+   todo lo que hay hoy, se completa en Excel —que es donde la gente de verdad trabaja— y se vuelve
+   a subir.
+
+   CÓMO SE RECONOCE A CADA TRABAJADOR. Por su ID, que viaja en la primera columna, y si no por su
+   DNI. Por eso ninguna de las dos se toca al llenar el archivo: son la llave. Una fila sin ID y
+   con un DNI que no existe es un trabajador NUEVO y se da de alta.
+
+   QUÉ PISA Y QUÉ NO. Solo lo que venga escrito. Una celda vacía NO borra lo que ya había: se
+   entiende como "esto no lo llené", no como "esto va en blanco". Así se puede mandar un archivo
+   con una sola columna completada sin miedo a vaciar el resto. Para borrar un dato a propósito
+   está la ficha en pantalla.
+
+   LAS LISTAS QUE SE REPITEN —familiares, contactos de emergencia, estudios superiores, idiomas—
+   no caben en una fila, así que van en sus propias hojas, atadas al DNI. Esas sí se reemplazan
+   enteras para el trabajador que aparezca en la hoja: es la única forma de quitar una fila. */
+function _pExcelPlanas(){
+  const out=[];
+  (typeof FICHA_SECCIONES!=='undefined'?FICHA_SECCIONES:[]).forEach(sec=>{
+    if(sec.filas) return;
+    (sec.campos||[]).forEach(c=>out.push({k:c.k, l:sec.tit+' — '+c.l}));
+  });
+  return out;
+}
+function _pExcelRepetidas(){
+  return (typeof FICHA_SECCIONES!=='undefined'?FICHA_SECCIONES:[]).filter(s=>s.filas);
+}
+// Excel no admite : \\ / ? * [ ] en el nombre de una hoja, y hay títulos que los llevan
+// ("Idiomas y/o Dialecto"). Mismo nombre al bajar y al subir, para que se reconozcan.
+function _pHoja(sec){ return String(sec.tit||sec.filas||'').replace(/[:\\\/?*\[\]]/g,' ').replace(/\s+/g,' ').trim().slice(0,31); }
+const _P_BASE=[
+  {k:'id',        l:'ID (no modificar)'},
+  {k:'nombre',    l:'Nombre completo'},
+  {k:'dni',       l:'DNI'},
+  {k:'rol',       l:'Cargo'},
+  {k:'frente',    l:'Frente (1, 2 o vacío)'},
+  {k:'guardia',   l:'Guardia'},
+  {k:'unidad',    l:'Unidad'},
+  {k:'estado',    l:'Estado (activo / baja)'},
+  {k:'ingreso',   l:'Fecha de ingreso'},
+  {k:'motivoBaja',l:'Motivo de baja'},
+  {k:'fechaBaja', l:'Fecha de baja'},
+];
+function personalExportarExcel(){
+  if(typeof XLSX==='undefined'){ showNotif('La librería de Excel no cargó. Recarga la página e intenta de nuevo.','error'); return; }
+  const gente=(state.personal||[]).slice()
+    .sort((a,b)=>String(a&&a.nombre||'').localeCompare(String(b&&b.nombre||'')));
+  if(!gente.length){ showNotif('No hay personal registrado','error'); return; }
+  const planas=_pExcelPlanas();
+  const wb=XLSX.utils.book_new();
+  // ── Hoja 1: un trabajador por fila ──
+  const cab=_P_BASE.map(c=>c.l).concat(planas.map(c=>c.l));
+  const filas=[cab];
+  gente.forEach(p=>{
+    const f=(p&&p.ficha)||{};
+    filas.push(_P_BASE.map(c=>{
+      const v=p?p[c.k]:'';
+      return (v==null)?'':String(v);
+    }).concat(planas.map(c=>{
+      const v=f[c.k]; return (v==null)?'':String(v);
+    })));
+  });
+  const ws=XLSX.utils.aoa_to_sheet(filas);
+  ws['!cols']=cab.map((t,i)=>({wch: i<2?30:Math.max(14,Math.min(34,String(t).length+2))}));
+  XLSX.utils.book_append_sheet(wb,ws,'Trabajadores');
+  // ── Una hoja por cada lista que se repite ──
+  _pExcelRepetidas().forEach(sec=>{
+    const cols=sec.cols||[];
+    const c2=['DNI','Trabajador'].concat(cols.map(c=>c.l));
+    const f2=[c2];
+    gente.forEach(p=>{
+      const arr=((p&&p.ficha)||{})[sec.filas]||[];
+      arr.forEach(r=>f2.push([String(p.dni||''),String(p.nombre||'')]
+        .concat(cols.map(c=>{ const v=r&&r[c.k]; return (v==null)?'':String(v); }))));
+    });
+    const w2=XLSX.utils.aoa_to_sheet(f2);
+    w2['!cols']=c2.map(t=>({wch:Math.max(14,Math.min(34,String(t).length+2))}));
+    XLSX.utils.book_append_sheet(wb,w2,_pHoja(sec));
+  });
+  // ── Instrucciones, para quien reciba el archivo sin contexto ──
+  const guia=XLSX.utils.aoa_to_sheet([
+    ['CÓMO USAR ESTE ARCHIVO'],[''],
+    ['1','Llena las casillas que quieras completar. Puedes dejar en blanco todo lo demás.'],
+    ['2','Una casilla vacía NO borra lo que ya está guardado: se entiende como "no la llené".'],
+    ['3','No cambies la columna ID ni la de DNI: con eso el sistema reconoce a cada trabajador.'],
+    ['4','Para dar de alta a alguien nuevo, agrega una fila al final con su nombre y su DNI, y deja el ID vacío.'],
+    ['5','No cambies los títulos de las columnas ni el nombre de las hojas.'],
+    ['6','En las hojas de familiares, emergencia, estudios e idiomas, las filas de un trabajador REEMPLAZAN a las que tenía.'],
+    [''],
+    ['Generado el', new Date().toLocaleString('es-PE')],
+    ['Trabajadores', gente.length],
+  ]);
+  guia['!cols']=[{wch:14},{wch:96}];
+  XLSX.utils.book_append_sheet(wb,guia,'Instrucciones');
+  XLSX.writeFile(wb, 'MukiCloud_personal_'+hoy()+'.xlsx');
+  showNotif('✓ Excel generado con '+gente.length+' trabajadores');
+}
+function personalImportarExcel(input){
+  const file=input&&input.files&&input.files[0];
+  input.value='';
+  if(!file) return;
+  if(typeof XLSX==='undefined'){ showNotif('La librería de Excel no cargó. Recarga la página e intenta de nuevo.','error'); return; }
+  const fr=new FileReader();
+  fr.onload=function(ev){
+    let wb;
+    try{ wb=XLSX.read(new Uint8Array(ev.target.result),{type:'array'}); }
+    catch(e){ showNotif('No se pudo leer el archivo. ¿Es un Excel?','error'); return; }
+    const hoja=wb.Sheets['Trabajadores'];
+    if(!hoja){ showNotif('El archivo no tiene la hoja "Trabajadores". Descarga el Excel del sistema y llena ese.','error'); return; }
+    const filas=XLSX.utils.sheet_to_json(hoja,{header:1,defval:''});
+    if(filas.length<2){ showNotif('La hoja "Trabajadores" está vacía','error'); return; }
+    const planas=_pExcelPlanas();
+    const porTit={}; _P_BASE.forEach(c=>porTit[c.l]={base:c.k}); planas.forEach(c=>porTit[c.l]={ficha:c.k});
+    const cab=(filas[0]||[]).map(x=>String(x||'').trim());
+    const mapa=cab.map(t=>porTit[t]||null);
+    if(!mapa.some(x=>x&&x.base==='dni')){ showNotif('No encuentro la columna de DNI. No cambies los títulos.','error'); return; }
+    const U=s=>String(s==null?'':s).trim();
+    const D=s=>U(s).replace(/\D/g,'');
+    const porId={}, porDni={};
+    (state.personal||[]).forEach(p=>{ if(!p) return;
+      if(p.id!=null) porId[String(p.id)]=p;
+      const d=D(p.dni); if(d && !porDni[d]) porDni[d]=p; });
+    let nuevos=0, tocados=0, campos=0, saltadas=0;
+    const vistos={};
+    for(let i=1;i<filas.length;i++){
+      const fila=filas[i]||[];
+      const leer=sel=>{ for(let j=0;j<mapa.length;j++){ const m=mapa[j]; if(m&&sel(m)) return U(fila[j]); } return ''; };
+      const id=leer(m=>m.base==='id'), dni=D(leer(m=>m.base==='dni')), nombre=leer(m=>m.base==='nombre');
+      let p = (id && porId[id]) || (dni && porDni[dni]) || null;
+      if(!p){
+        if(!nombre && !dni){ saltadas++; continue; }               // fila en blanco al final
+        const ids=(state.personal||[]).map(x=>Number(x&&x.id)||0);
+        p={ id:(ids.length?Math.max.apply(null,ids):0)+1+nuevos, nombre:nombre.toUpperCase(),
+            dni:dni, rol:'', frente:null, estado:'activo', jornal:0, ficha:{} };
+        state.personal.push(p); nuevos++;
+        if(dni) porDni[dni]=p; porId[String(p.id)]=p;
+      }
+      vistos[D(p.dni)||('id:'+p.id)]=p;
+      let cambio=false;
+      if(!p.ficha || typeof p.ficha!=='object') p.ficha={};
+      mapa.forEach((m,j)=>{
+        if(!m) return;
+        const v=U(fila[j]);
+        if(!v) return;                                   // vacío = "no lo llené", no borra
+        if(m.base){
+          if(m.base==='id') return;                      // la llave no se reescribe
+          let val=v;
+          if(m.base==='nombre') val=v.toUpperCase();
+          if(m.base==='dni')    val=D(v);
+          if(m.base==='frente'){ const n=parseInt(v,10); val=(n===1||n===2)?n:null; if(val==null) return; }
+          if(m.base==='estado') val=(/baja/i.test(v)?'baja':'activo');
+          if(String(p[m.base]==null?'':p[m.base])===String(val)) return;
+          p[m.base]=val; cambio=true; campos++;
+        }else{
+          if(String(p.ficha[m.ficha]==null?'':p.ficha[m.ficha])===v) return;
+          p.ficha[m.ficha]=v; cambio=true; campos++;
+        }
+      });
+      if(cambio){ p._ts=Date.now(); tocados++; }
+    }
+    // ── Listas que se repiten: reemplazan lo que tenía ese trabajador ──
+    let listas=0;
+    _pExcelRepetidas().forEach(sec=>{
+      const h=wb.Sheets[_pHoja(sec)]; if(!h) return;
+      const fs=XLSX.utils.sheet_to_json(h,{header:1,defval:''});
+      if(fs.length<2) return;
+      const cols=sec.cols||[];
+      const cb=(fs[0]||[]).map(x=>String(x||'').trim());
+      const idx=cols.map(c=>cb.indexOf(c.l));
+      const iDni=cb.indexOf('DNI');
+      if(iDni<0) return;
+      const acum={};
+      for(let i=1;i<fs.length;i++){
+        const f=fs[i]||[]; const d=D(f[iDni]); if(!d) continue;
+        const r={}; let algo=false;
+        cols.forEach((c,k)=>{ const v=(idx[k]>=0)?U(f[idx[k]]):''; r[c.k]=v; if(v) algo=true; });
+        if(!algo) continue;
+        (acum[d]=acum[d]||[]).push(r);
+      }
+      Object.keys(acum).forEach(d=>{
+        const p=porDni[d]; if(!p) return;
+        if(!p.ficha||typeof p.ficha!=='object') p.ficha={};
+        p.ficha[sec.filas]=acum[d]; p._ts=Date.now(); listas++;
+      });
+    });
+    if(!nuevos && !tocados && !listas){ showNotif('El Excel no trae ningún dato nuevo: nada que actualizar','error'); return; }
+    try{ personalSave(); }catch(e){}
+    try{ sbSyncModulo('personal', state.personal); }catch(e){}
+    try{ if(typeof renderPersonal==='function') renderPersonal(); }catch(e){}
+    showNotif('✓ '+tocados+' ficha'+(tocados===1?'':'s')+' actualizada'+(tocados===1?'':'s')
+      +(nuevos?' · '+nuevos+' trabajador'+(nuevos===1?'':'es')+' nuevo'+(nuevos===1?'':'s'):'')
+      +' · '+campos+' campo'+(campos===1?'':'s'));
+  };
+  fr.readAsArrayBuffer(file);
+}
 function deduplicarPersonal(){
   const norm=t=>String(t||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
   const nTareos=id=>(state.tareas||[]).filter(t=>String(t.trabajadorId)===String(id)).length;
