@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.22-257</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.22-258</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.22-257</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.22-258</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.22-257</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.22-258</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -3015,6 +3015,8 @@ select option{background:var(--coal3);}
         <button class="btn btn-outline" onclick="document.getElementById('personal-excel-file').click()" style="border-color:#c9a84c;color:#c9a84c;font-size:12px;padding:7px 14px"
           title="Sube el mismo Excel con los campos llenados: actualiza las fichas y da de alta a los trabajadores nuevos.">⬆ Subir Excel</button>
         <input type="file" id="personal-excel-file" accept=".xlsx,.xls" style="display:none" onchange="personalImportarExcel(this)">
+        <button class="btn btn-outline" onclick="abrirHistorialPersonal()" style="border-color:#a78bfa;color:#a78bfa;font-size:12px;padding:7px 14px"
+          title="Fotos de la lista de personal guardadas solas. Sirven para volver a como estaba hace un rato.">🕘 Versiones</button>
       </div>
       <div class="form-grid">
         <div class="form-group"><label>Nombre Completo</label><input type="text" id="p-nombre" placeholder="Ej: Juan Quispe"></div>
@@ -5917,6 +5919,17 @@ async function cargarAlmacenCombustibleSB(){
         if((state.personal||[]).length) await _sbSubirSiNubeVacia('personal', state.personal);
       }
       try{ if(typeof personalQuitarSueldos==='function') await personalQuitarSueldos(); }catch(e){}
+      // Historial de versiones: se trae el de la nube, se une con el de este equipo y se deja
+      // una foto del estado con el que arranca la jornada.
+      try{
+        const hNube=await sbLoadModulo('personal_hist');
+        if(Array.isArray(hNube) && typeof _MERGE_AL_SUBIR!=='undefined'){
+          const f=_MERGE_AL_SUBIR['personal_hist'];
+          _pHist=f?f((typeof pHistCargar==='function'?pHistCargar():[]), hNube):hNube;
+          try{ _lsSet('atmin_personal_hist', _pHist); }catch(e){}
+        }
+        if(typeof pHistGuardar==='function') pHistGuardar(state.personal||[], true);
+      }catch(e){}
     }
     // ── TAREOS — snapshot confiable (todos los meses), independiente del mes_id de la tabla ──
     {
@@ -8501,6 +8514,10 @@ const _MERGE_AL_SUBIR = {
   remanente_salidas:  (loc,nub)=> (typeof mergeSnapById==='function') ? mergeSnapById(loc,nub) : loc,
   remanente_ingresos: (loc,nub)=> (typeof mergeSnapById==='function') ? mergeSnapById(loc,nub) : loc,
   reuniones:          (loc,nub)=> (typeof mergeSnapById==='function') ? mergeSnapById(loc,nub) : loc,
+  // Las fotos del personal: se juntan las de todos los equipos y se conservan las más recientes.
+  personal_hist:      (loc,nub)=>{ const by={};
+                        (nub||[]).concat(loc||[]).forEach(f=>{ if(f&&f.t && !by[f.t]) by[f.t]=f; });
+                        return Object.values(by).sort((a,b)=>b.t-a.t).slice(0, (typeof PHIST_MAX!=='undefined'?PHIST_MAX:12)); },
 };
 // Dónde vive cada uno en este equipo, para que la unión se vea también en pantalla.
 const _GUARDAR_TRAS_FUSION = {
@@ -8511,6 +8528,7 @@ const _GUARDAR_TRAS_FUSION = {
   remanente_salidas:  m=>{ state.remanenteSalidas=m;  _lsSet('atmin_remanente_salidas', m); },
   remanente_ingresos: m=>{ state.remanenteIngresos=m; _lsSet('atmin_remanente_ingresos', m); },
   reuniones:          m=>{ state.reuniones=m;         _lsSet('atmin_reuniones', m); },
+  personal_hist:      m=>{ try{ _pHist=m; _lsSet('atmin_personal_hist', m); }catch(e){} },
 };
 /* ESCRITURA LOCAL QUE NO SE RINDE CON EL TELÉFONO LLENO.
    `localStorage` de un celular se llena, y entonces `setItem` lanza. Como el error se tragaba en
@@ -8633,7 +8651,7 @@ try{
 // Módulos cuya carga FUSIONA por id (unión), no reemplaza: para ellos SIEMPRE se trae la nube
 // aunque haya un pendiente, porque fusionar nunca pierde lo local y sí recupera lo de otros
 // equipos. Para los módulos de REEMPLAZO (personal, tareas…) sí se protege el dato offline.
-const _sbModulosFusion=new Set(['almacen','personal','reportes_guardia','equipos_operacion','mant_kits','compresorista','reuniones','remanente_salidas','remanente_ingresos','servicios_terceros','tombstones']);
+const _sbModulosFusion=new Set(['almacen','personal','reportes_guardia','equipos_operacion','mant_kits','compresorista','reuniones','remanente_salidas','remanente_ingresos','servicios_terceros','tombstones','personal_hist']);
 // Devuelve el ESTADO de la lectura, no solo el dato. sbLoadModulo() contestaba null para tres
 // situaciones muy distintas —nube vacía, cambio local pendiente y error de lectura— y quien
 // llamaba no podía distinguirlas. Confundir "no pude leer" con "está vacía" y subir encima lo
@@ -8722,6 +8740,8 @@ else if(Number(prevAlm.productosTs||0)>Number(data.productosTs||0)){ a.productos
                                  const act=(typeof pfLoad==='function')?pfLoad():{};
                                  setLS(FOTOS_KEY, {...act, ...data});
                                  try{ if(document.getElementById('rrhh-tarjetas')&&typeof renderTarjetas==='function') renderTarjetas(); }catch(e){} } break;
+    case 'personal_hist':      if(Array.isArray(data)){ try{ const f=_MERGE_AL_SUBIR['personal_hist'];
+                                 _pHist=f?f(_pHist||[], data):data; _lsSet('atmin_personal_hist', _pHist); }catch(e){} } break;
     case 'almacen_histbackup': if(data&&typeof data==='object'){ setLS('atmin_almacen_histbackup', data); } break;
     case 'params_precios': case 'adelantos': case 'meses_cerrados': case 'fin_config': case 'personal_jefe':
       if(typeof _cfgAplicar==='function'&&data&&typeof data==='object'){ _cfgAplicar(modulo,data); try{ localStorage.setItem('atmin_cfg_ts_'+modulo,String(Number(data._ts)||0)); }catch(e){} } break;
@@ -23121,7 +23141,122 @@ async function personalQuitarSueldos(){
     return true;
   }catch(e){ console.warn('[sinSueldo]', e); return false; }
 }
-function personalSave(){try{ if(typeof personalOrdenar==='function') personalOrdenar(); }catch(e){} _lsEscribir(PERSONAL_KEY, state.personal||[]); try{ sbSyncModulo('personal', state.personal||[]); }catch(e){}}
+/* ═══════ HISTORIAL DE PERSONAL — poder volver a cómo estaba hace un rato ═══════════════════
+   La lista de personal es el único sitio donde una sola acción equivocada —una fusión rara, una
+   subida desde un equipo atrasado, un botón apretado sin querer— puede deshacer el trabajo de una
+   mañana entera, y hasta hoy no había a dónde volver salvo que alguien se hubiera acordado de
+   bajar un respaldo. Desde ahora el sistema se guarda solo una FOTO de la lista cada vez que
+   cambia (como mucho una cada tres minutos, y se conservan las últimas doce), con su fecha, su
+   hora y quién estaba usando el sistema. Las fotos viajan también a la nube, que es lo que sirve
+   cuando el equipo que tenía el dato bueno es justamente el que se quedó sin él.
+   Las fotos NO llevan la foto del trabajador: pesa demasiado y no es lo que se pierde.          */
+const PHIST_KEY='atmin_personal_hist';
+const PHIST_MAX=12;                 // cuántas fotos se conservan
+const PHIST_CADA=3*60*1000;         // una foto cada tres minutos como máximo
+let _pHist=null;
+function pHistCargar(){
+  if(_pHist) return _pHist;
+  try{ _pHist=JSON.parse(localStorage.getItem(PHIST_KEY)||'[]')||[]; }catch(e){ _pHist=[]; }
+  if(!Array.isArray(_pHist)) _pHist=[];
+  return _pHist;
+}
+function _pHistLimpia(lista){
+  /* COPIA DE VERDAD, no una referencia: si la foto apuntara a las mismas fichas que está usando
+     la pantalla, editar un campo cambiaría también el recuerdo y no habría a dónde volver. */
+  return (lista||[]).map(p=>{
+    if(!p) return p;
+    let q; try{ q=JSON.parse(JSON.stringify(p)); }catch(e){ q=Object.assign({},p); }
+    delete q.foto; return q;
+  });
+}
+function _pHistPodar(h){
+  return h.filter(x=>x&&x.t).sort((a,b)=>b.t-a.t).slice(0,PHIST_MAX);
+}
+function pHistGuardar(lista, forzar){
+  try{
+    if(!Array.isArray(lista) || !lista.length) return;
+    const h=pHistCargar();
+    // Dos fotos no pueden compartir la hora exacta: es lo que las identifica al restaurar.
+    let ahora=Date.now();
+    if(h.length && ahora<=h[0].t) ahora=h[0].t+1;
+    const datos=_pHistLimpia(lista);
+    const firma=JSON.stringify(datos).length+':'+datos.length;
+    const ult=h.length?h[0]:null;
+    if(ult && ult.firma===firma) return;                        // nada cambió
+    if(!forzar && ult && (ahora-ult.t)<PHIST_CADA){             // muy seguida: se reemplaza la última
+      h[0]={t:ahora, firma, n:datos.length, por:_pHistQuien(), datos};
+    }else{
+      h.unshift({t:ahora, firma, n:datos.length, por:_pHistQuien(), datos});
+    }
+    _pHist=_pHistPodar(h);
+    _lsEscribir(PHIST_KEY, _pHist);
+    try{ sbSyncModulo('personal_hist', _pHist); }catch(e){}
+  }catch(e){ console.warn('[histPersonal]', e); }
+}
+function _pHistQuien(){
+  try{ return (typeof usuarioActivo!=='undefined' && usuarioActivo) ? (usuarioActivo.nombre||usuarioActivo.rol||'—') : '—'; }catch(e){ return '—'; }
+}
+function _pHistCuando(t){
+  const d=new Date(t), p=n=>String(n).padStart(2,'0');
+  return p(d.getDate())+'/'+p(d.getMonth()+1)+' '+p(d.getHours())+':'+p(d.getMinutes());
+}
+/* Volver a una foto. Se devuelven los datos de los trabajadores que estaban en ella y se marcan
+   con la hora de ahora, para que esta decisión le gane a cualquier copia de otro equipo. A quien
+   se haya dado de alta DESPUÉS no se le toca: volver atrás no debe borrar a nadie. */
+function pHistRestaurar(t){
+  const h=pHistCargar();
+  const f=h.find(x=>x&&String(x.t)===String(t));
+  if(!f){ showNotif('No encuentro esa versión','error'); return; }
+  if(!confirm('Volver la lista de personal a como estaba el '+_pHistCuando(f.t)+'?\n\n'+
+              f.n+' fichas se devuelven a ese estado. A quien se haya registrado después no se le toca.')) return;
+  pHistGuardar(state.personal||[], true);                       // foto de seguridad del estado de AHORA
+  const ahora=Date.now();
+  const porId={}; (state.personal||[]).forEach(p=>{ if(p&&p.id!=null) porId[String(p.id)]=p; });
+  let repuestas=0;
+  (f.datos||[]).forEach(v=>{
+    if(!v || v.id==null) return;
+    const act=porId[String(v.id)];
+    const foto=act&&act.foto;                                   // la foto del trabajador se conserva
+    const nuevo=Object.assign({}, v, {_ts:ahora});
+    if(foto) nuevo.foto=foto;
+    if(act){ Object.keys(act).forEach(k=>{ if(!(k in nuevo)) delete act[k]; }); Object.assign(act, nuevo); }
+    else state.personal.push(nuevo);
+    repuestas++;
+  });
+  try{ personalSave(); }catch(e){}
+  try{ if(typeof poblarSelects==='function') poblarSelects(); }catch(e){}
+  try{ if(typeof renderPersonal==='function') renderPersonal(); }catch(e){}
+  try{ if(typeof renderCostoRRHH==='function') renderCostoRRHH(); }catch(e){}
+  try{ cerrarModal('modal-phist'); }catch(e){}
+  showNotif('✓ '+repuestas+' fichas devueltas a como estaban el '+_pHistCuando(f.t),'ok');
+}
+function abrirHistorialPersonal(){
+  const h=pHistCargar();
+  let caja=document.getElementById('modal-phist');
+  if(!caja){
+    caja=document.createElement('div');
+    caja.className='modal-overlay'; caja.id='modal-phist';
+    caja.addEventListener('click',e=>{ if(e.target===caja) caja.style.display='none'; });
+    document.body.appendChild(caja);
+  }
+  const filas = h.length ? h.map(f=>
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;'+
+      'padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.08)">'+
+      '<div><div style="font-weight:700;color:#e5e7eb">'+_pHistCuando(f.t)+'</div>'+
+      '<div style="font-size:12px;color:#94a3b8">'+f.n+' fichas · '+(f.por||'—')+'</div></div>'+
+      '<button class="btn btn-outline" style="font-size:12px;padding:6px 12px;border-color:#22d3a5;color:#22d3a5" '+
+      'onclick="pHistRestaurar('+f.t+')">Volver a esta</button></div>').join('')
+    : '<div style="padding:18px;color:#94a3b8;font-size:13px">Todavía no hay versiones guardadas. '+
+      'Se van guardando solas cada vez que cambia la lista de personal.</div>';
+  caja.innerHTML='<div class="modal" style="max-width:520px">'+
+    '<div class="modal-header"><div class="modal-title">🕘 Versiones de Personal</div>'+
+    '<button class="modal-close" onclick="document.getElementById(\'modal-phist\').style.display=\'none\'">✕</button></div>'+
+    '<div style="font-size:12px;color:#94a3b8;padding:0 2px 10px">Fotos de la lista completa, guardadas solas. '+
+    'Volver a una devuelve las fichas a ese estado; a quien se haya registrado después no se le toca.</div>'+
+    '<div style="max-height:60vh;overflow:auto;border:1px solid rgba(255,255,255,.08);border-radius:8px">'+filas+'</div></div>';
+  caja.style.display='flex';
+}
+function personalSave(){try{ if(typeof personalOrdenar==='function') personalOrdenar(); }catch(e){} _lsEscribir(PERSONAL_KEY, state.personal||[]); try{ pHistGuardar(state.personal||[]); }catch(e){} try{ sbSyncModulo('personal', state.personal||[]); }catch(e){}}
 function tareasSave(){_lsEscribir(TAREAS_KEY, state.tareas||[]); try{ sbSyncModulo('tareas', state.tareas||[]); }catch(e){}}
 // Salidas del Stock Remanente (movimientos que controla Logística, NO afectan NV3190)
 const REMSAL_KEY='atmin_remanente_salidas';
