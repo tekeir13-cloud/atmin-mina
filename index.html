@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.22-259</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.22-260</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.22-259</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.22-260</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.22-259</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.22-260</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5904,7 +5904,16 @@ async function cargarAlmacenCombustibleSB(){
     // ── PERSONAL (RRHH) — snapshot confiable (localStorage + nube), independiente de la tabla ──
     {
       const pNube=await sbLoadModulo('personal');
-      if(Array.isArray(pNube)&&pNube.length){
+      /* AL CONECTAR, LA NUBE MANDA. Si este equipo no tiene nada pendiente de subir, su lista se
+         reemplaza por la de la nube tal cual: lo que quedó guardado en el sistema es la verdad, y
+         una copia vieja de este equipo no tiene por qué volver a imponerse. Solo cuando hay
+         trabajo propio sin subir —se trabajó sin señal— se fusionan las dos, para no perderlo. */
+      const _pPendiente = (typeof _sbPend!=='undefined') && ('personal' in _sbPend);
+      if(Array.isArray(pNube)&&pNube.length&&!_pPendiente){
+        state.personal=pNube;
+        try{ if(typeof normalizarCargos==='function') normalizarCargos(); }catch(e){}
+        try{localStorage.setItem(PERSONAL_KEY,JSON.stringify(state.personal));}catch(e){}
+      }else if(Array.isArray(pNube)&&pNube.length){
         // FUSIÓN por id conservando la última edición (_ts más reciente) y respetando lápidas:
         // así una edición de sueldo/baja hecha en un equipo NO se pierde ni la pisa una copia vieja
         // de otro dispositivo, y un trabajador eliminado no resucita.
@@ -8718,7 +8727,7 @@ function _rtAplicarModulo(modulo, data){
    sin tocar nada. Ahora se unen por id/código y solo una lápida borra. */
 if(typeof _mergeProductos==='function'){ a.productos=_mergeProductos(prevAlm.productos||[], data.productos||[], prevAlm.productosTs, data.productosTs); a.productosTs=Math.max(Number(prevAlm.productosTs||0), Number(data.productosTs||0)); }
 else if(Number(prevAlm.productosTs||0)>Number(data.productosTs||0)){ a.productos=prevAlm.productos; a.productosTs=prevAlm.productosTs; } if(typeof _prodsVivos==='function') a.productos=_prodsVivos(a.productos); try{ if(typeof _almRestaurarFotos==='function') a=_almRestaurarFotos(a); }catch(e){} state.almacen=a; setLS('atmin_almacen', state.almacen); if(typeof _sbPend!=='undefined' && ('almacen' in _sbPend)){ try{ _sbPend['almacen']=(typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}; _sbPendSave(); }catch(e){} } try{ _almRefrescarModalesAbiertos(); }catch(e){} } break;
-    case 'personal':           if(Array.isArray(data)){ state.personal=(typeof mergeById_ts==='function')?mergeById_ts(state.personal||[], data):data; try{ if(typeof normalizarCargos==='function') normalizarCargos(); }catch(e){} setLS('atmin_personal_snap', state.personal); if(typeof _sbPend!=='undefined' && ('personal' in _sbPend)){ _sbPend['personal']=state.personal; try{ _sbPendSave(); }catch(e){} } } break;
+    case 'personal':           if(Array.isArray(data)){ /* La nube manda: sin nada pendiente de subir, este equipo copia lo que hay en el sistema. */ const _pp=(typeof _sbPend!=='undefined') && ('personal' in _sbPend); state.personal=(!_pp)?data:((typeof mergeById_ts==='function')?mergeById_ts(state.personal||[], data):data); try{ if(typeof normalizarCargos==='function') normalizarCargos(); }catch(e){} setLS('atmin_personal_snap', state.personal); if(typeof _sbPend!=='undefined' && ('personal' in _sbPend)){ _sbPend['personal']=state.personal; try{ _sbPendSave(); }catch(e){} } } break;
     case 'tareas':             if(Array.isArray(data)){ state.tareas=data; setLS('atmin_tareas_snap', data); } break;
     case 'equipos_operacion':  if(Array.isArray(data)){ state.equiposOp=(typeof mergeById_ts==='function')?mergeById_ts(state.equiposOp||[], data):data; setLS('atmin_equipos_op', state.equiposOp); try{ renderEquiposOp(); }catch(e){} } break;
     case 'reportes_guardia':   if(Array.isArray(data)){ state.reportesGuardia=(typeof mergeById_ts==='function')?mergeById_ts(state.reportesGuardia||[], data, (typeof _rgMetros==='function'?_rgMetros:null)):M(data, state.reportesGuardia||[]); setLS('atmin_reportes_guardia', state.reportesGuardia); try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){} } break;
@@ -13867,6 +13876,12 @@ async function rhGuardarTodo(){
       return;
     }
     // 1) Reenviar lo de RRHH
+    /* GUARDAR ES UNA DECISIÓN, NO UN ENVÍO MÁS. Cada ficha queda sellada con la hora de este
+       guardado: a partir de aquí, ninguna copia arrastrada de otro equipo la puede deshacer. */
+    try{
+      const _sello=Date.now();
+      (state.personal||[]).forEach(p=>{ if(p) p._guard=_sello; });
+    }catch(e){}
     try{ if(typeof personalSave==='function') personalSave(); }catch(e){}
     try{ if(typeof tareasSave==='function') tareasSave(); }catch(e){}
     try{ if(typeof planillaSupSave==='function' && typeof planillaSupLoad==='function') planillaSupSave(planillaSupLoad()); }catch(e){}
@@ -23070,8 +23085,16 @@ function mergeById_ts(a,b,tie){
     if(r.id!=null && typeof tombHas==='function' && tombHas(r.id)) return;
     const k=(r.id!=null)?('id:'+r.id):('j:'+JSON.stringify(r));
     if(!(k in by)){ order.push(k); by[k]=r; return; }
-    const ex=by[k]; const tr=Number(r._ts)||0, te=Number(ex._ts)||0;
+    /* `_guard` es el sello de un GUARDADO A MANO: alguien miró la pantalla y le dio a Guardar.
+       Pesa como una edición hecha a esa hora, y en un empate le gana a la copia que solo venía
+       arrastrada de otro equipo. Es lo que hace que apretar Guardar signifique algo. */
+    const ex=by[k];
+    const _t=x=>Math.max(Number(x._ts)||0, Number(x._guard)||0);
+    const tr=_t(r), te=_t(ex);
     if(tr>te){ by[k]=r; }                                   // edición más reciente gana
+    else if(tr===te && (Number(r._guard)||0)!==(Number(ex._guard)||0)){
+      if((Number(r._guard)||0)>(Number(ex._guard)||0)) by[k]=r;   // a igual hora, manda el guardado a mano
+    }
     else if(tr===te){                                       // empate de _ts (o ambos sin marca):
       if(tie){ if(tie(r)>=tie(ex)) by[k]=r; }               //   gana el de MAYOR valor (más metros)
       else by[k]=r;                                          //   sin desempate → gana el 2º argumento
