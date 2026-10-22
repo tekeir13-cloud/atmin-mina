@@ -23106,7 +23106,11 @@ async function personalQuitarSueldos(){
     let n=0;
     state.personal.forEach(p=>{
       if(!p) return;
-      if(Number(p.jornal)||0){ p.jornal=0; p._ts=Date.now(); n++; }
+      /* Ojo: NO se le pone marca de hora nueva. Esta limpieza toca TODAS las fichas de golpe, y
+         marcarlas haría que la copia de ESTE equipo —que puede estar atrasada— le gane a la de
+         los demás: volverían trabajadores dados de baja y se perderían fichas recién llenadas.
+         El jornal se pone en cero sin pretender ser la última palabra sobre el resto de la ficha. */
+      if(Number(p.jornal)||0){ p.jornal=0; n++; }
       else if(p.jornal!==0) p.jornal=0;
     });
     state.almacen.sinSueldoV=SIN_SUELDO_V;
@@ -35654,7 +35658,18 @@ function personalImportarExcel(input){
   if(!file) return;
   if(typeof XLSX==='undefined'){ showNotif('La librería de Excel no cargó. Recarga la página e intenta de nuevo.','error'); return; }
   const fr=new FileReader();
-  fr.onload=function(ev){
+  fr.onload=async function(ev){
+    /* ANTES DE TOCAR NADA, TRAER LA NUBE. Subir un Excel reescribe fichas enteras y las marca con
+       la hora de ahora, así que manda sobre todos los equipos. Si esta computadora tenía una copia
+       atrasada —por ejemplo, no había bajado las fichas que otro llenó hace un rato—, lo viejo
+       ganaba y esas fichas desaparecían de todas partes. Se baja y se fusiona primero: así el
+       Excel se aplica sobre lo ÚLTIMO que hay, no sobre lo que este equipo recordaba. */
+    try{
+      if(typeof sbLoadModulo==='function' && typeof mergeById_ts==='function'){
+        const nube=await sbLoadModulo('personal');
+        if(Array.isArray(nube)) state.personal=mergeById_ts(state.personal||[], nube);
+      }
+    }catch(e){}
     let wb;
     try{ wb=XLSX.read(new Uint8Array(ev.target.result),{type:'array'}); }
     catch(e){ showNotif('No se pudo leer el archivo. ¿Es un Excel?','error'); return; }
@@ -35713,7 +35728,15 @@ function personalImportarExcel(input){
           if(m.base==='nombre') val=N(v);
           if(m.base==='dni')    val=D(v);
           if(m.base==='frente'){ const n=parseInt(v,10); val=(n===1||n===2)?n:null; if(val==null) return; }
-          if(m.base==='estado') val=(/baja/i.test(v)?'baja':'activo');
+          /* La baja se da en el sistema, no en una hoja de cálculo. Un Excel puede traer
+             "Activo" simplemente por ser una copia bajada antes de la liquidación; si eso
+             reactivara al trabajador, volverían solos los que ya se liquidaron. Entonces:
+             el Excel SÍ puede dar de baja, pero nunca puede devolver a alguien a activo. */
+          if(m.base==='estado'){
+            if(/baja/i.test(v)) val='baja';
+            else if(String(p.estado||'')==='baja') return;   // ya está de baja: la hoja no lo revive
+            else val='activo';
+          }
           if(String(p[m.base]==null?'':p[m.base])===String(val)) return;
           p[m.base]=val; cambio=true; campos++;
         }else{
