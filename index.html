@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.22-260</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.23-261</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.22-260</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.23-261</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.22-260</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.23-261</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -4240,7 +4240,9 @@ select option{background:var(--coal3);}
         <option value="operario">Entrega a Operario (consumo directo)</option>
       </select></div>
       <div class="form-group" id="sa-operario-wrap" style="display:none"><label>Operario que recibe <span style="color:var(--text3);font-size:10px">(personal activo)</span></label>
-        <select id="sa-operario"><option value="">— Seleccionar operario —</option></select></div>
+        <input type="text" id="sa-operario-buscar" placeholder="🔍 Escribe el apellido, el nombre o el DNI…"
+               oninput="poblarOperariosSalida()" autocomplete="off" style="margin-bottom:6px">
+        <select id="sa-operario" size="1"><option value="">— Seleccionar operario —</option></select></div>
       <div class="form-group"><label>Código de Máquina <span style="color:var(--text3);font-size:10px">(opcional)</span></label><input type="text" id="sa-maquina" list="maq-codigos" placeholder="Ej: AN26C18173"><datalist id="maq-codigos"></datalist></div>
     </div>
     <!-- Agregar ítem -->
@@ -13004,6 +13006,7 @@ function abrirSalidaModal(){
   g('sa-stock-disp').textContent='—';g('sa-importe').textContent='S/ 0.00';
   salidaCart=[];renderSalidaCart();
   window._saQ=''; const _sb=g('sa-buscar'); if(_sb) _sb.value='';
+  const _so=g('sa-operario-buscar'); if(_so) _so.value='';   // el buscador de operario arranca limpio
   poblarProductosSalida();
   poblarOperariosSalida();
   toggleOperarioSalida();
@@ -13013,11 +13016,25 @@ function abrirSalidaModal(){
 function poblarOperariosSalida(){
   const sel=document.getElementById('sa-operario'); if(!sel) return;
   const cur=sel.value;
+  /* Noventa y tantos nombres en un desplegable es buscar con el dedo. Se escribe cualquier
+     pedazo —apellido, nombre o DNI, sin importar tildes ni el orden de las palabras— y la lista
+     se queda solo con los que encajan. Si encaja uno solo, queda elegido sin tocar nada más. */
+  const sinTildes=s=>String(s||'').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  const q=sinTildes((document.getElementById('sa-operario-buscar')||{}).value||'').trim();
+  const palabras=q?q.split(/\s+/):[];
   const activos=(state.personal||[]).filter(p=>p&&(p.estado||'activo')==='activo')
+    .filter(p=>{ if(!palabras.length) return true;
+      const heno=sinTildes(p.nombre)+' '+String(p.dni||'');
+      return palabras.every(w=>heno.indexOf(w)>=0); })
     .sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'}));
-  sel.innerHTML='<option value="">— Seleccionar operario —</option>'+
+  const cabecera = palabras.length
+    ? (activos.length ? '<option value="">— '+activos.length+' coincidencia'+(activos.length===1?'':'s')+' —</option>'
+                      : '<option value="">— Nadie con ese dato —</option>')
+    : '<option value="">— Seleccionar operario —</option>';
+  sel.innerHTML=cabecera+
     activos.map(p=>`<option value="${escAttr(p.nombre)}">${p.nombre}${p.dni?' · '+p.dni:''}</option>`).join('');
-  if(cur) sel.value=cur;
+  if(activos.length===1) sel.value=activos[0].nombre;
+  else if(cur && activos.some(p=>p.nombre===cur)) sel.value=cur;
 }
 // Muestra el selector de operario solo cuando el destino es "Entrega a Operario".
 function toggleOperarioSalida(){
@@ -18497,6 +18514,7 @@ const CARGOS_BASE=['Jefe de Operaciones','Ingeniero Residente','Asistente de Res
   'Jefe de Finanzas','Supervisor de Proyecto','Ayudante','Compresorista',
   'Operador de Scoop','Operador de Dumper','Operador Múltiple','Operador de Línea Amarilla',
   'Conductor','Ayudante Mecánico'];
+const CARGOS_SIEMPRE=['Secretaria de Mina'];
 function cargosDisponibles(){
   // Los cargos que SE USAN mandan. Mezclarlos con una lista teórica llenaba el desplegable de
   // parejas casi iguales —"Compresorista" y "COMPRENSORISTA", "Administrador" y
@@ -18507,6 +18525,8 @@ function cargosDisponibles(){
     const k=t.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
     if(!vistos.has(k)) vistos.set(k,t); };
   try{ (state.personal||[]).forEach(p=>meter(p.rol)); }catch(e){}
+  // Puestos que deben poder elegirse aunque todavía no haya nadie con ese cargo cargado.
+  CARGOS_SIEMPRE.forEach(meter);
   if(vistos.size<3) CARGOS_BASE.forEach(meter);      // sistema recién instalado
   return [...vistos.values()].sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
 }
