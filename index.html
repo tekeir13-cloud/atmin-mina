@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.24-265</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.24-266</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.24-265</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.24-266</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.24-265</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.24-266</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -8702,10 +8702,13 @@ function rrhhBloqueado(){
 const MODULO_PANTALLA = { almacen:'logistica', almacen_histbackup:'logistica', tareas:'rrhh' };
 /* Y lo mismo que en Recursos Humanos, para el almacén: manda lo último que guarda Logística. Un
    equipo que se conecta con una copia atrasada puede mirar el stock, pero no lo publica. */
-const MODULO_DUENOS = {
-  almacen:            ['logistico','administrador','jefe_finanzas','gerente_general'],
-  almacen_histbackup: ['logistico','administrador','jefe_finanzas','gerente_general'],
-};
+/* OJO CON LA LISTA DE ROLES A MANO. Publicar el almacén se decide por QUIÉN TIENE LA PANTALLA de
+   Logística, no por una lista escrita aquí: los usuarios se crean desde el panel de administración
+   y pueden llevar un rol que esta lista no conozca. Con una lista fija, un logístico con rol
+   distinto se quedaba sin poder registrar ingresos ni salidas, y lo peor es que la app no se lo
+   decía: guardaba en su equipo y no subía nada. Quien no tiene la pantalla —jefe de guardia,
+   mantenimiento— sigue sin poder publicarlo, que es lo que se pidió. */
+const MODULO_DUENOS = {};
 function puedePublicarModulo(modulo){
   try{
     if(RRHH_MODULOS.indexOf(modulo)>=0) return puedePublicarRRHH();
@@ -8717,7 +8720,14 @@ function puedePublicarModulo(modulo){
     const pantalla=MODULO_PANTALLA[modulo];
     if(!pantalla) return true;
     if(typeof usuarioActivo==='undefined' || !usuarioActivo) return false;   // sin sesión: espera
-    const suyas=(typeof ROLES_MODULOS!=='undefined' && ROLES_MODULOS[usuarioActivo.rol]) || [];
+    /* Las pantallas de este usuario: primero las suyas propias —un usuario creado desde el panel
+       de administración las lleva en su ficha—, si no las de su rol. Y si no se sabe cuáles son,
+       NO se bloquea: más vale que suba de más a que alguien registre todo un turno y el dato se
+       quede en su computadora sin avisarle. */
+    const propias=Array.isArray(usuarioActivo.modulos)?usuarioActivo.modulos:null;
+    const delRol=(typeof ROLES_MODULOS!=='undefined' && ROLES_MODULOS[usuarioActivo.rol])||null;
+    const suyas=(propias&&propias.length)?propias:delRol;
+    if(!suyas || !suyas.length) return true;
     return suyas.indexOf(pantalla)>=0;
   }catch(e){ return true; }
 }
