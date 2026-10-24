@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.24-263</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.24-264</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.24-263</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.24-264</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.24-263</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.24-264</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -8928,8 +8928,14 @@ async function _syncPoll(){
       const m=row.modulo, upd=row.updated_at||'';
       if(!m) continue;
       const primeraVezModulo=!(m in _pollUpd);
-      // Primera pasada tras cargar: solo registrar la línea base, no re-aplicar (ya se cargó al abrir)
-      if(_pollPrimera || primeraVezModulo){ _pollUpd[m]=upd; continue; }
+      /* Primera pasada tras cargar: se registra la línea base y no se re-aplica, porque la carga
+         inicial ya trajo ese módulo. PERO solo si esa carga de verdad pudo leerlo. Si la nube no
+         contestó al abrir —señal mala en bocamina, un corte de un segundo—, dar por buena la línea
+         base dejaba al equipo convencido de estar al día: no volvía a pedir ese módulo en toda la
+         sesión y la pantalla se quedaba clavada en el último día que alcanzó a bajar, hasta que
+         alguien recargara la página. Es exactamente lo de los partes parados en el 20. */
+      const leidoAlAbrir = (typeof _sbEstadoUltimo!=='undefined') && _sbEstadoUltimo[m]==='ok';
+      if((_pollPrimera || primeraVezModulo) && leidoAlAbrir){ _pollUpd[m]=upd; continue; }
       if(!upd || upd===_pollUpd[m]) continue;
       // Ignorar el eco de nuestra propia escritura reciente
       if(_rtSelfWrite[m] && (Date.now()-_rtSelfWrite[m] < 6000)){ _pollUpd[m]=upd; continue; }
