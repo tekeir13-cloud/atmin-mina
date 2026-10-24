@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.23-261</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.24-262</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.23-261</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.24-262</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.23-261</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.24-262</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5910,7 +5910,8 @@ async function cargarAlmacenCombustibleSB(){
          reemplaza por la de la nube tal cual: lo que quedó guardado en el sistema es la verdad, y
          una copia vieja de este equipo no tiene por qué volver a imponerse. Solo cuando hay
          trabajo propio sin subir —se trabajó sin señal— se fusionan las dos, para no perderlo. */
-      const _pPendiente = (typeof _sbPend!=='undefined') && ('personal' in _sbPend);
+      // Quien no publica RRHH no tiene nada propio que defender: copia la nube siempre.
+      const _pPendiente = puedePublicarRRHH() && (typeof _sbPend!=='undefined') && ('personal' in _sbPend);
       if(Array.isArray(pNube)&&pNube.length&&!_pPendiente){
         state.personal=pNube;
         try{ if(typeof normalizarCargos==='function') normalizarCargos(); }catch(e){}
@@ -8558,16 +8559,42 @@ function _lsEscribir(k, v){
   return false;
 }
 function _lsSet(k,v){ _lsEscribir(k,v); }
+/* LEER LA FILA DE LA NUBE, DICIENDO LA VERDAD SOBRE SI SE PUDO LEER.
+   Esta es la diferencia entre "la nube no tiene nada" y "no pude leerla", y de ella depende que
+   un equipo con mala señal no reemplace el trabajo de todos por su copia vieja.               */
+async function _sbLeerFila(modulo){
+  try{
+    const { data, error } = await sb.from('app_modulos').select('data').eq('modulo', modulo).limit(1);
+    if(error) return {ok:false, data:null};
+    return {ok:true, data:(data && data.length) ? data[0].data : null};
+  }catch(e){ return {ok:false, data:null}; }
+}
 async function _sbSubirModulo(modulo){
   if(!SB_ONLINE || !CLOUD_SYNC_READY) return false;
   if(!(modulo in _sbPend)) return true;
+  // Recursos Humanos solo lo publican el Administrador y el Jefe de Finanzas: si quedó algo en la
+  // cola de una sesión anterior en este equipo, se descarta en vez de subirse.
+  if(typeof RRHH_MODULOS!=='undefined' && RRHH_MODULOS.indexOf(modulo)>=0 && !puedePublicarRRHH()){
+    try{ delete _sbPend[modulo]; _sbPendSave(); }catch(e){}
+    return true;
+  }
   let dataObj=_sbPend[modulo];
   // READ-MERGE-WRITE para 'almacen': antes de subir, fusionar con lo que ya hay en la nube para
   // que esta subida NUNCA pise los movimientos que registró otra computadora. Sin esto, un
   // snapshot con "el último gana" podía borrar del stock lo que otro equipo acababa de ingresar.
   if(modulo==='almacen' && typeof _almMergeSnaps==='function'){
+    const fila=await _sbLeerFila('almacen');
+    /* SI NO SE PUDO LEER, NO SE ESCRIBE. Antes, un error de lectura se tragaba en silencio y
+       encima se subía la copia local: bastaba un equipo con señal mala para que su versión vieja
+       reemplazara en la nube lo que habían registrado los demás. Ahora la subida se cancela y
+       queda en cola; se reintenta sola cuando la nube vuelva a contestar. */
+    if(!fila.ok){
+      console.warn('[sync] no se pudo leer "almacen" antes de subir: la subida queda en cola');
+      _sbPend[modulo]=dataObj; try{ _sbPendSave(); }catch(e){} _sbFallo=Date.now();
+      return false;
+    }
     try{
-      const { data:cloudRow } = await sb.from('app_modulos').select('data').eq('modulo','almacen').single();
+      const cloudRow = fila.data ? {data:fila.data} : null;
       if(cloudRow && cloudRow.data){
         const merged=_almMergeSnaps(cloudRow.data, dataObj);
         dataObj=(typeof _almClonLight==='function')?_almClonLight(merged):merged;
@@ -8586,8 +8613,14 @@ async function _sbSubirModulo(modulo){
   // READ-MERGE-WRITE para 'personal': fusiona con la nube por id (última edición gana, lápidas
   // respetadas) para que esta subida NUNCA pise el sueldo/baja que registró otro equipo.
   if(modulo==='personal' && typeof mergeById_ts==='function' && Array.isArray(dataObj)){
+    const fila=await _sbLeerFila('personal');
+    if(!fila.ok){                       // misma regla: sin lectura buena no se pisa a nadie
+      console.warn('[sync] no se pudo leer "personal" antes de subir: la subida queda en cola');
+      _sbPend[modulo]=dataObj; try{ _sbPendSave(); }catch(e){} _sbFallo=Date.now();
+      return false;
+    }
     try{
-      const { data:cloudRow } = await sb.from('app_modulos').select('data').eq('modulo','personal').single();
+      const cloudRow = fila.data ? {data:fila.data} : null;
       if(cloudRow && Array.isArray(cloudRow.data)){
         const merged=mergeById_ts(dataObj, cloudRow.data);
         dataObj=merged;
@@ -8609,8 +8642,14 @@ async function _sbSubirModulo(modulo){
   // Para incluirlo primero hay que darle lápida al borrado del tareo.
   const _fusionar=_MERGE_AL_SUBIR[modulo];
   if(_fusionar && Array.isArray(dataObj)){
+    const fila=await _sbLeerFila(modulo);
+    if(!fila.ok){                       // reportes de guardia, hojas de equipo, kits, reuniones…
+      console.warn('[sync] no se pudo leer "'+modulo+'" antes de subir: la subida queda en cola');
+      _sbPend[modulo]=dataObj; try{ _sbPendSave(); }catch(e){} _sbFallo=Date.now();
+      return false;
+    }
     try{
-      const { data:cloudRow } = await sb.from('app_modulos').select('data').eq('modulo', modulo).single();
+      const cloudRow = fila.data ? {data:fila.data} : null;
       if(cloudRow && Array.isArray(cloudRow.data)){
         const merged=_fusionar(dataObj, cloudRow.data);
         if(Array.isArray(merged)){
@@ -8640,8 +8679,33 @@ async function _sbSubirModulo(modulo){
   _sbFallo=Date.now();
   return false;
 }
+/* ═══ QUIÉN MANDA EN RECURSOS HUMANOS ═══════════════════════════════════════════════════════
+   La lista de personal la publican DOS personas: el Administrador y el Jefe de Finanzas. Lo
+   último que ellos dejan en la nube es lo que ve todo el sistema. Cualquier otro usuario la ve,
+   trabaja con ella, pero su equipo NO la sube: así una copia atrasada —la de un teléfono que
+   estuvo días sin abrir, la de una laptop que perdió señal a media mañana— no puede volver a
+   imponerse ni resucitar a quien ya se eliminó. Es la regla que pidió la operación, y es también
+   la única que cierra de raíz este problema: donde no hay dos manos escribiendo, no hay pelea. */
+const RRHH_DUENOS = ['administrador','jefe_finanzas'];
+const RRHH_MODULOS = ['personal','personal_hist'];
+function rrhhBloqueado(){
+  if(puedePublicarRRHH()) return false;
+  try{ showNotif('Solo el Administrador y el Jefe de Finanzas modifican Recursos Humanos. Puedes consultar la ficha, pero no cambiarla.','error'); }catch(e){}
+  return true;
+}
+function puedePublicarRRHH(){
+  try{
+    if(typeof usuarioActivo==='undefined' || !usuarioActivo) return false;
+    return RRHH_DUENOS.indexOf(String(usuarioActivo.rol||''))>=0;
+  }catch(e){ return false; }
+}
 async function sbSyncModulo(modulo, dataObj){
   if(!SB_ONLINE) return;                 // sin nube: el dato ya quedó en localStorage
+  // Recursos Humanos solo lo publican el Administrador y el Jefe de Finanzas.
+  if(RRHH_MODULOS.indexOf(modulo)>=0 && !puedePublicarRRHH()){
+    try{ delete _sbPend[modulo]; _sbPendSave(); }catch(e){}
+    return;
+  }
   _sbPend[modulo]=dataObj;               // recordar SIEMPRE el último estado a subir
   _sbPendSave();                         // persistir: la cola sobrevive si cierran la app sin señal
   if(!CLOUD_SYNC_READY) return;          // aún no cargó la nube: se subirá en el primer flush
@@ -8729,7 +8793,7 @@ function _rtAplicarModulo(modulo, data){
    sin tocar nada. Ahora se unen por id/código y solo una lápida borra. */
 if(typeof _mergeProductos==='function'){ a.productos=_mergeProductos(prevAlm.productos||[], data.productos||[], prevAlm.productosTs, data.productosTs); a.productosTs=Math.max(Number(prevAlm.productosTs||0), Number(data.productosTs||0)); }
 else if(Number(prevAlm.productosTs||0)>Number(data.productosTs||0)){ a.productos=prevAlm.productos; a.productosTs=prevAlm.productosTs; } if(typeof _prodsVivos==='function') a.productos=_prodsVivos(a.productos); try{ if(typeof _almRestaurarFotos==='function') a=_almRestaurarFotos(a); }catch(e){} state.almacen=a; setLS('atmin_almacen', state.almacen); if(typeof _sbPend!=='undefined' && ('almacen' in _sbPend)){ try{ _sbPend['almacen']=(typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}; _sbPendSave(); }catch(e){} } try{ _almRefrescarModalesAbiertos(); }catch(e){} } break;
-    case 'personal':           if(Array.isArray(data)){ /* La nube manda: sin nada pendiente de subir, este equipo copia lo que hay en el sistema. */ const _pp=(typeof _sbPend!=='undefined') && ('personal' in _sbPend); state.personal=(!_pp)?data:((typeof mergeById_ts==='function')?mergeById_ts(state.personal||[], data):data); try{ if(typeof normalizarCargos==='function') normalizarCargos(); }catch(e){} setLS('atmin_personal_snap', state.personal); if(typeof _sbPend!=='undefined' && ('personal' in _sbPend)){ _sbPend['personal']=state.personal; try{ _sbPendSave(); }catch(e){} } } break;
+    case 'personal':           if(Array.isArray(data)){ /* La nube manda: sin nada pendiente de subir, este equipo copia lo que hay en el sistema. */ const _pp=puedePublicarRRHH() && (typeof _sbPend!=='undefined') && ('personal' in _sbPend); state.personal=(!_pp)?data:((typeof mergeById_ts==='function')?mergeById_ts(state.personal||[], data):data); try{ if(typeof normalizarCargos==='function') normalizarCargos(); }catch(e){} setLS('atmin_personal_snap', state.personal); if(typeof _sbPend!=='undefined' && ('personal' in _sbPend)){ _sbPend['personal']=state.personal; try{ _sbPendSave(); }catch(e){} } } break;
     case 'tareas':             if(Array.isArray(data)){ state.tareas=data; setLS('atmin_tareas_snap', data); } break;
     case 'equipos_operacion':  if(Array.isArray(data)){ state.equiposOp=(typeof mergeById_ts==='function')?mergeById_ts(state.equiposOp||[], data):data; setLS('atmin_equipos_op', state.equiposOp); try{ renderEquiposOp(); }catch(e){} } break;
     case 'reportes_guardia':   if(Array.isArray(data)){ state.reportesGuardia=(typeof mergeById_ts==='function')?mergeById_ts(state.reportesGuardia||[], data, (typeof _rgMetros==='function'?_rgMetros:null)):M(data, state.reportesGuardia||[]); setLS('atmin_reportes_guardia', state.reportesGuardia); try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){} } break;
@@ -19709,6 +19773,7 @@ function abrirBajaDesdeCard(pid){
 }
 
 async function confirmarBajaDyn(pid){
+  if(rrhhBloqueado()) return;
   const motivo=document.getElementById('baja-dyn-motivo')?.value||'Sin motivo';
   const fecha=document.getElementById('baja-dyn-fecha')?.value||hoy();
   const obs=document.getElementById('baja-dyn-obs')?.value.trim()||'';
@@ -19722,6 +19787,7 @@ async function confirmarBajaDyn(pid){
 }
 
 async function agregarPersonal(){
+  if(rrhhBloqueado()) return;
   const nombre=document.getElementById('p-nombre').value.trim();
   if(!nombre){showNotif('⚠ Ingresa el nombre','error');return;}
   const jefe=document.getElementById('p-jefe')?.value||'';
@@ -20169,6 +20235,7 @@ function imprimirFichaTrabajador(pid){
 }
 
 function guardarFichaTrabajador(){
+  if(rrhhBloqueado()) return;
   const p=(state.personal||[]).find(x=>String(x.id)===String(_fichaPid));
   if(!p){ showNotif('⚠ Trabajador no encontrado','error'); return; }
   const f=_fichaLeer();
@@ -20222,6 +20289,7 @@ async function guardarEditarPersonal(){
 }
 
 async function eliminarPersonal(id){
+  if(rrhhBloqueado()) return;
   const p=state.personal.find(x=>String(x.id)===String(id));
   if(!p) return;
   if(!confirm(`¿Eliminar a ${p.nombre}? Esta acción no se puede deshacer.`)) return;
@@ -23247,6 +23315,7 @@ function _pHistCuando(t){
    con la hora de ahora, para que esta decisión le gane a cualquier copia de otro equipo. A quien
    se haya dado de alta DESPUÉS no se le toca: volver atrás no debe borrar a nadie. */
 function pHistRestaurar(t){
+  if(rrhhBloqueado()) return;
   const h=pHistCargar();
   const f=h.find(x=>x&&String(x.t)===String(t));
   if(!f){ showNotif('No encuentro esa versión','error'); return; }
@@ -35837,6 +35906,7 @@ function personalExportarExcel(){
   showNotif('✓ Excel generado con '+gente.length+' trabajadores');
 }
 function personalImportarExcel(input){
+  if(rrhhBloqueado()){ try{ input.value=''; }catch(e){} return; }
   const file=input&&input.files&&input.files[0];
   input.value='';
   if(!file) return;
