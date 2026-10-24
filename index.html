@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.24-266</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.24-267</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.24-266</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.24-267</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.24-266</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.24-267</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -12058,15 +12058,28 @@ function calcStock(){
      Ahora no se descuenta nada: la apertura ES lo contado, y lo anterior a esa fecha no entra en el
      cálculo. Lo que llegue tarde de setiembre ya no puede mover el stock de octubre. Sigue entero
      en el historial y en el gasto del mes en que ocurrió, que es donde debe estar. */
-  const _desde={};
+  const _desde={}, _desdeTs={};
   _invFinal.forEach(it=>{
     if(!it || !it.desde) return;
     const r=ensure(it.almacen,it.codigo,it.producto,it.descripcion,it.unidad,it.precio);
     const d=String(it.desde).slice(0,10);
     if(!_desde[r.key] || d>_desde[r.key]) _desde[r.key]=d;
+    // Cuándo se hizo la apertura: todo lo cargado después de ese momento cuenta, sea de la fecha
+    // que sea. Si la apertura no dejó marca de hora, vale la fecha misma del conteo.
+    const ts=Number(it._ts)||Date.parse(d+'T23:59:59')||0;
+    if(!_desdeTs[r.key] || ts>_desdeTs[r.key]) _desdeTs[r.key]=ts;
   });
   const _antesDelConteo=(r,it)=>{
     const d=_desde[r.key]; if(!d) return false;
+    /* LO QUE SE REGISTRA DESPUÉS DEL CONTEO SIEMPRE CUENTA, LLEVE LA FECHA QUE LLEVE.
+       El corte existe para que un papel de setiembre que aparece tarde no se sume encima de un
+       stock ya contado. Pero si el logístico registra HOY un ingreso y le pone fecha de setiembre
+       —porque esa es la fecha de la guía—, ese ingreso sí entró al almacén y tiene que sumar: no
+       estaba sobre la mesa cuando se hizo el conteo. La diferencia no la da la fecha del documento
+       sino CUÁNDO se cargó: si el movimiento se creó después de la apertura, entra. */
+    const tsMov=Number(it&&it._ts)||0;
+    const tsConteo=_desdeTs[r.key]||0;
+    if(tsMov && tsConteo && tsMov>tsConteo) return false;
     const f=String((it&&it.fecha)||'').slice(0,10);
     // Sin fecha legible no se puede situar: se trata como anterior, porque el conteo es la verdad.
     if(!/^\d{4}-\d{2}-\d{2}$/.test(f)) return true;
