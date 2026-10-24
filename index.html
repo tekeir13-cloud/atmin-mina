@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.24-262</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.24-263</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.24-262</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.24-263</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.24-262</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.24-263</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -8578,6 +8578,8 @@ async function _sbSubirModulo(modulo){
     try{ delete _sbPend[modulo]; _sbPendSave(); }catch(e){}
     return true;
   }
+  // Módulo que no es de esta sesión: se deja quieto en la cola, no se sube desde aquí.
+  if(typeof puedePublicarModulo==='function' && !puedePublicarModulo(modulo)) return true;
   let dataObj=_sbPend[modulo];
   // READ-MERGE-WRITE para 'almacen': antes de subir, fusionar con lo que ya hay en la nube para
   // que esta subida NUNCA pise los movimientos que registró otra computadora. Sin esto, un
@@ -8693,6 +8695,32 @@ function rrhhBloqueado(){
   try{ showNotif('Solo el Administrador y el Jefe de Finanzas modifican Recursos Humanos. Puedes consultar la ficha, pero no cambiarla.','error'); }catch(e){}
   return true;
 }
+/* Y la regla general que se desprende de la misma idea: cada sesión solo publica los módulos de
+   SU trabajo. Si un jefe de guardia sube su parte, eso no puede tocar el almacén ni la planilla;
+   si el logístico registra una salida, eso no toca los partes de operaciones. Antes, cualquier
+   sesión reenviaba a la nube el bloque entero de módulos que tuviera en memoria. */
+const MODULO_PANTALLA = { almacen:'logistica', almacen_histbackup:'logistica', tareas:'rrhh' };
+/* Y lo mismo que en Recursos Humanos, para el almacén: manda lo último que guarda Logística. Un
+   equipo que se conecta con una copia atrasada puede mirar el stock, pero no lo publica. */
+const MODULO_DUENOS = {
+  almacen:            ['logistico','administrador','jefe_finanzas','gerente_general'],
+  almacen_histbackup: ['logistico','administrador','jefe_finanzas','gerente_general'],
+};
+function puedePublicarModulo(modulo){
+  try{
+    if(RRHH_MODULOS.indexOf(modulo)>=0) return puedePublicarRRHH();
+    const duenos=MODULO_DUENOS[modulo];
+    if(duenos){
+      if(typeof usuarioActivo==='undefined' || !usuarioActivo) return false;
+      return duenos.indexOf(String(usuarioActivo.rol||''))>=0;
+    }
+    const pantalla=MODULO_PANTALLA[modulo];
+    if(!pantalla) return true;
+    if(typeof usuarioActivo==='undefined' || !usuarioActivo) return false;   // sin sesión: espera
+    const suyas=(typeof ROLES_MODULOS!=='undefined' && ROLES_MODULOS[usuarioActivo.rol]) || [];
+    return suyas.indexOf(pantalla)>=0;
+  }catch(e){ return true; }
+}
 function puedePublicarRRHH(){
   try{
     if(typeof usuarioActivo==='undefined' || !usuarioActivo) return false;
@@ -8701,11 +8729,14 @@ function puedePublicarRRHH(){
 }
 async function sbSyncModulo(modulo, dataObj){
   if(!SB_ONLINE) return;                 // sin nube: el dato ya quedó en localStorage
-  // Recursos Humanos solo lo publican el Administrador y el Jefe de Finanzas.
+  // Recursos Humanos solo lo publican el Administrador y el Jefe de Finanzas: lo de ellos ni
+  // siquiera se guarda en cola desde otro equipo, para que no suba nunca.
   if(RRHH_MODULOS.indexOf(modulo)>=0 && !puedePublicarRRHH()){
     try{ delete _sbPend[modulo]; _sbPendSave(); }catch(e){}
     return;
   }
+  // Los demás módulos ajenos al trabajo de esta sesión: no se publican desde aquí.
+  if(!puedePublicarModulo(modulo)) return;
   _sbPend[modulo]=dataObj;               // recordar SIEMPRE el último estado a subir
   _sbPendSave();                         // persistir: la cola sobrevive si cierran la app sin señal
   if(!CLOUD_SYNC_READY) return;          // aún no cargó la nube: se subirá en el primer flush
@@ -8784,7 +8815,13 @@ function _rtAplicarModulo(modulo, data){
   // EXCEPCIÓN: 'almacen' sí se aplica siempre, porque su merge une movimientos por id y el
   // maestro de productos se protege por productosTs — así Logística nunca se queda sin ver
   // los códigos nuevos aunque tenga subidas pendientes.
-  if(typeof _sbPend!=='undefined' && (modulo in _sbPend) && modulo!=='almacen' && modulo!=='personal') return;
+  /* Antes, cualquier módulo con una subida pendiente ignoraba lo que llegaba de la nube. En un
+     teléfono con señal pobre eso es lo peor que puede pasar: su parte queda en cola, y mientras
+     tanto deja de ver los partes de los demás —la pantalla se congela en el último día que
+     alcanzó a sincronizar—. Los módulos que se UNEN por id no tienen ese riesgo: unir conserva
+     siempre lo propio, así que se aplican igual, con o sin cola. Solo los de reemplazo esperan. */
+  if(typeof _sbPend!=='undefined' && (modulo in _sbPend) &&
+     !(typeof _sbModulosFusion!=='undefined' && _sbModulosFusion.has(modulo))) return;
   const setLS=(k,v)=>{ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} };
   const M=(typeof mergeSnapById==='function')?mergeSnapById:((a,b)=>b||a||[]);
   switch(modulo){
