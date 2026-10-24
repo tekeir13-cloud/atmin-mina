@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.24-264</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.24-265</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.24-264</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.24-265</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.24-264</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.24-265</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -8975,9 +8975,35 @@ function _syncPollProgramar(){
   clearTimeout(_syncPollT);
   _syncPollT=setTimeout(async ()=>{
     try{ await _syncPoll(); }catch(e){}
+    /* Y en la misma vuelta, reintentar lo que quedó sin subir. Hasta ahora la cola solo se vaciaba
+       cuando pasaba algo —volver la señal, cambiar de pestaña, reconectar el tiempo real—; un
+       teléfono que se queda abierto en bocamina con señal intermitente no dispara ninguno de esos
+       eventos, así que su parte podía pasarse el turno entero en la cola sin que nadie tocara
+       nada. Ahora se reintenta solo, cada vuelta del sondeo, hasta que entre. */
+    try{
+      if(typeof _sbPend!=='undefined' && Object.keys(_sbPend).length &&
+         typeof sbFlushPendientes==='function'){
+        await sbFlushPendientes();
+        try{ actualizarChipConexion(); }catch(e){}
+      }
+    }catch(e){}
     _syncPollProgramar();
   }, _rtVivo?60000:20000);
 }
+/* RED DE SEGURIDAD DEL ARRANQUE. La escritura a la nube se habilita cuando la carga inicial
+   consigue leer el almacén. Si esa carga se queda colgada —señal que va y viene al abrir la app
+   en el campamento—, el equipo se quedaba toda la sesión sin poder subir NADA, en silencio: el
+   jefe llenaba su parte, veía "guardado", y ese parte no salía del teléfono. Al minuto se habilita
+   igual y se vacía la cola; leer ya se reintenta solo en cada sondeo. */
+setTimeout(()=>{
+  try{
+    if(SB_ONLINE && !CLOUD_SYNC_READY){
+      CLOUD_SYNC_READY = true;
+      console.warn('[sync] la carga inicial no habilitó la nube: se habilita igual para no retener los registros');
+      if(typeof sbFlushPendientes==='function') sbFlushPendientes();
+    }
+  }catch(e){}
+}, 60000);
 // Arranca ~15 s después de cargar, para que la línea base sea posterior a la carga inicial.
 // También sondea al volver el foco a la ventana, para ver lo último ya.
 setTimeout(()=>{ _syncPoll(); _syncPollProgramar(); }, 15000);
