@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.25-269</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.25-270</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.25-269</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.25-270</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.25-269</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.25-270</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -36404,8 +36404,12 @@ async function respaldoCompleto(silencioso){
   const periodo=(()=>{try{return periodoActual()}catch(e){return new Date().toISOString().slice(0,7)}})();
   const stamp=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
   const snap=snapshotEstado();
-  // 1) Nube (recuperable)
-  try{ await sbSyncModulo('backup_'+periodo, snap); }catch(e){}
+  /* 1) Nube (recuperable) — UNA sola copia, la última.
+     Antes se guardaba además una copia completa POR PERIODO. Cada una es el sistema entero: con
+     los meses, esa tabla se llenó de filas enormes y las consultas empezaron a devolver error 500
+     —la base dejaba de contestar y, con ella, se caía la sincronización de todos los equipos—.
+     El histórico mes a mes se conserva donde corresponde: en el archivo de respaldo que se
+     descarga, no dentro de la base que la operación usa cada día. */
   try{ await sbSyncModulo('backup_ultimo', {periodo,stamp,snap}); }catch(e){}
   if(silencioso) return snap;
   // 2) Descarga JSON
