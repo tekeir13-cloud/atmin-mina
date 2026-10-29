@@ -19058,7 +19058,7 @@ async function guardarTareo(){
     if(!regs.length){ showNotif('No marcaste a nadie en la hoja','error'); return; }
     tpendLoad();
     const jefe=(document.getElementById('tareo-jefe')||{}).value||'';
-    const ya=(state.tareosPend||[]).find(h=>h && h.fecha===fecha && h.turno===turno && h.estado!=='aprobado');
+    const ya=(state.tareosPend||[]).find(h=>h && h.fecha===fecha && h.turno===turno && (h.estado==='enviado'||h.estado==='observado'));
     const ts=Date.now();
     const hoja={ id: ya?ya.id : ('HJ'+ts), _ts:ts, fecha, turno, jefe,
                  por:(typeof usuarioActivo!=='undefined'&&usuarioActivo)?(usuarioActivo.nombre||usuarioActivo.rol):'—',
@@ -19310,7 +19310,7 @@ function renderTareas(){
           <span style="font-size:11px;font-weight:700;background:rgba(26,39,68,0.15);color:#1a2744;border-radius:6px;padding:3px 10px">${h.tareas.length} trab.</span>
           <button onclick="event.stopPropagation();imprimirTareoArch('${h.fecha}','${h.turno}')" style="padding:4px 12px;font-size:11px;font-weight:700;border-radius:6px;border:1.5px solid #1a2744;background:#fff;color:#1a2744;cursor:pointer">🖨 Imprimir</button>
           <button id="tareo-arch-edit-${hi}" onclick="event.stopPropagation();toggleEditTareoArch(${hi})" style="padding:4px 12px;font-size:11px;font-weight:700;border-radius:6px;border:1.5px solid #1a2744;background:#1a2744;color:#FFD700;cursor:pointer">✏ Editar</button>
-          <button onclick="event.stopPropagation();eliminarTareoArch('${h.fecha}','${h.turno}')" style="padding:4px 12px;font-size:11px;font-weight:700;border-radius:6px;border:1.5px solid #b91c1c;background:#b91c1c;color:#fff;cursor:pointer">🗑 Eliminar</button>
+          ${puedeEliminarTareo()?`<button onclick="event.stopPropagation();eliminarTareoArch('${h.fecha}','${h.turno}')" style="padding:4px 12px;font-size:11px;font-weight:700;border-radius:6px;border:1.5px solid #b91c1c;background:#b91c1c;color:#fff;cursor:pointer">🗑 Eliminar</button>`:''}
         </div>
       </div>
       <div id="tareo-arch-body-${hi}" style="display:none;overflow-x:auto">
@@ -19399,16 +19399,35 @@ function toggleTareoArch(hi){
 }
 
 // Eliminar un tareo completo (todos los registros de una fecha + turno)
+/* Un tareo aprobado y ya en RRHH solo lo borra de raíz el Jefe de Finanzas. Al borrarlo se va
+   de la planilla, del costo de RRHH y de Finanzas, y de la consulta en línea del trabajador:
+   todos leen de state.tareas. La hoja aprobada queda marcada como «eliminado» para que se sepa
+   quién la borró y no vuelva a aparecer por aprobar. */
+const TAREO_ELIMINA=['jefe_finanzas'];
+function puedeEliminarTareo(){
+  try{ return !!(usuarioActivo && TAREO_ELIMINA.includes(String(usuarioActivo.rol||''))); }catch(e){ return false; }
+}
 async function eliminarTareoArch(fecha,turno){
+  if(!puedeEliminarTareo()){ showNotif('🔒 Solo el Jefe de Finanzas puede eliminar un tareo aprobado','error'); return; }
   const match=t=>t.fecha===fecha&&(t.turno||'DIA')===turno;
   const items=(state.tareas||[]).filter(match);
   if(!items.length)return;
-  if(!tareoEditable(fecha)) return;
-  if(!confirm(`¿Eliminar el tareo completo del ${fmtF(fecha)} (turno ${turno})?\n\nSe borrarán ${items.length} registro(s). Esta acción no se puede deshacer.`))return;
+  if(!confirm(`¿Eliminar DE RAÍZ el tareo del ${fmtF(fecha)} (turno ${turno})?\n\nSe borrarán ${items.length} registro(s) y su costeo: sale de la planilla, del costo de RRHH y Finanzas, y de la consulta en línea de cada trabajador.\n\nEsta acción no se puede deshacer.`))return;
   for(const t of items){ if(t.id){ try{ await sb.from('tareas').delete().eq('id',t.id); }catch(e){} } }
   state.tareas=(state.tareas||[]).filter(t=>!match(t));
   try{ tareasSave(); }catch(e){}
+  try{
+    tpendLoad();
+    const resp=usuarioActivo?(usuarioActivo.nombre||usuarioActivo.rol):'—';
+    let cambio=false;
+    (state.tareosPend||[]).forEach(h=>{ if(h && h.fecha===fecha && h.turno===turno && h.estado==='aprobado'){
+      h.estado='eliminado'; h.elim={resp, fecha:hoy(), ts:Date.now()}; h._ts=Date.now(); cambio=true; } });
+    if(cambio) tpendSave();
+  }catch(e){}
   try{ renderTareas(); }catch(e){}
+  try{ if(typeof actualizarKpisTareo==='function') actualizarKpisTareo(fecha); }catch(e){}
+  try{ if(typeof renderFinDashboard==='function') renderFinDashboard(); }catch(e){}
+  try{ if(typeof renderFinCostoCentro==='function') renderFinCostoCentro(); }catch(e){}
   try{ if(typeof renderCostoRRHH==='function') renderCostoRRHH(); }catch(e){}
   try{ if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
   showNotif(`🗑 Tareo del ${fmtF(fecha)} (${turno}) eliminado`,'warn');
@@ -24113,7 +24132,7 @@ function renderTareosPendientes(){
   const cont=document.getElementById('res-tareos-pend'); if(!cont) return;
   tpendLoad(); tareoPendTab();
   if(!tareoPuedeAprobar()){ cont.innerHTML='<div class="card"><div class="empty-state" style="padding:16px;color:var(--text3)">Solo el Jefe de Operaciones, el Ing. Residente o su asistente aprueban el tareo.</div></div>'; return; }
-  const pend=(state.tareosPend||[]).filter(h=>h && h.estado!=='aprobado')
+  const pend=(state.tareosPend||[]).filter(h=>h && (h.estado==='enviado'||h.estado==='observado'))
     .sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
   if(!pend.length){ cont.innerHTML='<div class="card"><div class="empty-state" style="padding:16px;color:var(--text3)">No hay hojas de tareo esperando aprobación.</div></div>'; return; }
   const nom=id=>{ const p=(state.personal||[]).find(x=>String(x.id)===String(id)); return p?p.nombre:('#'+id); };
