@@ -5209,6 +5209,8 @@ const FRENTES=[
   {id:'TJ5100',    key:'tj5100',    pfx:'tj51', nombre:'TJ 5100',    emoji:'⬛', color:'#2dd4bf',
    tajo:true, unidad:'m³', potencia:2.4},
 ];
+// Frentes a los que se asigna personal en la hoja de tareo.
+const TAREO_FRENTES=['1','2'];
 // Labores vigentes: las que se pueden reportar hoy.
 function frentesActivos(){ return FRENTES.filter(f=>f.activo!==false); }
 // Labores a MOSTRAR en un tablero: las vigentes siempre, y una retirada solo si tiene datos en
@@ -18873,7 +18875,9 @@ function abrirSetupTareo(){
   const gmap=(dist&&dist._guardias)||{};
   list.innerHTML=activos.map(p=>{
     const asignado=Object.prototype.hasOwnProperty.call(dist,p.id)&&String(p.id)!=='_guardias';
-    const labor=asignado?dist[p.id]:(p.frente||1);
+    // En la hoja de tareo solo se asignan los dos frentes de personal: RA Brenda (1) y CRNE (2)
+    const laborRaw=asignado?dist[p.id]:(p.frente||1);
+    const labor=TAREO_FRENTES.includes(String(laborRaw))?laborRaw:1;
     const g=gmap[p.id]||p.guardia||'';
     // Si hay distribución activa, solo se pre-marcan los asignados; si no hay, ninguno
     const marcado=asignado;
@@ -18886,8 +18890,7 @@ function abrirSetupTareo(){
         </div>
       </div>
       <select class="tareo-labor" data-pid="${p.id}" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
-        ${FRENTES.filter(f=>f.activo!==false||String(labor)===String(f.id)).map(f=>`<option value="${f.id}" ${String(labor)===String(f.id)?'selected':''}>${f.emoji} ${f.nombre}${f.activo===false?' (retirada)':''}</option>`).join('')}
-        <option value="MARGINAL" ${labor==='MARGINAL'?'selected':''}>📊 Costeo Marginal</option>
+        ${FRENTES.filter(f=>TAREO_FRENTES.includes(String(f.id))).map(f=>`<option value="${f.id}" ${String(labor)===String(f.id)?'selected':''}>${f.emoji} ${f.nombre}</option>`).join('')}
       </select>
     </div>`;
   }).join('');
