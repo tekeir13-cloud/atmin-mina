@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-273</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-274</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-273</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-274</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.29-273</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.29-274</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -26425,7 +26425,11 @@ function renderSolicitudMantLog(){
     const sal=(((state.almacen||{}).salidas)||[]).filter(x=>x&&x.grupo==='KIT-'+m.id);
     const filas=(sal.length?sal:(m.repuestos||[]).map(p=>({producto:p.nombre,codigo:p.codigo,unidad:p.unidad||'UND',
                  cantidad:p.cant,precio:p.costo||0,importe:(p.cant||0)*(p.costo||0),almacen:p.almacen})));
-    const total=filas.reduce((a,x)=>a+(Number(x.importe)||(Number(x.cantidad)||0)*(Number(x.precio)||0)),0);
+    /* EL VALE SE COSTEA COMO EN MANTENIMIENTO: piezas MÁS horas hombre. El kit cobra la mano de
+       obra del jefe de mantenimiento a su tarifa por hora, y dejarla fuera hacía que el vale de
+       Logística mostrara un importe menor que el mismo kit visto desde Mantenimiento. */
+    const piezasS=filas.reduce((a,x)=>a+(Number(x.importe)||(Number(x.cantidad)||0)*(Number(x.precio)||0)),0);
+    const hh=Number(m.horasMant)||0, moS=hh*KIT_TARIFA_HORA, total=piezasS+moS;
     const cuerpo=filas.map(x=>`<tr>
         <td style="padding:5px 8px;border-bottom:1px solid var(--border);font-size:12px">${esc(x.producto||'—')}
           <div style="font-size:10px;color:var(--text3)">${esc(x.codigo||'')}${x.almacen?' · '+nombreAlmacen(x.almacen):''}</div></td>
@@ -26458,6 +26462,15 @@ function renderSolicitudMantLog(){
           <th style="padding:5px 8px;text-align:right;font-size:10px;color:var(--text3)">IMPORTE</th>
         </tr></thead>
         <tbody>${cuerpo}</tbody>
+        <tfoot>
+          <tr><td colspan="3" style="padding:5px 8px;text-align:right;font-size:11px;color:var(--text3)">Piezas</td>
+              <td style="padding:5px 8px;text-align:right;font-size:12px">${fmtS(piezasS)}</td></tr>
+          <tr><td colspan="3" style="padding:5px 8px;text-align:right;font-size:11px;color:var(--text3)">
+              Horas hombre${hh?' — '+hh+' h × S/ '+KIT_TARIFA_HORA.toFixed(2)+'/h':''}</td>
+              <td style="padding:5px 8px;text-align:right;font-size:12px">${fmtS(moS)}</td></tr>
+          <tr><td colspan="3" style="padding:6px 8px;text-align:right;font-size:12px;font-weight:700;border-top:1px solid var(--border)">TOTAL</td>
+              <td style="padding:6px 8px;text-align:right;font-size:13px;font-weight:800;color:#fbbf24;border-top:1px solid var(--border)">${fmtS(total)}</td></tr>
+        </tfoot>
       </table>
     </div>`;
   }).join('')
@@ -26499,7 +26512,8 @@ function imprimirValeKit(id){
     const sal=(((state.almacen||{}).salidas)||[]).filter(x=>x&&x.grupo==='KIT-'+m.id);
     const filas=(sal.length?sal:(m.repuestos||[]).map(p=>({producto:p.nombre,codigo:p.codigo,unidad:p.unidad||'UND',
                  cantidad:p.cant,precio:p.costo||0,importe:(p.cant||0)*(p.costo||0),almacen:p.almacen})));
-    const total=filas.reduce((a,x)=>a+(Number(x.importe)||(Number(x.cantidad)||0)*(Number(x.precio)||0)),0);
+    const piezasS=filas.reduce((a,x)=>a+(Number(x.importe)||(Number(x.cantidad)||0)*(Number(x.precio)||0)),0);
+    const hh=Number(m.horasMant)||0, moS=hh*KIT_TARIFA_HORA, total=piezasS+moS;
     const ops=m.aprobOps||{}, log=m.aprobLog||{};
     const tr=filas.map((x,i)=>'<tr><td>'+(i+1)+'</td><td>'+e(x.codigo||'')+'</td><td>'+e(x.producto||'')+
       '</td><td class="c">'+(Number(x.cantidad)||0)+' '+e(x.unidad||'')+'</td><td class="d">'+fmtS(x.precio||0)+
@@ -26511,6 +26525,7 @@ function imprimirValeKit(id){
       'table{width:100%;border-collapse:collapse;margin-top:10px}'+
       'th,td{border:1px solid #bbb;padding:5px 7px;font-size:12px}th{background:#eee;font-size:10px;letter-spacing:.06em}'+
       '.c{text-align:center}.d{text-align:right}.tot{text-align:right;font-weight:700;font-size:13px;margin-top:8px}'+
+      '.r{text-align:right;border:none;padding:3px 10px;font-size:12px}td.d{text-align:right;border:none;padding:3px 0;font-size:12px;min-width:90px}'+
       '.fin{display:flex;gap:40px;margin-top:48px}.fin div{flex:1;border-top:1px solid #333;padding-top:5px;font-size:11px;text-align:center}'+
       '.caja{border:1px solid #ccc;padding:9px 11px;font-size:11px;margin-top:10px;line-height:1.6}</style></head><body>'+
       '<h1>VALE DE DESPACHO DE MANTENIMIENTO</h1>'+
@@ -26521,7 +26536,9 @@ function imprimirValeKit(id){
       '<b>Aprobó y despachó Logística:</b> '+e(log.resp||'—')+(log.fecha?' ('+fmtF(log.fecha)+')':'')+'</div>'+
       '<table><thead><tr><th>#</th><th>CÓDIGO</th><th>DESCRIPCIÓN</th><th>CANT.</th><th>P. UNIT.</th><th>IMPORTE</th></tr></thead>'+
       '<tbody>'+tr+'</tbody></table>'+
-      '<div class="tot">TOTAL: '+fmtS(total)+'</div>'+
+      '<table style="margin-top:8px"><tr><td class="r">Piezas</td><td class="d">'+fmtS(piezasS)+'</td></tr>'+
+      '<tr><td class="r">Horas hombre'+(hh?' ('+hh+' h × S/ '+KIT_TARIFA_HORA.toFixed(2)+'/h)':'')+'</td><td class="d">'+fmtS(moS)+'</td></tr>'+
+      '<tr><td class="r"><b>TOTAL</b></td><td class="d"><b>'+fmtS(total)+'</b></td></tr></table>'+
       '<div class="fin"><div>Entregó (Logística)</div><div>Recibió conforme</div><div>V°B° Mantenimiento</div></div>'+
       '</body></html>');
     w.document.close(); setTimeout(()=>{ try{ w.print(); }catch(e){} }, 350);
