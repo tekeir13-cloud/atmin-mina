@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-278</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-279</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-278</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-279</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.29-278</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.29-279</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -2886,8 +2886,8 @@ select option{background:var(--coal3);}
     <div class="kpi-grid">
       <div class="kpi-card"><div class="kpi-label">Tareados Hoy</div><div class="kpi-value gold" id="rr-activo">—</div></div>
       <div class="kpi-card"><div class="kpi-label">Ausentes Hoy</div><div class="kpi-value red" id="rr-ausente">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Costo Tareo Hoy</div><div class="kpi-value warn" id="rr-costo-hoy">S/ 0</div></div>
-      <div class="kpi-card"><div class="kpi-label">Costo Acum. Mes</div><div class="kpi-value red" id="rr-costo-mes">S/ 0</div></div>
+      <div class="kpi-card" id="kpi-costo-hoy" style="display:none"><div class="kpi-label">Costo Tareo Hoy</div><div class="kpi-value warn" id="rr-costo-hoy">S/ 0</div></div>
+      <div class="kpi-card" id="kpi-costo-mes" style="display:none"><div class="kpi-label">Costo Acum. Mes</div><div class="kpi-value red" id="rr-costo-mes">S/ 0</div></div>
     </div>
 
     <!-- Botón inicial -->
@@ -18883,7 +18883,7 @@ function abrirSetupTareo(){
       <input type="checkbox" class="tareo-chk" data-pid="${p.id}" ${marcado?'checked':''} style="width:18px;height:18px;accent-color:var(--gold);cursor:pointer">
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.nombre}${asignado?' <span style="font-size:9px;color:var(--gold)">● asignado</span>':''}</div>
-        <div style="font-size:10px;color:var(--text3);display:flex;align-items:center;gap:6px;flex-wrap:wrap">${p.rol} · ${sueldoConfidencial(p)&&!puedeVerSueldos()?'🔒':'S/'+p.jornal+'/día'}
+        <div style="font-size:10px;color:var(--text3);display:flex;align-items:center;gap:6px;flex-wrap:wrap">${p.rol}
           ${g?`<span style="font-size:9px;font-weight:800;padding:1px 7px;border-radius:999px;background:${g==='dia'?'rgba(245,158,11,0.18)':g==='noche'?'rgba(96,165,250,0.18)':'rgba(34,211,165,0.18)'};color:${g==='dia'?'#f59e0b':g==='noche'?'#60a5fa':'#22d3a5'}">${GUARDIA_ICO[g]}</span>`:'<span style="font-size:9px;color:var(--text3);border:1px dashed var(--border);padding:1px 7px;border-radius:999px">sin guardia</span>'}
         </div>
       </div>
@@ -19045,8 +19045,18 @@ function actualizarKpisTareo(fecha){
   const g=id=>document.getElementById(id);
   if(g('rr-activo')) g('rr-activo').textContent=hoyT.length;
   if(g('rr-ausente')) g('rr-ausente').textContent=activos.length-hoyT.length;
-  if(g('rr-costo-hoy')) g('rr-costo-hoy').textContent=fmtS(costHoy);
-  if(g('rr-costo-mes')) g('rr-costo-mes').textContent=fmtS(costMes);
+  /* EN LA PANTALLA DEL TAREO NO SE VE PLATA. El jornal es confidencial y por esta pantalla pasa
+     media mina; lo que aquí importa son las tareas. Las dos tarjetas de costo solo aparecen para
+     quien tiene permiso de ver sueldos —Finanzas y Gerencia—; el resto ve los conteos y nada más.
+     Los importes completos siguen en la Planilla de Operarios y en el costeo de RRHH. */
+  const _verPlata=(typeof puedeVerSueldos==='function') && puedeVerSueldos();
+  const _kh=g('kpi-costo-hoy'), _km=g('kpi-costo-mes');
+  if(_kh) _kh.style.display=_verPlata?'':'none';
+  if(_km) _km.style.display=_verPlata?'':'none';
+  if(_verPlata){
+    if(g('rr-costo-hoy')) g('rr-costo-hoy').textContent=fmtS(costHoy);
+    if(g('rr-costo-mes')) g('rr-costo-mes').textContent=fmtS(costMes);
+  }
 }
 
 async function guardarTareo(){
