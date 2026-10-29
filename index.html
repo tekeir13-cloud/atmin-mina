@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-272</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-273</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-272</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-273</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.29-272</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.29-273</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -3234,6 +3234,8 @@ select option{background:var(--coal3);}
     <div id="op-mant-historial"></div>
   </div>
   <div class="mod-pane" style="display:none" id="op-vsproyectado">
+  <div class="section-title" style="margin-top:0">🗓 Tareos por aprobar</div>
+  <div id="res-tareos-pend" style="margin-bottom:18px"></div>
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
       <div>
         <div class="section-title" style="margin:0">👷 Reporte del Ingeniero Residente</div>
@@ -5046,17 +5048,17 @@ select option{background:var(--coal3);}
 
 <!-- ════ MODAL: DISTRIBUCIÓN DE PERSONAL (Ing. Residente) ════ -->
 <div class="modal-overlay" id="modal-distribucion" onclick="if(event.target===this)cerrarModal('modal-distribucion')">
-  <div class="modal" style="width:min(720px,96vw);max-height:92vh;overflow-y:auto">
+  <div class="modal" style="width:min(1180px,97vw);max-height:92vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <div class="modal-title" style="margin-bottom:0;color:#fbbf24">👥 Distribución de Personal por Frente</div>
+      <div class="modal-title" style="margin-bottom:0;color:#fbbf24">👥 Distribución de Personal — Pizarra del nivel</div>
       <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px" onclick="cerrarModal('modal-distribucion')">✕</button>
     </div>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:14px">Asigna cada trabajador a un frente. Los asignados quedarán <strong>pre-seleccionados en el tareo diario</strong> de RRHH. Puedes actualizarlo cuando lo necesites.</div>
-    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-      <button class="btn btn-outline" style="font-size:11px;padding:6px 14px" onclick="distMarcarTodos(true)">✓ Asignar todos</button>
-      <button class="btn btn-outline" style="font-size:11px;padding:6px 14px" onclick="distMarcarTodos(false)">✕ Quitar todos</button>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:12px">La pizarra del nivel: tres guardias, su turno, su supervisor y la gente de cada frente. Lo que dejes aquí es lo que el jefe de guardia encuentra marcado en su hoja de tareo.</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+      <label style="font-size:11px;color:var(--text3)">Nivel</label>
+      <input id="piz-nv" class="input-field" style="width:150px;font-weight:800;text-align:center" value="NV 2820">
       <span style="flex:1"></span>
-      <span style="font-size:12px;color:var(--text3);align-self:center">🟦 RA Brenda · 🟩 CRNE</span>
+      <button class="btn btn-outline" style="font-size:11px;padding:6px 14px" onclick="pizImprimir()">🖨 Imprimir pizarra</button>
     </div>
     <div id="dist-modal-list"></div>
     <div class="btn-row" style="margin-top:14px">
@@ -5296,7 +5298,7 @@ const state={
   // Módulo Compras: control independiente del costeo operativo (no entra a calcCostos ni al dashboard)
   compras:{facturas:[],presupuestos:[]},
   metas:{f1:20,f2:20,dias:26,mensualF1:520,mensualF2:520,metasFrentes:{}},frenteActivo:1,
-  distribucion:{},reuniones:[],
+  distribucion:{},reuniones:[],tareosPend:[],
   mesActivo:{ id:null, mes:null, año:null },
   mesesCerrados:[],
   adelantos:{},
@@ -5945,6 +5947,12 @@ async function cargarAlmacenCombustibleSB(){
     }
     // ── TAREOS — snapshot confiable (todos los meses), independiente del mes_id de la tabla ──
     {
+      try{
+        if(typeof tpendLoad==='function') tpendLoad();
+        const hNube=await sbLoadModulo('tareos_pend');
+        if(Array.isArray(hNube)) { state.tareosPend=(typeof mergeById_ts==='function')?mergeById_ts(state.tareosPend||[], hNube):hNube;
+          try{ _lsSet('atmin_tareos_pend', state.tareosPend); }catch(e){} }
+      }catch(e){}
       const tNube=await sbLoadModulo('tareas');
       if(Array.isArray(tNube)&&tNube.length){
         state.tareas=tNube;
@@ -6312,7 +6320,7 @@ function renderModPane(mod,pane){
   else if(k==='op-valorizaciones'){renderValorizacionOp();}
   else if(k==='op-avance'){renderAvance();}
   else if(k==='op-solicitudes')renderSolicitudesPendientesOp();
-  else if(k==='op-vsproyectado')renderResidente();
+  else if(k==='op-vsproyectado'){ renderResidente(); try{ renderTareosPendientes(); }catch(e){} }
   else if(k==='mant-registro')renderMantenimiento();
   else if(k==='mant-costosmant')renderCostosMant();
   else if(k==='mant-horometros')renderHorometrosMant();
@@ -8526,6 +8534,7 @@ const _MERGE_AL_SUBIR = {
   remanente_salidas:  (loc,nub)=> (typeof mergeSnapById==='function') ? mergeSnapById(loc,nub) : loc,
   remanente_ingresos: (loc,nub)=> (typeof mergeSnapById==='function') ? mergeSnapById(loc,nub) : loc,
   reuniones:          (loc,nub)=> (typeof mergeSnapById==='function') ? mergeSnapById(loc,nub) : loc,
+  tareos_pend:        (loc,nub)=> (typeof mergeById_ts==='function') ? mergeById_ts(loc,nub) : loc,
   // Las fotos del personal: se juntan las de todos los equipos y se conservan las más recientes.
   personal_hist:      (loc,nub)=>{ const by={};
                         (nub||[]).concat(loc||[]).forEach(f=>{ if(f&&f.t && !by[f.t]) by[f.t]=f; });
@@ -8540,6 +8549,7 @@ const _GUARDAR_TRAS_FUSION = {
   remanente_salidas:  m=>{ state.remanenteSalidas=m;  _lsSet('atmin_remanente_salidas', m); },
   remanente_ingresos: m=>{ state.remanenteIngresos=m; _lsSet('atmin_remanente_ingresos', m); },
   reuniones:          m=>{ state.reuniones=m;         _lsSet('atmin_reuniones', m); },
+  tareos_pend:        m=>{ state.tareosPend=m;        _lsSet('atmin_tareos_pend', m); },
   personal_hist:      m=>{ try{ _pHist=m; _lsSet('atmin_personal_hist', m); }catch(e){} },
 };
 /* ESCRITURA LOCAL QUE NO SE RINDE CON EL TELÉFONO LLENO.
@@ -8803,7 +8813,7 @@ try{
 // Módulos cuya carga FUSIONA por id (unión), no reemplaza: para ellos SIEMPRE se trae la nube
 // aunque haya un pendiente, porque fusionar nunca pierde lo local y sí recupera lo de otros
 // equipos. Para los módulos de REEMPLAZO (personal, tareas…) sí se protege el dato offline.
-const _sbModulosFusion=new Set(['almacen','personal','reportes_guardia','equipos_operacion','mant_kits','compresorista','reuniones','remanente_salidas','remanente_ingresos','servicios_terceros','tombstones','personal_hist']);
+const _sbModulosFusion=new Set(['almacen','personal','reportes_guardia','equipos_operacion','mant_kits','compresorista','reuniones','remanente_salidas','remanente_ingresos','servicios_terceros','tombstones','personal_hist','tareos_pend']);
 // Devuelve el ESTADO de la lectura, no solo el dato. sbLoadModulo() contestaba null para tres
 // situaciones muy distintas —nube vacía, cambio local pendiente y error de lectura— y quien
 // llamaba no podía distinguirlas. Confundir "no pude leer" con "está vacía" y subir encima lo
@@ -8906,6 +8916,7 @@ else if(Number(prevAlm.productosTs||0)>Number(data.productosTs||0)){ a.productos
                                  const act=(typeof pfLoad==='function')?pfLoad():{};
                                  setLS(FOTOS_KEY, {...act, ...data});
                                  try{ if(document.getElementById('rrhh-tarjetas')&&typeof renderTarjetas==='function') renderTarjetas(); }catch(e){} } break;
+    case 'tareos_pend':        if(Array.isArray(data)){ state.tareosPend=(typeof mergeById_ts==='function')?mergeById_ts(state.tareosPend||[], data):data; _lsSet('atmin_tareos_pend', state.tareosPend); } break;
     case 'personal_hist':      if(Array.isArray(data)){ try{ const f=_MERGE_AL_SUBIR['personal_hist'];
                                  _pHist=f?f(_pHist||[], data):data; _lsSet('atmin_personal_hist', _pHist); }catch(e){} } break;
     case 'almacen_histbackup': if(data&&typeof data==='object'){ setLS('atmin_almacen_histbackup', data); } break;
@@ -19021,6 +19032,33 @@ async function guardarTareo(){
   if((state.mesesCerrados||[]).includes(mesFecha)){showNotif('Este mes está cerrado. Contacte al administrador.','error');return;}
   if(!tareoEditable(fecha)) return;
   const rows = document.querySelectorAll('#tareo-grid .tareo-row');
+  /* HOJA EN ESPERA. Si quien reporta es el jefe de guardia, lo que llena no entra a la planilla
+     todavía: se guarda como hoja pendiente y el Ingeniero Residente la aprueba. Si la llena el
+     residente, el administrador o finanzas, entra directo —son ellos los que aprueban—. */
+  if(typeof tareoRequiereAprobacion==='function' && tareoRequiereAprobacion()){
+    const regs=[];
+    rows.forEach(row=>{
+      const pid=row.dataset.pid; if(!pid) return;
+      const btn=Array.from(row.querySelectorAll('button')).find(b=> b.style.background==='#1a2744' || b.style.background.includes('26, 39, 68'));
+      if(!btn) return;
+      const obsEl=row.querySelector('.tareo-obs');
+      regs.push({ pid:pid, mult:parseFloat(btn.dataset.val)||1, obs:obsEl?obsEl.value:'',
+                  frente:parseInt(row.dataset.frente||'',10)||undefined });
+    });
+    if(!regs.length){ showNotif('No marcaste a nadie en la hoja','error'); return; }
+    tpendLoad();
+    const jefe=(document.getElementById('tareo-jefe')||{}).value||'';
+    const ya=(state.tareosPend||[]).find(h=>h && h.fecha===fecha && h.turno===turno && h.estado!=='aprobado');
+    const ts=Date.now();
+    const hoja={ id: ya?ya.id : ('HJ'+ts), _ts:ts, fecha, turno, jefe,
+                 por:(typeof usuarioActivo!=='undefined'&&usuarioActivo)?(usuarioActivo.nombre||usuarioActivo.rol):'—',
+                 enviado:ts, estado:'enviado', obs:'', registros:regs };
+    if(ya){ Object.assign(ya,hoja); } else { state.tareosPend.push(hoja); }
+    tpendSave();
+    cancelarSetupTareo();
+    showNotif('✓ Hoja de tareo enviada — '+regs.length+' trabajadores. Queda esperando la aprobación del Ingeniero Residente.');
+    return;
+  }
   let guardados=0, omitidos=0;
   for(const row of rows){
     const pid = row.dataset.pid;
@@ -23505,6 +23543,25 @@ function abrirHistorialPersonal(){
   caja.style.display='flex';
 }
 function personalSave(){try{ if(typeof personalOrdenar==='function') personalOrdenar(); }catch(e){} _lsEscribir(PERSONAL_KEY, state.personal||[]); try{ pHistGuardar(state.personal||[]); }catch(e){} try{ sbSyncModulo('personal', state.personal||[]); }catch(e){}}
+/* ═══ HOJAS DE TAREO EN ESPERA DE APROBACIÓN ════════════════════════════════════════════════
+   El jefe de guardia llena su hoja como siempre, pero ya no entra directo a la planilla: queda
+   en espera hasta que el Ingeniero Residente la aprueba. Recién aprobada pasa a Recursos Humanos,
+   al costo, a la planilla y a la consulta en línea del trabajador.
+   Esto va en su propio módulo —no dentro de 'tareas'— para que la consulta pública del trabajador
+   y la planilla sigan leyendo exactamente lo mismo que antes: lo aprobado, y nada más.        */
+const TPEND_KEY='atmin_tareos_pend';
+function tpendLoad(){ try{ const d=localStorage.getItem(TPEND_KEY); if(d) state.tareosPend=JSON.parse(d)||[]; }catch(e){}
+  if(!Array.isArray(state.tareosPend)) state.tareosPend=[]; return state.tareosPend; }
+function tpendSave(){ _lsEscribir(TPEND_KEY, state.tareosPend||[]); try{ sbSyncModulo('tareos_pend', state.tareosPend||[]); }catch(e){} }
+/* Quién necesita aprobación: el que reporta desde el frente. El residente, el administrador y
+   finanzas registran directo, porque son justamente quienes aprueban. */
+const TAREO_APRUEBAN=['ingeniero_residente','administrador','jefe_finanzas','gerente_general'];
+function tareoRequiereAprobacion(){
+  try{
+    if(typeof usuarioActivo==='undefined' || !usuarioActivo) return false;
+    return TAREO_APRUEBAN.indexOf(String(usuarioActivo.rol||''))<0;
+  }catch(e){ return false; }
+}
 function tareasSave(){_lsEscribir(TAREAS_KEY, state.tareas||[]); try{ sbSyncModulo('tareas', state.tareas||[]); }catch(e){}}
 // Salidas del Stock Remanente (movimientos que controla Logística, NO afectan NV3190)
 const REMSAL_KEY='atmin_remanente_salidas';
@@ -23983,65 +24040,285 @@ function guardarMetas(){
 }
 
 // ── DISTRIBUCIÓN DE PERSONAL (Ing. Residente) ──
+/* ═══ APROBACIÓN DEL TAREO POR EL INGENIERO RESIDENTE ═══════════════════════════════════════
+   Las hojas que mandan los jefes de guardia esperan aquí. El residente ve quién trabajó, con qué
+   marca y con qué observación, y aprueba o devuelve con un motivo. Recién al aprobar, el tareo
+   entra a Recursos Humanos: cuenta para la planilla, para el costo y para lo que el trabajador ve
+   en su consulta en línea. Mientras no la apruebe, no existe para nadie más —por eso aprobar
+   pasa a ser parte de la rutina del día, no un trámite—.                                      */
+function _tpendMarca(m){ const v=Number(m)||1; return v===1?'1':String(v); }
+function renderTareosPendientes(){
+  const cont=document.getElementById('res-tareos-pend'); if(!cont) return;
+  tpendLoad();
+  const pend=(state.tareosPend||[]).filter(h=>h && h.estado!=='aprobado')
+    .sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
+  if(!pend.length){ cont.innerHTML='<div class="card"><div class="empty-state" style="padding:16px;color:var(--text3)">No hay hojas de tareo esperando aprobación.</div></div>'; return; }
+  const nom=id=>{ const p=(state.personal||[]).find(x=>String(x.id)===String(id)); return p?p.nombre:('#'+id); };
+  cont.innerHTML=pend.map(h=>{
+    const dev = h.estado==='observado';
+    const filas=(h.registros||[]).map(r=>'<tr>'+
+      '<td style="padding:4px 7px;border-bottom:1px solid var(--border);font-size:12px">'+escAttr(nom(r.pid))+'</td>'+
+      '<td style="padding:4px 7px;border-bottom:1px solid var(--border);text-align:center;font-size:12px;font-weight:700;color:#fbbf24">'+_tpendMarca(r.mult)+'</td>'+
+      '<td style="padding:4px 7px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text3)">'+escAttr(r.obs||'')+'</td></tr>').join('');
+    return '<div class="card" style="margin-bottom:10px;border-left:3px solid '+(dev?'#f87171':'#fbbf24')+'">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">'+
+        '<div><div style="font-size:14px;font-weight:700">'+fmtF(h.fecha)+' · Turno '+escAttr(h.turno||'')+
+          ' <span class="badge '+(dev?'badge-danger':'badge-warn')+'">'+(dev?'↩ Devuelta':'⏳ Esperando aprobación')+'</span></div>'+
+          '<div style="font-size:11.5px;color:var(--text3);margin-top:2px">Jefe de turno: '+escAttr(h.jefe||'—')+
+          ' · Envió: '+escAttr(h.por||'—')+' · '+(h.registros||[]).length+' trabajadores</div>'+
+          (h.obs?'<div style="font-size:11.5px;color:#f87171;margin-top:3px">Observación: '+escAttr(h.obs)+'</div>':'')+
+        '</div>'+
+        '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+          '<button class="btn" style="font-size:12px;padding:5px 12px;background:#15803d;color:#fff;border:1px solid #15803d" onclick="aprobarTareoHoja(\''+escAttr(h.id)+'\')">✅ Aprobar tareo</button>'+
+          '<button class="btn btn-outline" style="font-size:12px;padding:5px 12px;color:#f87171;border-color:#f87171" onclick="devolverTareoHoja(\''+escAttr(h.id)+'\')">↩ Devolver</button>'+
+        '</div>'+
+      '</div>'+
+      '<table style="width:100%;border-collapse:collapse;margin-top:8px"><thead><tr style="background:var(--coal4)">'+
+        '<th style="padding:4px 7px;text-align:left;font-size:10px;color:var(--text3)">TRABAJADOR</th>'+
+        '<th style="padding:4px 7px;text-align:center;font-size:10px;color:var(--text3)">TAREA</th>'+
+        '<th style="padding:4px 7px;text-align:left;font-size:10px;color:var(--text3)">OBSERVACIÓN</th>'+
+      '</tr></thead><tbody>'+filas+'</tbody></table>'+
+    '</div>';
+  }).join('');
+}
+async function aprobarTareoHoja(id){
+  tpendLoad();
+  const h=(state.tareosPend||[]).find(x=>String(x.id)===String(id));
+  if(!h){ showNotif('No encuentro esa hoja','error'); return; }
+  if(!confirm('¿Aprobar el tareo del '+fmtF(h.fecha)+' turno '+h.turno+'?\n\n'+(h.registros||[]).length+
+              ' trabajadores pasan a Recursos Humanos, a la planilla y a su consulta en línea.')) return;
+  const resp=(typeof usuarioActivo!=='undefined'&&usuarioActivo)?(usuarioActivo.nombre||usuarioActivo.rol):'—';
+  let n=0;
+  for(const r of (h.registros||[])){
+    const p=(state.personal||[]).find(x=>String(x.id)===String(r.pid));
+    const jornal=(p&&p.jornal)||0;
+    const fr=r.frente||(p&&p.frente)||1;
+    const existe=(state.tareas||[]).find(t=>t.fecha===h.fecha && String(t.trabajadorId)===String(r.pid) && (t.turno||'DIA')===h.turno);
+    if(existe){ existe.mult=r.mult; existe.jornal=jornal; existe.obs=r.obs; existe.turno=h.turno; existe.frente=fr; }
+    else state.tareas.push({ fecha:h.fecha, trabajadorId:r.pid, tarea:'Tareo diario', frente:fr, detalle:'',
+                             estadoTarea:'completado', mult:r.mult, jornal, turno:h.turno, obs:r.obs, _ts:Date.now() });
+    n++;
+  }
+  h.estado='aprobado'; h.aprob={resp, fecha:hoy(), ts:Date.now()}; h._ts=Date.now(); h.obs='';
+  try{ tareasSave(); }catch(e){}
+  try{ tpendSave(); }catch(e){}
+  try{ renderTareosPendientes(); }catch(e){}
+  try{ actualizarKpisTareo(h.fecha); }catch(e){}
+  try{ renderCostoRRHH(); }catch(e){}
+  showNotif('✓ Tareo aprobado — '+n+' trabajadores pasaron a Recursos Humanos');
+}
+function devolverTareoHoja(id){
+  tpendLoad();
+  const h=(state.tareosPend||[]).find(x=>String(x.id)===String(id));
+  if(!h) return;
+  const motivo=(prompt('¿Por qué se devuelve la hoja? El jefe de guardia va a ver este motivo:','')||'').trim();
+  if(!motivo) return;
+  h.estado='observado'; h.obs=motivo; h._ts=Date.now();
+  tpendSave();
+  renderTareosPendientes();
+  showNotif('↩ Hoja devuelta al jefe de guardia','warn');
+}
+/* ═══ LA PIZARRA DEL NIVEL ═══════════════════════════════════════════════════════════════════
+   Esto reemplaza la lista de casillas por lo que de verdad hay colgado en la pared de la oficina
+   de mina: el nivel arriba, las tres guardias una al lado de la otra con su turno y su supervisor,
+   y debajo de cada una la gente repartida en los dos frentes —CR-NE y RA-BRENDA— con el cargo que
+   pide cada puesto, más compresorista, scoop, dumper y servicios.
+   Se alimenta SOLO del personal activo de Recursos Humanos, así que un trabajador que se liquidó
+   deja de aparecer para ser asignado. Lo que queda guardado aquí es lo que el jefe de guardia
+   encuentra ya marcado al abrir su hoja de tareo, que no cambia en nada.                        */
+const PIZ_GUARDIAS=['A','B','C'];
+const PIZ_TURNOS=[['dia','🌞 Día'],['noche','🌙 Noche'],['libre','🏖️ Libre']];
+const PIZ_FRENTES=[{k:'CRNE',id:2,nom:'CR-NE'},{k:'RABRENDA',id:1,nom:'RA-BRENDA'}];
+const PIZ_PUESTOS=[['compresorista','Compresorista'],['scoop','Scoop'],['dumper','Dumper'],['servicios','Servicios']];
+/* Los cargos que pide cada puesto del frente. M1 y M2 son los perforistas; AY, su ayudante. El
+   panel solo ofrece gente cuyo cargo encaja, pero no obliga: en mina falta gente y hay que poder
+   poner a quien esté. Si el cargo no coincide, el casillero queda en ámbar. */
+const PIZ_CARGOS=[['M1','M1'],['M2','M2'],['AY','Ayudante'],['',' — ']];
+const PIZ_CUPOS={CRNE:['M1','M2','AY'], RABRENDA:['M1','M1','AY','AY']};
+function _pizCargoDe(p){
+  const r=String((p&&p.rol)||'').toUpperCase();
+  if(/\bM1\b/.test(r)) return 'M1';
+  if(/\bM2\b/.test(r)) return 'M2';
+  if(/AYUD/.test(r))   return 'AY';
+  return '';
+}
+let _piz=null;                       // la pizarra que se está editando
+function _pizVacia(){
+  const g={};
+  PIZ_GUARDIAS.forEach((G,i)=>{
+    g[G]={ turno:['dia','noche','libre'][i], supervisor:'',
+           frentes:{ CRNE:PIZ_CUPOS.CRNE.map(c=>({cargo:c,pid:''})),
+                     RABRENDA:PIZ_CUPOS.RABRENDA.map(c=>({cargo:c,pid:''})) },
+           puestos:{ compresorista:[''], scoop:[''], dumper:[''], servicios:[] } };
+  });
+  return { nv:'NV 2820', guardias:g };
+}
+function _pizCargar(){
+  const d=state.distribucion||{};
+  if(d.pizarra && d.pizarra.guardias) return JSON.parse(JSON.stringify(d.pizarra));
+  return _pizVacia();
+}
+/* A quién se puede poner: personal activo de RRHH. Se excluye a quien ya está puesto en otro
+   lado de la misma pizarra, para que nadie quede en dos guardias ni en dos frentes a la vez. */
+function _pizUsados(exceptoRef){
+  const u=new Set();
+  PIZ_GUARDIAS.forEach(G=>{
+    const g=_piz.guardias[G]; if(!g) return;
+    if(g.supervisor && exceptoRef!=='sup|'+G) u.add(String(g.supervisor));
+    PIZ_FRENTES.forEach(f=>(g.frentes[f.k]||[]).forEach((s,i)=>{
+      if(s.pid && exceptoRef!=='fr|'+G+'|'+f.k+'|'+i) u.add(String(s.pid)); }));
+    PIZ_PUESTOS.forEach(([k])=>(g.puestos[k]||[]).forEach((pid,i)=>{
+      if(pid && exceptoRef!=='pu|'+G+'|'+k+'|'+i) u.add(String(pid)); }));
+  });
+  return u;
+}
+function _pizOpciones(sel, ref, cargo){
+  const usados=_pizUsados(ref);
+  const act=(state.personal||[]).filter(p=>p && p.estado!=='baja')
+    .sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'}));
+  let h='<option value="">— vacío —</option>';
+  // Primero los que encajan con el cargo pedido; después el resto, por si hay que improvisar.
+  const encajan=cargo?act.filter(p=>_pizCargoDe(p)===cargo):act;
+  const resto  =cargo?act.filter(p=>_pizCargoDe(p)!==cargo):[];
+  const fila=p=>{
+    const ya=usados.has(String(p.id)) && String(sel)!==String(p.id);
+    return '<option value="'+p.id+'"'+(String(sel)===String(p.id)?' selected':'')+(ya?' disabled':'')+'>'+
+      escAttr(p.nombre)+(ya?' (ya asignado)':'')+'</option>';
+  };
+  h+=encajan.map(fila).join('');
+  if(resto.length) h+='<optgroup label="Otros cargos">'+resto.map(fila).join('')+'</optgroup>';
+  return h;
+}
 function abrirModalDistribucion(){
   distribLoad();
-  const activos=state.personal.filter(p=>p.estado!=='baja'&&!JEFES_TURNO_CARGOS.includes(p.rol));
-  const list=document.getElementById('dist-modal-list');
-  if(!activos.length){list.innerHTML='<div style="color:var(--text3);padding:14px;text-align:center;font-size:13px">Sin personal activo. Registra trabajadores en RRHH → Personal.</div>';abrirModal('modal-distribucion');return;}
-  const _gmap=(state.distribucion&&state.distribucion._guardias)||{};
-  list.innerHTML=activos.map(p=>{
-    const asignado=Object.prototype.hasOwnProperty.call(state.distribucion,p.id);
-    const frente=asignado?state.distribucion[p.id]:(p.frente||1);
-    const guardia=_gmap[p.id]||p.guardia||'dia';
-    return `<div class="dist-row" data-pid="${p.id}" style="display:flex;align-items:center;gap:10px;background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:6px;flex-wrap:wrap">
-      <input type="checkbox" class="dist-chk" data-pid="${p.id}" ${asignado?'checked':''} style="width:18px;height:18px;accent-color:var(--gold);cursor:pointer">
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:700;font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.nombre}</div>
-        <div style="font-size:10px;color:var(--text3)">${p.rol} · ${sueldoConfidencial(p)&&!puedeVerSueldos()?'🔒':'S/'+p.jornal+'/día'}</div>
-      </div>
-      <select class="dist-frente" data-pid="${p.id}" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
-        ${FRENTES.filter(f=>f.activo!==false||frente==f.id||String(frente)===String(f.id)).map(f=>`<option value="${f.id}" ${frente==f.id||String(frente)===String(f.id)?'selected':''}>${f.emoji} ${f.nombre}${f.activo===false?' (retirada)':''}</option>`).join('')}
-        <option value="MARGINAL" ${frente==='MARGINAL'?'selected':''}>📊 Costeo Marginal</option>
-      </select>
-      <select class="dist-guardia" data-pid="${p.id}" title="Guardia" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
-        <option value="dia" ${guardia==='dia'?'selected':''}>🌞 Día</option>
-        <option value="noche" ${guardia==='noche'?'selected':''}>🌙 Noche</option>
-        <option value="libre" ${guardia==='libre'?'selected':''}>🏖️ Días Libres</option>
-      </select>
-    </div>`;
-  }).join('');
+  _piz=_pizCargar();
+  const nv=document.getElementById('piz-nv'); if(nv) nv.value=_piz.nv||'NV 2820';
+  pizRender();
   abrirModal('modal-distribucion');
 }
-function distMarcarTodos(val){document.querySelectorAll('.dist-chk').forEach(c=>c.checked=val);}
+function pizRender(){
+  const cont=document.getElementById('dist-modal-list'); if(!cont) return;
+  const jefes=(state.personal||[]).filter(p=>p&&p.estado!=='baja');
+  const COL={dia:'#f59e0b',noche:'#60a5fa',libre:'#94a3b8'};
+  cont.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:12px">'+
+  PIZ_GUARDIAS.map(G=>{
+    const g=_piz.guardias[G]||{};
+    const col=COL[g.turno]||'#94a3b8';
+    const supOpts='<option value="">— sin supervisor —</option>'+jefes.map(p=>
+      '<option value="'+p.id+'"'+(String(g.supervisor)===String(p.id)?' selected':'')+'>'+escAttr(p.nombre)+'</option>').join('');
+    const frentesH=PIZ_FRENTES.map(f=>{
+      const slots=g.frentes[f.k]||[];
+      const filas=slots.map((sl,i)=>{
+        const p=(state.personal||[]).find(x=>String(x.id)===String(sl.pid));
+        const malCargo=sl.pid && sl.cargo && _pizCargoDe(p)!==sl.cargo;
+        return '<div style="display:flex;gap:5px;align-items:center;margin-bottom:4px">'+
+          '<span style="font-size:10px;font-weight:800;color:'+(malCargo?'#fbbf24':'var(--text3)')+';width:26px;text-align:center;'+
+          'border:1px solid '+(malCargo?'#fbbf24':'var(--border)')+';border-radius:4px;padding:2px 0" title="'+(malCargo?'El cargo no coincide':'Cargo requerido')+'">'+(sl.cargo||'—')+'</span>'+
+          '<select onchange="pizSet(\''+G+'\',\''+f.k+'\','+i+',this.value)" style="flex:1;min-width:0;background:var(--coal4);border:1px solid '+
+            (sl.pid?'var(--border)':'rgba(239,68,68,.45)')+';border-radius:6px;padding:4px 6px;color:var(--text);font-size:11px">'+
+            _pizOpciones(sl.pid,'fr|'+G+'|'+f.k+'|'+i,sl.cargo)+'</select>'+
+          '<button onclick="pizQuitarSlot(\''+G+'\',\''+f.k+'\','+i+')" title="Quitar puesto" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:13px">✕</button>'+
+        '</div>';
+      }).join('');
+      const faltan=slots.filter(x=>!x.pid).length;
+      return '<div style="margin-top:8px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'+
+          '<span style="font-size:11px;font-weight:800;color:var(--text2)">'+f.nom+
+          ' <span style="color:var(--text3);font-weight:600">('+(slots.length-faltan)+'/'+slots.length+')</span></span>'+
+          '<span>'+PIZ_CARGOS.filter(c=>c[0]).map(c=>'<button onclick="pizAddSlot(\''+G+'\',\''+f.k+'\',\''+c[0]+'\')" '+
+            'style="background:var(--coal4);border:1px solid var(--border);border-radius:5px;color:var(--text3);font-size:10px;padding:1px 6px;margin-left:3px;cursor:pointer">+'+c[1]+'</button>').join('')+'</span>'+
+        '</div>'+filas+'</div>';
+    }).join('');
+    const puestosH=PIZ_PUESTOS.map(([k,nom])=>{
+      const arr=g.puestos[k]||[];
+      const filas=arr.map((pid,i)=>'<div style="display:flex;gap:5px;align-items:center;margin-bottom:3px">'+
+        '<select onchange="pizSetPuesto(\''+G+'\',\''+k+'\','+i+',this.value)" style="flex:1;min-width:0;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:4px 6px;color:var(--text);font-size:11px">'+
+          _pizOpciones(pid,'pu|'+G+'|'+k+'|'+i,'')+'</select>'+
+        '<button onclick="pizQuitarPuesto(\''+G+'\',\''+k+'\','+i+')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:13px">✕</button></div>').join('');
+      return '<div style="margin-top:6px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center">'+
+        '<span style="font-size:10.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">'+nom+'</span>'+
+        '<button onclick="pizAddPuesto(\''+G+'\',\''+k+'\')" style="background:var(--coal4);border:1px solid var(--border);border-radius:5px;color:var(--text3);font-size:10px;padding:1px 7px;cursor:pointer">+</button></div>'+filas+'</div>';
+    }).join('');
+    return '<div style="background:var(--coal3);border:1px solid var(--border);border-top:3px solid '+col+';border-radius:10px;padding:11px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px">'+
+        '<span style="font-size:15px;font-weight:800;color:'+col+'">GUARDIA '+G+'</span>'+
+        '<select onchange="pizTurno(\''+G+'\',this.value)" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:3px 6px;color:var(--text);font-size:11px">'+
+          PIZ_TURNOS.map(t=>'<option value="'+t[0]+'"'+(g.turno===t[0]?' selected':'')+'>'+t[1]+'</option>').join('')+'</select>'+
+      '</div>'+
+      '<div style="margin-top:7px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Supervisor / Capataz</div>'+
+        '<select onchange="pizSupervisor(\''+G+'\',this.value)" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:4px 6px;color:var(--text);font-size:11.5px;font-weight:700">'+supOpts+'</select></div>'+
+      frentesH+
+      '<div style="border-top:1px solid var(--border);margin-top:9px;padding-top:5px">'+puestosH+'</div>'+
+    '</div>';
+  }).join('')+'</div>'+
+  '<div style="font-size:11px;color:var(--text3);margin-top:10px">El casillero en rojo está vacío; el cargo en ámbar avisa que quien pusiste no tiene ese cargo en su ficha. Nadie puede quedar en dos sitios a la vez.</div>';
+}
+function pizTurno(G,v){ _piz.guardias[G].turno=v; pizRender(); }
+function pizSupervisor(G,v){ _piz.guardias[G].supervisor=v; pizRender(); }
+function pizSet(G,fk,i,v){ _piz.guardias[G].frentes[fk][i].pid=v; pizRender(); }
+function pizAddSlot(G,fk,cargo){ _piz.guardias[G].frentes[fk].push({cargo:cargo,pid:''}); pizRender(); }
+function pizQuitarSlot(G,fk,i){ _piz.guardias[G].frentes[fk].splice(i,1); pizRender(); }
+function pizSetPuesto(G,k,i,v){ _piz.guardias[G].puestos[k][i]=v; pizRender(); }
+function pizAddPuesto(G,k){ (_piz.guardias[G].puestos[k]=_piz.guardias[G].puestos[k]||[]).push(''); pizRender(); }
+function pizQuitarPuesto(G,k,i){ _piz.guardias[G].puestos[k].splice(i,1); pizRender(); }
+/* Guardar: además de la pizarra se escriben las DOS claves que la hoja de tareo ya sabe leer
+   —el frente de cada trabajador y su guardia—, para que el jefe de guardia encuentre su gente
+   marcada sin que haya que tocar la hoja de tareo. */
 function guardarDistribucion(){
-  const nueva={};
-  const guardias={};
-  document.querySelectorAll('.dist-chk').forEach(chk=>{
-    const pid=chk.dataset.pid;
-    const p=state.personal.find(x=>String(x.id)===String(pid));
-    // La guardia se guarda para TODOS (esté o no asignado a un frente): viaja dentro de la
-    // distribución (clave _guardias) para sincronizarse igual que los frentes, y también se
-    // copia a la ficha del trabajador como respaldo.
-    const gsel=document.querySelector(`.dist-guardia[data-pid="${pid}"]`);
-    if(gsel){ guardias[pid]=gsel.value||'dia'; if(p)p.guardia=gsel.value||'dia'; }
-    if(chk.checked){
-      const fsel=document.querySelector(`.dist-frente[data-pid="${pid}"]`);
-      const val=fsel?.value||'1';
-      const frente=isNaN(val)?val:parseInt(val,10);
-      nueva[pid]=frente;
-      // Sincronizar frente del trabajador
-      if(p)p.frente=frente;
-    }
+  if(!_piz) _piz=_pizCargar();
+  const nvEl=document.getElementById('piz-nv'); if(nvEl) _piz.nv=(nvEl.value||'NV 2820').trim();
+  const nueva={}, guardias={};
+  PIZ_GUARDIAS.forEach(G=>{
+    const g=_piz.guardias[G]||{}; const t=g.turno||'dia';
+    const marcar=(pid,labor)=>{ if(!pid) return; guardias[pid]=t;
+      if(labor!=null) nueva[pid]=labor;
+      const p=(state.personal||[]).find(x=>String(x.id)===String(pid));
+      if(p){ p.guardia=t; if(labor!=null && labor!=='MARGINAL') p.frente=labor; } };
+    if(g.supervisor) marcar(g.supervisor,null);                 // el supervisor no se tarea
+    PIZ_FRENTES.forEach(f=>(g.frentes[f.k]||[]).forEach(sl=>marcar(sl.pid,f.id)));
+    // Compresorista, scoop, dumper y servicios no trabajan en un frente: su costo va a marginal.
+    PIZ_PUESTOS.forEach(([k])=>(g.puestos[k]||[]).forEach(pid=>marcar(pid,'MARGINAL')));
   });
   nueva._guardias=guardias;
+  nueva.pizarra=_piz;
   state.distribucion=nueva;
   distribSave();
-  try{ if(typeof personalSave==='function')personalSave(); }catch(e){}
+  try{ if(typeof personalSave==='function') personalSave(); }catch(e){}
   cerrarModal('modal-distribucion');
-  if(typeof renderDistribucion==='function'){try{renderDistribucion();}catch(e){}}
-  showNotif('✓ Distribución guardada — frentes y guardias aplicados al tareo diario');
+  if(typeof renderDistribucion==='function'){ try{ renderDistribucion(); }catch(e){} }
+  const n=Object.keys(guardias).length;
+  showNotif('✓ Pizarra guardada — '+n+' trabajador'+(n===1?'':'es')+' distribuido'+(n===1?'':'s')+'. El tareo ya los trae marcados.');
 }
-
+/* La pizarra en papel, para la pared: mientras no se pueda imprimir igual que la de plumón, la
+   de plumón no desaparece y habría dos verdades. */
+function pizImprimir(){
+  try{
+    const piz=_piz||_pizCargar();
+    const nom=id=>{ const p=(state.personal||[]).find(x=>String(x.id)===String(id)); return p?p.nombre:'—'; };
+    const TUR={dia:'DÍA',noche:'NOCHE',libre:'LIBRE'};
+    const cols=PIZ_GUARDIAS.map(G=>{
+      const g=piz.guardias[G]||{};
+      const fr=PIZ_FRENTES.map(f=>'<div class="fr"><b>'+f.nom+'</b>'+
+        (g.frentes[f.k]||[]).map((sl,i)=>'<div class="ln">'+(i+1)+'. '+escAttr(nom(sl.pid))+' <i>'+(sl.cargo||'')+'</i></div>').join('')+'</div>').join('');
+      const pu=PIZ_PUESTOS.map(([k,n2])=>{ const a=(g.puestos[k]||[]).filter(Boolean);
+        return a.length?'<div class="ln"><b>'+n2+':</b> '+a.map(x=>escAttr(nom(x))).join(', ')+'</div>':''; }).join('');
+      return '<td><div class="gh">GUARDIA '+G+'</div><div class="tu">TURNO: '+(TUR[g.turno]||'—')+'</div>'+
+             '<div class="su">SUPERVISOR: '+escAttr(nom(g.supervisor))+'</div>'+fr+'<div class="pu">'+pu+'</div></td>';
+    }).join('');
+    const w=window.open('','_blank','width=1000,height=800'); if(!w) return;
+    w.document.write('<!doctype html><html lang="es"><head><meta charset="utf-8"><title>'+escAttr(piz.nv||'')+'</title>'+
+      '<style>body{font-family:Arial,Helvetica,sans-serif;margin:24px;color:#111}'+
+      'h1{text-align:center;font-size:20px;margin:0 0 14px;text-decoration:underline}'+
+      'table{width:100%;border-collapse:collapse}td{vertical-align:top;width:33%;border:1px solid #bbb;padding:10px}'+
+      '.gh{font-weight:800;font-size:14px}.tu,.su{font-size:12px;margin-top:2px}'+
+      '.fr{margin-top:9px}.fr b{font-size:12px}.ln{font-size:12px;margin-top:2px}.ln i{color:#666;font-style:normal;font-size:10px}'+
+      '.pu{margin-top:9px;border-top:1px solid #ddd;padding-top:5px}</style></head><body>'+
+      '<h1>'+escAttr(piz.nv||'NV 2820')+'</h1><table><tr>'+cols+'</tr></table></body></html>');
+    w.document.close(); setTimeout(()=>{ try{ w.print(); }catch(e){} },350);
+  }catch(e){ console.warn('[pizarra]',e); }
+}
+function distMarcarTodos(){}            // quedó sin uso con la pizarra
 // ── REPORTES DE REUNIÓN DIARIA ──
 function renderReuniones(){
   reunionesLoad();
