@@ -19308,6 +19308,7 @@ function renderTareas(){
         <div style="display:flex;align-items:center;gap:10px">
           <span style="font-family:'DM Mono',monospace;font-weight:800;font-size:13px;color:#1a2744">${fmtS(total)}</span>
           <span style="font-size:11px;font-weight:700;background:rgba(26,39,68,0.15);color:#1a2744;border-radius:6px;padding:3px 10px">${h.tareas.length} trab.</span>
+          <button onclick="event.stopPropagation();imprimirTareoArch('${h.fecha}','${h.turno}')" style="padding:4px 12px;font-size:11px;font-weight:700;border-radius:6px;border:1.5px solid #1a2744;background:#fff;color:#1a2744;cursor:pointer">🖨 Imprimir</button>
           <button id="tareo-arch-edit-${hi}" onclick="event.stopPropagation();toggleEditTareoArch(${hi})" style="padding:4px 12px;font-size:11px;font-weight:700;border-radius:6px;border:1.5px solid #1a2744;background:#1a2744;color:#FFD700;cursor:pointer">✏ Editar</button>
           <button onclick="event.stopPropagation();eliminarTareoArch('${h.fecha}','${h.turno}')" style="padding:4px 12px;font-size:11px;font-weight:700;border-radius:6px;border:1.5px solid #b91c1c;background:#b91c1c;color:#fff;cursor:pointer">🗑 Eliminar</button>
         </div>
@@ -19328,6 +19329,42 @@ function renderTareas(){
       </div>
     </div>`;
   }).join('');
+}
+
+/* Hoja de tareo ya aprobada, lista para imprimir y firmar en RRHH. Trae el jefe de guardia y
+   quién la aprobó desde la hoja que pasó por «Tareos por aprobar». No lleva montos: los jornales
+   son confidenciales y la hoja se firma y se archiva en papel. */
+function imprimirTareoArch(fecha, turno){
+  const filas=(state.tareas||[]).filter(t=>t.fecha===fecha && (t.turno||'DIA')===turno);
+  if(!filas.length){ showNotif('No hay tareo para esa fecha y turno','error'); return; }
+  try{ tpendLoad(); }catch(e){}
+  const hoja=(state.tareosPend||[]).find(h=>h && h.fecha===fecha && h.turno===turno && h.estado==='aprobado');
+  const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const cuerpo=filas.map((t,i)=>{
+    const p=(state.personal||[]).find(x=>String(x.id)===String(t.trabajadorId));
+    const f=frenteGet(t.frente);
+    return '<tr><td style="text-align:center">'+(i+1)+'</td><td>'+esc(p?p.nombre:(t.nombre||t.trabajadorId))+'</td><td>'+esc(p?p.rol:(t.rol||''))+
+      '</td><td>'+esc(f?f.nombre:'')+'</td><td style="text-align:center;font-weight:700">×'+esc(t.mult||1)+'</td><td>'+esc(t.obs||'')+'</td><td></td></tr>';
+  }).join('');
+  const total=filas.reduce((s,t)=>s+(Number(t.mult)||1),0);
+  const aprob=hoja&&hoja.aprob?(esc(hoja.aprob.resp)+' — '+fmtF(hoja.aprob.fecha)):'—';
+  const w=window.open('','_blank','width=900,height=700');
+  if(!w){ showNotif('El navegador bloqueó la ventana de impresión','error'); return; }
+  w.document.write('<html><head><title>Tareo '+esc(fecha)+' '+esc(turno)+'</title><style>'+
+    'body{margin:24px;font-family:Arial,sans-serif;color:#000}h1{font-size:16px;margin:0 0 4px}'+
+    '.meta{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;font-size:12px;margin:10px 0 14px}'+
+    'table{width:100%;border-collapse:collapse}th,td{border:1px solid #555;padding:6px 8px;font-size:11px}th{background:#FFD700}'+
+    '.firmas{display:flex;justify-content:space-around;margin-top:60px;font-size:11px;text-align:center}.firmas div{border-top:1px solid #000;width:28%;padding-top:4px}'+
+    '</style></head><body>'+
+    '<h1>HOJA DE TAREO DIARIO — APROBADA</h1>'+
+    '<div class="meta"><div><b>Fecha:</b> '+fmtF(fecha)+'</div><div><b>Turno:</b> '+(turno==='NOCHE'?'NOCHE':'DÍA')+'</div>'+
+    '<div><b>Jefe de Guardia:</b> '+esc(hoja&&hoja.jefe||'—')+'</div><div><b>Aprobado por:</b> '+aprob+'</div>'+
+    '<div><b>Trabajadores:</b> '+filas.length+'</div><div><b>Total tareas:</b> '+(Math.round(total*100)/100)+'</div></div>'+
+    '<table><thead><tr><th>N°</th><th>NOMBRE</th><th>CARGO</th><th>LABOR</th><th>TAREA</th><th>OBSERVACIÓN</th><th style="width:90px">FIRMA</th></tr></thead><tbody>'+cuerpo+'</tbody></table>'+
+    '<div class="firmas"><div>Jefe de Guardia</div><div>Jefe de Operaciones / Residente</div><div>Recursos Humanos</div></div>'+
+    '</body></html>');
+  w.document.close();
+  setTimeout(()=>w.print(),400);
 }
 
 async function editarMultTareo(uid, multStr){
