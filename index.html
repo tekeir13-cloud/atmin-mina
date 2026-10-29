@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-280</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-281</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-280</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-281</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.29-280</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.29-281</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -19352,6 +19352,14 @@ function renderTareas(){
         <div style="display:flex;align-items:center;gap:12px">
           <span id="tareo-arch-chevron-${hi}" style="font-size:14px;color:#1a2744">▶</span>
           <div style="font-weight:900;font-size:14px;color:#000;font-family:Arial,sans-serif">TAREO — ${fmtF(h.fecha)} &nbsp;|&nbsp; TURNO: ${h.turno}</div>
+          ${(()=>{ /* Quién firmó por este día: el visto que lo dejó entrar a la planilla. */
+            try{ if(typeof tpendLoad==='function') tpendLoad();
+              const hj=(state.tareosPend||[]).find(x=>x && x.fecha===h.fecha && String(x.turno)===String(h.turno) && x.estado==='aprobado');
+              if(!hj) return '';
+              const a=hj.aprob||{};
+              return '<div style="font-size:10.5px;color:#1a2744;opacity:.75;font-family:Arial,sans-serif">'+
+                'Jefe de guardia: '+escAttr(hj.jefe||'—')+' · Aprobó: <b>'+escAttr(a.resp||'—')+'</b>'+(a.fecha?' el '+fmtF(a.fecha):'')+'</div>';
+            }catch(e){ return ''; } })()}
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           
@@ -23683,11 +23691,14 @@ function tpendLoad(){ try{ const d=localStorage.getItem(TPEND_KEY); if(d) state.
 function tpendSave(){ _lsEscribir(TPEND_KEY, state.tareosPend||[]); try{ sbSyncModulo('tareos_pend', state.tareosPend||[]); }catch(e){} try{ pintarBadgeTareos(); }catch(e){} }
 /* Quién necesita aprobación: el que reporta desde el frente. El residente, el administrador y
    finanzas registran directo, porque son justamente quienes aprueban. */
-const TAREO_APRUEBAN=['ingeniero_residente','asistente_residente','jefe_operaciones','administrador','jefe_finanzas','gerente_general'];
-/* Quién ve la pestaña de tareos por aprobar. El jefe de guardia NO: él manda su hoja y espera.
-   Administración y finanzas tampoco la necesitan —entran por RRHH—, pero sí pueden registrar
-   tareo directo, por eso están arriba y no aquí. */
-const TAREO_VEN_APROBACION=['jefe_operaciones','ingeniero_residente','asistente_residente','gerente_general'];
+/* TODO TAREO PASA POR APROBACIÓN, SIN EXCEPCIÓN. Antes, quien podía aprobar registraba directo;
+   eso dejaba hojas entrando a la planilla sin que nadie firmara por ellas, y no había forma de
+   saber quién respondía por ese día. Ahora cualquiera que llene una hoja la manda a aprobación,
+   incluido el propio residente: alguien de la lista de abajo tiene que ponerle el visto. */
+/* LOS CUATRO QUE APRUEBAN. Son los que responden por el turno y por la planilla: Operaciones, el
+   Ingeniero Residente, su asistente y Finanzas. Nadie más ve la pestaña ni puede dar el visto —y
+   la función de aprobar lo vuelve a comprobar, porque una pestaña oculta no es un permiso—. */
+const TAREO_VEN_APROBACION=['jefe_operaciones','ingeniero_residente','asistente_residente','jefe_finanzas'];
 function puedeVerTareosPorAprobar(){
   try{ return !!usuarioActivo && TAREO_VEN_APROBACION.indexOf(String(usuarioActivo.rol||''))>=0; }catch(e){ return false; }
 }
@@ -23705,12 +23716,7 @@ function pintarBadgeTareos(){
     if(tab) tab.style.display=puedeVerTareosPorAprobar()?'':'none';
   }catch(e){}
 }
-function tareoRequiereAprobacion(){
-  try{
-    if(typeof usuarioActivo==='undefined' || !usuarioActivo) return false;
-    return TAREO_APRUEBAN.indexOf(String(usuarioActivo.rol||''))<0;
-  }catch(e){ return false; }
-}
+function tareoRequiereAprobacion(){ return true; }
 function tareasSave(){_lsEscribir(TAREAS_KEY, state.tareas||[]); try{ sbSyncModulo('tareas', state.tareas||[]); }catch(e){}}
 // Salidas del Stock Remanente (movimientos que controla Logística, NO afectan NV3190)
 const REMSAL_KEY='atmin_remanente_salidas';
@@ -24231,6 +24237,9 @@ function renderTareosPendientes(){
   }).join('');
 }
 async function aprobarTareoHoja(id){
+  if(typeof puedeVerTareosPorAprobar==='function' && !puedeVerTareosPorAprobar()){
+    showNotif('Solo Operaciones, el Ingeniero Residente, su asistente y Finanzas aprueban tareos.','error'); return;
+  }
   tpendLoad();
   const h=(state.tareosPend||[]).find(x=>String(x.id)===String(id));
   if(!h){ showNotif('No encuentro esa hoja','error'); return; }
@@ -24257,6 +24266,9 @@ async function aprobarTareoHoja(id){
   showNotif('✓ Tareo aprobado — '+n+' trabajadores pasaron a Recursos Humanos');
 }
 function devolverTareoHoja(id){
+  if(typeof puedeVerTareosPorAprobar==='function' && !puedeVerTareosPorAprobar()){
+    showNotif('Solo Operaciones, el Ingeniero Residente, su asistente y Finanzas revisan tareos.','error'); return;
+  }
   tpendLoad();
   const h=(state.tareosPend||[]).find(x=>String(x.id)===String(id));
   if(!h) return;
