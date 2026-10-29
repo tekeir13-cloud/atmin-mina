@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-276</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-277</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-276</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-277</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.29-276</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.29-277</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -2908,7 +2908,7 @@ select option{background:var(--coal3);}
         <div class="form-group"><label>Fecha <span style="color:var(--text3);font-size:10px">(selecciona fechas actuales o anteriores)</span></label><input type="date" id="tareo-fecha"></div>
         <div class="form-group"><label>Turno</label><select id="tareo-turno" onchange="tareoTurnoCambia()"><option value="DIA">DÍA</option><option value="NOCHE">NOCHE</option></select></div>
         <div class="form-group"><label>Nivel</label><input type="text" id="tareo-nivel" value="Nv 2820"></div>
-        <div class="form-group"><label>Jefe de Turno</label><select id="tareo-jefe"><option value="">— Seleccionar —</option></select></div>
+        <div class="form-group"><label>Jefe de Guardia <span style="color:var(--text3);font-size:10px">(sale de la distribución)</span></label><input type="text" id="tareo-jefe" readonly style="background:var(--coal4);cursor:not-allowed"></div>
       </div>
       <div style="margin-top:14px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -3142,9 +3142,16 @@ select option{background:var(--coal3);}
     <button class="mod-tab" onclick="modTab('op','avance',this)">📋 Reporte Jefe de Guardia</button>
     <button class="mod-tab" onclick="modTab('op','equipos',this);renderEquiposOp()">🚜 Reportes de Equipo</button>
     <button class="mod-tab" onclick="modTab('op','vsproyectado',this)">👷 Reporte Ing. Residente</button>
+    <button class="mod-tab" id="tab-tareos-aprobar" style="display:none" onclick="modTab('op','tareosaprobar',this)">🔔 Tareos por aprobar
+      <span id="badge-tareos-aprobar" style="display:none;background:#dc2626;color:#fff;border-radius:999px;font-size:10px;font-weight:800;padding:1px 7px;margin-left:5px;align-items:center">0</span></button>
     <button class="mod-tab" onclick="modTab('op','valorizaciones',this)">💵 Valorizaciones</button>
     <button class="mod-tab" onclick="modTab('op','solicitudes',this);renderSolicitudesPendientesOp()">🛒 Solicitudes</button>
     <button class="mod-tab" onclick="modTab('op','presentaciones',this);renderPresentaciones()">📊 Presentaciones</button>
+  </div>
+  <div class="mod-pane" style="display:none" id="op-tareosaprobar">
+    <div class="section-title" style="margin-top:0">🔔 Tareos por aprobar</div>
+    <div style="font-size:12px;color:var(--text3);margin:-6px 0 12px">Hojas que mandaron los jefes de guardia. Hasta que no se aprueben, no entran a Recursos Humanos ni las ve el trabajador en su consulta.</div>
+    <div id="res-tareos-pend"></div>
   </div>
   <div class="mod-pane" style="display:none" id="op-presentaciones"></div>
   <div class="mod-pane active" style="display:block" id="op-tablero">
@@ -3234,8 +3241,6 @@ select option{background:var(--coal3);}
     <div id="op-mant-historial"></div>
   </div>
   <div class="mod-pane" style="display:none" id="op-vsproyectado">
-  <div class="section-title" style="margin-top:0">🗓 Tareos por aprobar</div>
-  <div id="res-tareos-pend" style="margin-bottom:18px"></div>
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
       <div>
         <div class="section-title" style="margin:0">👷 Reporte del Ingeniero Residente</div>
@@ -5209,6 +5214,11 @@ const FRENTES=[
   {id:'TJ5100',    key:'tj5100',    pfx:'tj51', nombre:'TJ 5100',    emoji:'⬛', color:'#2dd4bf',
    tajo:true, unidad:'m³', potencia:2.4},
 ];
+/* LOS ÚNICOS DOS FRENTES DONDE SE TAREA PERSONAL. La lista FRENTES lleva además los tajos y las
+   labores de avance que se reportan en Operaciones; en la hoja de tareo no van, porque al jefe de
+   guardia solo le toca decir en cuál de los dos frentes de personal estuvo cada trabajador.
+   FRENTES no se toca: los tareos ya registrados se siguen leyendo igual. */
+const TAREO_FRENTES=['1','2'];
 // Labores vigentes: las que se pueden reportar hoy.
 function frentesActivos(){ return FRENTES.filter(f=>f.activo!==false); }
 // Labores a MOSTRAR en un tablero: las vigentes siempre, y una retirada solo si tiene datos en
@@ -6320,7 +6330,8 @@ function renderModPane(mod,pane){
   else if(k==='op-valorizaciones'){renderValorizacionOp();}
   else if(k==='op-avance'){renderAvance();}
   else if(k==='op-solicitudes')renderSolicitudesPendientesOp();
-  else if(k==='op-vsproyectado'){ renderResidente(); try{ renderTareosPendientes(); }catch(e){} }
+  else if(k==='op-vsproyectado')renderResidente();
+  else if(k==='op-tareosaprobar'){ try{ renderTareosPendientes(); }catch(e){} }
   else if(k==='mant-registro')renderMantenimiento();
   else if(k==='mant-costosmant')renderCostosMant();
   else if(k==='mant-horometros')renderHorometrosMant();
@@ -8916,7 +8927,7 @@ else if(Number(prevAlm.productosTs||0)>Number(data.productosTs||0)){ a.productos
                                  const act=(typeof pfLoad==='function')?pfLoad():{};
                                  setLS(FOTOS_KEY, {...act, ...data});
                                  try{ if(document.getElementById('rrhh-tarjetas')&&typeof renderTarjetas==='function') renderTarjetas(); }catch(e){} } break;
-    case 'tareos_pend':        if(Array.isArray(data)){ state.tareosPend=(typeof mergeById_ts==='function')?mergeById_ts(state.tareosPend||[], data):data; _lsSet('atmin_tareos_pend', state.tareosPend); } break;
+    case 'tareos_pend':        if(Array.isArray(data)){ state.tareosPend=(typeof mergeById_ts==='function')?mergeById_ts(state.tareosPend||[], data):data; _lsSet('atmin_tareos_pend', state.tareosPend); try{ pintarBadgeTareos(); }catch(e){} } break;
     case 'personal_hist':      if(Array.isArray(data)){ try{ const f=_MERGE_AL_SUBIR['personal_hist'];
                                  _pHist=f?f(_pHist||[], data):data; _lsSet('atmin_personal_hist', _pHist); }catch(e){} } break;
     case 'almacen_histbackup': if(data&&typeof data==='object'){ setLS('atmin_almacen_histbackup', data); } break;
@@ -18844,18 +18855,7 @@ function abrirSetupTareo(){
   document.getElementById('tareo-setup').style.display='block';
   document.getElementById('tareo-hoja').style.display='none';
   document.getElementById('tareo-acciones').style.display='none';
-  // Poblar jefe de turno con personal cuyos cargos sean jefatura, o los cargos genéricos
-  const jefeSel=document.getElementById('tareo-jefe');
-  if(jefeSel){
-    const candidatos=state.personal.filter(p=>p.estado!=='baja'&&JEFES_TURNO_CARGOS.includes(p.rol));
-    const vistos=new Set();
-    let opts='<option value="">— Seleccionar —</option>';
-    candidatos.forEach(p=>{
-      if(!vistos.has(p.id)){vistos.add(p.id);opts+=`<option value="${p.nombre}">${p.nombre} — ${p.rol}</option>`;}
-    });
-    if(!candidatos.length) opts+=`<option value="">Sin Jefes/Capataces registrados</option>`;
-    jefeSel.innerHTML=opts;
-  }
+  // El jefe de guardia ya no se elige: lo pone la distribución según el turno (ver tareoJefeAuto).
   // Poblar lista de personal con selección y labor — pre-selecciona según distribución del Ing. Residente
   if(typeof distribLoad==='function')distribLoad();
   const dist=state.distribucion||{};
@@ -18873,7 +18873,9 @@ function abrirSetupTareo(){
   const gmap=(dist&&dist._guardias)||{};
   list.innerHTML=activos.map(p=>{
     const asignado=Object.prototype.hasOwnProperty.call(dist,p.id)&&String(p.id)!=='_guardias';
-    const labor=asignado?dist[p.id]:(p.frente||1);
+    // Si la ficha trae otro frente —o costeo marginal— cae a RA Brenda, que es el que vale aquí.
+    const laborCruda=asignado?dist[p.id]:(p.frente||1);
+    const labor=TAREO_FRENTES.includes(String(laborCruda))?laborCruda:1;
     const g=gmap[p.id]||p.guardia||'';
     // Si hay distribución activa, solo se pre-marcan los asignados; si no hay, ninguno
     const marcado=asignado;
@@ -18886,17 +18888,39 @@ function abrirSetupTareo(){
         </div>
       </div>
       <select class="tareo-labor" data-pid="${p.id}" style="background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px">
-        ${FRENTES.filter(f=>f.activo!==false||String(labor)===String(f.id)).map(f=>`<option value="${f.id}" ${String(labor)===String(f.id)?'selected':''}>${f.emoji} ${f.nombre}${f.activo===false?' (retirada)':''}</option>`).join('')}
-        <option value="MARGINAL" ${labor==='MARGINAL'?'selected':''}>📊 Costeo Marginal</option>
+        ${FRENTES.filter(f=>TAREO_FRENTES.includes(String(f.id))).map(f=>`<option value="${f.id}" ${String(labor)===String(f.id)?'selected':''}>${f.emoji} ${f.nombre}</option>`).join('')}
       </select>
     </div>`;
   }).join('');
   // Filtro inicial según el turno elegido (DIA→Guardia Día, NOCHE→Guardia Noche)
   tareoTurnoCambia();
+  try{ tareoJefeAuto(); }catch(e){}
 }
 
+/* EL JEFE DE GUARDIA NO SE ELIGE: YA ESTÁ DECIDIDO. Es el supervisor que el Ingeniero Residente
+   puso en la pizarra para la guardia que está de día o de noche. Elegirlo a mano en la hoja era
+   una pregunta sin respuesta libre —el que firma el turno es el que la distribución dice— y abría
+   la puerta a que la hoja saliera a nombre de alguien que ese día no estaba. */
+function tareoJefeAuto(){
+  const el=document.getElementById('tareo-jefe'); if(!el) return '';
+  const t=(document.getElementById('tareo-turno')||{}).value||'DIA';
+  const turno=(t==='NOCHE')?'noche':'dia';
+  let nombre='';
+  try{
+    if(typeof distribLoad==='function') distribLoad();
+    const piz=(state.distribucion||{}).pizarra;
+    const g=(piz&&piz.guardias)?Object.values(piz.guardias).find(x=>x&&x.turno===turno&&x.supervisor):null;
+    const p=g?(state.personal||[]).find(x=>String(x.id)===String(g.supervisor)):null;
+    nombre=p?p.nombre:'';
+  }catch(e){}
+  el.value=nombre||'Sin jefe asignado en la distribución';
+  el.dataset.jefe=nombre||'';
+  el.style.color=nombre?'var(--text)':'#f87171';
+  return nombre;
+}
 // El turno de la hoja controla el filtro: al elegir DÍA se muestra la gente de guardia día, etc.
 function tareoTurnoCambia(){
+  try{ tareoJefeAuto(); }catch(e){}
   const t=document.getElementById('tareo-turno')?.value||'';
   const f=document.getElementById('tareo-gfiltro');
   if(f) f.value=(t==='DIA')?'dia':(t==='NOCHE')?'noche':'';
@@ -19047,7 +19071,8 @@ async function guardarTareo(){
     });
     if(!regs.length){ showNotif('No marcaste a nadie en la hoja','error'); return; }
     tpendLoad();
-    const jefe=(document.getElementById('tareo-jefe')||{}).value||'';
+    const jefeEl=document.getElementById('tareo-jefe');
+    const jefe=(jefeEl&&(jefeEl.dataset.jefe||''))||'';
     const ya=(state.tareosPend||[]).find(h=>h && h.fecha===fecha && h.turno===turno && h.estado!=='aprobado');
     const ts=Date.now();
     const hoja={ id: ya?ya.id : ('HJ'+ts), _ts:ts, fecha, turno, jefe,
@@ -19299,7 +19324,8 @@ function renderTareas(){
           <span style="font-family:'DM Mono',monospace;font-weight:800;font-size:13px;color:#1a2744">${fmtS(total)}</span>
           <span style="font-size:11px;font-weight:700;background:rgba(26,39,68,0.15);color:#1a2744;border-radius:6px;padding:3px 10px">${h.tareas.length} trab.</span>
           <button id="tareo-arch-edit-${hi}" onclick="event.stopPropagation();toggleEditTareoArch(${hi})" style="padding:4px 12px;font-size:11px;font-weight:700;border-radius:6px;border:1.5px solid #1a2744;background:#1a2744;color:#FFD700;cursor:pointer">✏ Editar</button>
-          <button onclick="event.stopPropagation();eliminarTareoArch('${h.fecha}','${h.turno}')" style="padding:4px 12px;font-size:11px;font-weight:700;border-radius:6px;border:1.5px solid #b91c1c;background:#b91c1c;color:#fff;cursor:pointer">🗑 Eliminar</button>
+          <button onclick="event.stopPropagation();imprimirHojaTareo('${h.fecha}','${h.turno}')" style="padding:4px 12px;font-size:11px;font-weight:700;border-radius:6px;border:1px solid #1a2744;background:#fff;color:#1a2744;cursor:pointer">🖨 Imprimir</button>
+          ${puedeBorrarTareo()?`<button onclick="event.stopPropagation();eliminarTareoArch('${h.fecha}','${h.turno}')" style="padding:4px 12px;font-size:11px;font-weight:700;border-radius:6px;border:1.5px solid #b91c1c;background:#b91c1c;color:#fff;cursor:pointer">🗑 Eliminar</button>`:''}
         </div>
       </div>
       <div id="tareo-arch-body-${hi}" style="display:none;overflow-x:auto">
@@ -19352,14 +19378,82 @@ function toggleTareoArch(hi){
 }
 
 // Eliminar un tareo completo (todos los registros de una fecha + turno)
+/* LA HOJA DE TAREO EN PAPEL. Es la que se archiva firmada: lleva el día, el turno, el jefe de
+   guardia que la reportó y quién la aprobó, y debajo cada trabajador con su labor, su tarea y su
+   observación, con un casillero para que firme. Sin un solo monto en soles: el jornal es
+   confidencial y esta hoja circula por la oficina y por el frente. */
+function imprimirHojaTareo(fecha,turno){
+  try{
+    const match=t=>t.fecha===fecha&&(t.turno||'DIA')===turno;
+    const items=(state.tareas||[]).filter(match);
+    if(!items.length){ showNotif('No hay registros en esa hoja','error'); return; }
+    const e=escAttr;
+    let hoja=null;
+    try{ if(typeof tpendLoad==='function') tpendLoad();
+         hoja=(state.tareosPend||[]).find(h=>h && h.fecha===fecha && String(h.turno)===String(turno) && h.estado==='aprobado'); }catch(err){}
+    const FR={}; (typeof FRENTES!=='undefined'?FRENTES:[]).forEach(f=>FR[String(f.id)]=f.nombre);
+    const filas=items.map((t,i)=>{
+      const p=(state.personal||[]).find(x=>String(x.id)===String(t.trabajadorId));
+      const m=Number(t.mult||1);
+      return '<tr><td class="c">'+(i+1)+'</td><td>'+e(p?p.nombre:(t.nombre||t.trabajadorId||'—'))+'</td>'+
+        '<td>'+e(p?p.rol:'—')+'</td><td>'+e(FR[String(t.frente)]||t.frente||'—')+'</td>'+
+        '<td class="c"><b>'+(m===1?'1':String(m))+'</b></td><td>'+e(t.obs||'')+'</td><td class="fi"></td></tr>';
+    }).join('');
+    const w=window.open('','_blank','width=900,height=950'); if(!w) return;
+    w.document.write('<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Tareo '+e(fecha)+' '+e(turno)+'</title>'+
+      '<style>body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:26px}'+
+      'h1{font-size:16px;margin:0;letter-spacing:.04em}.sub{font-size:11px;color:#555;margin:3px 0 12px}'+
+      '.caja{border:1px solid #ccc;padding:8px 11px;font-size:11.5px;line-height:1.7;margin-bottom:10px}'+
+      'table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:5px 7px;font-size:11.5px}'+
+      'th{background:#eee;font-size:9.5px;letter-spacing:.06em}.c{text-align:center}.fi{width:110px}'+
+      '.fin{display:flex;gap:34px;margin-top:52px}.fin div{flex:1;border-top:1px solid #333;padding-top:5px;font-size:11px;text-align:center}'+
+      '</style></head><body>'+
+      '<h1>HOJA DE TAREO DIARIO</h1><div class="sub">TEMUAL · '+e((document.getElementById('tareo-nivel')||{}).value||'NV 2820')+'</div>'+
+      '<div class="caja"><b>Fecha:</b> '+fmtF(fecha)+' &nbsp;·&nbsp; <b>Turno:</b> '+e(turno)+
+      ' &nbsp;·&nbsp; <b>Trabajadores:</b> '+items.length+'<br>'+
+      '<b>Jefe de guardia:</b> '+e((hoja&&hoja.jefe)||'—')+'<br>'+
+      '<b>Aprobado por:</b> '+e((hoja&&hoja.aprob&&hoja.aprob.resp)||'—')+
+      ((hoja&&hoja.aprob&&hoja.aprob.fecha)?' el '+fmtF(hoja.aprob.fecha):'')+'</div>'+
+      '<table><thead><tr><th>N°</th><th>TRABAJADOR</th><th>CARGO</th><th>LABOR</th><th>TAREA</th><th>OBSERVACIÓN</th><th>FIRMA</th></tr></thead>'+
+      '<tbody>'+filas+'</tbody></table>'+
+      '<div class="fin"><div>Jefe de Guardia</div><div>Jefe de Operaciones / Residente</div><div>Recursos Humanos</div></div>'+
+      '</body></html>');
+    w.document.close(); setTimeout(()=>{ try{ w.print(); }catch(err){} },350);
+  }catch(err){ console.warn('[hojaTareo]',err); showNotif('No se pudo abrir la hoja','error'); }
+}
+/* BORRAR UN TAREO APROBADO ES DE RAÍZ, Y LO HACE UNA SOLA PERSONA. Un tareo en Recursos Humanos
+   ya está en la planilla, en el costo y en lo que el trabajador ve en su consulta; sacarlo no es
+   "corregir una fila", es deshacer un día de trabajo pagado. Por eso queda en manos del Jefe de
+   Finanzas, que es quien responde por la planilla, y por eso el botón ni siquiera se dibuja para
+   los demás —y la función vuelve a comprobarlo, porque un botón oculto no es un permiso—. */
+function puedeBorrarTareo(){
+  try{ return !!usuarioActivo && String(usuarioActivo.rol||'')==='jefe_finanzas'; }catch(e){ return false; }
+}
 async function eliminarTareoArch(fecha,turno){
+  if(!puedeBorrarTareo()){
+    showNotif('Solo el Jefe de Finanzas puede eliminar un tareo ya aprobado.','error'); return;
+  }
   const match=t=>t.fecha===fecha&&(t.turno||'DIA')===turno;
   const items=(state.tareas||[]).filter(match);
   if(!items.length)return;
   if(!tareoEditable(fecha)) return;
-  if(!confirm(`¿Eliminar el tareo completo del ${fmtF(fecha)} (turno ${turno})?\n\nSe borrarán ${items.length} registro(s). Esta acción no se puede deshacer.`))return;
+  if(!confirm('ELIMINAR DE RAÍZ el tareo del '+fmtF(fecha)+' (turno '+turno+')\n\n'+
+     'Se borran los '+items.length+' registro(s) de esa fecha y turno, y con eso sale de:\n'+
+     '  · la planilla de operarios\n  · el costeo de RRHH y de Finanzas\n'+
+     '  · la consulta en línea del trabajador\n\n'+
+     'No se toca ningún otro día. Esto no se puede deshacer.\n\n¿Continuar?'))return;
   for(const t of items){ if(t.id){ try{ await sb.from('tareas').delete().eq('id',t.id); }catch(e){} } }
   state.tareas=(state.tareas||[]).filter(t=>!match(t));
+  /* La hoja aprobada se marca como eliminada —con quién y cuándo— para que no reaparezca en
+     "Tareos por aprobar" ni vuelva a entrar por una sincronización de otro equipo. */
+  try{
+    if(typeof tpendLoad==='function') tpendLoad();
+    (state.tareosPend||[]).forEach(h=>{ if(h && h.fecha===fecha && String(h.turno)===String(turno)){
+      h.estado='eliminado'; h._ts=Date.now();
+      h.eliminado={ resp:(usuarioActivo&&(usuarioActivo.nombre||usuarioActivo.rol))||'—', fecha:hoy(), ts:Date.now() };
+    }});
+    if(typeof tpendSave==='function') tpendSave();
+  }catch(e){}
   try{ tareasSave(); }catch(e){}
   try{ renderTareas(); }catch(e){}
   try{ if(typeof renderCostoRRHH==='function') renderCostoRRHH(); }catch(e){}
@@ -23552,10 +23646,31 @@ function personalSave(){try{ if(typeof personalOrdenar==='function') personalOrd
 const TPEND_KEY='atmin_tareos_pend';
 function tpendLoad(){ try{ const d=localStorage.getItem(TPEND_KEY); if(d) state.tareosPend=JSON.parse(d)||[]; }catch(e){}
   if(!Array.isArray(state.tareosPend)) state.tareosPend=[]; return state.tareosPend; }
-function tpendSave(){ _lsEscribir(TPEND_KEY, state.tareosPend||[]); try{ sbSyncModulo('tareos_pend', state.tareosPend||[]); }catch(e){} }
+function tpendSave(){ _lsEscribir(TPEND_KEY, state.tareosPend||[]); try{ sbSyncModulo('tareos_pend', state.tareosPend||[]); }catch(e){} try{ pintarBadgeTareos(); }catch(e){} }
 /* Quién necesita aprobación: el que reporta desde el frente. El residente, el administrador y
    finanzas registran directo, porque son justamente quienes aprueban. */
-const TAREO_APRUEBAN=['ingeniero_residente','administrador','jefe_finanzas','gerente_general'];
+const TAREO_APRUEBAN=['ingeniero_residente','asistente_residente','jefe_operaciones','administrador','jefe_finanzas','gerente_general'];
+/* Quién ve la pestaña de tareos por aprobar. El jefe de guardia NO: él manda su hoja y espera.
+   Administración y finanzas tampoco la necesitan —entran por RRHH—, pero sí pueden registrar
+   tareo directo, por eso están arriba y no aquí. */
+const TAREO_VEN_APROBACION=['jefe_operaciones','ingeniero_residente','asistente_residente','gerente_general'];
+function puedeVerTareosPorAprobar(){
+  try{ return !!usuarioActivo && TAREO_VEN_APROBACION.indexOf(String(usuarioActivo.rol||''))>=0; }catch(e){ return false; }
+}
+function tareosPorAprobarCuenta(){
+  try{ tpendLoad(); return (state.tareosPend||[]).filter(h=>h && h.estado!=='aprobado' && h.estado!=='eliminado').length; }catch(e){ return 0; }
+}
+/* El contador rojo en la pestaña: si hay hojas esperando, se ve desde cualquier pantalla del
+   módulo. Un tareo sin aprobar frena la planilla, así que tiene que doler a la vista. */
+function pintarBadgeTareos(){
+  try{
+    const b=document.getElementById('badge-tareos-aprobar'); if(!b) return;
+    const n=tareosPorAprobarCuenta();
+    b.textContent=n; b.style.display=n?'inline-flex':'none';
+    const tab=document.getElementById('tab-tareos-aprobar');
+    if(tab) tab.style.display=puedeVerTareosPorAprobar()?'':'none';
+  }catch(e){}
+}
 function tareoRequiereAprobacion(){
   try{
     if(typeof usuarioActivo==='undefined' || !usuarioActivo) return false;
@@ -28418,6 +28533,8 @@ const ROLES_MODULOS = {
   logistico:            ['dashboard','logistica','compresorista','seguridad','compras'],
   administrador:        ['rrhh','seguridad'],
   jefe_guardia:         ['operaciones','seguridad'],
+  // El asistente del residente ve y aprueba lo mismo que su jefe en Operaciones.
+  asistente_residente:  ['operaciones','compresorista','seguridad'],
   // Todos los módulos. Logística estaba fuera porque el almacén no es suyo, pero el residente es
   // quien responde por el consumo de la operación —aceros, explosivos, combustible— y necesita ver
   // el stock sin pedírselo a nadie. Monte Bravo entra en su lista, aunque la llave del módulo la
@@ -28440,6 +28557,7 @@ const ROL_LABELS = {
   administrador:       'Administrador',
   jefe_guardia:        'Jefe de Guardia',
   ingeniero_residente: 'Ingeniero Residente',
+  asistente_residente: 'Asistente de Residente',
   jefe_mantenimiento:  'Jefe de Mantenimiento',
   monte_bravo:         'Monte Bravo',
   compresorista:       'Compresorista',
@@ -28449,6 +28567,7 @@ const ROL_LABELS = {
 
 const ROL_COLORS = {
   gerente_general:     '#1d6fe5',
+  asistente_residente: '#059669',
   jefe_finanzas:       '#7c3aed',
   jefe_operaciones:    '#f59e0b',
   logistico:           '#16a34a',
@@ -28655,6 +28774,7 @@ function aplicarPermisosNavegacion(mods){
       btn.setAttribute('data-locked','1');
     }
   });
+  try{ pintarBadgeTareos(); }catch(e){}
 }
 
 async function doLogout(){
@@ -29797,6 +29917,7 @@ let _iaMensajes    = []; // historial del chat
    Si mañana hay un rol nuevo, cae en el trato neutro de «Señor» sin romper nada. */
 const IA_TRATOS = {
   gerente_general:      'Señor Amador',
+  asistente_residente:  'Ingeniero',
   jefe_finanzas:        'Jefe de Finanzas',
   jefe_operaciones:     'Ingeniero',
   jefe_guardia:         'Ingeniero',
