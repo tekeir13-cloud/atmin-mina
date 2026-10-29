@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-275</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-276</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-275</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-276</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.29-275</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.29-276</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -24135,11 +24135,31 @@ const PIZ_PUESTOS=[['compresorista','Compresorista'],['scoop','Scoop'],['dumper'
    poner a quien esté. Si el cargo no coincide, el casillero queda en ámbar. */
 const PIZ_CARGOS=[['M1','M1'],['M2','M2'],['AY','Ayudante'],['',' — ']];
 const PIZ_CUPOS={CRNE:['M1','M2','AY'], RABRENDA:['M1','M1','AY','AY']};
+/* QUÉ CARGO PUEDE OCUPAR CADA CASILLERO. Cada puesto de la pizarra solo ofrece a la gente que
+   tiene ese cargo en su ficha de Recursos Humanos: el casillero M1 no lista ayudantes, y el de
+   supervisor solo lista capataces, jefes de guardia, el residente y su asistente.
+   Los operadores son el caso con regla propia: el OPERADOR MÚLTIPLE maneja cualquier máquina,
+   así que aparece tanto en scoop como en dumper, junto al operador específico de cada una.
+   Se compara sin tildes y por pedazo de texto, porque en las fichas el mismo cargo está escrito
+   de varias formas —"PERFORISTA MINA M1", "COMPRENSORISTA", "OP. DUMPER"—. */
+function _pizRol(p){
+  return String((p&&p.rol)||'').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+}
+const PIZ_FILTRO={
+  M1:  r=>/\bM\s*-?\s*1\b/.test(r) || /PERFORISTA.*1\b/.test(r),
+  M2:  r=>/\bM\s*-?\s*2\b/.test(r) || /PERFORISTA.*2\b/.test(r),
+  AY:  r=>/AYUD/.test(r),
+  SUP: r=>/CAPATAZ|JEFE DE GUARDIA|RESIDENTE/.test(r),
+  compresorista: r=>/COMPRE/.test(r),
+  scoop:  r=>/SCOOP|MULTIPLE/.test(r),
+  dumper: r=>/DUMPER|MULTIPLE/.test(r),
+  servicios: ()=>true
+};
 function _pizCargoDe(p){
-  const r=String((p&&p.rol)||'').toUpperCase();
-  if(/\bM1\b/.test(r)) return 'M1';
-  if(/\bM2\b/.test(r)) return 'M2';
-  if(/AYUD/.test(r))   return 'AY';
+  const r=_pizRol(p);
+  if(PIZ_FILTRO.M1(r)) return 'M1';
+  if(PIZ_FILTRO.M2(r)) return 'M2';
+  if(PIZ_FILTRO.AY(r)) return 'AY';
   return '';
 }
 let _piz=null;                       // la pizarra que se está editando
@@ -24172,21 +24192,29 @@ function _pizUsados(exceptoRef){
   });
   return u;
 }
-function _pizOpciones(sel, ref, cargo){
+function _pizOpciones(sel, ref, tipo){
   const usados=_pizUsados(ref);
   const act=(state.personal||[]).filter(p=>p && p.estado!=='baja')
     .sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'}));
-  let h='<option value="">— vacío —</option>';
-  // Primero los que encajan con el cargo pedido; después el resto, por si hay que improvisar.
-  const encajan=cargo?act.filter(p=>_pizCargoDe(p)===cargo):act;
-  const resto  =cargo?act.filter(p=>_pizCargoDe(p)!==cargo):[];
-  const fila=p=>{
+  const prueba=PIZ_FILTRO[tipo];
+  let aptos = prueba ? act.filter(p=>prueba(_pizRol(p))) : act;
+  /* Si NADIE tiene ese cargo escrito en su ficha, el casillero quedaría muerto y la pizarra no se
+     podría llenar. En ese caso se muestra a todos y se avisa: es preferible poder trabajar y
+     corregir el cargo en la ficha después, a tener un panel que no deja hacer nada. */
+  const sinCargo = prueba && !aptos.length;
+  if(sinCargo) aptos=act;
+  // Quien ya está puesto en otro casillero se ve, pero no se puede elegir dos veces.
+  let h='<option value="">'+(sinCargo?'— nadie con ese cargo —':'— vacío —')+'</option>';
+  h+=aptos.map(p=>{
     const ya=usados.has(String(p.id)) && String(sel)!==String(p.id);
     return '<option value="'+p.id+'"'+(String(sel)===String(p.id)?' selected':'')+(ya?' disabled':'')+'>'+
       escAttr(p.nombre)+(ya?' (ya asignado)':'')+'</option>';
-  };
-  h+=encajan.map(fila).join('');
-  if(resto.length) h+='<optgroup label="Otros cargos">'+resto.map(fila).join('')+'</optgroup>';
+  }).join('');
+  // Si el que estaba guardado ya no encaja en el filtro, igual se muestra para no perderlo.
+  if(sel && !aptos.some(p=>String(p.id)===String(sel))){
+    const p=act.find(x=>String(x.id)===String(sel));
+    if(p) h+='<option value="'+p.id+'" selected>'+escAttr(p.nombre)+' (cargo distinto)</option>';
+  }
   return h;
 }
 function abrirModalDistribucion(){
@@ -24198,7 +24226,8 @@ function abrirModalDistribucion(){
 }
 function pizRender(){
   const cont=document.getElementById('dist-modal-list'); if(!cont) return;
-  const jefes=(state.personal||[]).filter(p=>p&&p.estado!=='baja');
+  // El supervisor solo puede ser capataz, jefe de guardia, el residente o su asistente.
+  const jefes=(state.personal||[]).filter(p=>p&&p.estado!=='baja'&&PIZ_FILTRO.SUP(_pizRol(p)));
   const COL={dia:'#f59e0b',noche:'#60a5fa',libre:'#94a3b8'};
   cont.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:12px">'+
   PIZ_GUARDIAS.map(G=>{
@@ -24233,7 +24262,7 @@ function pizRender(){
       const arr=g.puestos[k]||[];
       const filas=arr.map((pid,i)=>'<div style="display:flex;gap:5px;align-items:center;margin-bottom:3px">'+
         '<select onchange="pizSetPuesto(\''+G+'\',\''+k+'\','+i+',this.value)" style="flex:1;min-width:0;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:4px 6px;color:var(--text);font-size:11px">'+
-          _pizOpciones(pid,'pu|'+G+'|'+k+'|'+i,'')+'</select>'+
+          _pizOpciones(pid,'pu|'+G+'|'+k+'|'+i,k)+'</select>'+
         '<button onclick="pizQuitarPuesto(\''+G+'\',\''+k+'\','+i+')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:13px">✕</button></div>').join('');
       return '<div style="margin-top:6px">'+
         '<div style="display:flex;justify-content:space-between;align-items:center">'+
