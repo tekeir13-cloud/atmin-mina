@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-281</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-282</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-281</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-282</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.29-281</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.29-282</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5943,6 +5943,8 @@ async function cargarAlmacenCombustibleSB(){
         if(pLocal.length) state.personal=pLocal;
         if((state.personal||[]).length) await _sbSubirSiNubeVacia('personal', state.personal);
       }
+      // Levantar las lápidas de fichas que se repusieron después del borrado (ver tombRepararPersonal).
+      try{ if(typeof tombRepararPersonal==='function' && tombRepararPersonal()>0 && typeof personalSave==='function') personalSave(); }catch(e){}
       try{ if(typeof personalQuitarSueldos==='function') await personalQuitarSueldos(); }catch(e){}
       // Historial de versiones: se trae el de la nube, se une con el de este equipo y se deja
       // una foto del estado con el que arranca la jornada.
@@ -20096,6 +20098,16 @@ async function confirmarBajaDyn(pid){
   showNotif(`${p.nombre} dado de baja: ${motivo}`,'warn');
 }
 
+/* UN ID NUEVO QUE NO PISE UNA LÁPIDA. Antes el alta tomaba "el mayor que haya, más uno", y si
+   ese número era justo el de alguien eliminado hace poco, el trabajador nuevo nacía condenado:
+   la lápida lo borraba en la siguiente sincronización. Ahora el contador también mira la lista
+   de borrados, así que un alta nunca cae sobre un id marcado. */
+function _nuevoIdPersonal(extra){
+  let max=0;
+  (state.personal||[]).forEach(p=>{ const n=Number(p&&p.id)||0; if(n>max) max=n; });
+  try{ Object.keys(tombLoad()).forEach(k=>{ const n=Number(k)||0; if(n>max) max=n; }); }catch(e){}
+  return max+1+(Number(extra)||0);
+}
 async function agregarPersonal(){
   if(rrhhBloqueado()) return;
   const nombre=document.getElementById('p-nombre').value.trim();
@@ -20106,7 +20118,12 @@ async function agregarPersonal(){
   // 'foto' tampoco se envía al insert (columna opcional): se guarda en el módulo 'personal'
   const foto=_pFotoTmp||'';
   try{const{data}=await sb.from('personal').insert([nv]).select().single();state.personal.push({...nv,jefe,foto,id:data.id});}
-  catch(e){state.personal.push({...nv,jefe,foto,id:Date.now()});}
+  catch(e){state.personal.push({...nv,jefe,foto,id:_nuevoIdPersonal()});}
+  /* Un alta es una decisión: si ese id arrastraba una lápida de un borrado viejo, se levanta
+     aquí mismo, porque si no el trabajador recién dado de alta se borraría solo al sincronizar. */
+  try{ const ult=state.personal[state.personal.length-1];
+       if(ult && typeof tombQuitar==='function' && tombQuitar(ult.id))
+         console.log('[lapida] levantada al dar de alta a', ult.nombre); }catch(e){}
   if(jefe&&nv.dni) pJefeSet(nv.dni,jefe);
   // Guardar la referencia ANTES de ordenar: al ordenar alfabéticamente, "el último de la lista"
   // deja de ser el recién creado y la ficha se abriría con otra persona.
@@ -20553,6 +20570,8 @@ function guardarFichaTrabajador(){
   if(faltan.length && !confirm('Faltan '+faltan.length+' dato(s) obligatorio(s):\n\n  · '+faltan.slice(0,12).join('\n  · ')+
      (faltan.length>12?'\n  · …y '+(faltan.length-12)+' más':'')+'\n\nSe puede guardar igual y completarlos después. ¿Guardar así?')) return;
   p.ficha=f; p._ts=Date.now();
+  // Si esa ficha tenía lápida de un borrado anterior, se levanta: alguien la está llenando.
+  try{ if(typeof tombQuitar==='function') tombQuitar(p.id); }catch(e){}
   // Lo que la ficha corrige se refleja en el listado, para que no queden dos verdades.
   const nom=[f.apPaterno,f.apMaterno,f.nombres].filter(Boolean).join(' ').trim();
   if(nom) p.nombre=nom;
@@ -20594,6 +20613,7 @@ async function guardarEditarPersonal(){
   p._ts=Date.now();   // marca la edición como la más reciente para que gane al sincronizar
   try{ await sb.from('personal').update({nombre:p.nombre,dni:p.dni,rol:p.rol,frente:p.frente,jornal:p.jornal,ingreso:p.ingreso}).eq('id',id); }catch(e){}
   cerrarModal('modal-editar-personal');
+  try{ if(typeof tombQuitar==='function' && tombQuitar(p.id)) console.log('[lapida] levantada al editar a', p.nombre); }catch(e){}
   personalSave();poblarSelects();renderPersonal();renderCostoRRHH();
   showNotif(`✓ ${p.nombre} actualizado`);
 }
@@ -23404,6 +23424,41 @@ function tombAdd(id){
   if(id==null||id==='') return;
   const t=tombLoad(); t[String(id)]=Date.now(); tombPrune(); tombPersist();
   try{ if(typeof sbSyncModulo==='function') sbSyncModulo('tombstones', tombLoad()); }catch(e){}
+}
+/* QUITAR LA LÁPIDA. Un borrado se impone en todos los equipos durante noventa días; eso es lo
+   que impide que un trabajador eliminado reviva solo. Pero cuando alguien lo da de alta OTRA VEZ
+   —mirando la pantalla, a propósito— esa lápida deja de tener sentido: si se queda puesta, el
+   trabajador se vuelve a borrar en la siguiente sincronización y nadie entiende por qué. Es lo
+   que le pasaba a una ficha que había que reponer después de cada actualización. */
+/* REPARAR LAS LÁPIDAS QUE YA ESTÁN PUESTAS. Un trabajador repuesto antes de este arreglo sigue
+   con su lápida encima y se volvería a borrar. Pero no se pueden levantar todas a ciegas: eso
+   desharía borrados legítimos hechos en otro equipo.
+   La regla que las distingue es la hora: si la FICHA es más nueva que la lápida, significa que
+   alguien la dio de alta o la editó DESPUÉS del borrado —está viva, y la lápida sobra—. Si la
+   lápida es más nueva, el borrado manda y se queda. Se ejecuta en cada arranque: es inofensivo,
+   porque solo toca los casos donde la ficha gana por fecha. */
+function tombRepararPersonal(){
+  try{
+    const t=tombLoad(); let n=0;
+    (state.personal||[]).forEach(p=>{
+      if(!p || p.id==null) return;
+      const marca=Number(t[String(p.id)]||0); if(!marca) return;
+      const ficha=Number(p._ts)||Number(p._guard)||0;
+      if(ficha>marca){ delete t[String(p.id)]; n++;
+        console.log('[lapida] levantada para', p.nombre, '— su ficha es posterior al borrado'); }
+    });
+    if(n){ tombPersist(); try{ if(typeof sbSyncModulo==='function') sbSyncModulo('tombstones', tombLoad()); }catch(e){} }
+    return n;
+  }catch(e){ return 0; }
+}
+function tombQuitar(id){
+  if(id==null||id==='') return false;
+  const t=tombLoad();
+  if(!(String(id) in t)) return false;
+  delete t[String(id)];
+  tombPersist();
+  try{ if(typeof sbSyncModulo==='function') sbSyncModulo('tombstones', tombLoad()); }catch(e){}
+  return true;
 }
 function tombHas(id){ return id!=null && !!tombLoad()[String(id)]; }
 // Une tombstones remotos (nube/tiempo real) con los locales conservando el timestamp más nuevo.
@@ -36720,10 +36775,10 @@ function personalImportarExcel(input){
       if(!p && dni && nombre && porNom[N(nombre)] && !D(porNom[N(nombre)].dni)) p=porNom[N(nombre)];
       if(!p){
         if(!dni){ sinDni++; continue; }                   // sin DNI no se puede dar de alta
-        const ids=(state.personal||[]).map(x=>Number(x&&x.id)||0);
-        p={ id:(ids.length?Math.max.apply(null,ids):0)+1+nuevos, nombre:N(nombre),
+        p={ id:_nuevoIdPersonal(nuevos), nombre:N(nombre),
             dni:dni, rol:'', frente:null, estado:'activo', jornal:0, ficha:{} };
         state.personal.push(p); nuevos++;
+        try{ if(typeof tombQuitar==='function') tombQuitar(p.id); }catch(e){}
         porDni[dni]=p; if(N(nombre)) porNom[N(nombre)]=p;
       }
       if(!p.ficha || typeof p.ficha!=='object') p.ficha={};
