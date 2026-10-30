@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.30-283</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.30-284</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.30-283</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.30-284</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.30-283</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.30-284</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -13591,14 +13591,15 @@ function renderHistorialAlmacen(){
   }
   if(tipo==='ing') sals=[];
   if(tipo==='sal') ings=[];
-  /* Los despachos a NV2820 no se listan aquí. El material salió del almacén, sí, pero quien lo
-     administra desde ese punto es el Compresorista y su detalle vive en el subalmacén NV2820 y en
-     su propio módulo. Mezclarlos con el resto hacía leer dos veces el mismo movimiento.
-     Siguen contando en el stock y en el subalmacén: esto es la VISTA, no el dato.
-     Para corregir uno, basta buscar "NV2820" y la lista los vuelve a mostrar con sus botones. */
-  const _verNV=/2820/.test(q);
-  let _nvOcultas=0;
-  if(!_verNV){ const antes=sals.length; sals=sals.filter(s=>String(s.destino)!=='2820'); _nvOcultas=antes-sals.length; }
+  /* LOS DESPACHOS A NV2820 SE LISTAN COMO CUALQUIER OTRA SALIDA.
+     Antes se ocultaban: el material salió del almacén y se descontó del stock, pero el logístico no
+     lo veía en su historial a menos que buscara "NV2820", que nadie tiene por qué adivinar. Y NV2820
+     es el destino que sale POR DEFECTO al abrir la salida, así que lo normal era registrar una
+     salida y que desapareciera de la vista. El logístico daba salida a las barras, no las encontraba
+     y daba por perdido el registro —estaba, descontado y todo, solo invisible—.
+     Se evita leer dos veces el mismo movimiento marcando la fila, no escondiéndola: la columna de
+     destino dice si el Compresorista ya confirmó la recepción o si todavía está por confirmar, que
+     es justo lo que el logístico necesita saber de un despacho a mina. */
   const _LIM=25; // vista compacta: solo los 25 más recientes de cada uno (no borra nada)
   // Solo DOS grupos: Ingresos y Salidas (tablas planas, más recientes arriba)
   // Se usa el importe guardado y, si falta, cantidad × precio (registros viejos sin total).
@@ -13627,7 +13628,6 @@ function renderHistorialAlmacen(){
   const salsV=_histVerTodo?sals.slice().reverse():sals.slice().reverse().slice(0,_LIM);
   const notaIn=(!_histVerTodo&&ings.length>_LIM)?`<div style="font-size:10px;color:var(--text3);padding:6px 8px">Mostrando los ${_LIM} más recientes de ${ings.length}. Usa "👁 Ver todo" para ver el resto. (No se borra nada.)</div>`:'';
   let notaSal=(!_histVerTodo&&sals.length>_LIM)?`<div style="font-size:10px;color:var(--text3);padding:6px 8px">Mostrando los ${_LIM} más recientes de ${sals.length}. Usa "👁 Ver todo" para ver el resto. (No se borra nada.)</div>`:'';
-  if(_nvOcultas) notaSal+=`<div style="font-size:10px;color:var(--text3);padding:6px 8px">${_nvOcultas} despacho${_nvOcultas!==1?'s':''} a NV2820 no se lista${_nvOcultas!==1?'n':''} aquí — su detalle lo lleva el Compresorista. Busca "NV2820" si necesitas corregir alguno.</div>`;
   const cIng=document.getElementById('hist-ing-count'); if(cIng) cIng.textContent=`· ${ings.length} ítem${ings.length!==1?'s':''} · ${fmtS2(totIn)}`;
   const cSal=document.getElementById('hist-sal-count'); if(cSal) cSal.textContent=`· ${sals.length} ítem${sals.length!==1?'s':''} · ${fmtS2(totSal)}`;
   // ── Tabla de INGRESOS ──
@@ -13642,7 +13642,7 @@ function renderHistorialAlmacen(){
     :`<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:18px">Sin ingresos registrados</td></tr>`;
   const st=document.getElementById('alm-salidas-tbody');
   if(st) st.innerHTML=sals.length?salsV.map(s=>`<tr>
-    <td>${fmtF(s.fecha)}</td><td><strong>${nivelLabel(s.destino)}</strong>${(String(s.destino)==='operario'&&s.operario)?`<br><span style="font-size:10px;color:#34d399">👤 ${s.operario}</span>`:''}</td>
+    <td>${fmtF(s.fecha)}</td><td><strong>${nivelLabel(s.destino)}</strong>${(String(s.destino)==='operario'&&s.operario)?`<br><span style="font-size:10px;color:#34d399">👤 ${s.operario}</span>`:''}${String(s.destino)==='2820'?`<br><span style="font-size:10px;color:${s.confirmadoNV2820===false?'#f59e0b':'#34d399'}">${s.confirmadoNV2820===false?'⏳ por confirmar en mina':'✓ recibido en mina'}</span>`:''}</td>
     <td><span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${s.almacen==='Mantenimiento'?'rgba(201,168,76,0.15);color:#d4b75e':'rgba(96,165,250,0.15);color:#60a5fa'}">${almLabel(s.almacen)}</span></td>
     <td>${s.solicitante||'—'}</td><td>${s.maquina||'—'}</td>
     <td><strong>${s.producto||''}</strong><br><span style="font-size:10px;color:var(--text3)">${s.descripcion||''}</span></td>
