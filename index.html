@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-282</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.30-283</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.29-282</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.30-283</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.29-282</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.30-283</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -3203,6 +3203,13 @@ select option{background:var(--coal3);}
         <span id="op-tareo-cara" style="color:var(--text3);font-size:13px">▸ Abrir</span>
       </button>
       <div id="op-tareo-host" style="display:none;padding:0 16px 16px"></div>
+    </div>
+    <!-- CONSTANCIA DE SUS TAREOS — una línea por hoja: pendiente, aprobada o devuelta. El jefe de
+         guardia manda su hoja y queda a ciegas; aquí ve en qué quedó y, si se la devolvieron, por
+         qué, para volver a tarear ese turno. Sin montos: es su hoja, no la planilla. -->
+    <div style="margin-bottom:18px">
+      <div class="section-title" style="margin-top:0">🧾 Mis tareos — estado</div>
+      <div id="op-tareos-hist"></div>
     </div>
     <!-- Solicitudes de Compra pendientes de aprobación Operaciones -->
     <div style="margin-bottom:18px">
@@ -6331,7 +6338,7 @@ function renderModPane(mod,pane){
   else if(k==='rrhh-planillaint')renderPlanillaIntegrada();
   else if(k==='op-tablero'){renderTableroOp();}
   else if(k==='op-valorizaciones'){renderValorizacionOp();}
-  else if(k==='op-avance'){renderAvance();}
+  else if(k==='op-avance'){renderAvance();try{renderHistorialTareosGuardia();}catch(e){}}
   else if(k==='op-solicitudes')renderSolicitudesPendientesOp();
   else if(k==='op-vsproyectado')renderResidente();
   else if(k==='op-tareosaprobar'){ try{ renderTareosPendientes(); }catch(e){} }
@@ -18091,7 +18098,7 @@ function renderAvisoTareosOp(){
   const w=document.getElementById('op-tareos-aviso'); if(!w) return;
   const n=(typeof tareosPorAprobarCuenta==='function')?tareosPorAprobarCuenta():0;
   if(!n || (typeof puedeVerTareosPorAprobar==='function' && !puedeVerTareosPorAprobar())){ w.innerHTML=''; return; }
-  const h=(state.tareosPend||[]).filter(x=>x && x.estado!=='aprobado' && x.estado!=='eliminado')
+  const h=(state.tareosPend||[]).filter(x=>x && x.estado==='enviado')
     .sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
   w.innerHTML='<div class="card" style="border-left:3px solid #dc2626;margin-bottom:16px">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
@@ -23758,7 +23765,7 @@ function puedeVerTareosPorAprobar(){
   try{ return !!usuarioActivo && TAREO_VEN_APROBACION.indexOf(String(usuarioActivo.rol||''))>=0; }catch(e){ return false; }
 }
 function tareosPorAprobarCuenta(){
-  try{ tpendLoad(); return (state.tareosPend||[]).filter(h=>h && h.estado!=='aprobado' && h.estado!=='eliminado').length; }catch(e){ return 0; }
+  try{ tpendLoad(); return (state.tareosPend||[]).filter(h=>h && h.estado==='enviado').length; }catch(e){ return 0; }
 }
 /* El contador rojo en la pestaña: si hay hojas esperando, se ve desde cualquier pantalla del
    módulo. Un tareo sin aprobar frena la planilla, así que tiene que doler a la vista. */
@@ -23797,6 +23804,34 @@ function sincronizarPerforacionReportes(){
 }
 
 let _rgMes='';   // mes visible en la lista de reportes de jefe de guardia ('__todos' = archivo completo)
+/* Historial de una línea por hoja de tareo: en qué quedó. Tres estados y nada más —pendiente
+   mientras Operaciones no la mira, aprobada cuando entró a RRHH, devuelta cuando se descartó y
+   hay que volver a tarear—. La hoja devuelta no se puede retomar, así que la línea dice el
+   motivo: es lo único que el jefe de guardia necesita para hacerla de nuevo bien. */
+function renderHistorialTareosGuardia(){
+  const box=document.getElementById('op-tareos-hist'); if(!box) return;
+  try{ tpendLoad(); }catch(e){}
+  const hs=(state.tareosPend||[]).filter(h=>h && h.estado!=='eliminado')
+    .sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')) || (b.enviado||0)-(a.enviado||0))
+    .slice(0,30);
+  if(!hs.length){ box.innerHTML='<div class="card" style="padding:14px;color:var(--text3);font-size:12.5px">Todavía no mandaste ninguna hoja de tareo.</div>'; return; }
+  const E={ enviado:{t:'⏳ Pendiente de aprobación',c:'var(--amber)'},
+            aprobado:{t:'✅ Aprobado',c:'var(--green)'},
+            devuelto:{t:'↩ Devuelto — hay que volver a tarear',c:'var(--red)'} };
+  box.innerHTML='<div class="card" style="padding:6px 0">'+hs.map(h=>{
+    const e=E[h.estado]||E.enviado;
+    const quien = h.estado==='aprobado' ? ((h.aprob&&h.aprob.resp)||'') : ((h.devuelto&&h.devuelto.resp)||'');
+    const n=(h.registros||[]).length;
+    return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 14px;border-bottom:1px solid var(--border);font-size:12.5px">
+      <b style="min-width:90px">${fmtF(h.fecha)}</b>
+      <span style="color:var(--text3)">${h.turno==='noche'?'🌙 Noche':'☀ Día'} · ${n} trab.</span>
+      <span style="color:${e.c};font-weight:800">${e.t}</span>
+      ${quien?`<span style="color:var(--text3)">por ${escAttr(quien)}</span>`:''}
+      ${h.estado==='devuelto'&&h.obs?`<span style="flex:1 0 100%;color:var(--red);font-size:11.5px">Motivo: ${escAttr(h.obs)}</span>`:''}
+    </div>`;
+  }).join('')+'</div>';
+}
+
 function renderAvance(){
   reportesGuardiaLoad();
   if(typeof metasLoad==='function')metasLoad();
@@ -24260,12 +24295,12 @@ function _tpendMarca(m){ const v=Number(m)||1; return v===1?'1':String(v); }
 function renderTareosPendientes(){
   const cont=document.getElementById('res-tareos-pend'); if(!cont) return;
   tpendLoad();
-  const pend=(state.tareosPend||[]).filter(h=>h && h.estado!=='aprobado')
+  const pend=(state.tareosPend||[]).filter(h=>h && h.estado==='enviado')
     .sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
   if(!pend.length){ cont.innerHTML='<div class="card"><div class="empty-state" style="padding:16px;color:var(--text3)">No hay hojas de tareo esperando aprobación.</div></div>'; return; }
   const nom=id=>{ const p=(state.personal||[]).find(x=>String(x.id)===String(id)); return p?p.nombre:('#'+id); };
   cont.innerHTML=pend.map(h=>{
-    const dev = h.estado==='observado';
+    const dev = false;
     const filas=(h.registros||[]).map(r=>'<tr>'+
       '<td style="padding:4px 7px;border-bottom:1px solid var(--border);font-size:12px">'+escAttr(nom(r.pid))+'</td>'+
       '<td style="padding:4px 7px;border-bottom:1px solid var(--border);text-align:center;font-size:12px;font-weight:700;color:#fbbf24">'+_tpendMarca(r.mult)+'</td>'+
@@ -24316,6 +24351,7 @@ async function aprobarTareoHoja(id){
   try{ tareasSave(); }catch(e){}
   try{ tpendSave(); }catch(e){}
   try{ renderTareosPendientes(); }catch(e){}
+  try{ renderHistorialTareosGuardia(); }catch(e){}
   try{ actualizarKpisTareo(h.fecha); }catch(e){}
   try{ renderCostoRRHH(); }catch(e){}
   showNotif('✓ Tareo aprobado — '+n+' trabajadores pasaron a Recursos Humanos');
@@ -24329,10 +24365,19 @@ function devolverTareoHoja(id){
   if(!h) return;
   const motivo=(prompt('¿Por qué se devuelve la hoja? El jefe de guardia va a ver este motivo:','')||'').trim();
   if(!motivo) return;
-  h.estado='observado'; h.obs=motivo; h._ts=Date.now();
+  if(!confirm('Devolver el tareo del '+fmtF(h.fecha)+' (turno '+h.turno+').\n\n'+
+     'La hoja se descarta: no se aprueba después, el jefe de guardia tiene que volver a tarear.\n'+
+     'Queda la constancia en su pestaña.\n\n¿Continuar?')) return;
+  /* DEVOLVER ES DESCARTAR. Una hoja observada no se corrige a medias ni se aprueba después: el
+     jefe de guardia vuelve a tarear ese turno y manda una nueva. Dejarla viva, esperando, era
+     tener dos versiones del mismo día sin saber cuál vale. De la devuelta queda la constancia
+     —día, turno, quién la devolvió y por qué— en la pestaña del jefe de guardia. */
+  h.estado='devuelto'; h.obs=motivo; h._ts=Date.now();
+  h.devuelto={ resp:(usuarioActivo&&(usuarioActivo.nombre||usuarioActivo.rol))||'—', fecha:hoy(), ts:Date.now(), motivo };
   tpendSave();
   renderTareosPendientes();
-  showNotif('↩ Hoja devuelta al jefe de guardia','warn');
+  try{ renderHistorialTareosGuardia(); }catch(e){}
+  showNotif('↩ Tareo devuelto y descartado — el jefe de guardia debe volver a tarear','warn');
 }
 /* ═══ LA PIZARRA DEL NIVEL ═══════════════════════════════════════════════════════════════════
    Esto reemplaza la lista de casillas por lo que de verdad hay colgado en la pared de la oficina
