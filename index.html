@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-285</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-286</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-285</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-286</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-285</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-286</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -26893,6 +26893,31 @@ async function refrescarSolicitudMantLog(){
   }
   renderSolicitudMantLog();
 }
+/* LA PIEZA SE BUSCA PRIMERO POR SU CLAVE EXACTA, Y SOLO DESPUÉS POR CÓDIGO O NOMBRE.
+   Aquí estaba el "no hay stock" de una pieza que sí había. La búsqueda era un solo find con tres
+   criterios en un OR:
+
+     stk.find(x => x.key===key || norm(x.codigo)===norm(e.codigo) || norm(x.producto)===norm(e.nombre))
+
+   y un find devuelve la PRIMERA fila que cumpla CUALQUIERA de los tres, no la que cumpla el
+   primero. El mismo filtro suele estar dado de alta en los dos almacenes —AF26400 en Insumos y en
+   Mantenimiento—, así que la fila de Insumos, que va antes en la lista, ganaba por código aunque
+   el kit pidiera expresamente la de Mantenimiento. Resultado: "pide 1, hay 0 en Insumos" con tres
+   en el almacén de Mantenimiento, y un despacho legítimo bloqueado.
+
+   Los criterios son de distinta calidad y ahora se usan en ese orden. La clave identifica almacén
+   y producto: si hay fila con esa clave, es ESA y no se discute. El código y el nombre son el
+   respaldo para los ingresos antiguos que no traen código, y entre varias coincidencias se queda
+   la que más stock tenga: es donde está el material, y es de donde hay que descontarlo. */
+function _kitFilaDeStock(stk,e,key){
+  const norm=s=>String(s||'').trim().toUpperCase();
+  const exacta=(stk||[]).find(x=>x.key===key);
+  if(exacta) return exacta;
+  const cod=norm(e&&e.codigo||key), nom=norm(e&&e.nombre);
+  const cand=(stk||[]).filter(x=>(cod&&norm(x.codigo)===cod) || (nom&&norm(x.producto||x.descripcion)===nom));
+  if(!cand.length) return null;
+  return cand.reduce((a,x)=>((x.stock||0)>(a.stock||0)?x:a), cand[0]);
+}
 function aprobarLogKitLog(id){
   mantRepLoad();mantKitLoad();
   const m=(state.mantenimiento||[]).find(x=>x.id===id);
@@ -26922,10 +26947,21 @@ function aprobarLogKitLog(id){
   // cinco veces, para enterarte de a una cuál faltaba.
   const faltan=[];
   pedido.forEach((e,key)=>{
-    // Coincidir por clave, por código o por nombre (los ingresos antiguos no traen código)
-    const r=stk.find(x=>x.key===key || norm(x.codigo)===norm(e.codigo||key) || norm(x.producto||x.descripcion)===norm(e.nombre));
+    const r=_kitFilaDeStock(stk,e,key);
     const disp=r?(r.stock||0):0;
-    if(e.cant>disp) faltan.push(`${e.nombre||key} (pide ${e.cant}, hay ${disp} en ${r?(r.almacen==='Mantenimiento'?'Almacén Mantenimiento':'Insumos'):'el almacén'})`);
+    if(e.cant>disp){
+      /* Si la misma pieza está dada de alta en el otro almacén y ahí queda material, se dice. El
+         logístico sabe entonces que no tiene que comprar nada: tiene que mover el saldo de un
+         almacén al otro, o armar el kit con la pieza del almacén que sí la tiene. */
+      let otro='';
+      if(r){
+        const norm2=x=>String(x||'').trim().toUpperCase();
+        const o=(stk||[]).find(x=>x.key!==r.key && (x.stock||0)>0 &&
+          ((norm2(x.codigo)&&norm2(x.codigo)===norm2(r.codigo)) || norm2(x.producto||x.descripcion)===norm2(r.producto||r.descripcion)));
+        if(o) otro=` — hay ${o.stock} en ${_almNom(o.almacen)}`;
+      }
+      faltan.push(`${e.nombre||key} (pide ${e.cant}, hay ${disp} en ${r?_almNom(r.almacen):'el almacén'}${otro})`);
+    }
   });
   if(faltan.length){
     /* El aviso de stock faltante iba en una notificación que se va sola y, con un kit largo, se
@@ -26946,7 +26982,20 @@ function aprobarLogKitLog(id){
     if(!p.key||!p.cant) return;
     state.almacen=state.almacen||{ingresos:[],salidas:[],inventarioInicial:[],solicitudesCompra:[]};
     state.almacen.salidas=state.almacen.salidas||[];
-    state.almacen.salidas.push(kitSalidaDePieza(p,m.id,m.equipo,m.resp,idx));
+    /* La salida descuenta del almacén donde el stock SE ENCONTRÓ, que es el mismo que se acaba de
+       validar. Si la pieza se halló por el respaldo de código o nombre —un ingreso antiguo— su
+       almacén puede no ser el que arrastraba el kit, y descontar del otro lo dejaría en negativo
+       mientras el material sigue en el anaquel de al lado. Validar en un sitio y descontar en otro
+       es como no haber validado. */
+    const fila=_kitFilaDeStock(stk,{codigo:p.codigo,nombre:p.nombre},p.key);
+    /* La salida se arma con la identidad de LA FILA QUE SE VALIDÓ —su clave, su código y su
+       almacén—, no con la que arrastraba el kit. Si la pieza se halló por el respaldo de nombre,
+       la clave del kit no existe en el stock: la salida salía con un código inventado a partir de
+       esa clave muerta y descontaba de un producto fantasma. El despacho se aprobaba, el material
+       salía del anaquel y el stock no bajaba ni un punto. */
+    const pz=fila?{...p, key:fila.key, codigo:fila.codigo||p.codigo, almacen:fila.almacen,
+                   unidad:p.unidad||fila.unidad}:p;
+    state.almacen.salidas.push(kitSalidaDePieza(pz,m.id,m.equipo,m.resp,idx));
   });
   // El descuento REAL es la salida de almacén de arriba, sobre el stock de Mantenimiento.
   // (Antes se intentaba descontar además de state.mantRepuestos, una lista aparte de piezas de
