@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-293</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-294</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-293</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-294</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-293</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-294</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -14007,6 +14007,35 @@ function cieGrafComposicion(d){
   </svg>`;
 }
 
+/* 4 · EN QUÉ EQUIPO SE FUE EL MANTENIMIENTO — barras apiladas: piezas y horas hombre.
+   No entra en el gráfico de "en qué se gastó" a propósito: las piezas ya están contadas dentro
+   de materiales, y sumarlas otra vez inflaría el mes. Lo que sí hace falta saber al cerrar es
+   QUÉ MÁQUINA se llevó el mantenimiento, porque una que repite todos los meses no es un gasto de
+   almacén: es una decisión de reparar o reemplazar. Por eso va aquí, en su sección, con las dos
+   partes separadas —la pieza sale del anaquel, la hora hombre no—. */
+function cieGrafMantenimiento(d){
+  const S=n=>fmtS2(n);
+  const eq=(d.mantPorEquipo||[]).slice(0,10);
+  if(!eq.length) return '';
+  const max=Math.max(...eq.map(x=>x.total),1);
+  const W=720, fil=26, H=eq.length*fil+26, ML=186, MR=132;
+  const iw=W-ML-MR;
+  const corta=t=>{ t=String(t||''); return t.length>30?t.slice(0,29)+'…':t; };
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px">
+    ${eq.map((x,i)=>{
+      const y=i*fil+4;
+      const wp=Math.max(0,(x.piezas/max)*iw), wm=Math.max(0,(x.mo/max)*iw);
+      return `<text x="${ML-8}" y="${y+14}" text-anchor="end" font-size="10.5" fill="#111">${escAttr(corta(x.nombre))}</text>
+        ${wp?`<rect x="${ML}" y="${y+2}" width="${wp.toFixed(1)}" height="15" fill="#b45309" rx="2"/>`:''}
+        ${wm?`<rect x="${(ML+wp).toFixed(1)}" y="${y+2}" width="${wm.toFixed(1)}" height="15" fill="#f59e0b" rx="2"/>`:''}
+        <text x="${(ML+wp+wm+7).toFixed(1)}" y="${y+14}" font-size="10.5" fill="#111">${S(x.total)}${x.horas?' · '+x.horas+' h':''}</text>`;
+    }).join('')}
+    <text x="${ML}" y="${H-4}" font-size="10" fill="#555">
+      <tspan fill="#b45309">■</tspan> piezas (salen del almacén) &#160;&#160;
+      <tspan fill="#f59e0b">■</tspan> horas hombre (no pasan por el almacén)</text>
+  </svg>`;
+}
+
 // 2 · CÓMO SE REPARTIÓ EL MES — una barra por día, entró contra salió
 function cieGrafDiario(d){
   const dias=d.dias||[];
@@ -14148,6 +14177,7 @@ function cieDescargar(){
       ['Saldo del mes',N(d.petIn-d.petSalido)+' gln'],['Precio por galón',S(d.pPet)]])}
   ${d.petPorEq.length?`<h3>Consumo por equipo</h3><table>${d.petPorEq.map(e=>`<tr><td>${escAttr(e.nombre)}</td><td class="n">${N(e.gln)} gln · ${S(e.gln*d.pPet)}</td></tr>`).join('')}</table>`:''}
   <h2>5 · Mantenimiento</h2>
+  <div class="fig"><div class="cap">En qué equipo se fue el mantenimiento del mes</div>${cieGrafMantenimiento(d)}</div>
   ${T('Resumen',[['Kits despachados',String(d.mantKits)],['Costo de piezas',S(d.mantPiezas)],
       ['Horas hombre',N(d.mantHoras)+' h'],['Valor de las horas hombre',S(d.mantMO)],['Total mantenimiento',S(d.mantS)]])}
   ${(d.mantPorEquipo||[]).length?`<h3>Por equipo</h3><table>${d.mantPorEquipo.map(e=>`<tr><td>${escAttr(e.nombre)}</td><td class="n">piezas ${S(e.piezas)} · ${N(e.horas)} h · <b>${S(e.total)}</b></td></tr>`).join('')}</table>`:''}
