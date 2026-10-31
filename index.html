@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-292</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-293</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-292</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-293</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-292</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-293</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -13980,6 +13980,89 @@ function cieExcel(){
   showNotif('✓ Excel descargado: '+f);
 }
 
+/* ── LOS TRES GRÁFICOS DEL INFORME IMPRESO ───────────────────────────────────────────────────
+   El PDF salía como una lista de tablas: para ver si el mes fue bueno había que leerlo entero.
+   Tres figuras contestan de un vistazo las tres preguntas que se hacen al recibirlo —en qué se
+   gastó, cómo se repartió el mes, y qué pasó con el anaquel— y las tablas quedan para comprobar.
+   Van en SVG dentro del propio HTML: sin librería y sin imágenes, así imprimen igual en cualquier
+   navegador, sin señal, y salen nítidas en el papel porque son vectores, no una captura. */
+
+// 1 · EN QUÉ SE GASTÓ — barras horizontales, que es como se lee una composición
+function cieGrafComposicion(d){
+  const S=n=>fmtS2(n);
+  const items=[{n:'Materiales',v:d.matIng,c:'#2563eb'},
+               {n:'Explosivo',v:d.expIngS,c:'#d97706'},
+               {n:'Combustible',v:d.combIngS,c:'#059669'}].filter(x=>x.v>0);
+  if(!items.length) return '';
+  const tot=items.reduce((a,x)=>a+x.v,0), max=Math.max(...items.map(x=>x.v));
+  const W=720, fil=34, H=items.length*fil+14, ML=108, MR=150;
+  const iw=W-ML-MR;
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px">
+    ${items.map((x,i)=>{
+      const y=i*fil+6, w=Math.max(2,(x.v/max)*iw), p=Math.round(x.v/tot*100);
+      return `<text x="${ML-8}" y="${y+17}" text-anchor="end" font-size="12" fill="#111">${x.n}</text>
+        <rect x="${ML}" y="${y+3}" width="${w}" height="18" fill="${x.c}" rx="2"/>
+        <text x="${ML+w+8}" y="${y+17}" font-size="11.5" fill="#111">${S(x.v)} · ${p}%</text>`;
+    }).join('')}
+  </svg>`;
+}
+
+// 2 · CÓMO SE REPARTIÓ EL MES — una barra por día, entró contra salió
+function cieGrafDiario(d){
+  const dias=d.dias||[];
+  const ing=dias.map(x=>Number(d.dIng[x])||0), sal=dias.map(x=>Number(d.dSal[x])||0);
+  const max=Math.max(1,...ing,...sal);
+  if(max<=1) return '';
+  const W=720, H=190, ML=58, MR=8, MT=14, MB=26;
+  const iw=W-ML-MR, ih=H-MT-MB, px=iw/Math.max(1,dias.length), bw=Math.max(1.6,px*0.34);
+  const mag=Math.pow(10,Math.floor(Math.log10(max))), paso=Math.ceil(max/mag/3)*mag, tope=paso*3||1;
+  const y=v=>MT+ih-(v/tope)*ih;
+  const mil=v=>v>=1000?(Math.round(v/100)/10)+'k':String(Math.round(v));
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px">
+    ${[0,1,2,3].map(i=>`<line x1="${ML}" y1="${y(paso*i)}" x2="${W-MR}" y2="${y(paso*i)}" stroke="#ddd"/>
+      <text x="${ML-6}" y="${y(paso*i)+4}" text-anchor="end" font-size="9" fill="#777">${mil(paso*i)}</text>`).join('')}
+    ${dias.map((f,i)=>{ const cx=ML+px*i+px/2;
+      const a=ing[i], b=sal[i];
+      return (a?`<rect x="${(cx-bw-0.6).toFixed(1)}" y="${y(a).toFixed(1)}" width="${bw}" height="${(ih-(y(a)-MT)).toFixed(1)}" fill="#2563eb"/>`:'')
+           + (b?`<rect x="${(cx+0.6).toFixed(1)}" y="${y(b).toFixed(1)}" width="${bw}" height="${(ih-(y(b)-MT)).toFixed(1)}" fill="#dc2626"/>`:'')
+           + ((i%5===0)?`<text x="${cx.toFixed(1)}" y="${H-8}" text-anchor="middle" font-size="8.5" fill="#777">${f.slice(8,10)}</text>`:''); }).join('')}
+  </svg>
+  <div style="font-size:10.5px;color:#555;margin-top:2px">
+    <span style="display:inline-block;width:9px;height:9px;background:#2563eb"></span> entró &nbsp;
+    <span style="display:inline-block;width:9px;height:9px;background:#dc2626"></span> salió &nbsp;· día del mes</div>`;
+}
+
+/* 3 · QUÉ PASÓ CON EL ANAQUEL — escalera: de dónde partió, qué lo subió, qué lo bajó y dónde
+   quedó. Es la figura que enseña de un golpe lo que la cadena dice en palabras, y la que se
+   mira cuando alguien pregunta por qué el almacén vale lo que vale. */
+function cieGrafAnaquel(d){
+  const S=n=>fmtS2(n);
+  const ini=Number(d.anaquelIni)||0, ent=Number(d.matIng)||0, sal=Number(d.matSal)||0, fin=Number(d.anaquelFin)||0;
+  if(!ini && !ent && !sal) return '';
+  const tope=Math.max(ini,fin,ini+ent,1)*1.12;
+  const W=720, H=210, ML=56, MR=10, MT=16, MB=44;
+  const iw=W-ML-MR, ih=H-MT-MB, px=iw/4, bw=px*0.5;
+  const y=v=>MT+ih-(Math.max(0,v)/tope)*ih;
+  const mil=v=>v>=1000?(Math.round(v/100)/10)+'k':String(Math.round(v));
+  // Las dos del medio son flotantes: arrancan donde quedó la anterior
+  const barras=[
+    {lab:'Venía con', base:0,       alto:ini, col:'#64748b', val:ini},
+    {lab:'Entró',     base:ini,     alto:ent, col:'#2563eb', val:ent},
+    {lab:'Salió',     base:fin,     alto:sal, col:'#dc2626', val:-sal},
+    {lab:'Acumulado', base:0,       alto:fin, col:'#b45309', val:fin}
+  ];
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px">
+    ${[0,1,2,3].map(i=>{ const v=tope/3*i; return `<line x1="${ML}" y1="${y(v)}" x2="${W-MR}" y2="${y(v)}" stroke="#eee"/>
+      <text x="${ML-6}" y="${y(v)+4}" text-anchor="end" font-size="9" fill="#777">${mil(v)}</text>`; }).join('')}
+    ${barras.map((b,i)=>{ const cx=ML+px*i+px/2, yTop=y(b.base+b.alto), h=Math.max(2,y(b.base)-y(b.base+b.alto));
+      return `<rect x="${(cx-bw/2).toFixed(1)}" y="${yTop.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" fill="${b.col}" rx="2"/>
+        <text x="${cx.toFixed(1)}" y="${(yTop-5).toFixed(1)}" text-anchor="middle" font-size="10.5" font-weight="bold" fill="#111">${(b.val<0?'−':'')+S(Math.abs(b.val))}</text>
+        <text x="${cx.toFixed(1)}" y="${H-24}" text-anchor="middle" font-size="11" fill="#111">${b.lab}</text>`;
+    }).join('')}
+    <text x="${ML+px*2.5}" y="${H-8}" text-anchor="middle" font-size="10" fill="#555">valor de stock del periodo: ${(d.movMes>=0?'+ ':'− ')+S(Math.abs(d.movMes))}</text>
+  </svg>`;
+}
+
 /* El informe para entregar: se abre en una ventana lista para imprimir o guardar como PDF, con
    las mismas cifras de la pantalla y la lectura del mes incluida. Va en HTML y no en Excel porque
    esto se entrega y se archiva, no se sigue editando, y porque así funciona sin señal. */
@@ -14003,13 +14086,43 @@ function cieDescargar(){
     .lec{background:#f4f4f4;padding:14px 16px;margin-top:10px;font-size:11.5px;line-height:1.75}
     .lec div{margin-bottom:7px} .firmas{display:flex;gap:40px;margin-top:52px;font-size:11px}
     .firmas div{flex:1;border-top:1px solid #111;padding-top:5px;text-align:center}
-    @media print{body{padding:16px 20px} .noimp{display:none}}
+    .port{height:94vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;
+          border:3px solid #111;padding:40px;page-break-after:always}
+    .marca{font-size:52px;font-weight:900;letter-spacing:7px;line-height:1}
+    .marca span{color:#b45309}
+    .port .lin{width:120px;height:3px;background:#b45309;margin:22px 0}
+    .port .tit{font-size:21px;font-weight:700;letter-spacing:3px;text-transform:uppercase}
+    .port .mes{font-size:40px;font-weight:900;margin-top:10px}
+    .port .dat{font-size:12.5px;color:#444;margin-top:30px;line-height:1.9}
+    .port .tot{margin-top:34px;border:2px solid #111;padding:16px 34px}
+    .port .tot .lbl{font-size:11px;letter-spacing:1.5px;color:#555;margin-bottom:6px}
+    .port .tot .num{font-size:32px;font-weight:900;line-height:1}
+    .fig{margin:10px 0 22px;page-break-inside:avoid}
+    .fig .cap{font-size:11px;color:#555;margin-bottom:6px}
+    @media print{body{padding:16px 20px} .noimp{display:none} .port{height:95vh;border-width:2px}}
   </style></head><body>
+  <!-- PORTADA. El informe sale de la oficina y llega a gerencia, a la contrata y al banco:
+       tiene que decir de quién es y de qué mes antes de que nadie lo abra. -->
+  <div class="port">
+    <div class="marca">MUKI<span>CLOUD</span></div>
+    <div class="lin"></div>
+    <div class="tit">Informe de Logística</div>
+    <div class="mes">${nom}</div>
+    <div class="dat">
+      Periodo del <b>${fmtF(d.ini)}</b> al <b>${fmtF(d.fin)}</b><br>
+      ${d.enCurso?('Mes EN CURSO — día '+d.diaDe+' de '+d.diasMes):'Mes cerrado'}<br>
+      Emitido el ${fmtF(hoy())} por <b>${quien}</b>
+    </div>
+    <div class="tot"><div class="lbl">COSTO LOGÍSTICO DEL MES</div><div class="num">${S(d.costoTotal)}</div></div>
+  </div>
+
   <h1>INFORME DE CIERRE DE MES — LOGÍSTICA</h1>
   <div class="sub"><b>${nom}</b> · del ${fmtF(d.ini)} al ${fmtF(d.fin)} · ${d.enCurso?('mes EN CURSO, día '+d.diaDe+' de '+d.diasMes):'mes cerrado'}
     · emitido el ${fmtF(hoy())} por ${quien}</div>
   <div class="tot"><span>COSTO LOGÍSTICO DEL MES<br><small style="color:#555">materiales + explosivo + combustible comprados</small></span><b>${S(d.costoTotal)}</b></div>
   <h2>1 · Cuadre del mes</h2>
+  <div class="fig"><div class="cap">En qué se gastó el mes</div>${cieGrafComposicion(d)}</div>
+  <div class="fig"><div class="cap">Día a día: lo que entró al almacén contra lo que salió a la operación</div>${cieGrafDiario(d)}</div>
   ${T('Resumen',[['Entró al almacén (comprado)',S(d.costoTotal)],['Salió a la operación',S(d.consumoTotal)],
       ['Se quedó en el anaquel',S(d.costoTotal-d.consumoTotal)]])}
   <h2>2 · Materiales</h2>
@@ -14042,6 +14155,7 @@ function cieDescargar(){
   ${T('Enviado desde 2820',[['Materiales despachados',S(d.mbDespachado)],['Consumido en la unidad',S(d.mbConsumido)],
       ['Petróleo enviado',N(d.mbPetGln)+' gln'],['Valor del petróleo',S(d.mbPetS)]])}
   <h2>7 · El anaquel, de un cierre al siguiente</h2>
+  <div class="fig"><div class="cap">De dónde partió el anaquel, qué lo movió y dónde quedó</div>${cieGrafAnaquel(d)}</div>
   ${T('Movimiento del anaquel'+(d.enCurso?' (la cifra final es la de hoy y sigue moviéndose)':' — congelado el '+fmtF(d.stockAl)),
       [['Venía con (cierre del mes anterior)',S(d.anaquelIni)],['Entró este mes',S(d.matIng)],
        ['Salió este mes',S(d.matSal)],
