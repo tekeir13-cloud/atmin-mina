@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-289</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-290</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-289</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-290</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-289</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-290</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -13264,10 +13264,24 @@ function cieDatos(mes){
   const expIniU=expStockU-expMovU;
 
   // 3) COMBUSTIBLE — y el petróleo que se le envía a Monte Bravo
+  /* ABASTECIMIENTO Y SALIDA MANUAL NO SON LA MISMA FILA CON DISTINTO SIGNO.
+     El registro de combustible guarda las salidas manuales del tanque en NEGATIVO, en la misma
+     lista que los abastecimientos. Sumarlo todo de corrido daba dos cifras falsas: un "petróleo
+     ingresado" de 9,824 cuando al tanque entraron 10,300 —la diferencia eran 476 galones sacados a
+     mano, no un abastecimiento más chico—, y un costo de combustible rebajado, como si sacar
+     petróleo del tanque devolviera el dinero de comprarlo. La pantalla del tanque ya los separa;
+     el informe no, y por eso no coincidían.
+     Ahora: lo ingresado son solo los positivos, lo que salió a mano se informa aparte, y el
+     consumo del mes es lo que descuentan los partes MÁS esas salidas —las dos cosas salieron del
+     tanque, aunque se registren por caminos distintos—. Así ingresado − consumido vuelve a dar el
+     saldo que marca la cisterna. */
   const pPet=(typeof compGetPrecioPet==='function')?(Number(compGetPrecioPet())||0):0;
-  let petIn=0, gasIn=0, combIngS=0;
-  try{ (combCargar('pet')||[]).filter(r=>r&&cieEnMes(r.fecha,mes)).forEach(r=>{ petIn+=Number(r.cantidad)||0; combIngS+=(Number(r.cantidad)||0)*(Number(r.precio)||0); }); }catch(e){}
-  try{ (combCargar('gas')||[]).filter(r=>r&&cieEnMes(r.fecha,mes)).forEach(r=>{ gasIn+=Number(r.cantidad)||0; combIngS+=(Number(r.cantidad)||0)*(Number(r.precio)||0); }); }catch(e){}
+  let petIn=0, gasIn=0, combIngS=0, petManual=0, gasManual=0;
+  const _comb=(t,fn)=>{ try{ (combCargar(t)||[]).filter(r=>r&&cieEnMes(r.fecha,mes)).forEach(fn); }catch(e){} };
+  _comb('pet',r=>{ const c=Number(r.cantidad)||0;
+    if(c>0){ petIn+=c; combIngS+=c*(Number(r.precio)||0); } else petManual+=Math.abs(c); });
+  _comb('gas',r=>{ const c=Number(r.cantidad)||0;
+    if(c>0){ gasIn+=c; combIngS+=c*(Number(r.precio)||0); } else gasManual+=Math.abs(c); });
   let petCon=0, mbPetGln=0; const petPorEq={};
   (state.compresorista||[]).filter(r=>r&&cieEnMes(r.fecha,mes)).forEach(r=>{
     (r.petroleo||[]).forEach(x=>{
@@ -13279,6 +13293,7 @@ function cieDatos(mes){
     });
   });
   const mbPetS=mbPetGln*pPet;
+  const petSalido=petCon+petManual;          // todo lo que salió del tanque de petróleo
 
   /* 4) MANTENIMIENTO — se reparte EXACTAMENTE COMO LA PANTALLA DE COSTO DE MANTENIMIENTO:
      por equipo, separando piezas de horas hombre, y sumando el mismo m.costo que ella. El informe
@@ -13334,7 +13349,7 @@ function cieDatos(mes){
 
   // EL TOTAL: lo comprado. Ver la nota de arriba sobre no contar dos veces.
   const costoTotal=matIng+expIngS+combIngS;
-  const consumoTotal=matSal+expSalS+(petCon*pPet);
+  const consumoTotal=matSal+expSalS+(petSalido*pPet);
 
   /* Un mes ya archivado devuelve la foto del almacén que se guardó al cerrarlo. Lo demás del
      informe no hace falta congelarlo: son movimientos con fecha, y los de octubre seguirán siendo
@@ -13383,7 +13398,7 @@ function cieDatos(mes){
     porDest:Object.values(porDest).sort((x,y)=>(y.gen+y.mant)-(x.gen+x.mant)),
     expIngU, expSalU, expIngS, expSalS, expPorProd,
     expStockU, expStockS, expStockPorProd, expMovU, expIniU,
-    petIn, gasIn, petCon, combIngS, pPet,
+    petIn, gasIn, petCon, combIngS, pPet, petManual, gasManual, petSalido,
     petPorEq:Object.entries(petPorEq).map(([k,v])=>({nombre:k,gln:v})).sort((x,y)=>y.gln-x.gln),
     mantS, mantKits:kits.length, kits, mantPiezas, mantHoras, mantMO, mantPorEquipo,
     mbDespachado, mbConsumido, mbPetGln, mbPetS,
@@ -13432,9 +13447,9 @@ function cieInterpretacion(d){
     L.push(`A Monte Bravo se le despacharon <b>${S(d.mbDespachado)}</b> en materiales${d.mbPetGln>0?` y <b>${fmt3(d.mbPetGln)} gln</b> de petróleo (${S(d.mbPetS)})`:''}. Es gasto de esa unidad, no de 2820${d.mbConsumido>0?`; de lo enviado, allá consumieron ${S(d.mbConsumido)}`:''}.`);
   }
 
-  if(d.petIn>0||d.petCon>0){
-    const saldo=d.petIn-d.petCon;
-    L.push(`Petróleo: entraron <b>${fmt3(d.petIn)} gln</b> y se consumieron <b>${fmt3(d.petCon)} gln</b>${Math.abs(saldo)>0.5?`, ${saldo>0?'quedan':'se consumieron de más'} ${fmt3(Math.abs(saldo))} gln${saldo>0?' en tanque':' contra el saldo anterior'}`:''}.`);
+  if(d.petIn>0||d.petSalido>0){
+    const saldo=d.petIn-d.petSalido;
+    L.push(`Petróleo: se abastecieron <b>${fmt3(d.petIn)} gln</b> y salieron del tanque <b>${fmt3(d.petSalido)} gln</b>${d.petManual>0?` (${fmt3(d.petCon)} por los partes y ${fmt3(d.petManual)} por salida manual)`:''}${Math.abs(saldo)>0.5?`, ${saldo>0?'quedan':'salieron de más'} ${fmt3(Math.abs(saldo))} gln${saldo>0?' en el tanque':' contra el saldo anterior'}`:''}.`);
     const top=(d.petPorEq||[])[0];
     if(top&&top.gln>0) L.push(`El equipo que más consumió fue <b>${top.nombre}</b> con ${fmt3(top.gln)} gln, el ${P(top.gln,d.petCon)}% del petróleo del mes.`);
   }
@@ -13678,10 +13693,15 @@ function renderLogEstadisticas(){
 
   // ── 3. COMBUSTIBLE ──
   +bloque('comb','⛽','COMBUSTIBLE',S(d.combIngS),
-    `Petróleo ${N(d.petIn)} gln entró · ${N(d.petCon)} gln consumido`,'#22d3a5',
-    fila(mini('Petróleo ingresado',N(d.petIn)+' gln','#60a5fa')+mini('Gasolina ingresada',N(d.gasIn)+' gln','#60a5fa')
-        +mini('Petróleo consumido',N(d.petCon)+' gln','#f87171')+mini('Saldo',N(d.petIn-d.petCon)+' gln',(d.petIn-d.petCon)>=0?'#22d3a5':'#f59e0b')
+    `Petróleo: entró ${N(d.petIn)} gln · salió ${N(d.petSalido)} gln`,'#22d3a5',
+    fila(mini('Petróleo abastecido',N(d.petIn)+' gln','#60a5fa')
+        +mini('Gasolina abastecida',N(d.gasIn)+' gln','#60a5fa')
+        +mini('Consumido en partes',N(d.petCon)+' gln','#f87171')
+        +mini('Salidas manuales',N(d.petManual)+' gln',d.petManual>0?'#f59e0b':'var(--text3)')
+        +mini('SALIÓ DEL TANQUE',N(d.petSalido)+' gln','#f87171')
+        +mini('Saldo del mes',N(d.petIn-d.petSalido)+' gln',(d.petIn-d.petSalido)>=0?'#22d3a5':'#f59e0b')
         +mini('Precio por galón',S(d.pPet),'var(--text2)'))
+    +(d.petManual>0?`<div style="font-size:11px;color:var(--text2);margin-top:10px">De los ${N(d.petSalido)} gln que salieron del tanque, <b>${N(d.petCon)}</b> los descuentan los partes del compresorista y <b>${N(d.petManual)}</b> salieron por salida manual. Las dos cosas salieron, aunque se registren por caminos distintos.</div>`:'')
     +gPet
     +`<div style="font-size:11.5px;color:var(--text2);font-weight:700;margin:16px 0 0">Consumo por equipo</div>`
     +tabla(['Equipo','Galones','Valorizado','% del mes'],
@@ -13793,7 +13813,7 @@ function cieExcel(){
     {Concepto:'Salió a la operación', Valor:n2(d.consumoTotal)},
     {Concepto:'  Materiales', Valor:n2(d.matSal)},
     {Concepto:'  Explosivo consumido', Valor:n2(d.expSalS)},
-    {Concepto:'  Petróleo consumido', Valor:n2(d.petCon*d.pPet)},
+    {Concepto:'  Petróleo salido del tanque', Valor:n2(d.petSalido*d.pPet)},
     {Concepto:'', Valor:''},
     {Concepto:'EL ANAQUEL', Valor:''},
     {Concepto:'  Venía con (cierre anterior)', Valor:n2(d.anaquelIni)},
@@ -13813,6 +13833,14 @@ function cieExcel(){
     {Concepto:'Mantenimiento — piezas', Valor:n2(d.mantPiezas)},
     {Concepto:'Mantenimiento — horas hombre', Valor:n2(d.mantHoras)},
     {Concepto:'Mantenimiento — total', Valor:n2(d.mantS)},
+    {Concepto:'COMBUSTIBLE (galones)', Valor:''},
+    {Concepto:'  Petróleo abastecido', Valor:n2(d.petIn)},
+    {Concepto:'  Consumido en partes', Valor:n2(d.petCon)},
+    {Concepto:'  Salidas manuales del tanque', Valor:n2(d.petManual)},
+    {Concepto:'  Total salido del tanque', Valor:n2(d.petSalido)},
+    {Concepto:'  Saldo del mes', Valor:n2(d.petIn-d.petSalido)},
+    {Concepto:'  Gasolina abastecida', Valor:n2(d.gasIn)},
+    {Concepto:'', Valor:''},
     {Concepto:'Monte Bravo — materiales despachados', Valor:n2(d.mbDespachado)},
     {Concepto:'Monte Bravo — petróleo enviado (gln)', Valor:n2(d.mbPetGln)},
     {Concepto:'', Valor:''},
@@ -13856,10 +13884,15 @@ function cieExcel(){
 
   // 4 · COMBUSTIBLE: lo comprado y lo consumido por equipo, parte por parte
   const comb=[];
-  try{ ['pet','gas'].forEach(t=>(combCargar(t)||[]).filter(r=>r&&enMes(r.fecha)).forEach(r=>comb.push({
-      Fecha:r.fecha||'', Tipo:t==='pet'?'Petróleo':'Gasolina', Movimiento:'INGRESO',
-      Equipo:'', Galones:n2(r.cantidad), 'S/ por galón':n2(r.precio), Importe:n2((Number(r.cantidad)||0)*(Number(r.precio)||0)),
-      Vale:r.vale||r.guia||''}))); }catch(e){}
+  // Las salidas manuales del tanque se guardan en negativo: se distinguen del abastecimiento,
+  // porque sumarlas con él rebajaba lo ingresado y el costo de lo comprado.
+  try{ ['pet','gas'].forEach(t=>(combCargar(t)||[]).filter(r=>r&&enMes(r.fecha)).forEach(r=>{
+      const c=Number(r.cantidad)||0;
+      comb.push({ Fecha:r.fecha||'', Tipo:t==='pet'?'Petróleo':'Gasolina',
+        Movimiento:c>=0?'ABASTECIMIENTO':'SALIDA MANUAL', Equipo:c<0?(r.destino||r.autoriza||r.solicitante||''):'',
+        Galones:n2(Math.abs(c)), 'S/ por galón':n2(r.precio),
+        Importe:c>=0?n2(c*(Number(r.precio)||0)):0, Vale:r.vale||r.guia||''});
+    })); }catch(e){}
   (state.compresorista||[]).filter(r=>r&&enMes(r.fecha)).forEach(rep=>{
     (rep.petroleo||[]).forEach(x=>{ const g=Number(x&&x.gln)||0; if(!g) return;
       comb.push({Fecha:rep.fecha||'', Tipo:'Petróleo', Movimiento:'CONSUMO', Equipo:x.equipo||'',
@@ -13949,9 +13982,12 @@ function cieDescargar(){
   ${(d.expStockPorProd||[]).length?`<h3>Lo que queda, por producto</h3><table>${d.expStockPorProd.map(x=>`<tr><td>${escAttr(x.nombre)}</td><td class="n">${N(x.und)} und · ${S(x.soles)}</td></tr>`).join('')}</table>`:''}
   ${d.expPorProd.length?`<h3>Por producto</h3><table>${d.expPorProd.map(x=>`<tr><td>${escAttr(x.nombre)}</td><td class="n">ing ${N(x.ing)} · cons ${N(x.sal)} und</td></tr>`).join('')}</table>`:''}
   <h2>4 · Combustible</h2>
-  ${T('Movimiento',[['Petróleo ingresado',N(d.petIn)+' gln'],['Gasolina ingresada',N(d.gasIn)+' gln'],
-      ['Valor del combustible comprado',S(d.combIngS)],['Petróleo consumido',N(d.petCon)+' gln'],
-      ['Saldo',N(d.petIn-d.petCon)+' gln'],['Precio por galón',S(d.pPet)]])}
+  ${T('Movimiento',[['Petróleo abastecido',N(d.petIn)+' gln'],['Gasolina abastecida',N(d.gasIn)+' gln'],
+      ['Valor del combustible comprado',S(d.combIngS)],
+      ['Petróleo consumido (partes del compresorista)',N(d.petCon)+' gln'],
+      ['Petróleo por salida manual del tanque',N(d.petManual)+' gln'],
+      ['Total salido del tanque',N(d.petSalido)+' gln'],
+      ['Saldo del mes',N(d.petIn-d.petSalido)+' gln'],['Precio por galón',S(d.pPet)]])}
   ${d.petPorEq.length?`<h3>Consumo por equipo</h3><table>${d.petPorEq.map(e=>`<tr><td>${escAttr(e.nombre)}</td><td class="n">${N(e.gln)} gln · ${S(e.gln*d.pPet)}</td></tr>`).join('')}</table>`:''}
   <h2>5 · Mantenimiento</h2>
   ${T('Resumen',[['Kits despachados',String(d.mantKits)],['Costo de piezas',S(d.mantPiezas)],
