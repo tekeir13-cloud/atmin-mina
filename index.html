@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-295</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-296</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-295</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-296</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-295</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-296</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -13227,8 +13227,22 @@ function cieDatos(mes){
   // De dónde vino el material (proveedor del vale) y a dónde se fue (destino de la salida)
   const porProv={}; ings.forEach(r=>{ const k=origen(r);
     if(!porProv[k])porProv[k]={nombre:k,gen:0,mant:0,n:0}; porProv[k][esMant(r)?'mant':'gen']+=tot(r); porProv[k].n++; });
+  /* A CADA DESTINO SE LE MIRA QUÉ SE LLEVÓ, no solo cuánto. Saber que a NV2820 se fueron
+     S/ 130,091.89 no dice nada accionable: lo que se decide es qué material está consumiendo cada
+     frente —si son barrenos, si es madera, si es aceite— porque ahí se ve si el consumo responde
+     al avance o se está yendo en otra cosa. Se guarda el detalle por producto de cada destino y
+     se muestran los principales; el resto se agrupa para que la suma siga cuadrando con el total. */
   const porDest={}; sals.forEach(r=>{ const k=(typeof nivelLabel==='function')?nivelLabel(r.destino):String(r.destino||'—');
-    if(!porDest[k])porDest[k]={nombre:k,gen:0,mant:0,n:0}; porDest[k][esMant(r)?'mant':'gen']+=imp(r); porDest[k].n++; });
+    if(!porDest[k])porDest[k]={nombre:k,gen:0,mant:0,n:0,prod:{}};
+    porDest[k][esMant(r)?'mant':'gen']+=imp(r); porDest[k].n++;
+    const pk=String(r.codigo||r.producto||r.descripcion||'—').trim().toUpperCase();
+    const p=porDest[k].prod[pk]||(porDest[k].prod[pk]={codigo:r.codigo||'', nombre:r.producto||r.descripcion||pk,
+                                                       unidad:r.unidad||'', cant:0, soles:0, n:0});
+    p.cant+=Number(r.cantidad)||0; p.soles+=imp(r); p.n++; });
+  Object.values(porDest).forEach(dd=>{
+    dd.top=Object.values(dd.prod).sort((a,b)=>b.soles-a.soles);
+    dd.total=dd.gen+dd.mant;
+    delete dd.prod; });
 
   // 2) EXPLOSIVO
   const ex=a.explosivos||{ingresos:[],salidas:[]};
@@ -13698,7 +13712,21 @@ function renderLogEstadisticas(){
     +`<div style="font-size:11.5px;color:var(--text2);font-weight:700;margin:16px 0 0">A dónde se fue</div>`
     +tabla(['Destino','Insumos','Mantenimiento','Total','Salidas'],
        d.porDest.slice(0,25).map(p=>[escAttr(p.nombre),S(p.gen),p.mant?S(p.mant):'—',`<b>${S(p.gen+p.mant)}</b>`,p.n]),
-       'Sin salidas registradas este mes.'))
+       'Sin salidas registradas este mes.')
+    +(d.porDest.length?`<div style="font-size:11.5px;color:var(--text2);font-weight:700;margin:16px 0 0">Qué material recibe cada destino</div>`
+      +d.porDest.slice(0,6).map(p=>{
+        const top=(p.top||[]).slice(0,8), resto=(p.top||[]).slice(8);
+        const restoS=resto.reduce((a,x)=>a+x.soles,0);
+        return `<div style="background:var(--coal2);border-radius:10px;padding:12px 14px;margin-top:10px">
+          <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12.5px;font-weight:800">
+            <span>${escAttr(p.nombre)}</span><span style="color:#f87171">${S(p.total)}</span></div>
+          <div style="font-size:10.5px;color:var(--text3);margin:2px 0 8px">${p.n} salida${p.n!==1?'s':''} · Insumos ${S(p.gen)}${p.mant?' · Almacén Mantenimiento '+S(p.mant):' · sin material de Mantenimiento'}</div>
+          ${top.map(x=>`<div style="display:flex;justify-content:space-between;gap:10px;font-size:11.5px;padding:3px 0;border-top:1px solid var(--border2)">
+             <span>${escAttr(x.nombre)}${x.codigo?` <span style="color:var(--text3)">(${escAttr(x.codigo)})</span>`:''}</span>
+             <span style="white-space:nowrap;color:var(--text2)">${N(x.cant)} ${escAttr(x.unidad||'')} · <b>${S(x.soles)}</b></span></div>`).join('')}
+          ${resto.length?`<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);padding:4px 0 0;border-top:1px solid var(--border2)">
+             <span>y ${resto.length} material${resto.length!==1?'es':''} más</span><span>${S(restoS)}</span></div>`:''}
+        </div>`; }).join(''):''))
 
   // ── 2. EXPLOSIVO ──
   +bloque('exp','🧨','EXPLOSIVO',S(d.expIngS),
@@ -14164,7 +14192,15 @@ function cieDescargar(){
       ['Total ingresado',S(d.matIng)],['Salida Insumos',S(d.matSalGen)],['Salida Mantenimiento',S(d.matSalMant)],
       ['Total salido',S(d.matSal)],['N° de ingresos',String(d.nIng)],['N° de salidas',String(d.nSal)]])}
   ${d.porProv.length?`<h3>De dónde vino</h3><table>${d.porProv.slice(0,20).map(p=>`<tr><td>${escAttr(p.nombre)}</td><td class="n">${S(p.gen+p.mant)}</td></tr>`).join('')}</table>`:''}
-  ${d.porDest.length?`<h3>A dónde se fue</h3><table>${d.porDest.slice(0,20).map(p=>`<tr><td>${escAttr(p.nombre)}</td><td class="n">${S(p.gen+p.mant)}</td></tr>`).join('')}</table>`:''}
+  ${d.porDest.length?d.porDest.slice(0,8).map(p=>{
+      const TOP=8, top=(p.top||[]).slice(0,TOP);
+      const resto=(p.top||[]).slice(TOP);
+      const restoS=resto.reduce((a,x)=>a+x.soles,0);
+      return `<h3>A dónde se fue · ${escAttr(p.nombre)} — ${S(p.total)}</h3>
+      <div style="font-size:10.5px;color:#555;margin:-2px 0 4px">${p.n} salida${p.n!==1?'s':''} · Insumos ${S(p.gen)}${p.mant?' · Almacén Mantenimiento '+S(p.mant):' · sin material de Mantenimiento'}</div>
+      <table>${top.map(x=>`<tr><td>${escAttr(x.nombre)}${x.codigo?' <span style="color:#777">('+escAttr(x.codigo)+')</span>':''}</td><td class="n">${N(x.cant)} ${escAttr(x.unidad||'')} · ${S(x.soles)}</td></tr>`).join('')}
+        ${resto.length?`<tr><td style="color:#777">y ${resto.length} material${resto.length!==1?'es':''} más</td><td class="n" style="color:#777">${S(restoS)}</td></tr>`:''}
+      </table>`; }).join(''):''}
   <h2>3 · Explosivo</h2>
   ${T('Movimiento del polvorín',[['Venía con',N(d.expIniU)+' und'],['Ingresado',N(d.expIngU)+' und'],
       ['Valor ingresado',S(d.expIngS)],['Consumido',N(d.expSalU)+' und'],['Valor consumido',S(d.expSalS)],
