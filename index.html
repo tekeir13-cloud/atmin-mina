@@ -5776,11 +5776,8 @@ async function cargarAlmacenCombustibleSB(){
       // Conservar el valor MÁS ALTO de cada flag de migración (nube o local) para que las
       // migraciones de explosivos (apertura, ajuste, fijación) NO se vuelvan a ejecutar en
       // cada carga y borren las salidas nuevas registradas por Logística.
-      ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','almExcelV','stockCorteTs','mantConteoV','codNuevosV','insConteoV','ajusteV','precioMantV','trimMantV','sinSueldoV']
+      ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','almExcelV','stockCorteTs','mantConteoV','codNuevosV','insConteoV','ajusteV','precioMantV','trimMantV','sinSueldoV']
         .forEach(k=>{ const mx=Math.max(Number(almNube[k]||0), Number(almLocalPrev[k]||0)); if(mx) state.almacen[k]=mx; });
-      // Conservar el saldo/corte de apertura del remanente (objeto + timestamp), venga de nube o local.
-      if(!state.almacen.remApertura && (almNube.remApertura||almLocalPrev.remApertura)) state.almacen.remApertura=almNube.remApertura||almLocalPrev.remApertura;
-      if(!state.almacen.remAperturaTs) state.almacen.remAperturaTs=Number(almNube.remAperturaTs||almLocalPrev.remAperturaTs||0)||state.almacen.remAperturaTs;
       // Conservar el bloqueo del stock de explosivos: si CUALQUIER equipo lo activó, queda activo
       // (protege el stock NV3190 de que una migración lo vuelva a sobrescribir/borrar).
       if(almNube.exploLock||almLocalPrev.exploLock) state.almacen.exploLock=true;
@@ -5802,7 +5799,6 @@ async function cargarAlmacenCombustibleSB(){
     try{ if(typeof aplicarStockBaseExplosivos==='function') aplicarStockBaseExplosivos(); }catch(e){}
     try{ if(typeof bloquearStockExplosivosSiReal==='function') bloquearStockExplosivosSiReal(); }catch(e){}
     try{ if(typeof aplicarAperturaExplosivos==='function') aplicarAperturaExplosivos(); }catch(e){}
-    try{ if(typeof aplicarAperturaRemanente==='function') aplicarAperturaRemanente(); }catch(e){}
     // Fija las salidas de explosivos con un set DETERMINISTA idéntico en todos los equipos
     // (mismo stock 164/1292/680/323/343/538/804 en cualquier dispositivo, sin depender de sync)
     try{ if(typeof fijarSalidasExplosivosDefinitivo==='function') fijarSalidasExplosivosDefinitivo(); }catch(e){}
@@ -8659,11 +8655,9 @@ function _almMergeSnaps(a,b){
     explosivos:{ ...exA, ...exB, ingresos:_exploMergeMov(exA.ingresos,exB.ingresos), salidas:_exploMergeMov(exA.salidas,exB.salidas) },
     mbAcopio:{ ...mbA, ...mbB, ingresos:_exploMergeMov(mbA.ingresos,mbB.ingresos), salidas:_exploMergeMov(mbA.salidas,mbB.salidas) },
     productos, productosTs };
-  ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','remAperturaV','exploStockBaseV','catalogVersion','almExcelV','stockCorteTs','aguaFixV','mantConteoV','codNuevosV','insConteoV','ajusteV','precioMantV','trimMantV','sinSueldoV']
+  ['exploAperturaV','exploAjusteSalidasV','exploLimpiezaRecupV','exploFijarV','epp2820FixV','exploStockBaseV','catalogVersion','almExcelV','stockCorteTs','aguaFixV','mantConteoV','codNuevosV','insConteoV','ajusteV','precioMantV','trimMantV','sinSueldoV']
     .forEach(k=>{ const mx=Math.max(Number(a[k]||0), Number(b[k]||0)); if(mx) out[k]=mx; });
   if(a.exploLock||b.exploLock) out.exploLock=true;
-  out.remApertura=a.remApertura||b.remApertura||out.remApertura;
-  out.remAperturaTs=Number(a.remAperturaTs||b.remAperturaTs||0)||out.remAperturaTs;
   // La base de stock gana por versión (exploStockBaseV): si un equipo la ajustó al editar/eliminar
   // un movimiento viejo, ese ajuste se impone y no lo pisa una base más antigua de otro equipo.
   out.exploStockBase=(Number(a.exploStockBaseV||0)>=Number(b.exploStockBaseV||0)
@@ -8732,7 +8726,6 @@ function almacenLoad(){
     try{ if(typeof aplicarStockBaseExplosivos==='function') aplicarStockBaseExplosivos(); }catch(e){}
     try{ if(typeof bloquearStockExplosivosSiReal==='function') bloquearStockExplosivosSiReal(); }catch(e){}
     try{ if(typeof aplicarAperturaExplosivos==='function') aplicarAperturaExplosivos(); }catch(e){}
-    try{ if(typeof aplicarAperturaRemanente==='function') aplicarAperturaRemanente(); }catch(e){}
     try{ if(typeof migrarEppSalidas2820==='function') migrarEppSalidas2820(); }catch(e){}
   }catch(e){}
 }
@@ -14371,7 +14364,7 @@ const EXPLO_CATALOGO=[
   ...FANEL_TODOS,
 ];
 // ¿Este explosivo entra al Stock Remanente? Hoy entran TODOS —los FANEL también, que antes
-// quedaban fuera y no se podían ni ingresar ni despachar—. La marca `remanente:false` sigue
+// quedaban fuera y no se podían ni ingresar ni despachar—.
 // disponible por si algún producto tuviera que quedarse fuera más adelante.
 // ¿Este explosivo se mide en METROS (y se agrupa en rollos) en vez de en unidades sueltas?
 // Antes esto se preguntaba comparando contra el id de la mecha en ~20 sitios, así que cualquier
@@ -14442,68 +14435,6 @@ function aplicarAperturaExplosivos(){
     return true;
   }catch(e){ return false; }
 }
-// ── APERTURA del STOCK REMANENTE (una sola vez) ──────────────────────────────────────────────
-// El Stock Remanente arranca con este saldo (conteo físico real a la fecha de apertura). De aquí
-// EN ADELANTE cada egreso (campo E) que reporte el Compresorista SUMA, y cada salida registrada por
-// Logística RESTA. Los egresos de reportes ANTERIORES a la apertura NO se cuentan (ya están dentro
-// de este saldo). Mecha (NEITHER) va en METROS. Para volver a resetear el saldo, sube REM_APERTURA_V.
-// Conteo físico 2026-07-10 (corregido): EMULNOR 1000 = 9 cajas (9×264=2376) · EMULNOR 3000 =
-// 2 cajas + 19 und (2×228+19=475) · EMULNOR 5000 = 1 caja + 43 und (216+43=259) ·
-// CARMEX 1.8 = 56 und · CARMEX 2.40 = 6 und · MECHA RÁPIDA = 1200 m.
-// Desde esta fecha los egresos del compresorista vuelven a sumar desde cero.
-const REM_APERTURA_V=3;
-const REM_APERTURA_FECHA='2026-07-10';
-const REM_APERTURA_STOCK={ M1000:2376, M3000:475, M5000:259, CARMEX18:56, CARMEX240:6, NEITHER:1200 };
-function aplicarAperturaRemanente(){
-  try{
-    state.almacen=state.almacen||{};
-    if((state.almacen.remAperturaV||0)>=REM_APERTURA_V) return false; // ya aplicada
-    state.almacen.remApertura={...REM_APERTURA_STOCK};
-    state.almacen.remAperturaTs=(typeof Date!=='undefined')?Date.now():0; // corte: solo egresos posteriores suman
-    state.almacen.remAperturaFecha=(typeof REM_APERTURA_FECHA!=='undefined')?REM_APERTURA_FECHA:((typeof hoy==='function')?hoy():'');
-    state.almacen.remAperturaV=REM_APERTURA_V;
-    try{ localStorage.setItem(ALM_KEY, JSON.stringify(state.almacen)); }catch(e){}
-    try{ if(typeof sbSyncModulo==='function') sbSyncModulo('almacen', (typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}); }catch(e){}
-    return true;
-  }catch(e){ return false; }
-}
-// Egresos de compresorista que cuentan para el remanente: los de reportes del DÍA DE APERTURA en
-// adelante (por fecha, tengan o no marca de tiempo). Los anteriores ya están dentro del saldo de
-// apertura, por eso se excluyen. Devuelve {codigo, cant, fecha, turno, nombre, ts}.
-function remEgresosContables(){
-  const apFecha=(state.almacen&&state.almacen.remAperturaFecha)||'';
-  const out=[];
-  (state.compresorista||[]).forEach(rep=>{
-    if(!rep) return;
-    if(apFecha && String(rep.fecha||'') < apFecha) return; // reporte anterior a la apertura → ya en el saldo
-    (rep.explosivos||[]).forEach(x=>{
-      const e=Number(x&&x.E)||0;
-      if(x && x.codigo!=null && e>0) out.push({codigo:x.codigo, cant:e, fecha:rep.fecha, turno:rep.turno, nombre:rep.nombre||'', ts:Number(rep._ts)||0});
-    });
-  });
-  return out;
-}
-// Egresos de los N días ANTERIORES a la apertura. SOLO para mostrar en el historial (contexto
-// reciente); NO suman al stock, porque ese consumo ya está dentro del saldo de apertura.
-function remEgresosPrevios(dias){
-  const apFecha=(state.almacen&&state.almacen.remAperturaFecha)||'';
-  if(!apFecha) return [];
-  const desde=(function(){ try{ const d=new Date(apFecha+'T00:00:00'); d.setDate(d.getDate()-(dias||3)); return d.toISOString().slice(0,10); }catch(e){ return ''; } })();
-  const out=[];
-  (state.compresorista||[]).forEach(rep=>{
-    if(!rep) return;
-    const f=String(rep.fecha||'');
-    if(!(f<apFecha && f>=desde)) return; // solo la ventana [apertura-N, apertura)
-    (rep.explosivos||[]).forEach(x=>{
-      const e=Number(x&&x.E)||0;
-      if(x && x.codigo!=null && e>0) out.push({codigo:x.codigo, cant:e, fecha:rep.fecha, turno:rep.turno, nombre:rep.nombre||'', ts:Number(rep._ts)||0});
-    });
-  });
-  return out;
-}
-// Stock remanente actual por explosivo = apertura + egresos contables − salidas registradas.
-// Las salidas ANTERIORES a la fecha de apertura no restan: ya están dentro del conteo físico
-// (mismo criterio que los egresos del compresorista).
 const EXPLO_AJUSTE_SALIDAS_V=2;
 // Cantidad (apertura − final) y vale real de cada salida a reponer.
 const EXPLO_AJUSTE_SALIDAS={
