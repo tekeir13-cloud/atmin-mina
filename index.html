@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.30-284</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-285</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.30-284</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-285</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.30-284</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-285</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -7616,18 +7616,29 @@ function fcVentanaLbl(){
   const v=fcVentana();
   const dd=f=>f.slice(8,10)+'/'+f.slice(5,7);
   const n=(v.periodo && typeof finNombreMes==='function')?finNombreMes(v.periodo):'';
-  return (n?n+' · ':'')+'del '+dd(v.ini)+' al '+dd(v.fin)+' (ciclo en curso)';
+  /* Se nombra el ciclo ENTERO y aparte hasta dónde va lo graficado. Decir solo "del 26/10 al
+     31/10" hacía pensar en una ventana de cinco días; el ciclo es del 26/10 al 25/11 y lo que se
+     ve es lo que va corrido de él. */
+  let cierre='';
+  try{ const r=(typeof ventanaMes==='function')?ventanaMes(v.periodo, AREA_OP):null; if(r&&r.fin) cierre=dd(r.fin); }catch(e){}
+  return 'Ciclo '+(n||v.periodo)+' · del '+dd(v.ini)+(cierre?' al '+cierre:'')+
+         ' · graficado hasta el '+dd(v.fin);
 }
-/* Los días del MES en curso, del primero hasta hoy. Antes eran "los últimos 30 días" a secas, que
-   se montan sobre dos periodos: el acumulado sumaba también lo del periodo anterior y no cuadraba
-   con lo que reporta la operación a la fecha.
-   Va por MES y no por ciclo porque esta lámina mide EXPLOSIVO: factor de carga, kg por metro y
-   desvío contra el óptimo. El ciclo 26→25 es solo para los avances lineales. */
+/* LOS DÍAS DEL CICLO DE OPERACIONES EN CURSO, del 26 hasta hoy.
+   Esta lámina es de OPERACIONES y el ciclo de Operaciones va del 26 al 25, no del 1 al 30. Iba por
+   mes de calendario —se pedía el periodo sin decir de qué área, y sin área la app responde mes
+   calendario— con el argumento de que mide explosivo y no avance lineal. Pero lo que se lee aquí
+   es el avance acumulado del ciclo contra el factor de carga que costó, y la operación rinde
+   cuentas del 26 al 25: el 30 de octubre esta lámina mostraba "del 01/10 al 30/10" y seguía
+   sumando días de un ciclo que había cerrado el 25, mientras el ciclo vivo —el que arrancó el 26—
+   no aparecía por ningún lado.
+   Ahora se pide el periodo de Operaciones. El 26 el gráfico arranca de cero solo, porque ese día
+   cambia el periodo y con él la ventana. */
 function fcVentana(){
   const hoyStr=hoy();
   try{
-    const per=(typeof periodoActual==='function')?periodoActual():'';
-    const v=(typeof ventanaMes==='function')?ventanaMes(per):null;
+    const per=(typeof periodoActual==='function')?periodoActual(AREA_OP):'';
+    const v=(typeof ventanaMes==='function')?ventanaMes(per, AREA_OP):null;
     if(v && v.ini) return { ini:v.ini, fin:(hoyStr<v.fin?hoyStr:v.fin), periodo:per };
   }catch(e){}
   const t=new Date(hoyStr+'T12:00:00'); t.setDate(t.getDate()-(FC_DIAS-1));
