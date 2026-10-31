@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-291</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-292</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-291</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-292</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-291</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-292</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -13348,6 +13348,7 @@ function cieDatos(mes){
      Se calcula con filtrarPorMaestro, igual que la tarjeta "Valor de Stock" de Logística: sin ese
      filtro entran códigos que ya no están en el maestro y el mismo producto repetido por venir de
      dos fichas, y las dos pantallas darían cifras distintas del mismo almacén. */
+  const enCursoMes=(String(mes)===cieMesActual());
   let valorStock=0, prodConStock=0, prodBajo=0, prodAgotado=0;
   try{
     let st=(typeof calcStock==='function')?calcStock():[];
@@ -13362,17 +13363,29 @@ function cieDatos(mes){
   const costoTotal=matIng+expIngS+combIngS;
   const consumoTotal=matSal+expSalS+(petSalido*pPet);
 
-  /* Un mes ya archivado devuelve la foto del almacén que se guardó al cerrarlo. Lo demás del
-     informe no hace falta congelarlo: son movimientos con fecha, y los de octubre seguirán siendo
-     los de octubre se mire cuando se mire. El almacén no: es un saldo, y el saldo se mueve. */
+  /* EL CIERRE DE UN MES PASADO SE CALCULA HACIA ATRÁS, NO SE FOTOGRAFÍA.
+     calcStock dice lo que vale el almacén HOY. Al archivar setiembre en octubre se guardaba esa
+     foto como si fuera el cierre de setiembre, así que "venía con" y "vale hoy" salían iguales y
+     la cadena no cerraba: 197,996.59 + 271,791.95 − 194,410.11 daba 275,378.43 y arriba seguía
+     diciendo 197,996.59.
+     Lo que vale el anaquel al cerrar un mes es lo que vale hoy, deshaciendo todo lo que entró y
+     salió DESPUÉS de ese mes. Y esto no se mueve con el tiempo: cuando mañana entre un vale
+     nuevo, sube el stock de hoy y sube también lo que hay que deshacer, así que el cierre de
+     setiembre sigue siendo el mismo. Sale más estable que la foto, y además hace que el cierre de
+     un mes sea exactamente el arranque del siguiente, sin cuadrarlo a mano. */
   const _arc=cieArchivoDe(mes);
-  if(_arc && _arc.resumen && _arc.resumen.valorStock!=null){
-    valorStock=Number(_arc.resumen.valorStock)||0;
-    prodConStock=Number(_arc.resumen.prodConStock)||0;
-    prodBajo=Number(_arc.resumen.prodBajo)||0;
-    prodAgotado=Number(_arc.resumen.prodAgotado)||0;
+  if(!enCursoMes){
+    const impMov=r=>Number(r&&r.importe)||Number(r&&r.total)||(Number(r&&r.cantidad)||0)*(Number(r&&r.precio)||0);
+    const despues=f=>String(f||'').slice(0,10)>w.fin;
+    const ingPost=(a.ingresos||[]).filter(r=>r&&despues(r.fecha)).reduce((x,r)=>x+impMov(r),0);
+    const salPost=(a.salidas||[]).filter(r=>r&&despues(r.fecha)).reduce((x,r)=>x+impMov(r),0);
+    valorStock=valorStock-(ingPost-salPost);
+    /* Los semáforos sí son de hoy y no se pueden reconstruir: cuántos productos quedaban bajo
+       mínimo el 30 de setiembre no está registrado en ninguna parte. Se ponen en cero en vez de
+       enseñar los de hoy dentro de un informe de setiembre. */
+    prodConStock=0; prodBajo=0; prodAgotado=0;
   }
-  const stockAl=(_arc&&_arc.resumen&&_arc.resumen.stockAl)||(_arc&&_arc.cerrado)||hoy();
+  const stockAl=enCursoMes?hoy():w.fin;
 
   /* EL ANAQUEL ES UNA CADENA, NO UNA FOTO SUELTA. Lo que vale el anaquel al cerrar un mes es con
      lo que arranca el siguiente, y los ingresos y salidas de ese mes lo mueven hasta su propio
@@ -13388,18 +13401,18 @@ function cieDatos(mes){
      existencias, una apertura de periodo—. Se muestra el cierre guardado, que es el heredado de
      verdad, y la diferencia se dice en vez de disolverla dentro de la cifra de arranque, que es lo
      que pasaba al deducirla siempre: el descuadre desaparecía sin que nadie se enterara. */
+  /* El arranque sale del cierre menos el movimiento del mes, y eso ES el cierre del mes anterior:
+     los dos se calculan deshaciendo movimientos sobre el mismo stock de hoy, así que coinciden por
+     aritmética, no por casualidad. Antes se leía del archivo del mes anterior, y como ese archivo
+     guardaba la foto de hoy, el informe se avisaba a sí mismo de un descuadre que él mismo creaba. */
   const movMes=matIng-matSal;
   const anaquelFin=valorStock;
-  const anaquelDeducido=anaquelFin-movMes;
+  const anaquelIni=anaquelFin-movMes;
   const _mAnt=(()=>{ const y=+String(mes).slice(0,4), m=+String(mes).slice(5,7)-1;
     const yy=m===0?y-1:y, mm=m===0?12:m; return yy+'-'+String(mm).padStart(2,'0'); })();
-  const _arcAnt=cieArchivoDe(_mAnt);
-  const anaquelHeredado=(_arcAnt&&_arcAnt.resumen&&_arcAnt.resumen.valorStock!=null)?Number(_arcAnt.resumen.valorStock):null;
-  const anaquelIni=(anaquelHeredado!=null)?anaquelHeredado:anaquelDeducido;
-  const anaquelDesvio=(anaquelHeredado!=null)?(anaquelDeducido-anaquelHeredado):0;
   const mesAnterior=_mAnt;
 
-  const hoyS=hoy(); const enCurso=(String(mes)===cieMesActual());
+  const hoyS=hoy(); const enCurso=enCursoMes;
   const diaDe=enCurso?Math.min(w.dias, Number(hoyS.slice(8,10))||w.dias):w.dias;
 
   return { mes, ini:w.ini, fin:w.fin, diasMes:w.dias, diaDe, enCurso,
@@ -13419,7 +13432,7 @@ function cieDatos(mes){
        movimiento del periodo, y lo primero que hace quien recibe el informe es sumarla o
        restarla a las demás. El stock vive en su propia pantalla, que es donde significa algo. */
     costoTotal, consumoTotal, valorStock, prodConStock, prodBajo, prodAgotado, stockAl,
-    anaquelIni, anaquelFin, movMes, anaquelDeducido, anaquelHeredado, anaquelDesvio, mesAnterior,
+    anaquelIni, anaquelFin, movMes, mesAnterior,
     dias, dIng, dSal, dPetIn, dPetCon,
     hayMovimiento:!!(ings.length||sals.length||exIn.length||exSa.length||petIn||petCon||kits.length) };
 }
@@ -13472,10 +13485,10 @@ function cieInterpretacion(d){
   }
 
   if(d.anaquelFin>0||d.anaquelIni>0){
-    L.push(`El anaquel venía con <b>${S(d.anaquelIni)}</b> del cierre anterior, entró ${S(d.matIng)}, salió ${S(d.matSal)}, y ${d.enCurso?'hoy vale':'quedó en'} <b>${S(d.anaquelFin)}</b>: ${d.movMes>=0?'subió':'bajó'} ${S(Math.abs(d.movMes))} en el mes${d.enCurso?'':'. Con esa cifra arranca el mes siguiente'}.`);
-    if(d.anaquelHeredado!=null && Math.abs(d.anaquelDesvio)>0.01)
-      L.push(`⚠ El arranque heredado del cierre anterior (${S(d.anaquelHeredado)}) no coincide con lo que da la resta de este mes (${S(d.anaquelDeducido)}): ${S(Math.abs(d.anaquelDesvio))} de diferencia. El anaquel se movió por fuera de los ingresos y salidas, normalmente por un conteo físico que corrigió existencias.`);
-    L.push(`Son ${d.prodConStock} productos en existencia, ${d.prodBajo} por reponer y ${d.prodAgotado} agotado${d.prodAgotado!==1?'s':''}. El valor del anaquel es un saldo: no se suma a las cifras de gasto de arriba.`);
+    L.push(`<b>Valor de stock del periodo:</b> entró ${S(d.matIng)} y salió ${S(d.matSal)}, ${d.movMes>=0?'+':'−'} <b>${S(Math.abs(d.movMes))}</b> — ${d.movMes>=0?'eso se acumuló en el anaquel este mes':'eso se consumió del stock que ya había'}.`);
+    L.push(`<b>Valor de stock acumulado:</b> venía con ${S(d.anaquelIni)} del cierre anterior y ${d.enCurso?'hoy vale':'quedó en'} <b>${S(d.anaquelFin)}</b>${d.enCurso?'':', que es con lo que arranca el mes siguiente'}.`);
+    if(d.enCurso) L.push(`Son ${d.prodConStock} productos en existencia, ${d.prodBajo} por reponer y ${d.prodAgotado} agotado${d.prodAgotado!==1?'s':''}. El valor del anaquel es un saldo: no se suma a las cifras de gasto de arriba.`);
+    else L.push(`El valor del anaquel es un saldo: no se suma a las cifras de gasto de arriba.`);
   }
 
   if(d.enCurso) L.push(`<i>Mes en curso: van ${d.diaDe} de ${d.diasMes} días. Estas cifras crecen hasta el ${fmtF(d.fin)}; el informe queda cerrado y archivado el día 1 del mes siguiente.</i>`);
@@ -13658,11 +13671,14 @@ function renderLogEstadisticas(){
         ${flecha}
         ${paso('SALIÓ ESTE MES',S(d.matSal),d.nSal+' salidas','#f87171')}
         ${flecha}
-        ${paso(d.enCurso?'VALE HOY':'QUEDÓ AL CERRAR',S(d.anaquelFin),d.prodConStock+' productos · '+d.prodBajo+' por reponer · '+d.prodAgotado+' agotados','var(--gold-light)')}
+        ${paso('VALOR DE STOCK DEL PERIODO',(d.movMes>=0?'+ ':'− ')+S(Math.abs(d.movMes)),
+               'entró − salió, solo este mes',d.movMes>=0?'#22d3a5':'#f59e0b')}
+        ${flecha}
+        ${paso('VALOR DE STOCK ACUMULADO',S(d.anaquelFin),d.enCurso?('hoy · '+d.prodConStock+' productos · '+d.prodBajo+' por reponer · '+d.prodAgotado+' agotados'):('al cerrar el '+fmtF(d.fin)),'var(--gold-light)')}
       </div>
       <div style="font-size:11px;color:${d.movMes>=0?'#22d3a5':'#f59e0b'};margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
-        El anaquel ${d.movMes>=0?'subió':'bajó'} <b>${S(Math.abs(d.movMes))}</b> en el mes — ${d.movMes>=0?'entró más de lo que salió':'salió más de lo que entró'}.
-        ${(d.anaquelHeredado!=null&&Math.abs(d.anaquelDesvio)>0.01)?`<div style="color:#f59e0b;margin-top:7px">⚠ El arranque heredado del cierre anterior (${S(d.anaquelHeredado)}) no coincide con lo que da la resta de este mes (${S(d.anaquelDeducido)}): <b>${S(Math.abs(d.anaquelDesvio))}</b> de diferencia. El anaquel se movió por fuera de los ingresos y salidas — normalmente un conteo físico que corrigió existencias.</div>`:''}
+        El <b>valor de stock del periodo</b> es ${d.movMes>=0?'+':'−'} ${S(Math.abs(d.movMes))} —lo que entró menos lo que salió este mes— y el <b>acumulado</b> queda en ${S(d.anaquelFin)}.
+
         ${!d.enCurso?' Este cierre es el arranque de '+((typeof finNombreMes==='function')?finNombreMes((()=>{const y=+d.mes.slice(0,4),m=+d.mes.slice(5,7)+1;const yy=m===13?y+1:y,mm=m===13?1:m;return yy+'-'+String(mm).padStart(2,'0');})()):'')+'.':''}
       </div></div>`;
   })()
@@ -13838,7 +13854,8 @@ function cieExcel(){
     {Concepto:'  Venía con (cierre anterior)', Valor:n2(d.anaquelIni)},
     {Concepto:'  Entró', Valor:n2(d.matIng)},
     {Concepto:'  Salió', Valor:n2(d.matSal)},
-    {Concepto:'  '+(d.enCurso?'Vale hoy':'Quedó al cerrar'), Valor:n2(d.anaquelFin)},
+    {Concepto:'  VALOR DE STOCK DEL PERIODO (entró − salió)', Valor:n2(d.movMes)},
+    {Concepto:'  VALOR DE STOCK ACUMULADO'+(d.enCurso?' (hoy)':' (al cerrar)'), Valor:n2(d.anaquelFin)},
     {Concepto:'  Productos en existencia', Valor:d.prodConStock},
     {Concepto:'  Por reponer / agotados', Valor:d.prodBajo+' / '+d.prodAgotado},
     {Concepto:'', Valor:''},
@@ -14028,10 +14045,10 @@ function cieDescargar(){
   ${T('Movimiento del anaquel'+(d.enCurso?' (la cifra final es la de hoy y sigue moviéndose)':' — congelado el '+fmtF(d.stockAl)),
       [['Venía con (cierre del mes anterior)',S(d.anaquelIni)],['Entró este mes',S(d.matIng)],
        ['Salió este mes',S(d.matSal)],
-       [(d.enCurso?'Vale hoy':'Quedó al cerrar'),S(d.anaquelFin)],
-       ['Variación del mes',(d.movMes>=0?'+ ':'− ')+S(Math.abs(d.movMes))],
-       ['Productos en existencia',String(d.prodConStock)],
-       ['Productos por reponer (menos de 10)',String(d.prodBajo)],['Productos agotados',String(d.prodAgotado)]])}
+       ['VALOR DE STOCK DEL PERIODO (entró − salió)',(d.movMes>=0?'+ ':'− ')+S(Math.abs(d.movMes))],
+       ['VALOR DE STOCK ACUMULADO'+(d.enCurso?' (hoy)':' (al cerrar)'),S(d.anaquelFin)]]
+       .concat(d.enCurso?[['Productos en existencia',String(d.prodConStock)],
+       ['Productos por reponer (menos de 10)',String(d.prodBajo)],['Productos agotados',String(d.prodAgotado)]]:[]))}
   <div style="font-size:11px;color:#555;margin-top:4px">Lo que queda al cerrar este mes es con lo que arranca el siguiente.</div>
   <h2>8 · Lectura del mes</h2>
   <div class="lec">${cieInterpretacion(d).map(t=>'<div>• '+t+'</div>').join('')}
