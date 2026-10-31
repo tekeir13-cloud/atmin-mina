@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-288</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-289</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-288</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-289</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-288</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-289</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -13590,7 +13590,8 @@ function renderLogEstadisticas(){
       <div style="height:100%;width:${avance}%;background:linear-gradient(90deg,#c9a84c,#e5b45b)"></div></div>
       <div style="font-size:10.5px;color:var(--text3);margin-top:5px">El informe se llena solo: ${avance}% del mes transcurrido. Al llegar al ${fmtF(d.fin)} queda completo y listo para entregar.</div></div>`:''}
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:18px">
-      <button class="btn btn-gold" style="padding:9px 18px;font-size:12px" onclick="cieDescargar()">⬇ Descargar informe de ${nom}</button>
+      <button class="btn btn-gold" style="padding:9px 18px;font-size:12px" onclick="cieDescargar()">📄 Descargar PDF del informe</button>
+      <button class="btn btn-outline" style="padding:9px 16px;font-size:12px;border-color:#22d3a5;color:#22d3a5" onclick="cieExcel()">📊 Descargar Excel con los datos</button>
       <button class="btn btn-outline" style="padding:9px 16px;font-size:12px" onclick="renderLogEstadisticas()">↻ Actualizar</button>
       ${(!d.enCurso&&d.archivado)?`<button class="btn btn-outline" style="padding:9px 16px;font-size:12px" onclick="cieRecalcular('${mes}')">⟳ Recalcular este cierre</button>`:''}
     </div>
@@ -13749,6 +13750,159 @@ function cieRecalcular(mes){
   renderLogEstadisticas();
 }
 
+/* ── EL EXCEL DE DONDE SALE CADA CIFRA ───────────────────────────────────────────────────────
+   El PDF es el informe; esto es la prueba. Un informe de cierre que no se puede auditar se
+   discute a ciegas: cuando Finanzas pregunta de dónde salen los S/ 271,791.95, la respuesta no
+   puede ser "del sistema". Aquí va MOVIMIENTO POR MOVIMIENTO —cada vale de ingreso, cada salida,
+   cada disparo de explosivo, cada galón, cada kit— de modo que sumando una columna del Excel
+   salga exactamente la cifra del informe. Si alguna no cuadra, el movimiento que sobra o falta
+   está a la vista, con su fecha y su número de vale.
+
+   Una hoja por capítulo, más una de resumen que repite las cifras del informe: así se compara el
+   total contra el detalle sin salir del archivo. */
+function cieExcel(){
+  const d=_cieUlt; if(!d){ showNotif('Abre primero el informe','error'); return; }
+  if(typeof XLSX==='undefined'){ showNotif('No se pudo cargar el generador de Excel. Conéctate una vez para descargarlo y luego funciona sin señal.','error'); return; }
+  const nom=(typeof finNombreMes==='function')?finNombreMes(d.mes):d.mes;
+  const n2=v=>Math.round((Number(v)||0)*100)/100;
+  const wb=XLSX.utils.book_new();
+  const hoja=(nombre,filas,cols,anchos)=>{
+    const ws=XLSX.utils.json_to_sheet(filas.length?filas:[Object.fromEntries(cols.map(c=>[c,'']))],{header:cols});
+    ws['!cols']=(anchos||cols.map(()=>({wch:16}))).map(w=>typeof w==='number'?{wch:w}:w);
+    XLSX.utils.book_append_sheet(wb,ws,nombre.slice(0,31));
+  };
+  const val=(typeof _almValorMov==='function')?_almValorMov
+            :(r=>Number(r&&r.importe)||Number(r&&r.total)||(Number(r&&r.cantidad)||0)*(Number(r&&r.precio)||0));
+  const org=(typeof _almOrigen==='function')?_almOrigen:(r=>String((r&&r.detalle)||'—'));
+  const almL=a=>String(a||'General')==='Mantenimiento'?'Mantenimiento':'Insumos';
+  const A=state.almacen||{};
+  const enMes=f=>cieEnMes(f,d.mes);
+
+  // 0 · RESUMEN — las mismas cifras del informe, para contrastar contra el detalle
+  hoja('Resumen',[
+    {Concepto:'INFORME DE CIERRE — '+nom, Valor:''},
+    {Concepto:'Periodo', Valor:d.ini+' al '+d.fin},
+    {Concepto:'Estado', Valor:d.enCurso?('en curso, día '+d.diaDe+' de '+d.diasMes):'cerrado'},
+    {Concepto:'Emitido', Valor:hoy()+' por '+((typeof usuarioActivo!=='undefined'&&usuarioActivo&&(usuarioActivo.nombre||usuarioActivo.rol))||'—')},
+    {Concepto:'', Valor:''},
+    {Concepto:'COSTO LOGÍSTICO DEL MES (lo comprado)', Valor:n2(d.costoTotal)},
+    {Concepto:'  Materiales ingresados', Valor:n2(d.matIng)},
+    {Concepto:'  Explosivo ingresado', Valor:n2(d.expIngS)},
+    {Concepto:'  Combustible comprado', Valor:n2(d.combIngS)},
+    {Concepto:'', Valor:''},
+    {Concepto:'Salió a la operación', Valor:n2(d.consumoTotal)},
+    {Concepto:'  Materiales', Valor:n2(d.matSal)},
+    {Concepto:'  Explosivo consumido', Valor:n2(d.expSalS)},
+    {Concepto:'  Petróleo consumido', Valor:n2(d.petCon*d.pPet)},
+    {Concepto:'', Valor:''},
+    {Concepto:'EL ANAQUEL', Valor:''},
+    {Concepto:'  Venía con (cierre anterior)', Valor:n2(d.anaquelIni)},
+    {Concepto:'  Entró', Valor:n2(d.matIng)},
+    {Concepto:'  Salió', Valor:n2(d.matSal)},
+    {Concepto:'  '+(d.enCurso?'Vale hoy':'Quedó al cerrar'), Valor:n2(d.anaquelFin)},
+    {Concepto:'  Productos en existencia', Valor:d.prodConStock},
+    {Concepto:'  Por reponer / agotados', Valor:d.prodBajo+' / '+d.prodAgotado},
+    {Concepto:'', Valor:''},
+    {Concepto:'EL POLVORÍN (unidades)', Valor:''},
+    {Concepto:'  Venía con', Valor:n2(d.expIniU)},
+    {Concepto:'  Ingresó', Valor:n2(d.expIngU)},
+    {Concepto:'  Consumió', Valor:n2(d.expSalU)},
+    {Concepto:'  '+(d.enCurso?'Queda hoy':'Quedó al cerrar'), Valor:n2(d.expStockU)},
+    {Concepto:'  Valor de lo que queda', Valor:n2(d.expStockS)},
+    {Concepto:'', Valor:''},
+    {Concepto:'Mantenimiento — piezas', Valor:n2(d.mantPiezas)},
+    {Concepto:'Mantenimiento — horas hombre', Valor:n2(d.mantHoras)},
+    {Concepto:'Mantenimiento — total', Valor:n2(d.mantS)},
+    {Concepto:'Monte Bravo — materiales despachados', Valor:n2(d.mbDespachado)},
+    {Concepto:'Monte Bravo — petróleo enviado (gln)', Valor:n2(d.mbPetGln)},
+    {Concepto:'', Valor:''},
+    {Concepto:'NOTA DE MÉTODO', Valor:'El costo del mes es lo COMPRADO. Lo que sale del almacén (consumo, kits, despachos a Monte Bravo) no se suma aparte: es el mismo material ya contado al comprarlo. Sumar las dos columnas duplicaría el gasto.'}
+  ],['Concepto','Valor'],[52,70]);
+
+  // 1 · INGRESOS DE MATERIAL, vale por vale
+  hoja('Ingresos material',(A.ingresos||[]).filter(r=>r&&enMes(r.fecha))
+    .sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)))
+    .map(r=>({Fecha:r.fecha||'', Vale:r.vale||'', Origen:org(r), 'Detalle del vale':r.detalle||'',
+      Almacén:almL(r.almacen), Código:r.codigo||'', Producto:r.producto||r.descripcion||'',
+      'U.M.':r.unidad||'', Cantidad:n2(r.cantidad), 'P. Unit.':n2(r.precio), Importe:n2(val(r))})),
+    ['Fecha','Vale','Origen','Detalle del vale','Almacén','Código','Producto','U.M.','Cantidad','P. Unit.','Importe'],
+    [11,10,20,26,14,14,38,7,10,10,12]);
+
+  // 2 · SALIDAS DE MATERIAL
+  hoja('Salidas material',(A.salidas||[]).filter(r=>r&&enMes(r.fecha))
+    .sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)))
+    .map(r=>({Fecha:r.fecha||'', Destino:(typeof nivelLabel==='function')?nivelLabel(r.destino):(r.destino||''),
+      Operario:r.operario||'', Máquina:r.maquina||'', 'Entregó':r.solicitante||'',
+      Almacén:almL(r.almacen), Código:r.codigo||'', Producto:r.producto||r.descripcion||'',
+      'U.M.':r.unidad||'', Cantidad:n2(r.cantidad), 'P. Unit.':n2(r.precio), Importe:n2(val(r))})),
+    ['Fecha','Destino','Operario','Máquina','Entregó','Almacén','Código','Producto','U.M.','Cantidad','P. Unit.','Importe'],
+    [11,20,20,14,20,14,14,38,7,10,10,12]);
+
+  // 3 · EXPLOSIVO, movimiento por movimiento + lo que queda
+  const ex=A.explosivos||{ingresos:[],salidas:[]};
+  const pex=(typeof compGetPreciosExp==='function')?(compGetPreciosExp()||{}):{};
+  const nomEx=id=>{ const c=(typeof exploGetCat==='function')?exploGetCat(id):null; return (c&&c.nombre)||id||''; };
+  const movEx=(arr,tipo)=>(arr||[]).filter(r=>r&&enMes(r.fecha)).map(r=>({
+      Fecha:r.fecha||'', Movimiento:tipo, Vale:r.vale||'', Producto:nomEx(r.producto),
+      Unidades:n2(r.totalUnidades), 'P. Unit.':n2(pex[r.producto]),
+      Importe:n2((Number(r.totalUnidades)||0)*(Number(pex[r.producto])||0)),
+      Destino:r.destino||r.solicitante||''}));
+  hoja('Explosivo movimientos',
+    movEx(ex.ingresos,'INGRESO').concat(movEx(ex.salidas,'SALIDA')).sort((a,b)=>String(a.Fecha).localeCompare(String(b.Fecha))),
+    ['Fecha','Movimiento','Vale','Producto','Unidades','P. Unit.','Importe','Destino'],
+    [11,12,10,30,11,10,12,24]);
+  hoja('Explosivo saldo',(d.expStockPorProd||[]).map(x=>({Producto:x.nombre, Unidades:n2(x.und), Valorizado:n2(x.soles)})),
+    ['Producto','Unidades','Valorizado'],[32,12,14]);
+
+  // 4 · COMBUSTIBLE: lo comprado y lo consumido por equipo, parte por parte
+  const comb=[];
+  try{ ['pet','gas'].forEach(t=>(combCargar(t)||[]).filter(r=>r&&enMes(r.fecha)).forEach(r=>comb.push({
+      Fecha:r.fecha||'', Tipo:t==='pet'?'Petróleo':'Gasolina', Movimiento:'INGRESO',
+      Equipo:'', Galones:n2(r.cantidad), 'S/ por galón':n2(r.precio), Importe:n2((Number(r.cantidad)||0)*(Number(r.precio)||0)),
+      Vale:r.vale||r.guia||''}))); }catch(e){}
+  (state.compresorista||[]).filter(r=>r&&enMes(r.fecha)).forEach(rep=>{
+    (rep.petroleo||[]).forEach(x=>{ const g=Number(x&&x.gln)||0; if(!g) return;
+      comb.push({Fecha:rep.fecha||'', Tipo:'Petróleo', Movimiento:'CONSUMO', Equipo:x.equipo||'',
+        Galones:n2(g), 'S/ por galón':n2(d.pPet), Importe:n2(g*d.pPet), Vale:rep.nombre||''}); });
+  });
+  hoja('Combustible',comb.sort((a,b)=>String(a.Fecha).localeCompare(String(b.Fecha))),
+    ['Fecha','Tipo','Movimiento','Equipo','Galones','S/ por galón','Importe','Vale'],
+    [11,11,12,28,11,12,12,22]);
+
+  // 5 · MANTENIMIENTO: kit por kit y pieza por pieza
+  hoja('Mantenimiento kits',(d.kits||[]).slice().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)))
+    .map(k=>({Fecha:k.fecha||'', Equipo:k.equipo||'', 'Solicitó':k.resp||'',
+      Piezas:n2((k.repuestos||[]).reduce((s,p)=>s+(Number(p.cant)||0)*(Number(p.costo)||0),0)),
+      'Horas hombre':n2(k.horasMant), 'Mano de obra':n2(k.manoobra), Total:n2(k.costo),
+      'Aprobó Logística':(k.aprobLog&&k.aprobLog.resp)||''})),
+    ['Fecha','Equipo','Solicitó','Piezas','Horas hombre','Mano de obra','Total','Aprobó Logística'],
+    [11,30,22,12,13,13,12,22]);
+  const pz=[];
+  (d.kits||[]).forEach(k=>(k.repuestos||[]).forEach(p=>pz.push({
+    Fecha:k.fecha||'', Equipo:k.equipo||'', Código:p.codigo||'', Pieza:p.nombre||'',
+    Cantidad:n2(p.cant), 'P. Unit.':n2(p.costo), Importe:n2((Number(p.cant)||0)*(Number(p.costo)||0))})));
+  hoja('Mantenimiento piezas',pz.sort((a,b)=>String(a.Fecha).localeCompare(String(b.Fecha))),
+    ['Fecha','Equipo','Código','Pieza','Cantidad','P. Unit.','Importe'],[11,30,14,38,10,10,12]);
+
+  // 6 · MONTE BRAVO
+  const mb=[];
+  try{ (typeof mbSalidasLogistica==='function'?mbSalidasLogistica():[]).filter(s=>s&&enMes(s.fecha)).forEach(s=>mb.push({
+      Fecha:s.fecha||'', Concepto:'Material despachado', Detalle:s.producto||s.descripcion||s.codigo||'',
+      Cantidad:n2(s.cantidad), 'U.M.':s.unidad||'', Importe:n2(s.importe||s.monto||s.costo)})); }catch(e){}
+  (state.compresorista||[]).filter(r=>r&&enMes(r.fecha)).forEach(rep=>{
+    (rep.petroleo||[]).forEach(x=>{ if(typeof esEnvioMB==='function' && esEnvioMB(x&&x.equipo)){
+      const g=Number(x.gln)||0; if(!g) return;
+      mb.push({Fecha:rep.fecha||'', Concepto:'Petróleo enviado', Detalle:x.equipo||'',
+        Cantidad:n2(g), 'U.M.':'gln', Importe:n2(g*d.pPet)}); } });
+  });
+  hoja('Monte Bravo',mb.sort((a,b)=>String(a.Fecha).localeCompare(String(b.Fecha))),
+    ['Fecha','Concepto','Detalle','Cantidad','U.M.','Importe'],[11,22,38,11,7,12]);
+
+  const f='informe_cierre_'+d.mes+'.xlsx';
+  XLSX.writeFile(wb,f);
+  showNotif('✓ Excel descargado: '+f);
+}
+
 /* El informe para entregar: se abre en una ventana lista para imprimir o guardar como PDF, con
    las mismas cifras de la pantalla y la lectura del mes incluida. Va en HTML y no en Excel porque
    esto se entrega y se archiva, no se sigue editando, y porque así funciona sin señal. */
@@ -13822,10 +13976,15 @@ function cieDescargar(){
     contado al comprarlo. Sumar las dos columnas duplicaría el gasto.</div></div>
   <div class="firmas"><div>Logística</div><div>Jefe de Finanzas</div><div>Gerencia</div></div>
   <div class="noimp" style="margin-top:26px;text-align:center">
-    <button onclick="window.print()" style="padding:10px 26px;font-size:13px;cursor:pointer">🖨 Imprimir / Guardar PDF</button></div>
+    <button onclick="window.print()" style="padding:10px 26px;font-size:13px;cursor:pointer">🖨 Volver a guardar como PDF</button></div>
   </body></html>`);
   w.document.close();
-  showNotif('✓ Informe de '+nom+' generado');
+  /* Se abre solo el diálogo de guardar. Antes la ventana salía con un botón que había que buscar,
+     y "descargar el informe" terminaba en una pantalla más que leer. El botón se queda por si se
+     cierra el diálogo o se quiere una segunda copia. El retraso es para que el navegador termine
+     de componer la página: imprimir antes saca hojas a medio pintar. */
+  setTimeout(()=>{ try{ w.focus(); w.print(); }catch(e){} }, 400);
+  showNotif('✓ Informe de '+nom+' listo — elige "Guardar como PDF" en el diálogo');
 }
 
 function abrirEditarIngreso(id){
