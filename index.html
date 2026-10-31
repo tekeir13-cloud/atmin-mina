@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-287</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-288</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-287</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-288</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-287</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-288</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -6018,21 +6018,9 @@ async function cargarAlmacenCombustibleSB(){
     }
     // ── STOCK REMANENTE: salidas (movimientos de logística) — unión por id ──
     {
-      try{ if(typeof remSalLoad==='function') remSalLoad(); }catch(e){}
-      const rsNube=await sbLoadModulo('remanente_salidas');
-      const rsMerged=mergeSnapById(state.remanenteSalidas||[], Array.isArray(rsNube)?rsNube:[]);
-      state.remanenteSalidas=rsMerged;
-      try{localStorage.setItem(REMSAL_KEY,JSON.stringify(rsMerged));}catch(e){}
-      if(rsMerged.length) await sbSyncModulo('remanente_salidas', rsMerged);
     }
     // ── STOCK REMANENTE: ingresos manuales (botón Ingresar) — unión por id ──
     {
-      try{ if(typeof remIngLoad==='function') remIngLoad(); }catch(e){}
-      const riNube=await sbLoadModulo('remanente_ingresos');
-      const riMerged=mergeSnapById(state.remanenteIngresos||[], Array.isArray(riNube)?riNube:[]);
-      state.remanenteIngresos=riMerged;
-      try{localStorage.setItem(REMING_KEY,JSON.stringify(riMerged));}catch(e){}
-      if(riMerged.length) await sbSyncModulo('remanente_ingresos', riMerged);
     }
     // ── REPORTES DEL COMPRESORISTA — unión por fecha+turno (alimenta NV2820 y combustible) ──
     {
@@ -7982,8 +7970,6 @@ const _MERGE_AL_SUBIR = {
                                     ? mergeById_ts(loc,nub,(typeof _rgMetros==='function'?_rgMetros:null)) : loc,
   equipos_operacion:  (loc,nub)=> (typeof mergeById_ts==='function') ? mergeById_ts(loc,nub) : loc,
   mant_kits:          (loc,nub)=> (typeof mergeMantKits==='function') ? mergeMantKits(loc,nub) : loc,
-  remanente_salidas:  (loc,nub)=> (typeof mergeSnapById==='function') ? mergeSnapById(loc,nub) : loc,
-  remanente_ingresos: (loc,nub)=> (typeof mergeSnapById==='function') ? mergeSnapById(loc,nub) : loc,
   reuniones:          (loc,nub)=> (typeof mergeSnapById==='function') ? mergeSnapById(loc,nub) : loc,
   tareos_pend:        (loc,nub)=> (typeof mergeById_ts==='function') ? mergeById_ts(loc,nub) : loc,
   /* Los cierres mensuales se unen POR MES, no por id: cada mes tiene un solo informe archivado y
@@ -8004,8 +7990,6 @@ const _GUARDAR_TRAS_FUSION = {
   reportes_guardia:   m=>{ state.reportesGuardia=m;   _lsSet('atmin_reportes_guardia', m); },
   equipos_operacion:  m=>{ state.equiposOp=m;         _lsSet('atmin_equipos_op', m); },
   mant_kits:          m=>{ state.mantenimiento=m;     _lsSet('atmin_mant_kits', m); },
-  remanente_salidas:  m=>{ state.remanenteSalidas=m;  _lsSet('atmin_remanente_salidas', m); },
-  remanente_ingresos: m=>{ state.remanenteIngresos=m; _lsSet('atmin_remanente_ingresos', m); },
   reuniones:          m=>{ state.reuniones=m;         _lsSet('atmin_reuniones', m); },
   tareos_pend:        m=>{ state.tareosPend=m;        _lsSet('atmin_tareos_pend', m); },
   cierres_log:        m=>{ state.cierresLog=m;        _lsSet('atmin_cierres_log', m); },
@@ -8272,7 +8256,7 @@ try{
 // Módulos cuya carga FUSIONA por id (unión), no reemplaza: para ellos SIEMPRE se trae la nube
 // aunque haya un pendiente, porque fusionar nunca pierde lo local y sí recupera lo de otros
 // equipos. Para los módulos de REEMPLAZO (personal, tareas…) sí se protege el dato offline.
-const _sbModulosFusion=new Set(['almacen','personal','reportes_guardia','equipos_operacion','mant_kits','compresorista','reuniones','remanente_salidas','remanente_ingresos','servicios_terceros','tombstones','personal_hist','tareos_pend','cierres_log']);
+const _sbModulosFusion=new Set(['almacen','personal','reportes_guardia','equipos_operacion','mant_kits','compresorista','reuniones','servicios_terceros','tombstones','personal_hist','tareos_pend','cierres_log']);
 // Devuelve el ESTADO de la lectura, no solo el dato. sbLoadModulo() contestaba null para tres
 // situaciones muy distintas —nube vacía, cambio local pendiente y error de lectura— y quien
 // llamaba no podía distinguirlas. Confundir "no pude leer" con "está vacía" y subir encima lo
@@ -8364,14 +8348,12 @@ else if(Number(prevAlm.productosTs||0)>Number(data.productosTs||0)){ a.productos
     case 'distribucion':       if(data&&typeof data==='object'){ state.distribucion=data; setLS('atmin_distribucion', data); } break;
     case 'metas':              if(data&&typeof data==='object'){ state.metas=Object.assign(state.metas||{}, data); setLS('atmin_metas', state.metas); } break;
     case 'reuniones':          if(Array.isArray(data)){ state.reuniones=M(data, state.reuniones||[]); setLS('atmin_reuniones', state.reuniones); } break;
-    case 'remanente_salidas':  if(Array.isArray(data)){ state.remanenteSalidas=M(data, state.remanenteSalidas||[]); setLS('atmin_remanente_salidas', state.remanenteSalidas); } break;
     case 'cierres_log':        if(Array.isArray(data)){ const by={};
                                  data.concat(state.cierresLog||[]).forEach(c=>{ if(!c||!c.mes) return;
                                    const p=by[c.mes]; if(!p||Number(c._ts||0)>Number(p._ts||0)) by[c.mes]=c; });
                                  state.cierresLog=Object.values(by).sort((x,y)=>String(y.mes).localeCompare(String(x.mes)));
                                  setLS('atmin_cierres_log', state.cierresLog);
                                  try{ if(document.getElementById('log-estadisticas') && document.getElementById('log-estadisticas').style.display!=='none') renderLogEstadisticas(); }catch(e){} } break;
-    case 'remanente_ingresos': if(Array.isArray(data)){ state.remanenteIngresos=M(data, state.remanenteIngresos||[]); setLS('atmin_remanente_ingresos', state.remanenteIngresos); } break;
     case 'servicios_terceros': if(Array.isArray(data)){ let loc=[]; try{loc=JSON.parse(localStorage.getItem('atmin_servicios_terceros')||'[]');}catch(e){} setLS('atmin_servicios_terceros', M(data, loc)); } break;
     case 'planilla_supervision': if(data&&typeof data==='object'){ setLS('atmin_planilla_supervision', data); } break;
     case 'mb_labores':         if(Array.isArray(data)){ setLS('atmin_mb_labores', data); } break;
@@ -14334,7 +14316,6 @@ function almMinimo(r){
    reporte del Compresorista, el reporte del Jefe de Guardia y el Excel.
 
    Dos reglas que los distinguen del resto del explosivo:
-     · `remanente:false` — el Stock Remanente NO los recibe. Queda tal como está.
      · El gasto se cuenta SOLO cuando salen de Logística, igual que siempre. Lo que reportan el
        Compresorista y el Jefe de Guardia es trazabilidad, no gasto.
 
@@ -14392,7 +14373,6 @@ const EXPLO_CATALOGO=[
 // ¿Este explosivo entra al Stock Remanente? Hoy entran TODOS —los FANEL también, que antes
 // quedaban fuera y no se podían ni ingresar ni despachar—. La marca `remanente:false` sigue
 // disponible por si algún producto tuviera que quedarse fuera más adelante.
-function exploVaARemanente(id){ const c=exploGetCat(id); return !c || c.remanente!==false; }
 // ¿Este explosivo se mide en METROS (y se agrupa en rollos) en vez de en unidades sueltas?
 // Antes esto se preguntaba comparando contra el id de la mecha en ~20 sitios, así que cualquier
 // producto nuevo por metros salía con las cuentas mal. Ahora es una propiedad del catálogo.
@@ -23485,7 +23465,6 @@ function tombPurgarState(){
       if(state.almacen.explosivos){ state.almacen.explosivos.ingresos=f(state.almacen.explosivos.ingresos); state.almacen.explosivos.salidas=f(state.almacen.explosivos.salidas); }
     }
     state.reportesGuardia=f(state.reportesGuardia);
-    state.remanenteSalidas=f(state.remanenteSalidas);
     state.mantenimiento=f(state.mantenimiento);
     state.reuniones=f(state.reuniones);
     // Seguridad no usa id como clave de dedupe: sus tombstones van por firma 'seg:'+_segSig(r)
@@ -23771,12 +23750,6 @@ function pintarBadgeTareos(){
 function tareoRequiereAprobacion(){ return true; }
 function tareasSave(){_lsEscribir(TAREAS_KEY, state.tareas||[]); try{ sbSyncModulo('tareas', state.tareas||[]); }catch(e){}}
 // Salidas del Stock Remanente (movimientos que controla Logística, NO afectan NV3190)
-const REMSAL_KEY='atmin_remanente_salidas';
-function remSalLoad(){try{const d=localStorage.getItem(REMSAL_KEY);if(d)state.remanenteSalidas=JSON.parse(d)||[];}catch(e){} if(!Array.isArray(state.remanenteSalidas))state.remanenteSalidas=[];}
-function remSalSave(){try{localStorage.setItem(REMSAL_KEY,JSON.stringify(state.remanenteSalidas||[]));}catch(e){} try{ sbSyncModulo('remanente_salidas', state.remanenteSalidas||[]); }catch(e){}}
-const REMING_KEY='atmin_remanente_ingresos';
-function remIngLoad(){try{const d=localStorage.getItem(REMING_KEY);if(d)state.remanenteIngresos=JSON.parse(d)||[];}catch(e){} if(!Array.isArray(state.remanenteIngresos))state.remanenteIngresos=[];}
-function remIngSave(){try{localStorage.setItem(REMING_KEY,JSON.stringify(state.remanenteIngresos||[]));}catch(e){} try{ sbSyncModulo('remanente_ingresos', state.remanenteIngresos||[]); }catch(e){}}
 // Deriva el avance lineal (metros) desde los reportes de Jefe de Guardia hacia state.perforacion,
 // para que el avance aparezca SIEMPRE en el dashboard general y el tablero de operaciones,
 // incluso al recargar (los reportes se persisten en localStorage + nube; la perforación de la
@@ -36169,7 +36142,7 @@ async function _restaurarSnap(snap, exacto, etiqueta){
     pon('personal',snap.personal); pon('tareas',snap.tareas); pon('valorizacionesLabor',snap.valorizacionesLabor);
     pon('reportesGuardia',snap.reportesGuardia); pon('compresorista',snap.compresorista);
     pon('mantenimiento',snap.mantenimiento); pon('mantRepuestos',snap.mantRepuestos);
-    pon('perforacion',snap.perforacion); pon('remanenteSalidas',snap.remanenteSalidas);
+    pon('perforacion',snap.perforacion);
     pon('reuniones',snap.reuniones); pon('distribucion',snap.distribucion); pon('metas',snap.metas);
     if(snap.almacen) state.almacen=snap.almacen;
   }else{
@@ -36180,7 +36153,6 @@ async function _restaurarSnap(snap, exacto, etiqueta){
     state.reportesGuardia=U(state.reportesGuardia,snap.reportesGuardia);
     state.compresorista=U(state.compresorista,snap.compresorista);
     state.mantenimiento=U(state.mantenimiento,snap.mantenimiento);
-    state.remanenteSalidas=U(state.remanenteSalidas,snap.remanenteSalidas);
     state.reuniones=U(state.reuniones,snap.reuniones);
     if(snap.almacen && state.almacen){
       state.almacen.ingresos=U(state.almacen.ingresos,snap.almacen.ingresos);
@@ -36222,8 +36194,6 @@ async function _restaurarSnap(snap, exacto, etiqueta){
   }
   // Lo que vive fuera de las listas por id: se repone tal cual venga en el respaldo.
   try{
-    if(snap.remanenteIngresos) state.remanenteIngresos = exacto ? snap.remanenteIngresos
-      : U(state.remanenteIngresos, snap.remanenteIngresos);
     if(snap.seguridad) state.seguridad = exacto ? snap.seguridad : U(state.seguridad, snap.seguridad);
     if(snap.compras && (exacto || !state.compras)) state.compras = snap.compras;
     if(snap.historialPeriodos && typeof histPeriodosSave==='function'){
@@ -36260,7 +36230,6 @@ async function _restaurarSnap(snap, exacto, etiqueta){
     }
     if(snap.precios && typeof paramsSet==='function'){ /* los precios se dejan como están salvo restauración exacta */ }
   }catch(e){ console.warn('restaurar extras',e); }
-  try{ if(snap.remanenteIngresos && typeof remIngSave==='function') remIngSave(); }catch(e){}
   // Combustible y planilla de supervisión viven fuera de `state`
   try{ const c=snap.combustible||{};
     if(typeof combGuardar==='function'){
@@ -36273,7 +36242,7 @@ async function _restaurarSnap(snap, exacto, etiqueta){
       (snap[k]||[]).forEach(x=>{ if(x&&x.id!=null) ids.push(String(x.id)); }); });
     ids.forEach(id=>{ delete t[id]; }); tombPersist(); sbSyncModulo('tombstones',t); }catch(e){}
   try{ personalOrdenar(); }catch(e){}
-  ['personalSave','tareasSave','valLaborSave','almacenSave','remSalSave'].forEach(fn=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(e){} });
+  ['personalSave','tareasSave','valLaborSave','almacenSave'].forEach(fn=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(e){} });
   try{ sbSyncModulo('reportes_guardia', state.reportesGuardia); sbSyncModulo('compresorista', state.compresorista);
        sbSyncModulo('mant_kits', state.mantenimiento); }catch(e){}
   cerrarModal('modal-restaurar');
@@ -37123,7 +37092,7 @@ function snapshotEstado(){
     compresorista:state.compresorista, mantenimiento:state.mantenimiento, mantRepuestos:state.mantRepuestos,
     reportesGuardia:state.reportesGuardia, perforacion:state.perforacion,
     valorizacionesLabor:state.valorizacionesLabor, distribucion:state.distribucion, metas:state.metas,
-    reuniones:state.reuniones, remanenteSalidas:state.remanenteSalidas,
+    reuniones:state.reuniones,
     combustible:{ pet:(typeof combCargar==='function'?combCargar('pet'):[]), gas:(typeof combCargar==='function'?combCargar('gas'):[]) },
     serviciosTerceros:(typeof servCargar==='function'?servCargar():[]),
     finIngMaq:fim, mesesCerrados:state.mesesCerrados||[],
@@ -37136,7 +37105,6 @@ function snapshotEstado(){
     personalFotos:(typeof pfLoad==='function'?pfLoad():{}),               // las fotos, ahora en su propio módulo
     // Faltaban en el respaldo, y son datos que el sistema sí muestra y sí guarda en la nube: una
     // copia que no los lleve no devuelve el sistema al estado en que estaba.
-    remanenteIngresos: state.remanenteIngresos||[],
     compras: state.compras||null,                    // módulo de Compras
     seguridad: state.seguridad||[],                  // reportes de seguridad
     historialPeriodos: (typeof histPeriodosLoad==='function'?histPeriodosLoad():[]),  // cierres y sus cifras fijas
@@ -37353,7 +37321,7 @@ async function cerrarPeriodo(periodo){
 
   // 4) EL CIERRE YA NO DESTRUYE DATOS.
   // Antes se borraban de state los tareos, reportes de guardia, reportes del Compresorista,
-  // mantenimientos y salidas de remanente del periodo cerrado. El resultado era que al entrar
+  // mantenimientos del periodo cerrado. El resultado era que al entrar
   // después al dashboard de ese ciclo aparecía TODO EN CERO: el periodo quedaba en blanco y ya
   // no se podía revisar qué pasó ese mes.
   // No hace falta borrar nada: cada vista filtra por la ventana del periodo (ventanaMes/filtroMes),
@@ -37502,7 +37470,7 @@ function abrirHistorialPeriodos(){
 // RESTAURAR LOS DATOS DE UN CICLO CERRADO DESDE SU RESPALDO
 // ══════════════════════════════════════════════════════════════
 // Los cierres anteriores a esta versión borraban de state los reportes de guardia, los del
-// Compresorista, mantenimientos, remanente y los movimientos de almacén del ciclo. El respaldo
+// Compresorista, mantenimientos y los movimientos de almacén del ciclo. El respaldo
 // SÍ se guardó en la nube (app_modulos, modulo='backup_<periodo>') antes de purgar, así que el
 // ciclo se puede reconstruir.
 // REGLA CLAVE: del respaldo se toma SOLO lo que cae dentro de la ventana del ciclo restaurado y
@@ -37541,11 +37509,10 @@ async function restaurarPeriodo(periodo){
   const dRG=(snap.reportesGuardia||[]).filter(en);
   const dCO=(snap.compresorista||[]).filter(en);
   const dMA=(snap.mantenimiento||[]).filter(en);
-  const dRE=(snap.remanenteSalidas||[]).filter(en);
   const dTA=(snap.tareas||[]).filter(en);
   const alm=snap.almacen||{};
   const dAI=(alm.ingresos||[]).filter(en), dAS=(alm.salidas||[]).filter(en);
-  const total=dRG.length+dCO.length+dMA.length+dRE.length+dTA.length+dAI.length+dAS.length;
+  const total=dRG.length+dCO.length+dMA.length+dTA.length+dAI.length+dAS.length;
   if(!total){ showNotif('El respaldo de '+periodo+' no tiene registros dentro de '+r.ini+' → '+r.fin,'warn'); return; }
 
   if(!confirm('Restaurar el ciclo '+periodo+' ('+r.ini+' al '+r.fin+')\n\n'+
@@ -37553,7 +37520,6 @@ async function restaurarPeriodo(periodo){
     '· '+dRG.length+' reportes de guardia\n'+
     '· '+dCO.length+' reportes del Compresorista\n'+
     '· '+dMA.length+' mantenimientos\n'+
-    '· '+dRE.length+' salidas de remanente\n'+
     '· '+dTA.length+' tareos\n'+
     '· '+dAI.length+' ingresos y '+dAS.length+' salidas de almacén\n\n'+
     'Solo se agrega lo que falta, por id. El ciclo vigente NO se toca.\n'+
@@ -37566,7 +37532,6 @@ async function restaurarPeriodo(periodo){
   m=_restMergeId(state.reportesGuardia,dRG); state.reportesGuardia=m.lista; res.reportes=m.nuevos;
   m=_restMergeId(state.compresorista,dCO);   state.compresorista=m.lista;   res.compresorista=m.nuevos;
   m=_restMergeId(state.mantenimiento,dMA);   state.mantenimiento=m.lista;   res.mantenimiento=m.nuevos;
-  m=_restMergeId(state.remanenteSalidas,dRE);state.remanenteSalidas=m.lista;res.remanente=m.nuevos;
   m=_restMergeId(state.tareas,dTA);          state.tareas=m.lista;          res.tareos=m.nuevos;
   if(!state.almacen) state.almacen={ingresos:[],salidas:[]};
   m=_restMergeId(state.almacen.ingresos,dAI);state.almacen.ingresos=m.lista;res.ingresosAlm=m.nuevos;
@@ -37575,7 +37540,6 @@ async function restaurarPeriodo(periodo){
   try{ if(typeof reportesGuardiaSave==='function') reportesGuardiaSave(); }catch(e){}
   try{ if(typeof compGuardarLocal==='function') compGuardarLocal(); }catch(e){}
   try{ sbSyncModulo('mant_kits', state.mantenimiento||[]); }catch(e){}
-  try{ if(typeof remSalSave==='function') remSalSave(); }catch(e){}
   try{ if(typeof tareasSave==='function') tareasSave(); }catch(e){}
   try{ if(typeof almacenSave==='function') almacenSave(); }catch(e){}
   try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){}
@@ -37791,7 +37755,6 @@ async function abrirDiagSync(){
       ['compresorista','Reportes compresorista',()=>(state.compresorista||[]).length,d=>_diagCuenta(d)],
       ['comb_pet','Combustible petróleo',()=>{try{return (combCargar('pet')||[]).length;}catch(e){return '—';}},d=>_diagCuenta(d)],
       ['planilla_supervision','Planilla supervisión (meses)',()=>{try{return Object.keys(planillaSupLoad()||{}).length;}catch(e){return '—';}},d=>_diagCuenta(d)],
-      ['remanente_salidas','Salidas remanente',()=>(state.remanenteSalidas||[]).length,d=>_diagCuenta(d)],
       ['mant_kits','Kits mantenimiento',()=>(state.mantenimiento||[]).length,d=>_diagCuenta(d)],
       ['servicios_terceros','Servicios terceros',()=>{try{return (JSON.parse(localStorage.getItem('atmin_servicios_terceros')||'[]')).length;}catch(e){return '—';}},d=>_diagCuenta(d)],
       ['tombstones','Borrados registrados',()=>{try{return Object.keys(tombLoad()||{}).length;}catch(e){return '—';}},d=>_diagCuenta(d)],
@@ -37868,8 +37831,6 @@ const _SYNC_MODULOS=[
   ['personal_fotos', ()=>{try{return pfLoad();}catch(e){return null;}}],
   ['montebravo', ()=>{try{return mbEstado();}catch(e){return null;}}],
   ['mb_labores', ()=>{try{return mbLaboresExtra();}catch(e){return null;}}],
-  ['remanente_salidas', ()=>state.remanenteSalidas],
-  ['remanente_ingresos', ()=>state.remanenteIngresos],
   ['equipos_operacion', ()=>state.equiposOp],
   ['mant_kits', ()=>state.mantenimiento],
   ['mant_repuestos', ()=>state.mantRepuestos],
@@ -37915,7 +37876,7 @@ async function forzarSincronizacion(){
   showNotif('🔄 Sincronizando todo…');
   try{ if(typeof sbFlushPendientes==='function') await sbFlushPendientes(); }catch(e){}
   const MODULOS=['personal','tareas','reportes_guardia','equipos_operacion','compresorista',
-                 'mant_kits','mant_repuestos','remanente_salidas','remanente_ingresos',
+                 'mant_kits','mant_repuestos',
                  'reuniones','servicios_terceros','metas','distribucion','val_labor'];
   let traidos=0;
   for(const m of MODULOS){
