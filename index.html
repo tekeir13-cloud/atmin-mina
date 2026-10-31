@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-298</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-299</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-298</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-299</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-298</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-299</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5879,13 +5879,20 @@ async function cargarAlmacenCombustibleSB(){
         try{ if(typeof normalizarCargos==='function') normalizarCargos(); }catch(e){}
         try{localStorage.setItem(PERSONAL_KEY,JSON.stringify(state.personal));}catch(e){}
       }else if(Array.isArray(pNube)&&pNube.length){
-        // FUSIÓN por id conservando la última edición (_ts más reciente) y respetando lápidas:
-        // así una edición de sueldo/baja hecha en un equipo NO se pierde ni la pisa una copia vieja
-        // de otro dispositivo, y un trabajador eliminado no resucita.
-        state.personal=(typeof mergeById_ts==='function')?mergeById_ts(state.personal||[], pNube):pNube;
+        /* HAY TRABAJO DE RRHH SIN SUBIR: MANDA ESTA LISTA, ENTERA, SIN FUSIONAR.
+           Antes se fusionaba por id con la nube. Fusionar significa que la union de las dos listas
+           gana, y entonces un trabajador borrado aqui —que por eso ya no esta en esta lista— volvia
+           desde la copia de la nube. Para taparlo existian las lapidas: una marca por cada borrado,
+           que viajaba a todos los equipos y filtraba al fusionar. Ese parche trajo mas problemas
+           que el agujero: bastaba que algo refrescara la hora de las fichas para que se levantaran
+           todas de golpe, y un trabajador repuesto desaparecia al sincronizar porque su lapida
+           seguia viva.
+           Se quita el parche quitando la causa. Personal no se fusiona: solo el Administrador y el
+           Jefe de Finanzas pueden publicarlo, asi que no hay trabajo de otro equipo que preservar.
+           Si este equipo tiene cambios sin subir, su lista es la verdad y sube tal cual; si no los
+           tiene, copia la nube tal cual. Borrar a alguien lo borra, sin dejar marca de que existio. */
         try{ if(typeof normalizarCargos==='function') normalizarCargos(); }catch(e){}
         try{localStorage.setItem(PERSONAL_KEY,JSON.stringify(state.personal));}catch(e){}
-        // Si la fusión cambió algo respecto a la nube, re-subir el estado consolidado.
         try{ await sbSyncModulo('personal', state.personal); }catch(e){}
       }else{
         let pLocal=[]; try{pLocal=JSON.parse(localStorage.getItem(PERSONAL_KEY)||'[]')||[];}catch(e){}
@@ -8041,6 +8048,7 @@ async function _sbLeerFila(modulo){
     return {ok:true, data:(data && data.length) ? data[0].data : null};
   }catch(e){ return {ok:false, data:null}; }
 }
+let _personalBorradoOk=0;   // una sola confirmación por sesión para la poda grande
 async function _sbSubirModulo(modulo){
   if(!SB_ONLINE || !CLOUD_SYNC_READY) return false;
   if(!(modulo in _sbPend)) return true;
@@ -8053,6 +8061,39 @@ async function _sbSubirModulo(modulo){
   // Módulo que no es de esta sesión: se deja quieto en la cola, no se sube desde aquí.
   if(typeof puedePublicarModulo==='function' && !puedePublicarModulo(modulo)) return true;
   let dataObj=_sbPend[modulo];
+  /* PERSONAL REEMPLAZA LA LISTA DE TODOS, ASÍ QUE SE MIRA ANTES DE PISARLA.
+     Al dejar de fusionarse, la lista que sube es la que queda en todos los equipos. Eso es lo que
+     se quiere al borrar a alguien, y es un peligro si el equipo que sube arrastra una copia vieja:
+     subiría una lista corta y se llevaría por delante a los que faltan, en todos lados, de una.
+     Un borrado es de a uno y pasa por su confirmación; perder un tercio de la planilla de golpe no
+     es un borrado, es una copia atrasada. Si la lista que sube tiene bastante menos gente que la
+     de la nube, se pregunta antes, con la cuenta delante. Si no se confirma, no se sube y queda en
+     cola: no se pierde nada y la nube sigue con su lista buena. */
+  if(modulo==='personal' && Array.isArray(dataObj)){
+    const fila=await _sbLeerFila('personal');
+    if(!fila.ok){
+      console.warn('[sync] no se pudo leer "personal" antes de subir: la subida queda en cola');
+      _sbPend[modulo]=dataObj; try{ _sbPendSave(); }catch(e){} _sbFallo=Date.now();
+      return false;
+    }
+    const nube=Array.isArray(fila.data)?fila.data:null;
+    if(nube && nube.length){
+      const pierde=nube.length-dataObj.length;
+      if(pierde>=5 && pierde > nube.length*0.15 && !_personalBorradoOk){
+        const ok=confirm('⚠ ATENCIÓN — esta subida deja la lista de personal con '+dataObj.length+
+          ' trabajadores, cuando en el sistema hay '+nube.length+'.\n\n'+
+          'Se irían '+pierde+' de golpe, en todos los equipos.\n\n'+
+          'Si acabas de borrar a esa cantidad a propósito, continúa. Si no, es que este equipo tiene '+
+          'una copia atrasada: cancela, recarga y vuelve a intentarlo.\n\n¿Subir igual?');
+        if(!ok){
+          _sbPend[modulo]=dataObj; try{ _sbPendSave(); }catch(e){}
+          try{ showNotif('Subida de personal cancelada. Recarga la página para traer la lista del sistema.','warn'); }catch(e){}
+          return false;
+        }
+        _personalBorradoOk=Date.now();   // confirmado: no volver a preguntar en esta sesión
+      }
+    }
+  }
   // READ-MERGE-WRITE para 'almacen': antes de subir, fusionar con lo que ya hay en la nube para
   // que esta subida NUNCA pise los movimientos que registró otra computadora. Sin esto, un
   // snapshot con "el último gana" podía borrar del stock lo que otro equipo acababa de ingresar.
@@ -20955,7 +20996,11 @@ async function eliminarPersonal(id){
   if(!p) return;
   if(!confirm(`¿Eliminar a ${p.nombre}? Esta acción no se puede deshacer.`)) return;
   state.personal=state.personal.filter(x=>String(x.id)!==String(id));
-  try{ tombAdd(id); }catch(e){}   // lápida: el borrado se impone al sincronizar y no resucita
+  /* Sin lapida. Se va de la lista, se va de la fila de la base, y la lista que sube es la que
+     queda: en todos los equipos aparece igual. No se guarda ninguna marca de que existio.
+     La red de seguridad contra un borrado por error no es una lapida, es Versiones: ahi esta la
+     lista como estaba antes, y desde ahi se repone a quien haga falta. */
+  try{ if(typeof tombQuitar==='function') tombQuitar(id); }catch(e){}   // y se limpia la de antes, si la hubiera
   try{ await sb.from('personal').delete().eq('id',id); }catch(e){}
   personalSave();poblarSelects();renderPersonal();renderCostoRRHH();
   showNotif(`🗑 ${p.nombre} eliminado`,'warn');
@@ -24048,9 +24093,9 @@ function pHistRestaurar(t){
     if(confirm('Hay '+sobran.length+' trabajador'+(sobran.length!==1?'es':'')+' en la lista de ahora que NO estaban en esa versión:\n\n'+
                lista+(sobran.length>25?'\n  … y '+(sobran.length-25)+' más':'')+'\n\n'+
                '¿Quitarlos también, para dejar la lista exactamente como estaba?\n\n'+
-               'Se les marca como borrados para que no vuelvan al sincronizar.\n'+
+               'Se van de la lista en todos los equipos.\n'+
                'Si alguno es un alta legítima posterior, responde Cancelar y quítalo a mano.')){
-      sobran.forEach(p=>{ try{ if(typeof tombAdd==='function') tombAdd(p.id); }catch(e){} });
+      sobran.forEach(p=>{ try{ if(typeof tombQuitar==='function') tombQuitar(p.id); }catch(e){} });
       const fuera={}; sobran.forEach(p=>fuera[String(p.id)]=1);
       state.personal=(state.personal||[]).filter(p=>!(p&&p.id!=null&&fuera[String(p.id)]));
       quitados=sobran.length;
