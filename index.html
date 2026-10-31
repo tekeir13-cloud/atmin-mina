@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-286</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-287</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-286</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-287</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-286</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-287</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -2678,7 +2678,7 @@ select option{background:var(--coal3);}
     <button class="mod-tab" onclick="modTab('log','subalmacen2820',this)">🏗 Subalmacén NV2820</button>
     <button class="mod-tab" onclick="modTab('log','solicitudmantlog',this)">📋 Solic. Mantenimiento</button>
     <button class="mod-tab" onclick="modTab('log','combustible',this)">🛢 Combustible</button>
-    <button class="mod-tab" onclick="modTab('log','estadisticas',this)">📈 Estadísticas</button>
+    <button class="mod-tab" onclick="modTab('log','estadisticas',this)">📋 Informe de Cierre de Mes</button>
   </div>
 
   <!-- Guardado manual: la app ya sube sola, esto es para quedarse tranquilo y saberlo -->
@@ -2819,7 +2819,7 @@ select option{background:var(--coal3);}
     <!-- ── ESTADÍSTICAS DEL CICLO ── -->
     <div class="section-title">📊 Estadísticas del Ciclo</div>
     <div class="card" style="padding:12px 16px;margin-bottom:14px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-      <label style="font-size:11px;color:var(--text3)">Mes (1 → fin de mes):</label>
+      <label style="font-size:11px;color:var(--text3)">Mes del informe:</label>
       <select id="exp-est-periodo" onchange="renderExploStats()" style="background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px"></select>
       <div style="flex:1"></div>
       <button class="btn btn-outline" style="padding:6px 14px;font-size:11px" onclick="renderExploStats()">↻ Actualizar</button>
@@ -8567,6 +8567,13 @@ const _MERGE_AL_SUBIR = {
   remanente_ingresos: (loc,nub)=> (typeof mergeSnapById==='function') ? mergeSnapById(loc,nub) : loc,
   reuniones:          (loc,nub)=> (typeof mergeSnapById==='function') ? mergeSnapById(loc,nub) : loc,
   tareos_pend:        (loc,nub)=> (typeof mergeById_ts==='function') ? mergeById_ts(loc,nub) : loc,
+  /* Los cierres mensuales se unen POR MES, no por id: cada mes tiene un solo informe archivado y
+     gana el que se cerró o recalculó después. Si dos equipos archivan octubre el mismo día, no
+     quedan dos octubres. */
+  cierres_log:        (loc,nub)=>{ const by={};
+                        (nub||[]).concat(loc||[]).forEach(c=>{ if(!c||!c.mes) return;
+                          const p=by[c.mes]; if(!p || Number(c._ts||0)>Number(p._ts||0)) by[c.mes]=c; });
+                        return Object.values(by).sort((x,y)=>String(y.mes).localeCompare(String(x.mes))); },
   // Las fotos del personal: se juntan las de todos los equipos y se conservan las más recientes.
   personal_hist:      (loc,nub)=>{ const by={};
                         (nub||[]).concat(loc||[]).forEach(f=>{ if(f&&f.t && !by[f.t]) by[f.t]=f; });
@@ -8582,6 +8589,7 @@ const _GUARDAR_TRAS_FUSION = {
   remanente_ingresos: m=>{ state.remanenteIngresos=m; _lsSet('atmin_remanente_ingresos', m); },
   reuniones:          m=>{ state.reuniones=m;         _lsSet('atmin_reuniones', m); },
   tareos_pend:        m=>{ state.tareosPend=m;        _lsSet('atmin_tareos_pend', m); },
+  cierres_log:        m=>{ state.cierresLog=m;        _lsSet('atmin_cierres_log', m); },
   personal_hist:      m=>{ try{ _pHist=m; _lsSet('atmin_personal_hist', m); }catch(e){} },
 };
 /* ESCRITURA LOCAL QUE NO SE RINDE CON EL TELÉFONO LLENO.
@@ -8845,7 +8853,7 @@ try{
 // Módulos cuya carga FUSIONA por id (unión), no reemplaza: para ellos SIEMPRE se trae la nube
 // aunque haya un pendiente, porque fusionar nunca pierde lo local y sí recupera lo de otros
 // equipos. Para los módulos de REEMPLAZO (personal, tareas…) sí se protege el dato offline.
-const _sbModulosFusion=new Set(['almacen','personal','reportes_guardia','equipos_operacion','mant_kits','compresorista','reuniones','remanente_salidas','remanente_ingresos','servicios_terceros','tombstones','personal_hist','tareos_pend']);
+const _sbModulosFusion=new Set(['almacen','personal','reportes_guardia','equipos_operacion','mant_kits','compresorista','reuniones','remanente_salidas','remanente_ingresos','servicios_terceros','tombstones','personal_hist','tareos_pend','cierres_log']);
 // Devuelve el ESTADO de la lectura, no solo el dato. sbLoadModulo() contestaba null para tres
 // situaciones muy distintas —nube vacía, cambio local pendiente y error de lectura— y quien
 // llamaba no podía distinguirlas. Confundir "no pude leer" con "está vacía" y subir encima lo
@@ -8938,6 +8946,12 @@ else if(Number(prevAlm.productosTs||0)>Number(data.productosTs||0)){ a.productos
     case 'metas':              if(data&&typeof data==='object'){ state.metas=Object.assign(state.metas||{}, data); setLS('atmin_metas', state.metas); } break;
     case 'reuniones':          if(Array.isArray(data)){ state.reuniones=M(data, state.reuniones||[]); setLS('atmin_reuniones', state.reuniones); } break;
     case 'remanente_salidas':  if(Array.isArray(data)){ state.remanenteSalidas=M(data, state.remanenteSalidas||[]); setLS('atmin_remanente_salidas', state.remanenteSalidas); } break;
+    case 'cierres_log':        if(Array.isArray(data)){ const by={};
+                                 data.concat(state.cierresLog||[]).forEach(c=>{ if(!c||!c.mes) return;
+                                   const p=by[c.mes]; if(!p||Number(c._ts||0)>Number(p._ts||0)) by[c.mes]=c; });
+                                 state.cierresLog=Object.values(by).sort((x,y)=>String(y.mes).localeCompare(String(x.mes)));
+                                 setLS('atmin_cierres_log', state.cierresLog);
+                                 try{ if(document.getElementById('log-estadisticas') && document.getElementById('log-estadisticas').style.display!=='none') renderLogEstadisticas(); }catch(e){} } break;
     case 'remanente_ingresos': if(Array.isArray(data)){ state.remanenteIngresos=M(data, state.remanenteIngresos||[]); setLS('atmin_remanente_ingresos', state.remanenteIngresos); } break;
     case 'servicios_terceros': if(Array.isArray(data)){ let loc=[]; try{loc=JSON.parse(localStorage.getItem('atmin_servicios_terceros')||'[]');}catch(e){} setLS('atmin_servicios_terceros', M(data, loc)); } break;
     case 'planilla_supervision': if(data&&typeof data==='object'){ setLS('atmin_planilla_supervision', data); } break;
@@ -13698,135 +13712,726 @@ function estPetroleoIngresado(per){
   try{ (combCargar('pet')||[]).forEach(r=>{ if(r&&enVentana(r.fecha,per)) gln+=Number(r.cantidad)||0; }); }catch(e){}
   return gln;
 }
-function renderLogEstadisticas(){
-  const wrap=document.getElementById('est-wrap'); if(!wrap) return;
-  // Selector de ciclo
-  const sel=document.getElementById('est-periodo');
-  const pers=estPeriodos();
-  if(sel){
-    const prev=sel.value;
-    if(sel.options.length!==pers.length||!prev){
-      sel.innerHTML=pers.map(p=>{ const w=ventanaMes(p); return `<option value="${p}">${p} · ${w.ini} → ${w.fin}</option>`; }).join('');
-      sel.value=(prev&&pers.includes(prev))?prev:((typeof periodoActual==='function'&&pers.includes(periodoActual()))?periodoActual():(pers[0]||''));
-    }
-  }
-  const per=(sel&&sel.value)||(typeof periodoActual==='function'?periodoActual():'');
-  const w=ventanaMes(per);
-  const S=n=>(typeof fmtS2==='function')?fmtS2(n):('S/ '+(Number(n)||0).toFixed(2));
-  const N=n=>(Number(n)||0).toLocaleString('es-PE',{maximumFractionDigits:2});
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   INFORME DE CIERRE DE MES — LOGÍSTICA
+   Antes esta pestaña se llamaba "Estadísticas" y mostraba cinco lecturas sueltas: materiales,
+   explosivo, petróleo. Cada una por su lado, sin un total, y sin Monte Bravo ni mantenimiento.
+   Para cerrar el mes había que ir juntando cifras de cuatro pantallas a mano.
 
-  // ── 1 y 2) MATERIALES: ingreso y consumo en soles ──
+   Ahora es UN informe que se alimenta solo del 1 al último día del mes. El primero de cada mes el
+   informe del mes anterior se archiva —queda congelado con sus cifras— y el nuevo arranca vacío.
+   El día de cierre ya está todo sumado y verificado: se descarga y se entrega.
+
+   LA REGLA QUE EVITA CONTAR DOS VECES EL MISMO SOL, que es de lo que vive un informe de costos:
+   el COSTO LOGÍSTICO del mes es lo que ENTRÓ —lo comprado: materiales de Insumos y de
+   Mantenimiento, explosivo y combustible—, porque ese es el desembolso. Lo que SALE del almacén
+   (consumo de la operación, kits de mantenimiento, despachos a Monte Bravo) no se suma al costo:
+   es el mismo material ya contado al comprarlo, visto ahora cuando se usa. Sumar las dos columnas
+   duplicaría el gasto del mes. Por eso el informe las muestra enfrentadas, nunca sumadas.
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+const CIERRE_KEY='atmin_cierres_log';
+
+/* Los meses que el informe puede mostrar: el que corre, los que tienen movimiento y los ya
+   archivados. Mes de CALENDARIO —del 1 al último día—: Logística cierra así, y el ciclo 26→25 es
+   solo de Operaciones. */
+function cieMesActual(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function cieMeses(){
+  const set=new Set();
+  const add=f=>{ const d=String(f||'').slice(0,10); if(d.length>=7) set.add(d.slice(0,7)); };
+  const a=state.almacen||{}; const ex=a.explosivos||{ingresos:[],salidas:[]};
+  (a.ingresos||[]).forEach(r=>add(r&&r.fecha)); (a.salidas||[]).forEach(r=>add(r&&r.fecha));
+  (ex.ingresos||[]).forEach(r=>add(r&&r.fecha)); (ex.salidas||[]).forEach(r=>add(r&&r.fecha));
+  try{ ['pet','gas'].forEach(t=>(combCargar(t)||[]).forEach(r=>add(r&&r.fecha))); }catch(e){}
+  (state.compresorista||[]).forEach(r=>add(r&&r.fecha));
+  (state.mantenimiento||[]).forEach(k=>add(k&&k.fecha));
+  (cieArchivos()||[]).forEach(c=>{ if(c&&c.mes) set.add(c.mes); });
+  set.add(cieMesActual());
+  return [...set].filter(Boolean).sort().reverse();
+}
+function cieVentana(mes){
+  const m=String(mes||cieMesActual()).slice(0,7);
+  const y=+m.slice(0,4), mm=+m.slice(5,7);
+  const ult=new Date(y, mm, 0).getDate();           // día 0 del mes siguiente = último de este
+  return { ini:m+'-01', fin:m+'-'+String(ult).padStart(2,'0'), dias:ult };
+}
+function cieEnMes(f,mes){ const d=String(f||'').slice(0,10); return d.length>=7 && d.slice(0,7)===String(mes).slice(0,7); }
+
+// ── ARCHIVO: los meses ya cerrados, congelados ─────────────────────────────────────────────
+function cieArchivos(){
+  try{ const r=localStorage.getItem(CIERRE_KEY); const a=r?JSON.parse(r):[]; return Array.isArray(a)?a:[]; }catch(e){ return []; }
+}
+function cieArchivosSave(arr){
+  state.cierresLog=arr;
+  try{ localStorage.setItem(CIERRE_KEY, JSON.stringify(arr)); }catch(e){}
+  try{ if(typeof sbSyncModulo==='function') sbSyncModulo('cierres_log', arr); }catch(e){}
+}
+function cieArchivoDe(mes){ return (cieArchivos()||[]).find(c=>c&&c.mes===String(mes)); }
+
+/* EL ARCHIVADO ES SOLO: al entrar al informe, cualquier mes anterior al que corre y que tenga
+   movimiento queda guardado con sus cifras. El 1 de noviembre, octubre se archiva sin que nadie
+   apriete nada, y lo archivado ya no se recalcula: si una corrección tardía toca un mes cerrado,
+   el informe entregado sigue diciendo lo que decía el día que se entregó. Para rehacerlo a
+   propósito está el botón de recalcular. */
+function cieArchivarPendientes(){
+  const act=cieMesActual();
+  const arch=cieArchivos();
+  const hay=new Set(arch.map(c=>c&&c.mes));
+  let n=0;
+  cieMeses().filter(m=>m<act && !hay.has(m)).forEach(m=>{
+    const d=cieDatos(m);
+    if(!d.hayMovimiento) return;
+    arch.push({ mes:m, cerrado:hoy(), _ts:Date.now(), resumen:cieResumenPlano(d) });
+    n++;
+  });
+  if(n){ arch.sort((a,b)=>String(b.mes).localeCompare(String(a.mes))); cieArchivosSave(arch); }
+  return n;
+}
+function cieResumenPlano(d){
+  return { costoTotal:d.costoTotal, matIng:d.matIng, matIngGen:d.matIngGen, matIngMant:d.matIngMant,
+           expIngS:d.expIngS, expIngU:d.expIngU, expStockU:d.expStockU, expStockS:d.expStockS, combIngS:d.combIngS, petIn:d.petIn,
+           matSal:d.matSal, expSalS:d.expSalS, expSalU:d.expSalU, petCon:d.petCon,
+           mantS:d.mantS, mantKits:d.mantKits, mbDespachado:d.mbDespachado, mbConsumido:d.mbConsumido,
+           mbPetGln:d.mbPetGln, mbPetS:d.mbPetS, nIng:d.nIng, nSal:d.nSal,
+           /* LA FOTO DEL ALMACÉN SE CONGELA AL CERRAR. El valor del almacén se mueve todos los
+              días: si el informe de octubre lo leyera en vivo, en diciembre mostraría el almacén
+              de diciembre dentro del informe de octubre, y lo entregado dejaría de coincidir con
+              lo archivado. Se guarda lo que valía el día del cierre y es eso lo que se muestra
+              para siempre. Solo el mes EN CURSO lee el almacén en vivo, porque ahí la foto de hoy
+              es la que corresponde. */
+           valorStock:d.valorStock, prodConStock:d.prodConStock, prodBajo:d.prodBajo,
+           prodAgotado:d.prodAgotado, stockAl:hoy() };
+}
+
+/* ── TODAS LAS CIFRAS DEL MES, DE UNA SOLA LECTURA ──────────────────────────────────────────
+   Un único sitio que lee los datos de verdad —almacén, explosivo, combustible, mantenimiento y
+   Monte Bravo— y devuelve el mes entero. Las tarjetas, los gráficos, la interpretación y el
+   informe descargable salen todos de aquí, así que no pueden contradecirse entre ellos. */
+function cieDatos(mes){
+  const w=cieVentana(mes);
   const a=state.almacen||{};
-  const ings=(a.ingresos||[]).filter(r=>r&&enVentana(r.fecha,per));
-  const sals=(a.salidas||[]).filter(r=>r&&enVentana(r.fecha,per));
-  const totIngMat=ings.reduce((s,r)=>s+(Number(r.total)||(Number(r.cantidad)||0)*(Number(r.precio)||0)),0);
-  const totSalMat=sals.reduce((s,r)=>s+(Number(r.importe)||(Number(r.cantidad)||0)*(Number(r.precio)||0)),0);
+  /* SE VALORIZA CON LA MISMA FUNCIÓN QUE EL RESTO DE LOGÍSTICA (_almValorMov) y se agrupa el
+     origen con la misma que el panel de ingreso contra gasto (_almOrigen). Tener aquí una copia
+     propia de esas dos reglas era pedir que el informe de cierre y la pantalla de almacén dijeran
+     cifras distintas del mismo mes en cuanto una de las dos cambiara, y en un informe que se
+     entrega firmado esa diferencia no se puede explicar. */
+  const val=(typeof _almValorMov==='function')?_almValorMov
+            :(r=>Number(r&&r.importe)||Number(r&&r.total)||(Number(r&&r.cantidad)||0)*(Number(r&&r.precio)||0));
+  const imp=val, tot=val;
+  const origen=(typeof _almOrigen==='function')?_almOrigen:(r=>String((r&&r.detalle)||'—').trim()||'—');
 
-  // ── 3 y 4) EXPLOSIVOS: unidades y su valor a precio de catálogo ──
+  // 1) MATERIALES
+  const ings=(a.ingresos||[]).filter(r=>r&&cieEnMes(r.fecha,mes));
+  const sals=(a.salidas||[]).filter(r=>r&&cieEnMes(r.fecha,mes));
+  const esMant=r=>String(r&&r.almacen||'')==='Mantenimiento';
+  const matIng=ings.reduce((s,r)=>s+tot(r),0);
+  const matIngMant=ings.filter(esMant).reduce((s,r)=>s+tot(r),0);
+  const matIngGen=matIng-matIngMant;
+  const matSal=sals.reduce((s,r)=>s+imp(r),0);
+  const matSalMant=sals.filter(esMant).reduce((s,r)=>s+imp(r),0);
+  const matSalGen=matSal-matSalMant;
+  // De dónde vino el material (proveedor del vale) y a dónde se fue (destino de la salida)
+  const porProv={}; ings.forEach(r=>{ const k=origen(r);
+    if(!porProv[k])porProv[k]={nombre:k,gen:0,mant:0,n:0}; porProv[k][esMant(r)?'mant':'gen']+=tot(r); porProv[k].n++; });
+  const porDest={}; sals.forEach(r=>{ const k=(typeof nivelLabel==='function')?nivelLabel(r.destino):String(r.destino||'—');
+    if(!porDest[k])porDest[k]={nombre:k,gen:0,mant:0,n:0}; porDest[k][esMant(r)?'mant':'gen']+=imp(r); porDest[k].n++; });
+
+  // 2) EXPLOSIVO
   const ex=a.explosivos||{ingresos:[],salidas:[]};
-  const exIn=(ex.ingresos||[]).filter(r=>r&&enVentana(r.fecha,per));
-  const exSa=(ex.salidas||[]).filter(r=>r&&enVentana(r.fecha,per));
+  const exIn=(ex.ingresos||[]).filter(r=>r&&cieEnMes(r.fecha,mes));
+  const exSa=(ex.salidas||[]).filter(r=>r&&cieEnMes(r.fecha,mes));
   const pex=(typeof compGetPreciosExp==='function')?(compGetPreciosExp()||{}):{};
   const und=arr=>arr.reduce((s,r)=>s+(Number(r.totalUnidades)||0),0);
-  const soles=arr=>arr.reduce((s,r)=>s+(Number(r.totalUnidades)||0)*(Number(pex[r.producto])||0),0);
-  const totIngExpU=und(exIn), totSalExpU=und(exSa);
-  const totIngExpS=soles(exIn), totSalExpS=soles(exSa);
-  // Por producto, para el gráfico comparativo
+  const solesEx=arr=>arr.reduce((s,r)=>s+(Number(r.totalUnidades)||0)*(Number(pex[r.producto])||0),0);
+  const expIngU=und(exIn), expSalU=und(exSa), expIngS=solesEx(exIn), expSalS=solesEx(exSa);
   const catExp=(typeof EXPLO_CATALOGO!=='undefined')?EXPLO_CATALOGO:[];
-  const exPorProd=catExp.map(c=>({
-    nombre:c.nombre,
-    ing:exIn.filter(r=>r.producto===c.id).reduce((s,r)=>s+(Number(r.totalUnidades)||0),0),
-    sal:exSa.filter(r=>r.producto===c.id).reduce((s,r)=>s+(Number(r.totalUnidades)||0),0)
-  })).filter(x=>x.ing||x.sal);
+  const expPorProd=catExp.map(c=>({ nombre:c.nombre,
+      ing:exIn.filter(r=>r.producto===c.id).reduce((s,r)=>s+(Number(r.totalUnidades)||0),0),
+      sal:exSa.filter(r=>r.producto===c.id).reduce((s,r)=>s+(Number(r.totalUnidades)||0),0),
+      salS:exSa.filter(r=>r.producto===c.id).reduce((s,r)=>s+(Number(r.totalUnidades)||0)*(Number(pex[r.producto])||0),0)
+    })).filter(x=>x.ing||x.sal);
 
-  // ── 5) PETRÓLEO: ingresado vs consumido (galones) ──
-  const petIn=estPetroleoIngresado(per), petCon=estPetroleoConsumido(per);
-  const precioPet=(typeof compGetPrecioPet==='function')?(Number(compGetPrecioPet())||0):0;
-  const petSaldo=petIn-petCon;
-  const petPct=petIn>0?Math.min(100,Math.round(petCon/petIn*100)):0;
+  /* EL POLVORÍN, IGUAL QUE EL ANAQUEL. El informe decía cuánto explosivo entró y cuánto se
+     consumió, pero no cuánto QUEDA, que es lo que se pregunta al cerrar: con cuántos cartuchos
+     arranca el mes que viene. Se toma de exploStockActual, la misma fuente del Stock Remanente
+     —con su saldo base confirmado y solo los movimientos posteriores al corte—, no de una resta
+     propia: dos pantallas contando el mismo polvorín tienen que dar lo mismo.
+     Se valoriza a precio de catálogo, igual que el resto del bloque. */
+  let expStockU=0, expStockS=0, expStockPorProd=[];
+  try{
+    const mapa=(typeof exploStockActual==='function')?exploStockActual():{};
+    expStockPorProd=catExp.map(c=>({ nombre:c.nombre, und:Number(mapa[c.id])||0,
+                                     soles:(Number(mapa[c.id])||0)*(Number(pex[c.id])||0) }))
+                          .filter(x=>x.und!==0).sort((x,y)=>y.soles-x.soles);
+    expStockU=expStockPorProd.reduce((x,r)=>x+r.und,0);
+    expStockS=expStockPorProd.reduce((x,r)=>x+r.soles,0);
+  }catch(e){}
+  const expMovU=expIngU-expSalU;
+  const expIniU=expStockU-expMovU;
 
-  // ── Serie por día del ciclo (materiales y petróleo) ──
-  const dias=[]; { let d=new Date(w.ini+'T00:00:00'); const fin=new Date(w.fin+'T00:00:00');
-    while(d<=fin&&dias.length<40){ dias.push(d.toISOString().slice(0,10)); d=new Date(d.getTime()+86400000); } }
-  const zero=()=>{ const o={}; dias.forEach(d=>o[d]=0); return o; };
-  const dIng=zero(), dSal=zero(), dPetIn=zero(), dPetCon=zero();
-  ings.forEach(r=>{ const d=String(r.fecha||'').slice(0,10); if(dIng[d]!==undefined) dIng[d]+=Number(r.total)||(Number(r.cantidad)||0)*(Number(r.precio)||0); });
-  sals.forEach(r=>{ const d=String(r.fecha||'').slice(0,10); if(dSal[d]!==undefined) dSal[d]+=Number(r.importe)||(Number(r.cantidad)||0)*(Number(r.precio)||0); });
+  // 3) COMBUSTIBLE — y el petróleo que se le envía a Monte Bravo
+  const pPet=(typeof compGetPrecioPet==='function')?(Number(compGetPrecioPet())||0):0;
+  let petIn=0, gasIn=0, combIngS=0;
+  try{ (combCargar('pet')||[]).filter(r=>r&&cieEnMes(r.fecha,mes)).forEach(r=>{ petIn+=Number(r.cantidad)||0; combIngS+=(Number(r.cantidad)||0)*(Number(r.precio)||0); }); }catch(e){}
+  try{ (combCargar('gas')||[]).filter(r=>r&&cieEnMes(r.fecha,mes)).forEach(r=>{ gasIn+=Number(r.cantidad)||0; combIngS+=(Number(r.cantidad)||0)*(Number(r.precio)||0); }); }catch(e){}
+  let petCon=0, mbPetGln=0; const petPorEq={};
+  (state.compresorista||[]).filter(r=>r&&cieEnMes(r.fecha,mes)).forEach(r=>{
+    (r.petroleo||[]).forEach(x=>{
+      const g=Number(x&&x.gln)||0; if(!g) return;
+      petCon+=g;
+      const eq=String(x.equipo||'—');
+      if(typeof esEnvioMB==='function' && esEnvioMB(eq)) mbPetGln+=g;
+      petPorEq[eq]=(petPorEq[eq]||0)+g;
+    });
+  });
+  const mbPetS=mbPetGln*pPet;
+
+  /* 4) MANTENIMIENTO — se reparte EXACTAMENTE COMO LA PANTALLA DE COSTO DE MANTENIMIENTO:
+     por equipo, separando piezas de horas hombre, y sumando el mismo m.costo que ella. El informe
+     traía solo el total; quien lo recibe pregunta en el acto qué máquina se lo comió, y esa
+     respuesta ya existía en otra pestaña. Dos vistas del mismo dato tienen que sumar igual, así
+     que se agrupa con el mismo criterio (equipo, con equipoBase de respaldo). */
+  const kits=(state.mantenimiento||[]).filter(k=>k&&cieEnMes(k.fecha,mes)&&k.aprobLog&&k.aprobLog.ok);
+  const mantS=kits.reduce((s,k)=>s+(Number(k.costo)||0),0);
+  const mantPiezas=kits.reduce((s,k)=>s+((k.repuestos||[]).reduce((x,p)=>x+(Number(p.cant)||0)*(Number(p.costo)||0),0)),0);
+  const mantHoras=kits.reduce((s,k)=>s+(Number(k.horasMant)||0),0);
+  const mantMO=kits.reduce((s,k)=>s+(Number(k.manoobra)||0),0);
+  const _me={};
+  kits.forEach(k=>{ const key=k.equipo||k.equipoBase||'—';
+    if(!_me[key]) _me[key]={nombre:key, piezas:0, horas:0, mo:0, total:0, n:0};
+    _me[key].piezas+=(k.repuestos||[]).reduce((x,p)=>x+(Number(p.cant)||0)*(Number(p.costo)||0),0);
+    _me[key].horas+=Number(k.horasMant)||0; _me[key].mo+=Number(k.manoobra)||0;
+    _me[key].total+=Number(k.costo)||0; _me[key].n++; });
+  const mantPorEquipo=Object.values(_me).sort((x,y)=>y.total-x.total);
+
+  // 5) MONTE BRAVO — material despachado desde aquí y lo que la unidad consumió allá
+  let mbDespachado=0, mbConsumido=0;
+  try{ mbDespachado=(typeof mbSalidasLogistica==='function')
+        ? mbSalidasLogistica().filter(s=>s&&cieEnMes(s.fecha,mes)).reduce((x,s)=>x+(Number(s.importe||s.monto||s.costo)||0),0) : 0; }catch(e){}
+  try{ mbConsumido=(typeof mbConsumoMateriales==='function')?(Number(mbConsumoMateriales(mes))||0):0; }catch(e){}
+
+  // Serie diaria, para ver cómo se fue llenando el mes
+  const dias=[]; { let d=new Date(w.ini+'T12:00:00'); const fin=new Date(w.fin+'T12:00:00');
+    while(d<=fin){ dias.push(d.toISOString().slice(0,10)); d=new Date(d.getTime()+86400000); } }
+  const z=()=>{ const o={}; dias.forEach(d=>o[d]=0); return o; };
+  const dIng=z(), dSal=z(), dPetIn=z(), dPetCon=z();
+  ings.forEach(r=>{ const d=String(r.fecha||'').slice(0,10); if(dIng[d]!==undefined) dIng[d]+=tot(r); });
+  sals.forEach(r=>{ const d=String(r.fecha||'').slice(0,10); if(dSal[d]!==undefined) dSal[d]+=imp(r); });
   try{ (combCargar('pet')||[]).forEach(r=>{ const d=String(r&&r.fecha||'').slice(0,10); if(dPetIn[d]!==undefined) dPetIn[d]+=Number(r.cantidad)||0; }); }catch(e){}
-  (state.compresorista||[]).forEach(r=>{ const d=String(r&&r.fecha||'').slice(0,10); if(dPetCon[d]!==undefined) (r.petroleo||[]).forEach(p=>{ dPetCon[d]+=Number(p&&p.gln)||0; }); });
-  const etq=dias.map(d=>d.slice(8,10)+'/'+d.slice(5,7));
+  (state.compresorista||[]).forEach(r=>{ const d=String(r&&r.fecha||'').slice(0,10);
+    if(dPetCon[d]!==undefined) (r.petroleo||[]).forEach(x=>{ dPetCon[d]+=Number(x&&x.gln)||0; }); });
 
-  const kpi=(label,valor,sub,color)=>`<div class="kpi-card" style="padding:14px 16px">
-    <div class="kpi-label" style="font-size:10px">${label}</div>
-    <div class="kpi-value" style="font-size:21px;color:${color}">${valor}</div>
-    <div style="font-size:10px;color:var(--text3);margin-top:3px">${sub||''}</div></div>`;
+  /* CUÁNTO VALE EL ALMACÉN HOY. Es el único dato del informe que NO es del mes: es un saldo a la
+     fecha, el resultado de todo lo que entró y salió desde siempre. Va aparte y dicho con esas
+     palabras, porque mezclado con las cifras del periodo lo primero que hace quien lee el informe
+     es sumarlo o restarlo a las demás, y no se suma con nada: es una foto, no un movimiento.
+     Se calcula con filtrarPorMaestro, igual que la tarjeta "Valor de Stock" de Logística: sin ese
+     filtro entran códigos que ya no están en el maestro y el mismo producto repetido por venir de
+     dos fichas, y las dos pantallas darían cifras distintas del mismo almacén. */
+  let valorStock=0, prodConStock=0, prodBajo=0, prodAgotado=0;
+  try{
+    let st=(typeof calcStock==='function')?calcStock():[];
+    if(typeof filtrarPorMaestro==='function') st=filtrarPorMaestro(st);
+    valorStock=st.reduce((x,r)=>x+(Number(r.stock)||0)*(Number(r.precio)||0),0);
+    prodConStock=st.filter(r=>(Number(r.stock)||0)>0).length;
+    prodBajo=st.filter(r=>(Number(r.stock)||0)>0&&(Number(r.stock)||0)<10).length;
+    prodAgotado=st.filter(r=>(Number(r.stock)||0)<=0).length;
+  }catch(e){}
 
-  wrap.innerHTML=_cab+`
-    <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Ciclo <b style="color:var(--text2)">${w.ini} → ${w.fin}</b> · ${dias.length} días</div>
+  // EL TOTAL: lo comprado. Ver la nota de arriba sobre no contar dos veces.
+  const costoTotal=matIng+expIngS+combIngS;
+  const consumoTotal=matSal+expSalS+(petCon*pPet);
 
-    <div class="section-title" style="margin-top:0">📦 Materiales de almacén</div>
-    <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));margin-bottom:14px">
-      ${kpi('Total de ingresos',S(totIngMat),ings.length+' movimiento'+(ings.length!==1?'s':''),'#60a5fa')}
-      ${kpi('Total de consumo',S(totSalMat),sals.length+' salida'+(sals.length!==1?'s':''),'#f87171')}
-      ${kpi(totIngMat-totSalMat>=0?'Diferencia (entró más)':'Diferencia (salió más)',S(Math.abs(totIngMat-totSalMat)),'ingresos − consumo',totIngMat-totSalMat>=0?'#22d3a5':'#f59e0b')}
-    </div>
-    <div class="card" style="padding:16px;margin-bottom:22px">
-      <div class="section-title" style="margin-top:0;font-size:13px">Ingresos vs consumo por día (S/)</div>
-      <div style="height:270px"><canvas id="est-ch-mat"></canvas></div>
-    </div>
+  /* Un mes ya archivado devuelve la foto del almacén que se guardó al cerrarlo. Lo demás del
+     informe no hace falta congelarlo: son movimientos con fecha, y los de octubre seguirán siendo
+     los de octubre se mire cuando se mire. El almacén no: es un saldo, y el saldo se mueve. */
+  const _arc=cieArchivoDe(mes);
+  if(_arc && _arc.resumen && _arc.resumen.valorStock!=null){
+    valorStock=Number(_arc.resumen.valorStock)||0;
+    prodConStock=Number(_arc.resumen.prodConStock)||0;
+    prodBajo=Number(_arc.resumen.prodBajo)||0;
+    prodAgotado=Number(_arc.resumen.prodAgotado)||0;
+  }
+  const stockAl=(_arc&&_arc.resumen&&_arc.resumen.stockAl)||(_arc&&_arc.cerrado)||hoy();
 
-    <div class="section-title">💣 Explosivos NV3190</div>
-    <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));margin-bottom:14px">
-      ${kpi('Total de ingresos',N(totIngExpU)+' und',S(totIngExpS)+' · '+exIn.length+' ingreso'+(exIn.length!==1?'s':''),'#60a5fa')}
-      ${kpi('Total de consumo',N(totSalExpU)+' und',S(totSalExpS)+' · '+exSa.length+' salida'+(exSa.length!==1?'s':''),'#f87171')}
-      ${kpi('Saldo del ciclo',N(totIngExpU-totSalExpU)+' und','ingresos − consumo',(totIngExpU-totSalExpU)>=0?'#22d3a5':'#f59e0b')}
-    </div>
-    <div class="card" style="padding:16px;margin-bottom:22px">
-      <div class="section-title" style="margin-top:0;font-size:13px">Ingreso vs consumo por explosivo (unidades)</div>
-      ${exPorProd.length?'<div style="height:270px"><canvas id="est-ch-exp"></canvas></div>'
-        :'<div style="color:var(--text3);font-size:12px;padding:14px 0">Sin movimientos de explosivos en este ciclo.</div>'}
-    </div>
+  /* EL ANAQUEL ES UNA CADENA, NO UNA FOTO SUELTA. Lo que vale el anaquel al cerrar un mes es con
+     lo que arranca el siguiente, y los ingresos y salidas de ese mes lo mueven hasta su propio
+     cierre. Dar solo la cifra final obligaba a sacar la resta a mano.
 
-    <div class="section-title">🛢 Petróleo</div>
-    <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));margin-bottom:14px">
-      ${kpi('Total ingresado',N(petIn)+' gln',precioPet?S(petIn*precioPet):'','#60a5fa')}
-      ${kpi('Total consumido',N(petCon)+' gln',precioPet?S(petCon*precioPet):'','#f87171')}
-      ${kpi(petSaldo>=0?'Saldo':'Consumido de más',N(Math.abs(petSaldo))+' gln',petIn>0?petPct+'% consumido':'',petSaldo>=0?'#22d3a5':'#f59e0b')}
+     El saldo de arranque se deduce del cierre menos el movimiento del mes. Ojo con lo que eso
+     significa: así la resta cierra SIEMPRE, por construcción, igual que la diferencia de la
+     pantalla de ingreso contra gasto. No es una comprobación de nada.
+
+     Por eso, cuando el mes anterior está archivado, se compara el arranque deducido contra el
+     cierre que de verdad quedó guardado. Ahí sí puede haber diferencia, y significa algo concreto:
+     el anaquel se movió por fuera de los ingresos y salidas del mes —un conteo físico que corrigió
+     existencias, una apertura de periodo—. Se muestra el cierre guardado, que es el heredado de
+     verdad, y la diferencia se dice en vez de disolverla dentro de la cifra de arranque, que es lo
+     que pasaba al deducirla siempre: el descuadre desaparecía sin que nadie se enterara. */
+  const movMes=matIng-matSal;
+  const anaquelFin=valorStock;
+  const anaquelDeducido=anaquelFin-movMes;
+  const _mAnt=(()=>{ const y=+String(mes).slice(0,4), m=+String(mes).slice(5,7)-1;
+    const yy=m===0?y-1:y, mm=m===0?12:m; return yy+'-'+String(mm).padStart(2,'0'); })();
+  const _arcAnt=cieArchivoDe(_mAnt);
+  const anaquelHeredado=(_arcAnt&&_arcAnt.resumen&&_arcAnt.resumen.valorStock!=null)?Number(_arcAnt.resumen.valorStock):null;
+  const anaquelIni=(anaquelHeredado!=null)?anaquelHeredado:anaquelDeducido;
+  const anaquelDesvio=(anaquelHeredado!=null)?(anaquelDeducido-anaquelHeredado):0;
+  const mesAnterior=_mAnt;
+
+  const hoyS=hoy(); const enCurso=(String(mes)===cieMesActual());
+  const diaDe=enCurso?Math.min(w.dias, Number(hoyS.slice(8,10))||w.dias):w.dias;
+
+  return { mes, ini:w.ini, fin:w.fin, diasMes:w.dias, diaDe, enCurso,
+    archivado:!!cieArchivoDe(mes),
+    matIng, matIngGen, matIngMant, matSal, matSalGen, matSalMant, nIng:ings.length, nSal:sals.length,
+    porProv:Object.values(porProv).sort((x,y)=>(y.gen+y.mant)-(x.gen+x.mant)),
+    porDest:Object.values(porDest).sort((x,y)=>(y.gen+y.mant)-(x.gen+x.mant)),
+    expIngU, expSalU, expIngS, expSalS, expPorProd,
+    expStockU, expStockS, expStockPorProd, expMovU, expIniU,
+    petIn, gasIn, petCon, combIngS, pPet,
+    petPorEq:Object.entries(petPorEq).map(([k,v])=>({nombre:k,gln:v})).sort((x,y)=>y.gln-x.gln),
+    mantS, mantKits:kits.length, kits, mantPiezas, mantHoras, mantMO, mantPorEquipo,
+    mbDespachado, mbConsumido, mbPetGln, mbPetS,
+    /* AQUÍ NO ENTRA NADA QUE NO SEA DE ESTE MES. Estaba el valor del stock —lo acumulado de
+       todos los tiempos— como referencia al lado de la diferencia del mes. En un informe de
+       cierre esa cifra se lee como si fuera del mes y no lo es: mezcla saldo histórico con
+       movimiento del periodo, y lo primero que hace quien recibe el informe es sumarla o
+       restarla a las demás. El stock vive en su propia pantalla, que es donde significa algo. */
+    costoTotal, consumoTotal, valorStock, prodConStock, prodBajo, prodAgotado, stockAl,
+    anaquelIni, anaquelFin, movMes, anaquelDeducido, anaquelHeredado, anaquelDesvio, mesAnterior,
+    dias, dIng, dSal, dPetIn, dPetCon,
+    hayMovimiento:!!(ings.length||sals.length||exIn.length||exSa.length||petIn||petCon||kits.length) };
+}
+
+/* ── LA INTERPRETACIÓN ───────────────────────────────────────────────────────────────────────
+   Un informe de cifras sin lectura obliga a que alguien las lea por ti, y lo que se entrega sin
+   leer no se discute. Esto no adorna: dice de dónde salió el gasto, qué pesa más, qué está
+   descompensado y qué conviene mirar. Se escribe solo con lo que hay, así que cambia con el mes. */
+function cieInterpretacion(d){
+  const S=n=>fmtS2(n), P=(x,t)=>t>0?Math.round(x/t*100):0;
+  const L=[];
+  const comprado=d.costoTotal, gastado=d.consumoTotal;
+  if(!d.hayMovimiento) return ['Todavía no hay movimiento registrado en este mes. El informe se va llenando solo conforme Logística registra ingresos, salidas, explosivo y combustible.'];
+
+  L.push(`El costo logístico de ${finNombreMes?finNombreMes(d.mes):d.mes} es de <b>${S(comprado)}</b>: ${S(d.matIng)} en materiales, ${S(d.expIngS)} en explosivo y ${S(d.combIngS)} en combustible. Es lo que se compró, que es el desembolso del mes.`);
+
+  const mayor=[{n:'materiales',v:d.matIng},{n:'explosivo',v:d.expIngS},{n:'combustible',v:d.combIngS}].sort((a,b)=>b.v-a.v)[0];
+  if(mayor.v>0) L.push(`Lo que más pesa es <b>${mayor.n}</b>, con el ${P(mayor.v,comprado)}% del gasto.`);
+
+  const dif=comprado-gastado;
+  if(Math.abs(dif)>comprado*0.05){
+    L.push(dif>0
+      ? `Entró <b>${S(dif)}</b> más de lo que salió a la operación: ese material se quedó en el anaquel, que ${d.enCurso?'hoy vale':'al cerrar valía'} ${S(d.valorStock)}. Comprar por encima del consumo un mes está bien si se estaba reponiendo; sostenido, es capital parado.`
+      : `Salió <b>${S(Math.abs(dif))}</b> más de lo que entró: el mes se consumió contra stock viejo. Se puede hacer, pero el anaquel baja y en algún momento toca reponer de golpe.`);
+  } else {
+    L.push(`Lo que entró y lo que salió están prácticamente parejos (diferencia de ${S(Math.abs(dif))}): se compró lo que se consumió, que es como debe trabajar un almacén que no quiere capital parado ni roturas de stock.`);
+  }
+
+  if(d.mantS>0){
+    const eq=(d.mantPorEquipo||[])[0];
+    L.push(`Mantenimiento costó <b>${S(d.mantS)}</b> en ${d.mantKits} kit${d.mantKits!==1?'s':''}: ${S(d.mantPiezas)} en piezas y ${fmt3(d.mantHoras)} horas hombre (${S(d.mantMO)}). Las piezas ya están contadas al comprarlas; las horas no pasan por el almacén.`);
+    if(eq) L.push(`El equipo que más mantenimiento se llevó fue <b>${eq.nombre}</b> con ${S(eq.total)}, el ${P(eq.total,d.mantS)}% del total.`);
+  }
+
+  if(d.mbDespachado>0||d.mbPetS>0){
+    L.push(`A Monte Bravo se le despacharon <b>${S(d.mbDespachado)}</b> en materiales${d.mbPetGln>0?` y <b>${fmt3(d.mbPetGln)} gln</b> de petróleo (${S(d.mbPetS)})`:''}. Es gasto de esa unidad, no de 2820${d.mbConsumido>0?`; de lo enviado, allá consumieron ${S(d.mbConsumido)}`:''}.`);
+  }
+
+  if(d.petIn>0||d.petCon>0){
+    const saldo=d.petIn-d.petCon;
+    L.push(`Petróleo: entraron <b>${fmt3(d.petIn)} gln</b> y se consumieron <b>${fmt3(d.petCon)} gln</b>${Math.abs(saldo)>0.5?`, ${saldo>0?'quedan':'se consumieron de más'} ${fmt3(Math.abs(saldo))} gln${saldo>0?' en tanque':' contra el saldo anterior'}`:''}.`);
+    const top=(d.petPorEq||[])[0];
+    if(top&&top.gln>0) L.push(`El equipo que más consumió fue <b>${top.nombre}</b> con ${fmt3(top.gln)} gln, el ${P(top.gln,d.petCon)}% del petróleo del mes.`);
+  }
+
+  if(d.expIngU>0||d.expSalU>0||d.expStockU>0){
+    L.push(`Polvorín: venía con <b>${fmt3(d.expIniU)}</b> unidades, ingresaron <b>${fmt3(d.expIngU)}</b> y se consumieron <b>${fmt3(d.expSalU)}</b>; ${d.enCurso?'quedan':'quedaron'} <b>${fmt3(d.expStockU)}</b> unidades valorizadas en <b>${S(d.expStockS)}</b>${d.enCurso?'':', que es con lo que arranca el mes siguiente'}.`);
+  }
+
+  if(d.anaquelFin>0||d.anaquelIni>0){
+    L.push(`El anaquel venía con <b>${S(d.anaquelIni)}</b> del cierre anterior, entró ${S(d.matIng)}, salió ${S(d.matSal)}, y ${d.enCurso?'hoy vale':'quedó en'} <b>${S(d.anaquelFin)}</b>: ${d.movMes>=0?'subió':'bajó'} ${S(Math.abs(d.movMes))} en el mes${d.enCurso?'':'. Con esa cifra arranca el mes siguiente'}.`);
+    if(d.anaquelHeredado!=null && Math.abs(d.anaquelDesvio)>0.01)
+      L.push(`⚠ El arranque heredado del cierre anterior (${S(d.anaquelHeredado)}) no coincide con lo que da la resta de este mes (${S(d.anaquelDeducido)}): ${S(Math.abs(d.anaquelDesvio))} de diferencia. El anaquel se movió por fuera de los ingresos y salidas, normalmente por un conteo físico que corrigió existencias.`);
+    L.push(`Son ${d.prodConStock} productos en existencia, ${d.prodBajo} por reponer y ${d.prodAgotado} agotado${d.prodAgotado!==1?'s':''}. El valor del anaquel es un saldo: no se suma a las cifras de gasto de arriba.`);
+  }
+
+  if(d.enCurso) L.push(`<i>Mes en curso: van ${d.diaDe} de ${d.diasMes} días. Estas cifras crecen hasta el ${fmtF(d.fin)}; el informe queda cerrado y archivado el día 1 del mes siguiente.</i>`);
+  else if(d.archivado) L.push(`<i>Mes cerrado y archivado. Las cifras quedaron congeladas tal como estaban al cierre.</i>`);
+  return L;
+}
+
+/* ── LOS GRÁFICOS DEL INFORME SE DIBUJAN EN SVG, SIN LIBRERÍA ──────────────────────────────────
+   Chart.js se descarga de un CDN. En superficie carga; en interior mina, no, y el informe de
+   cierre se revisa donde esté el logístico. Con la librería ausente estos tres gráficos salían
+   como "gráfico no disponible sin conexión" justo en el documento que se entrega. En SVG se ven
+   siempre, igual que el gráfico de factor de carga de Operaciones, que ya se dibuja así.
+   Dos barras por categoría —lo que entró contra lo que salió—, que es la única forma que usa este
+   informe. */
+function cieBarras(cats, serieA, serieB, labA, labB, colA, colB, suf, fmt){
+  const n=cats.length;
+  if(!n) return '<div style="color:var(--text3);font-size:12px;padding:12px 0">Sin datos para graficar.</div>';
+  const F=fmt||(v=>(Math.round(v*100)/100).toLocaleString('es-PE'));
+  const W=1080, H=230, ML=58, MR=12, MT=22, MB=34;
+  const iw=W-ML-MR, ih=H-MT-MB;
+  const max=Math.max(1, ...serieA, ...serieB);
+  // La escala se redondea hacia arriba a una cifra "limpia" para que las guías digan números
+  // legibles (200, 500, 1 000) y no 1 837.4
+  const mag=Math.pow(10, Math.floor(Math.log10(max))), paso=Math.ceil(max/mag/4)*mag, tope=paso*4||1;
+  const px=iw/n, bw=Math.max(2, Math.min(16, px*0.33));
+  const y=v=>MT+ih-(v/tope)*ih;
+  const guias=[0,1,2,3,4].map(i=>{ const v=paso*i; return `
+    <line x1="${ML}" y1="${y(v)}" x2="${W-MR}" y2="${y(v)}" stroke="rgba(255,255,255,.07)" stroke-width="1"/>
+    <text x="${ML-7}" y="${y(v)+3.5}" fill="#6b7480" font-size="9.5" text-anchor="end">${F(v)}</text>`; }).join('');
+  // Con muchos días no caben todas las etiquetas: se escribe una de cada N
+  const salto=Math.ceil(n/18);
+  const barras=cats.map((c,i)=>{
+    const cx=ML+px*i+px/2;
+    const a=serieA[i]||0, b=serieB[i]||0;
+    const ha=Math.max(0,ih-(y(a)-MT)), hb=Math.max(0,ih-(y(b)-MT));
+    return `
+      ${a?`<rect x="${(cx-bw-1).toFixed(1)}" y="${y(a).toFixed(1)}" width="${bw}" height="${ha.toFixed(1)}" fill="${colA}" rx="2"><title>${escAttr(c)} · ${labA}: ${F(a)}${suf||''}</title></rect>`:''}
+      ${b?`<rect x="${(cx+1).toFixed(1)}" y="${y(b).toFixed(1)}" width="${bw}" height="${hb.toFixed(1)}" fill="${colB}" rx="2"><title>${escAttr(c)} · ${labB}: ${F(b)}${suf||''}</title></rect>`:''}
+      ${(i%salto===0)?`<text x="${cx.toFixed(1)}" y="${H-MB+15}" fill="#6b7480" font-size="9.5" text-anchor="middle">${escAttr(String(c).length>12?String(c).slice(0,11)+'…':c)}</text>`:''}`;
+  }).join('');
+  return `<div style="overflow-x:auto;margin-top:14px">
+    <div style="display:flex;gap:18px;align-items:center;font-size:10.5px;color:var(--text3);margin-bottom:4px">
+      <span><span style="display:inline-block;width:10px;height:10px;background:${colA};border-radius:2px;vertical-align:-1px"></span> ${labA}</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:${colB};border-radius:2px;vertical-align:-1px"></span> ${labB}</span>
     </div>
-    <div class="card" style="padding:14px 16px;margin-bottom:12px">
-      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:6px"><span>Consumo sobre lo ingresado</span><span>${N(petCon)} de ${N(petIn)} gln</span></div>
-      <div class="progress-bar" style="height:10px"><div class="progress-fill ${petPct>=100?'red':'green'}" style="width:${petPct}%"></div></div>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;min-width:560px;height:${H}px;display:block">
+      ${guias}<line x1="${ML}" y1="${MT+ih}" x2="${W-MR}" y2="${MT+ih}" stroke="rgba(255,255,255,.18)"/>
+      ${barras}
+    </svg></div>`;
+}
+
+// ── Qué bloques están desplegados. Se recuerda entre repintados para que actualizar no te cierre
+//    el bloque que estabas leyendo.
+let _cieAbiertos={};
+function cieToggle(k){
+  _cieAbiertos[k]=!_cieAbiertos[k];
+  const b=document.getElementById('cie-cuerpo-'+k), f=document.getElementById('cie-flecha-'+k);
+  if(b) b.style.display=_cieAbiertos[k]?'block':'none';
+  if(f) f.textContent=_cieAbiertos[k]?'▾':'▸';
+}
+
+function renderLogEstadisticas(){
+  const wrap=document.getElementById('est-wrap'); if(!wrap) return;
+  try{ cieArchivarPendientes(); }catch(e){}
+
+  const sel=document.getElementById('est-periodo');
+  const meses=cieMeses();
+  if(sel){
+    const prev=sel.value;
+    sel.innerHTML=meses.map(m=>{ const w=cieVentana(m); const arc=cieArchivoDe(m);
+      const nom=(typeof finNombreMes==='function')?finNombreMes(m):m;
+      return `<option value="${m}">${nom} · ${w.ini.slice(8)}→${w.fin.slice(8)}/${m.slice(5,7)} ${arc?'· archivado':(m===cieMesActual()?'· en curso':'')}</option>`; }).join('');
+    sel.value=(prev&&meses.includes(prev))?prev:(meses.includes(cieMesActual())?cieMesActual():(meses[0]||''));
+  }
+  const mes=(sel&&sel.value)||cieMesActual();
+  const d=cieDatos(mes);
+  _cieUlt=d;
+
+  const S=n=>fmtS2(n), N=n=>(Number(n)||0).toLocaleString('es-PE',{maximumFractionDigits:2});
+  const pct=(x,t)=>t>0?Math.round(x/t*100):0;
+  const nom=(typeof finNombreMes==='function')?finNombreMes(mes):mes;
+
+  // Tarjeta de cabecera: el número único y el estado del mes
+  const avance=d.enCurso?Math.round(d.diaDe/d.diasMes*100):100;
+  const estado=d.archivado?'<span style="color:#22d3a5">● Cerrado y archivado</span>'
+             :d.enCurso?`<span style="color:#f59e0b">● En curso — día ${d.diaDe} de ${d.diasMes}</span>`
+             :'<span style="color:var(--text3)">● Mes vencido, sin archivar</span>';
+
+  // Un bloque desplegable: cabecera siempre visible con su cifra, cuerpo al hacer clic
+  const bloque=(k,icon,titulo,cifra,sub,color,cuerpo)=>{
+    const ab=!!_cieAbiertos[k];
+    return `<div style="background:var(--coal4);border:1px solid var(--border);border-radius:16px;margin-bottom:12px;overflow:hidden">
+      <button onclick="cieToggle('${k}')" style="width:100%;display:flex;align-items:center;gap:14px;background:none;border:none;
+        color:var(--text);padding:16px 18px;cursor:pointer;font-family:inherit;text-align:left">
+        <span style="font-size:20px">${icon}</span>
+        <span style="flex:1;min-width:0">
+          <span style="display:block;font-weight:900;font-size:13.5px;letter-spacing:.3px">${titulo}</span>
+          <span style="display:block;font-size:11px;color:var(--text3);margin-top:2px">${sub}</span>
+        </span>
+        <span style="font-size:19px;font-weight:900;color:${color};white-space:nowrap">${cifra}</span>
+        <span id="cie-flecha-${k}" style="color:var(--text3);font-size:13px;width:14px">${ab?'▾':'▸'}</span>
+      </button>
+      <div id="cie-cuerpo-${k}" style="display:${ab?'block':'none'};padding:0 18px 18px;border-top:1px solid var(--border)">${cuerpo}</div>
+    </div>`;
+  };
+  const tabla=(cols,filas,vacio)=>filas.length
+    ? `<div class="table-wrap" style="max-height:340px;overflow:auto;margin-top:14px"><table style="width:100%;font-size:12px">
+        <thead><tr style="background:var(--coal2)">${cols.map((c,i)=>`<th style="padding:7px 10px;text-align:${i?'right':'left'};color:var(--text3);font-size:10.5px;letter-spacing:.4px">${c}</th>`).join('')}</tr></thead>
+        <tbody>${filas.map(f=>`<tr style="border-top:1px solid var(--border2)">${f.map((c,i)=>`<td style="padding:7px 10px;text-align:${i?'right':'left'}">${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`
+    : `<div style="color:var(--text3);font-size:12.5px;padding:14px 0">${vacio}</div>`;
+  const nota=t=>`<div style="font-size:11.5px;color:var(--text2);line-height:1.7;margin-top:12px;padding:10px 12px;background:var(--coal2);border-radius:10px">${t}</div>`;
+  const mini=(lab,val,col)=>`<div style="min-width:130px"><div style="font-size:10px;color:var(--text3);letter-spacing:.4px">${lab}</div>
+    <div style="font-size:17px;font-weight:900;color:${col||'var(--text)'};margin-top:2px">${val}</div></div>`;
+  const fila=xs=>`<div style="display:flex;gap:24px;flex-wrap:wrap;margin:14px 0 4px">${xs}</div>`;
+  const N2=v=>(Math.round(v*100)/100).toLocaleString('es-PE');
+  const etqDia=d.dias.map(x=>x.slice(8,10)+'/'+x.slice(5,7));
+  const gMat=cieBarras(etqDia, d.dias.map(x=>d.dIng[x]), d.dias.map(x=>d.dSal[x]),
+                       'Entró S/','Salió S/','#60a5fa','#f87171',' S/',N2);
+  const gExp=cieBarras(d.expPorProd.map(x=>x.nombre), d.expPorProd.map(x=>x.ing), d.expPorProd.map(x=>x.sal),
+                       'Ingresado','Consumido','#60a5fa','#f59e0b',' und',N2);
+  const gPet=cieBarras(etqDia, d.dias.map(x=>d.dPetIn[x]), d.dias.map(x=>d.dPetCon[x]),
+                       'Ingresado gln','Consumido gln','#22d3a5','#f59e0b',' gln',N2);
+
+  wrap.innerHTML=
+  // ── CABECERA ──
+  `<div style="background:linear-gradient(135deg,var(--coal3),var(--coal4));border:1px solid var(--border);border-radius:20px;padding:22px 24px;margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
+      <div>
+        <div style="font-size:11px;color:var(--text3);letter-spacing:1.2px">INFORME DE CIERRE DE MES · LOGÍSTICA</div>
+        <div style="font-size:26px;font-weight:900;color:var(--gold-light);margin-top:3px">${nom}</div>
+        <div style="font-size:11.5px;color:var(--text3);margin-top:3px">del ${fmtF(d.ini)} al ${fmtF(d.fin)} · ${estado}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:10.5px;color:var(--text3);letter-spacing:1px">COSTO LOGÍSTICO DEL MES</div>
+        <div style="font-size:34px;font-weight:900;color:#f87171;line-height:1.1">${S(d.costoTotal)}</div>
+        <div style="font-size:11px;color:var(--text3)">materiales + explosivo + combustible comprados</div>
+      </div>
     </div>
-    <div class="card" style="padding:16px;margin-bottom:22px">
-      <div class="section-title" style="margin-top:0;font-size:13px">Ingreso vs consumo de petróleo por día (gln)</div>
-      <div style="height:270px"><canvas id="est-ch-pet"></canvas></div>
+    ${d.enCurso?`<div style="margin-top:16px"><div style="height:7px;background:var(--coal2);border-radius:5px;overflow:hidden">
+      <div style="height:100%;width:${avance}%;background:linear-gradient(90deg,#c9a84c,#e5b45b)"></div></div>
+      <div style="font-size:10.5px;color:var(--text3);margin-top:5px">El informe se llena solo: ${avance}% del mes transcurrido. Al llegar al ${fmtF(d.fin)} queda completo y listo para entregar.</div></div>`:''}
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:18px">
+      <button class="btn btn-gold" style="padding:9px 18px;font-size:12px" onclick="cieDescargar()">⬇ Descargar informe de ${nom}</button>
+      <button class="btn btn-outline" style="padding:9px 16px;font-size:12px" onclick="renderLogEstadisticas()">↻ Actualizar</button>
+      ${(!d.enCurso&&d.archivado)?`<button class="btn btn-outline" style="padding:9px 16px;font-size:12px" onclick="cieRecalcular('${mes}')">⟳ Recalcular este cierre</button>`:''}
+    </div>
+  </div>`
+
+  // ── EL CUADRE DEL MES ──
+  +`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-bottom:16px">
+    ${[['ENTRÓ (comprado)',S(d.costoTotal),'#60a5fa',d.nIng+' ingresos de material'],
+       ['SALIÓ A LA OPERACIÓN',S(d.consumoTotal),'#f87171',d.nSal+' salidas de material'],
+       ['SE QUEDÓ EN EL ANAQUEL',S(d.costoTotal-d.consumoTotal),(d.costoTotal-d.consumoTotal)>=0?'#22d3a5':'#f59e0b',(d.costoTotal-d.consumoTotal)>=0?'entró más de lo que salió':'salió más de lo que entró']]
+      .map(([l,v,c,s])=>`<div class="kpi-card" style="padding:16px 18px">
+        <div style="font-size:10px;color:var(--text3);letter-spacing:.6px">${l}</div>
+        <div style="font-size:23px;font-weight:900;color:${c};margin-top:4px">${v}</div>
+        <div style="font-size:10.5px;color:var(--text3);margin-top:3px">${s}</div></div>`).join('')}
+  </div>`
+
+  // EL ALMACÉN HOY — va en su propia fila y con su propia etiqueta, separado de las tres de arriba,
+  // porque no es del mes: es el saldo a la fecha y no se suma con nada.
+  +(function(){
+    const mesAnt=(()=>{ const y=+d.mes.slice(0,4), m=+d.mes.slice(5,7)-1;
+      const yy=m===0?y-1:y, mm=m===0?12:m; const p=yy+'-'+String(mm).padStart(2,'0');
+      return (typeof finNombreMes==='function')?finNombreMes(p):p; })();
+    const paso=(lab,val,sub,col)=>`<div style="flex:1 1 150px;min-width:140px">
+        <div style="font-size:10px;color:var(--text3);letter-spacing:.5px">${lab}</div>
+        <div style="font-size:20px;font-weight:900;color:${col};margin-top:3px">${val}</div>
+        <div style="font-size:10.5px;color:var(--text3);margin-top:2px">${sub}</div></div>`;
+    const flecha=`<div style="font-size:20px;color:var(--text3);align-self:center">→</div>`;
+    return `<div style="background:var(--coal4);border:1px solid var(--border);border-left:3px solid var(--gold);
+       border-radius:16px;padding:20px 22px;margin-bottom:18px">
+      <div style="font-size:10.5px;color:var(--text3);letter-spacing:1px">EL ANAQUEL, DE UN CIERRE AL SIGUIENTE</div>
+      <div style="font-size:11.5px;color:var(--text3);margin-top:3px">Lo que valía el anaquel al cerrar ${mesAnt} es con lo que arranca este mes; lo que entra y sale lo mueve hasta su propio cierre. ${d.enCurso?'La cifra final es la de <b>hoy</b> y sigue moviéndose.':'Cifras <b>congeladas</b> el '+fmtF(d.stockAl)+'.'}</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:16px;align-items:stretch">
+        ${paso('VENÍA CON (cierre de '+mesAnt+')',S(d.anaquelIni),'heredado del mes anterior','var(--text2)')}
+        ${flecha}
+        ${paso('ENTRÓ ESTE MES',S(d.matIng),d.nIng+' ingresos','#60a5fa')}
+        ${flecha}
+        ${paso('SALIÓ ESTE MES',S(d.matSal),d.nSal+' salidas','#f87171')}
+        ${flecha}
+        ${paso(d.enCurso?'VALE HOY':'QUEDÓ AL CERRAR',S(d.anaquelFin),d.prodConStock+' productos · '+d.prodBajo+' por reponer · '+d.prodAgotado+' agotados','var(--gold-light)')}
+      </div>
+      <div style="font-size:11px;color:${d.movMes>=0?'#22d3a5':'#f59e0b'};margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+        El anaquel ${d.movMes>=0?'subió':'bajó'} <b>${S(Math.abs(d.movMes))}</b> en el mes — ${d.movMes>=0?'entró más de lo que salió':'salió más de lo que entró'}.
+        ${(d.anaquelHeredado!=null&&Math.abs(d.anaquelDesvio)>0.01)?`<div style="color:#f59e0b;margin-top:7px">⚠ El arranque heredado del cierre anterior (${S(d.anaquelHeredado)}) no coincide con lo que da la resta de este mes (${S(d.anaquelDeducido)}): <b>${S(Math.abs(d.anaquelDesvio))}</b> de diferencia. El anaquel se movió por fuera de los ingresos y salidas — normalmente un conteo físico que corrigió existencias.</div>`:''}
+        ${!d.enCurso?' Este cierre es el arranque de '+((typeof finNombreMes==='function')?finNombreMes((()=>{const y=+d.mes.slice(0,4),m=+d.mes.slice(5,7)+1;const yy=m===13?y+1:y,mm=m===13?1:m;return yy+'-'+String(mm).padStart(2,'0');})()):'')+'.':''}
+      </div></div>`;
+  })()
+
+  +`<div class="section-title" style="margin-top:4px">📂 Detalle — haz clic en cada bloque</div>`
+
+  // ── 1. MATERIALES ──
+  +bloque('mat','📦','MATERIALES DE ALMACÉN',S(d.matIng),
+    `Entró ${S(d.matIng)} · salió ${S(d.matSal)} · Insumos y Mantenimiento`,'#60a5fa',
+    fila(mini('Ingreso Insumos',S(d.matIngGen),'#60a5fa')+mini('Ingreso Mantenimiento',S(d.matIngMant),'#d4b75e')
+        +mini('Salida Insumos',S(d.matSalGen),'#f87171')+mini('Salida Mantenimiento',S(d.matSalMant),'#f59e0b'))
+    +gMat
+    +`<div style="font-size:11.5px;color:var(--text2);font-weight:700;margin:16px 0 0">De dónde vino el material</div>`
+    +tabla(['Proveedor / vale','Insumos','Mantenimiento','Total','Vales'],
+       d.porProv.slice(0,25).map(p=>[escAttr(p.nombre),S(p.gen),p.mant?S(p.mant):'—',`<b>${S(p.gen+p.mant)}</b>`,p.n]),
+       'Sin ingresos registrados este mes.')
+    +`<div style="font-size:11.5px;color:var(--text2);font-weight:700;margin:16px 0 0">A dónde se fue</div>`
+    +tabla(['Destino','Insumos','Mantenimiento','Total','Salidas'],
+       d.porDest.slice(0,25).map(p=>[escAttr(p.nombre),S(p.gen),p.mant?S(p.mant):'—',`<b>${S(p.gen+p.mant)}</b>`,p.n]),
+       'Sin salidas registradas este mes.'))
+
+  // ── 2. EXPLOSIVO ──
+  +bloque('exp','🧨','EXPLOSIVO',S(d.expIngS),
+    `Ingresó ${N(d.expIngU)} und · consumió ${N(d.expSalU)} und · <b>quedan ${N(d.expStockU)} und</b>`,'#f59e0b',
+    fila(mini('Venía con',N(d.expIniU)+' und','var(--text2)')
+        +mini('Ingresado',N(d.expIngU)+' und · '+S(d.expIngS),'#60a5fa')
+        +mini('Consumido',N(d.expSalU)+' und · '+S(d.expSalS),'#f87171')
+        +mini('QUEDA EN EL POLVORÍN',N(d.expStockU)+' und','var(--gold-light)')
+        +mini('Valor del polvorín',S(d.expStockS),'var(--gold-light)'))
+    +`<div style="font-size:11px;color:${d.expMovU>=0?'#22d3a5':'#f59e0b'};margin-top:10px">
+       El polvorín ${d.expMovU>=0?'subió':'bajó'} <b>${N(Math.abs(d.expMovU))} und</b> en el mes — ${d.expMovU>=0?'ingresó más de lo que se consumió':'se consumió más de lo que ingresó'}. Lo que queda es con lo que arranca el mes siguiente.</div>`
+    +(d.expPorProd.length?gExp:'')
+    +tabla(['Producto','Ingresado','Consumido','Valor consumido'],
+       d.expPorProd.map(x=>[escAttr(x.nombre),N(x.ing)+' und',N(x.sal)+' und',S(x.salS)]),
+       'Sin movimiento de explosivo este mes.')
+    +`<div style="font-size:11.5px;color:var(--text2);font-weight:700;margin:16px 0 0">Lo que queda en el polvorín${d.enCurso?' hoy':' al cerrar'}</div>`
+    +tabla(['Producto','Unidades','Valorizado'],
+       (d.expStockPorProd||[]).map(x=>[escAttr(x.nombre),N(x.und)+' und',S(x.soles)]),
+       'Polvorín sin existencias.')
+    +nota('El explosivo se valoriza al precio de catálogo. Su <b>ingreso</b> entra al costo logístico del mes; su <b>consumo</b> es el mismo material visto cuando se usa, y por eso no se vuelve a sumar. Lo que <b>queda</b> es un saldo —como el anaquel— y tampoco se suma: sale del Stock Remanente, con su saldo base confirmado.'))
+
+  // ── 3. COMBUSTIBLE ──
+  +bloque('comb','⛽','COMBUSTIBLE',S(d.combIngS),
+    `Petróleo ${N(d.petIn)} gln entró · ${N(d.petCon)} gln consumido`,'#22d3a5',
+    fila(mini('Petróleo ingresado',N(d.petIn)+' gln','#60a5fa')+mini('Gasolina ingresada',N(d.gasIn)+' gln','#60a5fa')
+        +mini('Petróleo consumido',N(d.petCon)+' gln','#f87171')+mini('Saldo',N(d.petIn-d.petCon)+' gln',(d.petIn-d.petCon)>=0?'#22d3a5':'#f59e0b')
+        +mini('Precio por galón',S(d.pPet),'var(--text2)'))
+    +gPet
+    +`<div style="font-size:11.5px;color:var(--text2);font-weight:700;margin:16px 0 0">Consumo por equipo</div>`
+    +tabla(['Equipo','Galones','Valorizado','% del mes'],
+       d.petPorEq.map(e=>[escAttr(e.nombre),N(e.gln),S(e.gln*d.pPet),pct(e.gln,d.petCon)+'%']),
+       'Sin consumo de combustible este mes.'))
+
+  // ── 4. MANTENIMIENTO ──
+  +bloque('mant','🔧','MANTENIMIENTO',S(d.mantS),
+    `${d.mantKits} kit${d.mantKits!==1?'s':''} · piezas ${S(d.mantPiezas)} + ${N(d.mantHoras)} h hombre`,'#e67e22',
+    fila(mini('Costo de piezas',S(d.mantPiezas),'#d4b75e')+mini('Horas hombre',N(d.mantHoras)+' h · '+S(d.mantMO),'#e67e22')
+        +mini('Total del mes',S(d.mantS),'#e67e22')+mini('Kits',String(d.mantKits),'var(--text2)')
+        +mini('% del material que salió',pct(d.mantPiezas,d.matSal)+'%','var(--text2)'))
+    +`<div style="font-size:11.5px;color:var(--text2);font-weight:700;margin:16px 0 0">Por equipo</div>`
+    +tabla(['Equipo','Piezas','Horas hombre','Total','Kits'],
+       (d.mantPorEquipo||[]).map(e=>[escAttr(e.nombre),S(e.piezas),N(e.horas)+' h · '+S(e.mo),`<b>${S(e.total)}</b>`,e.n]),
+       'Sin kits despachados este mes.')
+    +`<div style="font-size:11.5px;color:var(--text2);font-weight:700;margin:16px 0 0">Kit por kit</div>`
+    +tabla(['Fecha','Equipo','Solicitó','Costo'],
+       (d.kits||[]).slice().sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)))
+         .map(k=>[fmtF(k.fecha),escAttr(k.equipo||'—'),escAttr(k.resp||'—'),S(k.costo||0)]),
+       'Sin kits despachados este mes.')
+    +nota('Las <b>piezas</b> no se suman aparte al costo del mes: salieron del almacén y ya estaban contadas cuando se compraron. Las <b>horas hombre</b> sí son un costo propio de mantenimiento ('+S(d.mantMO)+' a S/ '+KIT_TARIFA_HORA.toFixed(2)+'/h), y se informan aquí porque no pasan por el almacén. Es el mismo reparto de la pantalla de Costo de Mantenimiento.'))
+
+  // ── 5. MONTE BRAVO ──
+  +bloque('mb','🏔️','MONTE BRAVO',S(d.mbDespachado+d.mbPetS),
+    `Materiales ${S(d.mbDespachado)} · petróleo ${N(d.mbPetGln)} gln`,'#9b59b6',
+    fila(mini('Materiales despachados',S(d.mbDespachado),'#9b59b6')+mini('Consumido allá',S(d.mbConsumido),'var(--text2)')
+        +mini('Petróleo enviado',N(d.mbPetGln)+' gln','#22d3a5')+mini('Valor del petróleo',S(d.mbPetS),'#22d3a5'))
+    +nota('Lo que se despacha a Monte Bravo <b>se compra aquí y se gasta allá</b>: aparece como gasto de esa unidad, no de 2820, para que el mismo sol no se cuente dos veces. El petróleo enviado sale del tanque de 2820 y se descuenta de su gasto de combustible.'))
+
+  // ── INTERPRETACIÓN ──
+  +`<div style="background:var(--coal3);border:1px solid var(--border);border-left:3px solid var(--gold);border-radius:16px;padding:22px 24px;margin-top:18px">
+      <div style="font-size:13px;font-weight:900;color:var(--gold-light);letter-spacing:.4px;margin-bottom:12px">🧭 LECTURA DEL MES</div>
+      ${cieInterpretacion(d).map(t=>`<div style="font-size:12.5px;color:var(--text2);line-height:1.8;margin-bottom:9px">• ${t}</div>`).join('')}
     </div>`;
 
-  _estDestruirCharts();
-  if(typeof Chart==='undefined'){
-    const av=document.createElement('div');
-    av.style.cssText='font-size:12px;color:var(--text3);padding:10px 0';
-    av.textContent='Los gráficos necesitan conexión a internet. Los totales de arriba sí son correctos.';
-    wrap.appendChild(av); return;
+}
+
+let _cieUlt=null;
+
+/* Vuelve a calcular un cierre ya archivado contra los datos de hoy. Es a propósito y a mano: lo
+   archivado no se toca solo, porque un informe entregado tiene que seguir diciendo lo que decía. */
+function cieRecalcular(mes){
+  /* El recálculo rehace los MOVIMIENTOS del mes con lo que haya hoy —correcciones tardías, un vale
+     que llegó después—, pero NO la foto del almacén: esa se queda como estaba al cierre. El valor
+     del anaquel es un saldo, se mueve todos los días, y lo que valía el 31 de octubre no se puede
+     reconstruir desde diciembre. Recalcularlo pondría el almacén de hoy dentro del informe de
+     octubre, que es justo lo que se quiso evitar al congelarlo. */
+  if(!confirm('Recalcular el cierre de '+mes+' con los datos actuales.\n\n'+
+     'Se rehacen los movimientos del mes (ingresos, salidas, explosivo, combustible, mantenimiento).\n'+
+     'El valor del almacén SIGUE congelado como estaba al cierre: es un saldo y no se puede recomponer hacia atrás.\n\n'+
+     'Si ya entregaste el informe, las cifras pueden dejar de coincidir con la copia entregada.\n\n¿Continuar?')) return;
+  const prev=cieArchivoDe(mes);
+  const arr=cieArchivos().filter(c=>c&&c.mes!==String(mes));
+  const d=cieDatos(mes);
+  const res=cieResumenPlano(d);
+  if(prev&&prev.resumen&&prev.resumen.valorStock!=null){       // la foto del almacén no se rehace
+    res.valorStock=prev.resumen.valorStock; res.prodConStock=prev.resumen.prodConStock;
+    res.prodBajo=prev.resumen.prodBajo; res.prodAgotado=prev.resumen.prodAgotado;
+    res.stockAl=prev.resumen.stockAl||prev.cerrado;
   }
-  const ejes=(sufijo)=>({responsive:true,maintainAspectRatio:false,
-    plugins:{legend:{labels:{color:'#9aa4b2',boxWidth:12,font:{size:11}}},
-      tooltip:{callbacks:{label:c=>c.dataset.label+': '+N(c.parsed.y)+sufijo}}},
-    scales:{x:{ticks:{color:'#6b7280',font:{size:9},maxRotation:60,minRotation:0},grid:{display:false}},
-      y:{beginAtZero:true,ticks:{color:'#6b7280',font:{size:10}},grid:{color:'rgba(255,255,255,0.05)'}}}});
-  const mk=(id,cfg)=>{ const cv=document.getElementById(id); if(!cv) return; try{ _estCharts.push(new Chart(cv.getContext('2d'),cfg)); }catch(e){} };
+  arr.push({ mes:String(mes), cerrado:hoy(), _ts:Date.now(), recalculado:true, resumen:res });
+  arr.sort((a,b)=>String(b.mes).localeCompare(String(a.mes)));
+  cieArchivosSave(arr);
+  showNotif('✓ Cierre de '+mes+' recalculado');
+  renderLogEstadisticas();
+}
 
-  mk('est-ch-mat',{type:'bar',data:{labels:etq,datasets:[
-    {label:'Ingresos S/',data:dias.map(d=>Math.round(dIng[d]*100)/100),backgroundColor:'rgba(96,165,250,0.75)',borderRadius:3},
-    {label:'Consumo S/',data:dias.map(d=>Math.round(dSal[d]*100)/100),backgroundColor:'rgba(248,113,113,0.75)',borderRadius:3}]},options:ejes(' S/')});
-
-  if(exPorProd.length) mk('est-ch-exp',{type:'bar',data:{labels:exPorProd.map(x=>x.nombre),datasets:[
-    {label:'Ingresado',data:exPorProd.map(x=>x.ing),backgroundColor:'rgba(96,165,250,0.75)',borderRadius:3},
-    {label:'Consumido',data:exPorProd.map(x=>x.sal),backgroundColor:'rgba(248,113,113,0.75)',borderRadius:3}]},options:ejes(' und')});
-
-  mk('est-ch-pet',{type:'bar',data:{labels:etq,datasets:[
-    {label:'Ingresado gln',data:dias.map(d=>Math.round(dPetIn[d]*100)/100),backgroundColor:'rgba(34,211,165,0.75)',borderRadius:3},
-    {label:'Consumido gln',data:dias.map(d=>Math.round(dPetCon[d]*100)/100),backgroundColor:'rgba(245,158,11,0.8)',borderRadius:3}]},options:ejes(' gln')});
+/* El informe para entregar: se abre en una ventana lista para imprimir o guardar como PDF, con
+   las mismas cifras de la pantalla y la lectura del mes incluida. Va en HTML y no en Excel porque
+   esto se entrega y se archiva, no se sigue editando, y porque así funciona sin señal. */
+function cieDescargar(){
+  const d=_cieUlt; if(!d){ showNotif('Abre primero el informe','error'); return; }
+  const S=n=>fmtS2(n), N=n=>(Number(n)||0).toLocaleString('es-PE',{maximumFractionDigits:2});
+  const nom=(typeof finNombreMes==='function')?finNombreMes(d.mes):d.mes;
+  const quien=(typeof usuarioActivo!=='undefined'&&usuarioActivo&&(usuarioActivo.nombre||usuarioActivo.rol))||'—';
+  const T=(t,filas)=>`<h3>${t}</h3><table>${filas.map(f=>`<tr><td>${f[0]}</td><td class="n">${f[1]}</td></tr>`).join('')}</table>`;
+  const w=window.open('','_blank','width=900,height=1000');
+  if(!w){ showNotif('El navegador bloqueó la ventana del informe. Permite las ventanas emergentes y vuelve a intentarlo.','error'); return; }
+  w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8">
+  <title>Informe de cierre — ${nom}</title><style>
+    *{box-sizing:border-box} body{font-family:Segoe UI,Arial,sans-serif;color:#111;margin:0;padding:34px 40px}
+    h1{font-size:21px;margin:0} h2{font-size:14px;margin:26px 0 6px;border-bottom:2px solid #111;padding-bottom:4px}
+    h3{font-size:11.5px;margin:14px 0 5px;color:#444;text-transform:uppercase;letter-spacing:.6px}
+    .sub{color:#555;font-size:12px;margin-top:4px}
+    .tot{border:2px solid #111;padding:14px 18px;margin:16px 0;display:flex;justify-content:space-between;align-items:center}
+    .tot b{font-size:25px} table{width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:6px}
+    td{padding:4px 8px;border-bottom:1px solid #ddd} td.n{text-align:right;font-variant-numeric:tabular-nums}
+    .lec{background:#f4f4f4;padding:14px 16px;margin-top:10px;font-size:11.5px;line-height:1.75}
+    .lec div{margin-bottom:7px} .firmas{display:flex;gap:40px;margin-top:52px;font-size:11px}
+    .firmas div{flex:1;border-top:1px solid #111;padding-top:5px;text-align:center}
+    @media print{body{padding:16px 20px} .noimp{display:none}}
+  </style></head><body>
+  <h1>INFORME DE CIERRE DE MES — LOGÍSTICA</h1>
+  <div class="sub"><b>${nom}</b> · del ${fmtF(d.ini)} al ${fmtF(d.fin)} · ${d.enCurso?('mes EN CURSO, día '+d.diaDe+' de '+d.diasMes):'mes cerrado'}
+    · emitido el ${fmtF(hoy())} por ${quien}</div>
+  <div class="tot"><span>COSTO LOGÍSTICO DEL MES<br><small style="color:#555">materiales + explosivo + combustible comprados</small></span><b>${S(d.costoTotal)}</b></div>
+  <h2>1 · Cuadre del mes</h2>
+  ${T('Resumen',[['Entró al almacén (comprado)',S(d.costoTotal)],['Salió a la operación',S(d.consumoTotal)],
+      ['Se quedó en el anaquel',S(d.costoTotal-d.consumoTotal)]])}
+  <h2>2 · Materiales</h2>
+  ${T('Movimiento',[['Ingreso Insumos',S(d.matIngGen)],['Ingreso Mantenimiento',S(d.matIngMant)],
+      ['Total ingresado',S(d.matIng)],['Salida Insumos',S(d.matSalGen)],['Salida Mantenimiento',S(d.matSalMant)],
+      ['Total salido',S(d.matSal)],['N° de ingresos',String(d.nIng)],['N° de salidas',String(d.nSal)]])}
+  ${d.porProv.length?`<h3>De dónde vino</h3><table>${d.porProv.slice(0,20).map(p=>`<tr><td>${escAttr(p.nombre)}</td><td class="n">${S(p.gen+p.mant)}</td></tr>`).join('')}</table>`:''}
+  ${d.porDest.length?`<h3>A dónde se fue</h3><table>${d.porDest.slice(0,20).map(p=>`<tr><td>${escAttr(p.nombre)}</td><td class="n">${S(p.gen+p.mant)}</td></tr>`).join('')}</table>`:''}
+  <h2>3 · Explosivo</h2>
+  ${T('Movimiento del polvorín',[['Venía con',N(d.expIniU)+' und'],['Ingresado',N(d.expIngU)+' und'],
+      ['Valor ingresado',S(d.expIngS)],['Consumido',N(d.expSalU)+' und'],['Valor consumido',S(d.expSalS)],
+      ['Variación del mes',(d.expMovU>=0?'+ ':'− ')+N(Math.abs(d.expMovU))+' und'],
+      [(d.enCurso?'Queda hoy':'Quedó al cerrar'),N(d.expStockU)+' und'],['Valor de lo que queda',S(d.expStockS)]])}
+  ${(d.expStockPorProd||[]).length?`<h3>Lo que queda, por producto</h3><table>${d.expStockPorProd.map(x=>`<tr><td>${escAttr(x.nombre)}</td><td class="n">${N(x.und)} und · ${S(x.soles)}</td></tr>`).join('')}</table>`:''}
+  ${d.expPorProd.length?`<h3>Por producto</h3><table>${d.expPorProd.map(x=>`<tr><td>${escAttr(x.nombre)}</td><td class="n">ing ${N(x.ing)} · cons ${N(x.sal)} und</td></tr>`).join('')}</table>`:''}
+  <h2>4 · Combustible</h2>
+  ${T('Movimiento',[['Petróleo ingresado',N(d.petIn)+' gln'],['Gasolina ingresada',N(d.gasIn)+' gln'],
+      ['Valor del combustible comprado',S(d.combIngS)],['Petróleo consumido',N(d.petCon)+' gln'],
+      ['Saldo',N(d.petIn-d.petCon)+' gln'],['Precio por galón',S(d.pPet)]])}
+  ${d.petPorEq.length?`<h3>Consumo por equipo</h3><table>${d.petPorEq.map(e=>`<tr><td>${escAttr(e.nombre)}</td><td class="n">${N(e.gln)} gln · ${S(e.gln*d.pPet)}</td></tr>`).join('')}</table>`:''}
+  <h2>5 · Mantenimiento</h2>
+  ${T('Resumen',[['Kits despachados',String(d.mantKits)],['Costo de piezas',S(d.mantPiezas)],
+      ['Horas hombre',N(d.mantHoras)+' h'],['Valor de las horas hombre',S(d.mantMO)],['Total mantenimiento',S(d.mantS)]])}
+  ${(d.mantPorEquipo||[]).length?`<h3>Por equipo</h3><table>${d.mantPorEquipo.map(e=>`<tr><td>${escAttr(e.nombre)}</td><td class="n">piezas ${S(e.piezas)} · ${N(e.horas)} h · <b>${S(e.total)}</b></td></tr>`).join('')}</table>`:''}
+  <h2>6 · Monte Bravo</h2>
+  ${T('Enviado desde 2820',[['Materiales despachados',S(d.mbDespachado)],['Consumido en la unidad',S(d.mbConsumido)],
+      ['Petróleo enviado',N(d.mbPetGln)+' gln'],['Valor del petróleo',S(d.mbPetS)]])}
+  <h2>7 · El anaquel, de un cierre al siguiente</h2>
+  ${T('Movimiento del anaquel'+(d.enCurso?' (la cifra final es la de hoy y sigue moviéndose)':' — congelado el '+fmtF(d.stockAl)),
+      [['Venía con (cierre del mes anterior)',S(d.anaquelIni)],['Entró este mes',S(d.matIng)],
+       ['Salió este mes',S(d.matSal)],
+       [(d.enCurso?'Vale hoy':'Quedó al cerrar'),S(d.anaquelFin)],
+       ['Variación del mes',(d.movMes>=0?'+ ':'− ')+S(Math.abs(d.movMes))],
+       ['Productos en existencia',String(d.prodConStock)],
+       ['Productos por reponer (menos de 10)',String(d.prodBajo)],['Productos agotados',String(d.prodAgotado)]])}
+  <div style="font-size:11px;color:#555;margin-top:4px">Lo que queda al cerrar este mes es con lo que arranca el siguiente.</div>
+  <h2>8 · Lectura del mes</h2>
+  <div class="lec">${cieInterpretacion(d).map(t=>'<div>• '+t+'</div>').join('')}
+    <div style="margin-top:12px;color:#555"><b>Nota de método:</b> el costo del mes es lo COMPRADO. Lo que sale del
+    almacén —consumo, kits de mantenimiento, despachos a Monte Bravo— no se suma aparte: es el mismo material ya
+    contado al comprarlo. Sumar las dos columnas duplicaría el gasto.</div></div>
+  <div class="firmas"><div>Logística</div><div>Jefe de Finanzas</div><div>Gerencia</div></div>
+  <div class="noimp" style="margin-top:26px;text-align:center">
+    <button onclick="window.print()" style="padding:10px 26px;font-size:13px;cursor:pointer">🖨 Imprimir / Guardar PDF</button></div>
+  </body></html>`);
+  w.document.close();
+  showNotif('✓ Informe de '+nom+' generado');
 }
 
 function abrirEditarIngreso(id){
