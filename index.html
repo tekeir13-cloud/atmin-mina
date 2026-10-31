@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-297</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-298</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-297</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-298</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-297</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-298</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -24025,6 +24025,11 @@ function pHistRestaurar(t){
     if(foto) nuevo.foto=foto;
     if(act){ Object.keys(act).forEach(k=>{ if(!(k in nuevo)) delete act[k]; }); Object.assign(act, nuevo); }
     else state.personal.push(nuevo);
+    /* Reponer a alguien levanta SU lápida. Sin esto, restaurar a un trabajador borrado lo devolvía
+       a la pantalla y la siguiente sincronización lo volvía a sacar, con el filtro de lápidas
+       haciendo su trabajo sobre una decisión que ya se había revertido. Volvía a verse el borrado
+       fantasma: aparece, actualizas, y ya no está. */
+    try{ if(typeof tombQuitar==='function') tombQuitar(v.id); }catch(e){}
     repuestas++;
   });
   /* VOLVER ATRÁS TAMBIÉN PUEDE QUITAR A LOS QUE NO ESTABAN.
@@ -24059,6 +24064,56 @@ function pHistRestaurar(t){
   showNotif('✓ '+repuestas+' fichas devueltas a como estaban el '+_pHistCuando(f.t)+
             (quitados?' · '+quitados+' quitadas de la lista':''),'ok');
 }
+/* ── BUSCAR A UNA PERSONA EN TODO EL HISTORIAL Y REPONERLA SOLA ──────────────────────────────
+   Cuando falta UN trabajador, volver a una versión entera es un cañonazo: devuelve 74 fichas al
+   estado de entonces para recuperar una, y de paso deshace los cambios que se hicieron después en
+   las otras 73. Esto busca el nombre en todas las fotos guardadas, dice en cuáles aparece y
+   repone esa ficha sola, con sus datos de la foto más reciente en que exista.
+   Al reponerla se levanta su lápida: si no, la siguiente sincronización la volvería a sacar. */
+function pHistBuscar(q){
+  const txt=String(q||'').trim().toUpperCase();
+  const caja=document.getElementById('phist-result'); if(!caja) return;
+  if(txt.length<3){ caja.innerHTML='<div style="padding:12px;color:#94a3b8;font-size:12.5px">Escribe al menos 3 letras del nombre o el DNI.</div>'; return; }
+  const h=pHistCargar();
+  const hallado={};                       // por id: la ficha de la foto MÁS RECIENTE donde está
+  h.forEach(f=>{ (f.datos||[]).forEach(v=>{
+    if(!v || v.id==null) return;
+    const n=String(v.nombre||'').toUpperCase(), d=String(v.dni||'');
+    if(n.indexOf(txt)<0 && d.indexOf(txt)<0) return;
+    const k=String(v.id);
+    if(!hallado[k]) hallado[k]={ficha:v, visto:[], t:f.t};
+    hallado[k].visto.push(_pHistCuando(f.t)); }); });
+  const ids=Object.keys(hallado);
+  if(!ids.length){ caja.innerHTML='<div style="padding:12px;color:#f59e0b;font-size:12.5px">No aparece en ninguna versión guardada. Si entró hace mucho, su foto pudo caer fuera de las '+PHIST_MAX+' que se conservan: habría que darlo de alta de nuevo.</div>'; return; }
+  const esta=id=>(state.personal||[]).some(p=>p&&String(p.id)===String(id));
+  caja.innerHTML=ids.map(k=>{ const x=hallado[k], v=x.ficha, ya=esta(k);
+    return '<div style="padding:11px 12px;border-bottom:1px solid rgba(255,255,255,.08)">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'+
+      '<div><div style="font-weight:700;color:#e5e7eb">'+escAttr(v.nombre||('#'+v.id))+'</div>'+
+      '<div style="font-size:11.5px;color:#94a3b8">'+(v.dni?'DNI '+escAttr(v.dni)+' · ':'')+escAttr(v.rol||'sin cargo')+
+      (v.estado&&v.estado!=='activo'?' · <span style="color:#f59e0b">'+escAttr(v.estado)+'</span>':'')+'</div>'+
+      '<div style="font-size:11px;color:#64748b;margin-top:2px">última vez en la versión del '+escAttr(x.visto[0])+
+      (x.visto.length>1?' · en '+x.visto.length+' versiones':'')+'</div></div>'+
+      (ya?'<span style="font-size:12px;color:#22d3a5;white-space:nowrap">✓ ya está en la lista</span>'
+         :'<button class="btn btn-outline" style="font-size:12px;padding:6px 12px;border-color:#22d3a5;color:#22d3a5;white-space:nowrap" onclick="pHistReponerUno('+x.t+','+JSON.stringify(String(v.id))+')">Reponer solo a este</button>')+
+      '</div></div>'; }).join('');
+}
+function pHistReponerUno(t, id){
+  if(rrhhBloqueado()) return;
+  const f=pHistCargar().find(x=>x&&String(x.t)===String(t));
+  const v=f&&(f.datos||[]).find(x=>x&&String(x.id)===String(id));
+  if(!v){ showNotif('No encuentro esa ficha en la versión','error'); return; }
+  if((state.personal||[]).some(p=>p&&String(p.id)===String(id))){ showNotif('Ya está en la lista','warn'); return; }
+  if(!confirm('Reponer a '+(v.nombre||('#'+v.id))+(v.dni?' (DNI '+v.dni+')':'')+'?\n\n'+
+              'Vuelve con los datos que tenía el '+_pHistCuando(f.t)+'. Al resto de la lista no se le toca.')) return;
+  state.personal.push(Object.assign({}, v, {_ts:Date.now()}));
+  try{ if(typeof tombQuitar==='function') tombQuitar(v.id); }catch(e){}   // si estaba borrado, deja de estarlo
+  try{ personalOrdenar(); }catch(e){}
+  try{ personalSave(); }catch(e){}
+  try{ poblarSelects(); renderPersonal(); renderCostoRRHH(); }catch(e){}
+  try{ pHistBuscar((document.getElementById('phist-q')||{}).value||''); }catch(e){}
+  showNotif('✓ '+(v.nombre||'Trabajador')+' repuesto en la lista');
+}
 function abrirHistorialPersonal(){
   const h=pHistCargar();
   let caja=document.getElementById('modal-phist');
@@ -24077,12 +24132,20 @@ function abrirHistorialPersonal(){
       'onclick="pHistRestaurar('+f.t+')">Volver a esta</button></div>').join('')
     : '<div style="padding:18px;color:#94a3b8;font-size:13px">Todavía no hay versiones guardadas. '+
       'Se van guardando solas cada vez que cambia la lista de personal.</div>';
-  caja.innerHTML='<div class="modal" style="max-width:520px">'+
+  caja.innerHTML='<div class="modal" style="max-width:580px">'+
     '<div class="modal-header"><div class="modal-title">🕘 Versiones de Personal</div>'+
     '<button class="modal-close" onclick="document.getElementById(\'modal-phist\').style.display=\'none\'">✕</button></div>'+
     '<div style="font-size:12px;color:#94a3b8;padding:0 2px 10px">Fotos de la lista completa, guardadas solas. '+
     'Volver a una devuelve las fichas a ese estado; a quien se haya registrado después no se le toca.</div>'+
-    '<div style="max-height:60vh;overflow:auto;border:1px solid rgba(255,255,255,.08);border-radius:8px">'+filas+'</div></div>';
+    '<div style="border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px 12px;margin-bottom:12px">'+
+      '<div style="font-size:12px;font-weight:700;color:#e5e7eb;margin-bottom:6px">🔍 Buscar a un trabajador que falta</div>'+
+      '<div style="font-size:11.5px;color:#94a3b8;margin-bottom:8px">Lo busca en todas las versiones y lo repone solo a él, sin tocar al resto de la lista.</div>'+
+      '<input type="text" id="phist-q" placeholder="Nombre o DNI — ej: TERRONES" oninput="pHistBuscar(this.value)" '+
+      'style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,.14);border-radius:7px;padding:8px 10px;color:#e5e7eb;font-size:13px">'+
+      '<div id="phist-result" style="max-height:34vh;overflow:auto;margin-top:8px"></div>'+
+    '</div>'+
+    '<div style="font-size:11.5px;color:#94a3b8;padding:0 2px 6px">O volver la lista entera a una versión:</div>'+
+    '<div style="max-height:40vh;overflow:auto;border:1px solid rgba(255,255,255,.08);border-radius:8px">'+filas+'</div></div>';
   caja.style.display='flex';
 }
 function personalSave(){try{ if(typeof personalOrdenar==='function') personalOrdenar(); }catch(e){} _lsEscribir(PERSONAL_KEY, state.personal||[]); try{ pHistGuardar(state.personal||[]); }catch(e){} try{ sbSyncModulo('personal', state.personal||[]); }catch(e){}}
