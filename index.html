@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-296</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-297</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-296</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.10.31-297</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-296</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.10.31-297</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5892,8 +5892,6 @@ async function cargarAlmacenCombustibleSB(){
         if(pLocal.length) state.personal=pLocal;
         if((state.personal||[]).length) await _sbSubirSiNubeVacia('personal', state.personal);
       }
-      // Levantar las lápidas de fichas que se repusieron después del borrado (ver tombRepararPersonal).
-      try{ if(typeof tombRepararPersonal==='function' && tombRepararPersonal()>0 && typeof personalSave==='function') personalSave(); }catch(e){}
       try{ if(typeof personalQuitarSueldos==='function') await personalQuitarSueldos(); }catch(e){}
       // Historial de versiones: se trae el de la nube, se une con el de este equipo y se deja
       // una foto del estado con el que arranca la jornada.
@@ -23770,20 +23768,17 @@ function tombAdd(id){
    alguien la dio de alta o la editó DESPUÉS del borrado —está viva, y la lápida sobra—. Si la
    lápida es más nueva, el borrado manda y se queda. Se ejecuta en cada arranque: es inofensivo,
    porque solo toca los casos donde la ficha gana por fecha. */
-function tombRepararPersonal(){
-  try{
-    const t=tombLoad(); let n=0;
-    (state.personal||[]).forEach(p=>{
-      if(!p || p.id==null) return;
-      const marca=Number(t[String(p.id)]||0); if(!marca) return;
-      const ficha=Number(p._ts)||Number(p._guard)||0;
-      if(ficha>marca){ delete t[String(p.id)]; n++;
-        console.log('[lapida] levantada para', p.nombre, '— su ficha es posterior al borrado'); }
-    });
-    if(n){ tombPersist(); try{ if(typeof sbSyncModulo==='function') sbSyncModulo('tombstones', tombLoad()); }catch(e){} }
-    return n;
-  }catch(e){ return 0; }
-}
+/* AQUÍ ESTABA tombRepararPersonal, Y HABÍA QUE QUITARLA.
+   Se puso para que un trabajador repuesto a mano no se borrara solo en la siguiente actualización:
+   levantaba la lápida de cualquier ficha cuyo _ts fuera posterior al borrado. El razonamiento
+   estaba mal. _ts no significa "lo volvieron a dar de alta": significa "esta ficha se tocó por
+   última vez entonces", y el sistema la toca sola —al purgar fotos, al correr una migración, al
+   fusionar—. Bastaba una de esas pasadas para que TODAS las fichas quedaran con hora de hoy, y
+   entonces esta función levantaba TODAS las lápidas de golpe: volvían todos los trabajadores
+   dados de baja desde siempre. De 74 a 89 en una actualización.
+   Y era innecesaria: dar de alta, editar una ficha y completarla ya llaman a tombQuitar con el id
+   concreto. Reponer a alguien es un acto deliberado y ahí se levanta su lápida, una, a propósito.
+   Adivinarlo por la hora es lo que salía mal. */
 function tombQuitar(id){
   if(id==null||id==='') return false;
   const t=tombLoad();
@@ -24032,12 +24027,37 @@ function pHistRestaurar(t){
     else state.personal.push(nuevo);
     repuestas++;
   });
+  /* VOLVER ATRÁS TAMBIÉN PUEDE QUITAR A LOS QUE NO ESTABAN.
+     Restaurar solo reponía fichas, nunca sacaba a nadie, y eso está bien cuando se recupera un
+     dato perdido. No sirve cuando lo que hay que deshacer es justo lo contrario: una lista que
+     creció sola con gente que ya estaba de baja. Entonces reponer las 74 no arregla nada, porque
+     las 15 de más siguen ahí.
+     Se pregunta aparte, con los nombres delante, y solo después de haber repuesto. Al quitarlos se
+     les pone lápida: sin ella la copia de otro equipo los devuelve en la siguiente sincronización,
+     que es exactamente como volvieron la primera vez. */
+  const enFoto={}; (f.datos||[]).forEach(v=>{ if(v&&v.id!=null) enFoto[String(v.id)]=1; });
+  const sobran=(state.personal||[]).filter(p=>p&&p.id!=null&&!enFoto[String(p.id)]);
+  let quitados=0;
+  if(sobran.length){
+    const lista=sobran.slice(0,25).map(p=>'  · '+(p.nombre||('#'+p.id))+(p.dni?' ('+p.dni+')':'')).join('\n');
+    if(confirm('Hay '+sobran.length+' trabajador'+(sobran.length!==1?'es':'')+' en la lista de ahora que NO estaban en esa versión:\n\n'+
+               lista+(sobran.length>25?'\n  … y '+(sobran.length-25)+' más':'')+'\n\n'+
+               '¿Quitarlos también, para dejar la lista exactamente como estaba?\n\n'+
+               'Se les marca como borrados para que no vuelvan al sincronizar.\n'+
+               'Si alguno es un alta legítima posterior, responde Cancelar y quítalo a mano.')){
+      sobran.forEach(p=>{ try{ if(typeof tombAdd==='function') tombAdd(p.id); }catch(e){} });
+      const fuera={}; sobran.forEach(p=>fuera[String(p.id)]=1);
+      state.personal=(state.personal||[]).filter(p=>!(p&&p.id!=null&&fuera[String(p.id)]));
+      quitados=sobran.length;
+    }
+  }
   try{ personalSave(); }catch(e){}
   try{ if(typeof poblarSelects==='function') poblarSelects(); }catch(e){}
   try{ if(typeof renderPersonal==='function') renderPersonal(); }catch(e){}
   try{ if(typeof renderCostoRRHH==='function') renderCostoRRHH(); }catch(e){}
   try{ cerrarModal('modal-phist'); }catch(e){}
-  showNotif('✓ '+repuestas+' fichas devueltas a como estaban el '+_pHistCuando(f.t),'ok');
+  showNotif('✓ '+repuestas+' fichas devueltas a como estaban el '+_pHistCuando(f.t)+
+            (quitados?' · '+quitados+' quitadas de la lista':''),'ok');
 }
 function abrirHistorialPersonal(){
   const h=pHistCargar();
