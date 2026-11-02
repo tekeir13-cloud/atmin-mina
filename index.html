@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.01-302</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.02-303</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.01-302</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.02-303</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.01-302</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.02-303</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -26876,8 +26876,14 @@ function combFormHtml(tipo){
         <input type="text" id="comb-${tipo}-placa" placeholder="Ej: A5H-320" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:13px;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div>
       <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Nombre del chofer</label>
         <input type="text" id="comb-${tipo}-chofer" placeholder="Nombre completo" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:13px"></div>
-      <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Cantidad (gln) — máx ${maxGln}</label>
-        <input type="number" id="comb-${tipo}-cant" placeholder="0" min="0.5" max="${maxGln}" step="0.5" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:14px;font-weight:700"></div>
+      <!-- SIN TOPE EN EL CAMPO. Tenía max=capacidad de la cisterna (2000 gln de petróleo) y los
+           abastecimientos reales vienen de 2170: el campo marcaba el número como inválido y en el
+           celular el teclado no dejaba pasar de 2000, así que "no llena" era literal, no se podía
+           escribir la cantidad. La capacidad sirve para dibujar el tanque, no para decidir cuánto
+           combustible llegó: si entra más de lo que cabe es que vinieron dos cisternas o que la
+           capacidad está mal puesta, y eso se avisa al registrar, no se impide escribir. -->
+      <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Cantidad (gln)</label>
+        <input type="number" id="comb-${tipo}-cant" placeholder="0" min="0.5" step="0.5" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:14px;font-weight:700"></div>
       <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Precio S/ por galón</label>
         <input type="number" id="comb-${tipo}-precio" placeholder="0.00" min="0" step="any" style="width:100%;background:var(--coal4);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:13px"></div>
       <div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Observaciones</label>
@@ -27086,6 +27092,7 @@ function renderCombustible(){
   </div>`;
 }
 
+function esSalidaPrevia(tipo){ try{ return _combModo[tipo]==='out'; }catch(e){ return false; } }
 function combRegistrar(tipo){
   const fecha=document.getElementById(`comb-${tipo}-fecha`)?.value;
   const hora=document.getElementById(`comb-${tipo}-hora`)?.value;
@@ -27094,7 +27101,32 @@ function combRegistrar(tipo){
   const cantidad=parseFloat(document.getElementById(`comb-${tipo}-cant`)?.value||'0');
   const precio=parseFloat(document.getElementById(`comb-${tipo}-precio`)?.value||'0');
   const obs=(document.getElementById(`comb-${tipo}-obs`)?.value||'').trim();
-  if(!fecha||!placa||!chofer||cantidad<=0){showNotif('Completa todos los campos requeridos','warn');return;}
+  /* Decir QUÉ falta. "Completa todos los campos requeridos" con seis campos en pantalla obliga a
+     adivinar, y el que más se olvida es la placa de la cisterna, que no es un dato del combustible
+     sino del camión que lo trajo. */
+  const faltan=[];
+  if(!fecha) faltan.push('la fecha');
+  if(!placa) faltan.push('la placa del vehículo');
+  if(!chofer) faltan.push('el chofer');
+  if(!(cantidad>0)) faltan.push('la cantidad en galones');
+  if(faltan.length){
+    showNotif('Falta '+(faltan.length>1?'completar: ':'')+faltan.join(', ').replace(/, ([^,]*)$/,' y $1'),'warn');
+    const foco=!fecha?'fecha':(!placa?'placa':(!chofer?'chofer':'cant'));
+    try{ const el=document.getElementById('comb-'+tipo+'-'+foco); if(el){ el.focus(); el.style.borderColor='#f59e0b'; setTimeout(()=>{ try{ el.style.borderColor=''; }catch(e){} },2500); } }catch(e){}
+    return;
+  }
+  // Más de lo que cabe en la cisterna: se avisa y se deja registrar. Puede ser el abastecimiento de
+  // dos camiones el mismo día, o una capacidad mal puesta; en ninguno de los dos casos el sistema
+  // sabe más que quien está viendo el tanque.
+  /* Solo se pregunta cuando la cifra es disparatada —más del DOBLE de la cisterna—, que es el
+     tamaño de un error de tecleo (un cero de más). Pasarse un poco de la capacidad es normal: el
+     camión descarga mientras las máquinas consumen, así que en un día entran más galones de los
+     que caben de una vez. Preguntar por eso sería preguntar todos los días. */
+  const _cap=tipo==='pet'?COMB_CAP_PET:COMB_CAP_GAS;
+  if(!esSalidaPrevia(tipo) && cantidad > _cap*2){
+    if(!confirm('¿'+cantidad+' galones?\n\nEs más del doble de la cisterna ('+_cap+' gln). '+
+                'Si es correcto continúa; si se coló un cero de más, cancela y corrígelo.\n\n¿Registrar igual?')) return;
+  }
   const esSalida=(_combModo[tipo]==='out');
   const nombre=tipo==='pet'?'petróleo':'gasolina';
   // Una salida no puede dejar el tanque en negativo: eso sería inventar combustible que no estaba.
