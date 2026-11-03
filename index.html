@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-305</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-306</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-305</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-306</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.03-305</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.03-306</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5313,7 +5313,7 @@ const state={
   // Módulo Compras: control independiente del costeo operativo (no entra a calcCostos ni al dashboard)
   compras:{facturas:[],presupuestos:[]},
   metas:{f1:20,f2:20,dias:26,mensualF1:520,mensualF2:520,metasFrentes:{}},frenteActivo:1,
-  distribucion:{},reuniones:[],tareosPend:[],
+  distribucion:{},reuniones:[],tareosPend:[],personalTurno:{},
   mesActivo:{ id:null, mes:null, año:null },
   mesesCerrados:[],
   adelantos:{},
@@ -5961,6 +5961,20 @@ async function cargarAlmacenCombustibleSB(){
           try{ _lsSet('atmin_personal_hist', _pHist); }catch(e){}
         }
         if(typeof pHistGuardar==='function') pHistGuardar(state.personal||[], true);
+      }catch(e){}
+    }
+    // ── GUARDIA Y LABOR DEL TURNO — lo que dejó la pizarra, desde cualquier equipo ──
+    // Va DESPUÉS del personal y ANTES del tareo: se vuelca sobre las fichas ya cargadas, así el
+    // jefe de guardia abre su hoja con su gente marcada aunque él no haya armado la pizarra.
+    {
+      try{
+        if(typeof pturnoLoad==='function') pturnoLoad();
+        const ptNube=await sbLoadModulo('personal_turno');
+        if(ptNube && typeof ptNube==='object' && !Array.isArray(ptNube)){
+          state.personalTurno=(typeof pturnoFusion==='function')?pturnoFusion(state.personalTurno||{}, ptNube):ptNube;
+          try{ _lsSet(PTURNO_KEY, state.personalTurno); }catch(e){}
+        }
+        if(typeof pturnoAplicar==='function') pturnoAplicar();
       }catch(e){}
     }
     // ── TAREOS — snapshot confiable (todos los meses), independiente del mes_id de la tabla ──
@@ -8024,6 +8038,8 @@ const _MERGE_AL_SUBIR = {
   mant_kits:          (loc,nub)=> (typeof mergeMantKits==='function') ? mergeMantKits(loc,nub) : loc,
   reuniones:          (loc,nub)=> (typeof mergeSnapById==='function') ? mergeSnapById(loc,nub) : loc,
   tareos_pend:        (loc,nub)=> (typeof mergeById_ts==='function') ? mergeById_ts(loc,nub) : loc,
+  // Guardia y labor del turno: se unen por trabajador, gana la anotación más nueva de cada uno.
+  personal_turno:     (loc,nub)=> (typeof pturnoFusion==='function') ? pturnoFusion(loc,nub) : (loc||{}),
   /* Los cierres mensuales se unen POR MES, no por id: cada mes tiene un solo informe archivado y
      gana el que se cerró o recalculó después. Si dos equipos archivan octubre el mismo día, no
      quedan dos octubres. */
@@ -8044,6 +8060,8 @@ const _GUARDAR_TRAS_FUSION = {
   mant_kits:          m=>{ state.mantenimiento=m;     _lsSet('atmin_mant_kits', m); },
   reuniones:          m=>{ state.reuniones=m;         _lsSet('atmin_reuniones', m); },
   tareos_pend:        m=>{ state.tareosPend=m;        _lsSet('atmin_tareos_pend', m); },
+  personal_turno:     m=>{ state.personalTurno=m||{};  _lsSet(PTURNO_KEY, state.personalTurno);
+                           try{ pturnoAplicar(); }catch(e){} },
   cierres_log:        m=>{ state.cierresLog=m;        _lsSet('atmin_cierres_log', m); },
   personal_hist:      m=>{ try{ _pHist=m; _lsSet('atmin_personal_hist', m); }catch(e){} },
 };
@@ -8283,7 +8301,13 @@ const MODULO_PANTALLA = { almacen:'logistica', almacen_histbackup:'logistica', t
    distinto se quedaba sin poder registrar ingresos ni salidas, y lo peor es que la app no se lo
    decía: guardaba en su equipo y no subía nada. Quien no tiene la pantalla —jefe de guardia,
    mantenimiento— sigue sin poder publicarlo, que es lo que se pidió. */
-const MODULO_DUENOS = {};
+/* La guardia y la labor del turno las publica quien arma la pizarra: el Ingeniero Residente, su
+   asistente y Operaciones —más Administración y Finanzas, que son los dueños del padrón—. Nadie
+   más, para que un equipo cualquiera no reparta el personal por su cuenta. */
+const MODULO_DUENOS = {
+  personal_turno: ['ingeniero_residente','asistente_residente','jefe_operaciones',
+                   'administrador','jefe_finanzas','gerente_general'],
+};
 function puedePublicarModulo(modulo){
   try{
     if(RRHH_MODULOS.indexOf(modulo)>=0) return puedePublicarRRHH();
@@ -8342,7 +8366,7 @@ try{
 // Módulos cuya carga FUSIONA por id (unión), no reemplaza: para ellos SIEMPRE se trae la nube
 // aunque haya un pendiente, porque fusionar nunca pierde lo local y sí recupera lo de otros
 // equipos. Para los módulos de REEMPLAZO (personal, tareas…) sí se protege el dato offline.
-const _sbModulosFusion=new Set(['almacen','personal','reportes_guardia','equipos_operacion','mant_kits','compresorista','reuniones','servicios_terceros','tombstones','personal_hist','tareos_pend','cierres_log']);
+const _sbModulosFusion=new Set(['almacen','personal','personal_turno','reportes_guardia','equipos_operacion','mant_kits','compresorista','reuniones','servicios_terceros','tombstones','personal_hist','tareos_pend','cierres_log']);
 // Devuelve el ESTADO de la lectura, no solo el dato. sbLoadModulo() contestaba null para tres
 // situaciones muy distintas —nube vacía, cambio local pendiente y error de lectura— y quien
 // llamaba no podía distinguirlas. Confundir "no pude leer" con "está vacía" y subir encima lo
@@ -8449,6 +8473,11 @@ else if(Number(prevAlm.productosTs||0)>Number(data.productosTs||0)){ a.productos
                                  const act=(typeof pfLoad==='function')?pfLoad():{};
                                  setLS(FOTOS_KEY, {...act, ...data});
                                  try{ if(document.getElementById('rrhh-tarjetas')&&typeof renderTarjetas==='function') renderTarjetas(); }catch(e){} } break;
+    case 'personal_turno':     if(data && typeof data==='object' && !Array.isArray(data)){
+                                 state.personalTurno=(typeof pturnoFusion==='function')?pturnoFusion(state.personalTurno||{}, data):data;
+                                 _lsSet(PTURNO_KEY, state.personalTurno);
+                                 try{ pturnoAplicar(); }catch(e){}
+                                 try{ if(typeof tareoFiltraGuardia==='function') tareoFiltraGuardia(); }catch(e){} } break;
     case 'tareos_pend':        if(Array.isArray(data)){ state.tareosPend=(typeof mergeById_ts==='function')?mergeById_ts(state.tareosPend||[], data):data; _lsSet('atmin_tareos_pend', state.tareosPend); try{ pintarBadgeTareos(); }catch(e){} } break;
     case 'personal_hist':      if(Array.isArray(data)){ try{ const f=_MERGE_AL_SUBIR['personal_hist'];
                                  _pHist=f?f(_pHist||[], data):data; _lsSet('atmin_personal_hist', _pHist); }catch(e){} } break;
@@ -19313,6 +19342,7 @@ function tareoApartadoToggle(donde){
 
 function abrirSetupTareo(){
   initTareoFecha();
+  try{ pturnoAplicar(); }catch(e){}   // la guardia y la labor que dejó la pizarra, venga de donde venga
   const em=document.getElementById('tareo-exito-msg');if(em)em.style.display='none';
   document.getElementById('tareo-inicio').style.display='none';
   document.getElementById('tareo-setup').style.display='block';
@@ -24343,6 +24373,63 @@ function personalSave(){
   try{ sbSyncModulo('personal', state.personal||[]); }catch(e){}
   return true;
 }
+/* ═══ GUARDIA Y LABOR DEL TURNO — LA RENDIJA DEL CANDADO DE RRHH ════════════════════════════
+   El Ingeniero Residente distribuye la pizarra, y de ahí salen dos datos que el jefe de guardia
+   necesita al abrir su hoja: en qué guardia está cada trabajador y en qué labor. Antes se
+   escribían dentro de la ficha de personal, y la ficha vive en el cajón de Recursos Humanos, que
+   solo abren Administración y Finanzas. El candado los rebotaba en silencio: la pizarra se
+   guardaba, pero desde otro equipo la gente aparecía "sin guardia" y había que marcarla a mano.
+
+   No se le hace un hueco al candado: estos dos datos se mudan a SU PROPIO cajón. El padrón
+   —nombre, DNI, jornal, estado, altas y bajas— sigue cerrado con llave para todos menos
+   Administración y Finanzas, exactamente como está. Lo único que el Residente puede escribir es
+   la guardia y la labor del turno, que es de lo que él responde.
+
+   Es un mapa por trabajador, no una lista: dos equipos que distribuyen a la vez no se pisan la
+   pizarra entera, solo gana el más reciente trabajador por trabajador. Al aplicarse se copia
+   sobre state.personal en memoria, así que todo lo que ya leía p.guardia y p.frente —la hoja de
+   tareo, el filtro por guardia, el costeo— sigue funcionando igual, sin tocar una línea. */
+const PTURNO_KEY='atmin_personal_turno';
+function pturnoLoad(){
+  try{ const d=localStorage.getItem(PTURNO_KEY); if(d) state.personalTurno=JSON.parse(d)||{}; }catch(e){}
+  if(!state.personalTurno || typeof state.personalTurno!=='object') state.personalTurno={};
+  return state.personalTurno;
+}
+function pturnoSave(){
+  _lsEscribir(PTURNO_KEY, state.personalTurno||{});
+  try{ sbSyncModulo('personal_turno', state.personalTurno||{}); }catch(e){}
+}
+// Vuelca el cajón sobre las fichas EN MEMORIA. No guarda personal: no lo necesita y no podría.
+function pturnoAplicar(){
+  try{
+    const m=pturnoLoad();
+    (state.personal||[]).forEach(p=>{
+      const r=m[String(p.id)]; if(!r) return;
+      if(r.g) p.guardia=r.g;
+      if(r.f!=null && r.f!=='MARGINAL') p.frente=r.f;
+    });
+  }catch(e){}
+}
+// Anota a un trabajador. Se guarda la hora para poder unir dos equipos sin inventar un ganador.
+function pturnoSet(pid,guardia,labor){
+  if(!pid) return;
+  pturnoLoad();
+  const k=String(pid), a=state.personalTurno[k]||{};
+  state.personalTurno[k]={ g:(guardia!=null?guardia:a.g)||'', f:(labor!=null?labor:a.f), _ts:Date.now() };
+}
+// Unión entre equipos: trabajador por trabajador, gana la anotación más nueva.
+function pturnoFusion(loc,nub){
+  const out={};
+  [nub||{}, loc||{}].forEach(src=>{
+    Object.keys(src||{}).forEach(k=>{
+      const v=src[k]; if(!v) return;
+      const p=out[k];
+      if(!p || Number(v._ts||0)>=Number(p._ts||0)) out[k]=v;
+    });
+  });
+  return out;
+}
+
 /* ═══ HOJAS DE TAREO EN ESPERA DE APROBACIÓN ════════════════════════════════════════════════
    El jefe de guardia llena su hoja como siempre, pero ya no entra directo a la planilla: queda
    en espera hasta que el Ingeniero Residente la aprueba. Recién aprobada pasa a Recursos Humanos,
@@ -25114,6 +25201,7 @@ function _pizVacia(){
   return { nv:'NV 2820', guardias:g };
 }
 function _pizCargar(){
+  try{ pturnoAplicar(); }catch(e){}
   const d=state.distribucion||{};
   if(!(d.pizarra && d.pizarra.guardias)) return _pizVacia();
   const piz=JSON.parse(JSON.stringify(d.pizarra));
@@ -25275,7 +25363,9 @@ function guardarDistribucion(){
     const marcar=(pid,labor)=>{ if(!pid) return; guardias[pid]=t;
       if(labor!=null) nueva[pid]=labor;
       const p=(state.personal||[]).find(x=>String(x.id)===String(pid));
-      if(p){ p.guardia=t; if(labor!=null && labor!=='MARGINAL') p.frente=labor; } };
+      if(p){ p.guardia=t; if(labor!=null && labor!=='MARGINAL') p.frente=labor; }
+      // Y queda anotado en el cajón del turno, que es el que sí puede escribir el Residente.
+      try{ pturnoSet(pid, t, labor); }catch(e){} };
     if(g.supervisor) marcar(g.supervisor,null);                 // el supervisor no se tarea
     PIZ_FRENTES.forEach(f=>(g.frentes[f.k]||[]).forEach(sl=>marcar(sl.pid,f.id)));
     /* Compresorista, scoop, dumper y servicios SÍ van a un frente: entran a la hoja de tareo ya
@@ -25290,6 +25380,11 @@ function guardarDistribucion(){
   nueva.pizarra=_piz;
   state.distribucion=nueva;
   distribSave();
+  /* La guardia y la labor se publican por su propio módulo: así las ve el jefe de guardia desde
+     cualquier equipo sin que el Residente tenga que escribir en el padrón de personal.
+     personalSave() se sigue llamando porque para Administración y Finanzas —que sí tienen la
+     llave— deja el dato también en la ficha; para los demás rebota sin hacer nada, como debe. */
+  try{ pturnoSave(); }catch(e){}
   try{ if(typeof personalSave==='function') personalSave(); }catch(e){}
   cerrarModal('modal-distribucion');
   if(typeof renderDistribucion==='function'){ try{ renderDistribucion(); }catch(e){} }
