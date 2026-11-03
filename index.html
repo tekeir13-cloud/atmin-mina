@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-306</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-307</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-306</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-307</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.03-306</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.03-307</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -21970,8 +21970,19 @@ const SERV_TIPOS=[
   {id:'limpieza',label:'Liquidación Servicios Limpieza y Lavandería', placa:false},
   {id:'ferreteria',label:'Liquidación Ferretería',                    placa:false},
   {id:'transporte',label:'Servicio de Transporte de Personal (factura única)', placa:false},
-  {id:'generales',label:'Liquidación Pagos Generales (Internet, Tienda Almendra, Botica, Adicionales)', placa:false}
+  {id:'botica',   label:'Liquidación Botica',                         placa:false},
+  {id:'almendra', label:'Liquidación Tienda Almendra',                 placa:false},
+  {id:'habitabilidad',label:'Pago Habitabilidad Hotel Doña Cecilia',   placa:false},
+  {id:'combhilder',label:'Pago Combustible Hilder Melgarejo',          placa:false},
+  /* "Pagos Generales" juntaba internet, la botica, la tienda y lo que cayera: una sola
+     liquidación para proveedores distintos, que a fin de mes no se podía repartir ni conciliar
+     con nadie. Se separó en sus conceptos reales. El concepto viejo NO se borra —hay
+     liquidaciones ya emitidas con ese tipo y se quedarían sin nombre— pero queda retirado: no
+     se ofrece al crear una nueva, solo sirve para leer las de antes. */
+  {id:'generales',label:'Liquidación Pagos Generales (concepto retirado)', placa:false, retirado:true}
 ];
+// Los que se pueden elegir hoy. Los retirados siguen existiendo para leer el historial.
+function servTiposActivos(){ return SERV_TIPOS.filter(t=>!t.retirado); }
 function servCargar(){try{return JSON.parse(localStorage.getItem(SERV_KEY)||'[]');}catch{return[];}}
 function servGuardar(arr){localStorage.setItem(SERV_KEY,JSON.stringify(arr)); try{ const light=(arr||[]).map(r=>{const{foto,fotoImpreso,...rest}=r;return rest;}); sbSyncModulo('servicios_terceros', light); }catch(e){}}
 // EXCEPCIÓN AL CICLO 26→25: los servicios de terceros se declaran y se pagan por MES
@@ -21999,7 +22010,7 @@ function renderServiciosTerceros(){
   if(!el) return;
   const todos=servCargar();
   const mesSel=servMesVista();
-  const tipoOpts=SERV_TIPOS.map(t=>`<option value="${t.id}">${t.label}</option>`).join('');
+  const tipoOpts=servTiposActivos().map(t=>`<option value="${t.id}">${t.label}</option>`).join('');
   const totalMes=finCostoServicios(mesSel);
   // La tabla muestra el mes elegido; los índices apuntan siempre al arreglo completo.
   const registros=todos.map((r,i)=>({r,i})).filter(x=>servEnMes(x.r.fecha,mesSel));
