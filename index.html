@@ -2291,6 +2291,59 @@ select option{background:var(--coal3);}
   div[style*="minmax(200px"] { grid-template-columns: 1fr !important; }
 }
 
+
+/* ══ PANTALLA DE ESPERA — EL MUKI PICANDO LA ROCA ═══════════════════════════════════════════
+   Al entrar, la app tiene que traerse de la nube el personal, el almacén, los tareos, los
+   reportes y el resto. En superficie son dos segundos; en el campamento, con la señal que hay,
+   puede ser medio minuto. Hasta ahora durante esa espera se veía el tablero vacío: el usuario
+   creía que no habían llegado sus datos, recargaba, y volvía a empezar la descarga desde cero.
+
+   Esta pantalla ocupa esa espera y dice la verdad mientras tanto: qué se está trayendo y cuánto
+   falta. El muki pica la roca porque el sistema está trabajando, no porque se colgó.
+
+   Todo es SVG y CSS: ni una imagen, ni una librería, ni una fuente de internet. Tiene que
+   aparecer justo cuando NO hay señal, que es cuando más se la necesita.                       */
+#muki-carga{position:fixed;inset:0;z-index:99999;display:none;align-items:center;justify-content:center;
+  background:radial-gradient(130% 95% at 50% 8%,#13213a 0%,#0a0f18 58%,#05070c 100%);
+  font-family:'Segoe UI',system-ui,Arial,sans-serif;-webkit-user-select:none;user-select:none}
+#muki-carga.on{display:flex}
+#muki-carga .mc-caja{width:min(420px,88vw);text-align:center}
+/* La galería al fondo: dos arcos de roca que dan profundidad sin pesar nada. */
+#muki-carga .mc-tunel{position:absolute;inset:0;overflow:hidden;pointer-events:none;opacity:.5}
+#muki-carga .mc-tunel i{position:absolute;left:50%;top:48%;transform:translate(-50%,-50%);
+  border:2px solid rgba(96,165,250,.13);border-radius:50% 50% 14% 14%/60% 60% 10% 10%}
+#muki-carga .mc-marca{margin-bottom:6px}
+#muki-carga .mc-nombre{font-size:25px;font-weight:800;letter-spacing:.02em;color:#fff;line-height:1}
+#muki-carga .mc-nombre b{color:#2f9bff;font-weight:800}
+#muki-carga .mc-lema{font-size:10.5px;letter-spacing:.3em;color:#5b6a80;margin-top:9px;font-weight:700}
+#muki-carga .mc-muki{margin:20px auto 4px;display:block}
+#muki-carga .mc-paso{font-size:13.5px;color:#cbd5e1;min-height:19px;font-weight:600}
+#muki-carga .mc-sub{font-size:11.5px;color:#64748b;margin-top:5px;min-height:16px}
+#muki-carga .mc-barra{height:6px;border-radius:99px;background:rgba(148,163,184,.16);overflow:hidden;margin:15px auto 0;max-width:300px}
+#muki-carga .mc-barra i{display:block;height:100%;width:4%;border-radius:99px;
+  background:linear-gradient(90deg,#1b6fd8,#3ea2ff 60%,#8ecbff);transition:width .45s cubic-bezier(.3,.8,.3,1)}
+#muki-carga .mc-saltar{margin-top:20px;background:none;border:1px solid rgba(148,163,184,.3);color:#94a3b8;
+  border-radius:9px;padding:8px 18px;font-size:12px;cursor:pointer;font-family:inherit;display:none}
+#muki-carga .mc-saltar:hover{border-color:#3ea2ff;color:#cbd5e1}
+/* El pico sube y baja; el golpe cae a la mitad del ciclo, que es cuando saltan las chispas. */
+/* El arco del golpe. No pasa de -28°: más arriba el pico cruzaba por delante de la cara del
+   muki y parecía que se la estaba partiendo. Sube atrás y a la derecha, como se pica de verdad. */
+@keyframes mc-pico{0%,100%{transform:rotate(-28deg)}38%{transform:rotate(17deg)}52%{transform:rotate(13deg)}}
+@keyframes mc-chispa{0%,34%{opacity:0;transform:scale(.3)}40%{opacity:1;transform:scale(1)}62%{opacity:0;transform:scale(1.5)}100%{opacity:0}}
+@keyframes mc-bob{0%,100%{transform:translateY(0)}40%{transform:translateY(2.5px)}}
+@keyframes mc-haz{0%,100%{opacity:.30}45%{opacity:.75}}
+@keyframes mc-polvo{0%{opacity:0;transform:translate(0,0) scale(.5)}
+  45%{opacity:.55}100%{opacity:0;transform:translate(var(--dx),-16px) scale(1.3)}}
+@keyframes mc-nube{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+.mc-brazo{animation:mc-pico 1.15s cubic-bezier(.45,.05,.3,1) infinite;transform-origin:97px 108px}
+.mc-chispas{animation:mc-chispa 1.15s linear infinite}
+.mc-cuerpo{animation:mc-bob 1.15s ease-in-out infinite}
+.mc-haz{animation:mc-haz 1.15s ease-in-out infinite}
+.mc-polvo{animation:mc-polvo 1.15s ease-out infinite}
+.mc-nubeflot{animation:mc-nube 3.4s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){
+  .mc-brazo,.mc-chispas,.mc-cuerpo,.mc-haz,.mc-polvo,.mc-nubeflot{animation:none}
+}
 </style>
 <!-- Excel, servido desde el proyecto por lo mismo que el cliente de nube: en un celular de mina la
      descarga de fuera puede no entrar, y entonces los botones de Excel fallan sin explicación. -->
@@ -2303,6 +2356,106 @@ select option{background:var(--coal3);}
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 </head>
 <body>
+
+<!-- La pantalla de espera. Se enciende sola al entrar y se apaga cuando la nube terminó. -->
+<div id="muki-carga" role="status" aria-live="polite">
+  <div class="mc-tunel">
+    <i style="width:720px;height:620px"></i><i style="width:500px;height:440px"></i><i style="width:320px;height:290px"></i>
+  </div>
+  <div class="mc-caja">
+    <!-- La marca: la nube con la M de la montaña -->
+    <div class="mc-marca">
+      <svg width="78" height="60" viewBox="0 0 96 74" class="mc-nubeflot" aria-hidden="true">
+        <defs><linearGradient id="mcAzul" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#4fb0ff"/><stop offset="1" stop-color="#1668cf"/></linearGradient></defs>
+        <path d="M26 68 a20 20 0 0 1 -1 -40 a23 23 0 0 1 44 -6 a18 18 0 0 1 4 46 Z"
+              fill="none" stroke="url(#mcAzul)" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+        <path d="M30 58 L46 28 L54 43 L60 33 L74 58 L62 58 L54 45 L46 58 Z" fill="#fff"/>
+      </svg>
+    </div>
+    <div class="mc-nombre">Muki<b>Cloud</b></div>
+    <div class="mc-lema">SMART INTERACTIONS</div>
+
+    <!-- EL MUKI. Pica la roca mientras se descargan los datos: el movimiento es la prueba de que
+         el sistema sigue trabajando. Si se queda quieto, algo pasó — y eso también se ve. -->
+    <svg class="mc-muki" width="200" height="152" viewBox="0 0 204 152" aria-hidden="true">
+      <defs>
+        <linearGradient id="mcRopa" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#2b63b8"/><stop offset="1" stop-color="#17386e"/></linearGradient>
+        <radialGradient id="mcLuz" cx=".5" cy=".5" r=".5">
+          <stop offset="0" stop-color="#fff6cf" stop-opacity=".95"/><stop offset="1" stop-color="#ffd66b" stop-opacity="0"/></radialGradient>
+        <linearGradient id="mcHaz" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#ffe9a8" stop-opacity=".5"/><stop offset="1" stop-color="#ffe9a8" stop-opacity="0"/></linearGradient>
+      </defs>
+
+      <!-- La roca. Corrida a la derecha para que no se le encime al muki: tiene que leerse que
+           pica una pared, no que carga una piedra. -->
+      <g transform="translate(16,6)">
+        <path d="M124 150 L112 120 L132 100 L164 104 L178 134 L174 150 Z" fill="#273243"/>
+        <path d="M132 100 L164 104 L153 120 L138 115 Z" fill="#33415a"/>
+      </g>
+      <!-- El polvo que levanta cada golpe -->
+      <g class="mc-polvo" style="--dx:-13px"><circle cx="148" cy="100" r="3.6" fill="#7b8a9f" opacity=".5"/></g>
+      <g class="mc-polvo" style="--dx:11px;animation-delay:.09s"><circle cx="157" cy="103" r="2.8" fill="#7b8a9f" opacity=".45"/></g>
+
+      <!-- El haz de la lámpara, apuntando a donde pica -->
+      <path class="mc-haz" d="M76 54 L162 78 L164 104 L76 70 Z" fill="url(#mcHaz)"/>
+
+      <g class="mc-cuerpo">
+        <!-- Cuerpo y chaleco -->
+        <path d="M52 150 q0 -44 28 -44 q28 0 28 44 Z" fill="url(#mcRopa)"/>
+        <path d="M66 112 q14 10 28 0 l5 38 h-38 Z" fill="#e9f3ff" opacity=".16"/>
+        <rect x="60" y="126" width="40" height="6" rx="3" fill="#c6e84f" opacity=".82"/>
+        <!-- Orejas de duende: lo que lo hace muki y no un minero cualquiera -->
+        <!-- Orejas largas y en punta: es lo único que distingue al muki de un minero cualquiera,
+             así que salen bien afuera de la cara. Si quedan cortas, se leen como orejas normales. -->
+        <path d="M54 66 q-30 -26 -25 -3 q4 22 25 13 Z" fill="#f0a97c"/>
+        <path d="M106 66 q30 -26 25 -3 q-4 22 -25 13 Z" fill="#f0a97c"/>
+        <path d="M52 66 q-21 -18 -17 -3 q3 15 17 9 Z" fill="#dd9a6d" opacity=".55"/>
+        <path d="M108 66 q21 -18 17 -3 q-3 15 -17 9 Z" fill="#dd9a6d" opacity=".55"/>
+        <!-- Cara -->
+        <ellipse cx="80" cy="72" rx="32" ry="30" fill="#f6bb8e"/>
+        <ellipse cx="70" cy="70" rx="4.6" ry="5.4" fill="#2a1a12"/>
+        <ellipse cx="92" cy="70" rx="4.6" ry="5.4" fill="#2a1a12"/>
+        <circle cx="68.4" cy="68" r="1.7" fill="#fff"/><circle cx="90.4" cy="68" r="1.7" fill="#fff"/>
+        <path d="M80 76 q4 4 0 7 q-4 -3 0 -7 Z" fill="#dd9a6d"/>
+        <path d="M68 86 q12 11 24 0" fill="none" stroke="#2a1a12" stroke-width="3" stroke-linecap="round"/>
+        <!-- Casco y lámpara -->
+        <path d="M48 56 a32 32 0 0 1 64 0 Z" fill="#f2f5f9"/>
+        <rect x="40" y="53" width="80" height="9" rx="4.5" fill="#e4e9f0"/>
+        <rect x="76" y="26" width="8" height="28" rx="4" fill="#d3dae4"/>
+        <circle cx="72" cy="56" r="21" fill="url(#mcLuz)"/>
+        <rect x="62" y="48" width="18" height="13" rx="4" fill="#3a4559"/>
+        <circle cx="74" cy="55" r="5" fill="#fff3c9"/>
+        <!-- La nube azul en el casco: la marca, donde la lleva de verdad -->
+        <path d="M70 40 a7 7 0 0 1 0 -11 a8.5 8.5 0 0 1 16 -2 a6.5 6.5 0 0 1 1.5 13 Z" fill="#2f9bff" opacity=".9"/>
+      </g>
+
+      <!-- EL BRAZO CON EL PICO. Gira desde el hombro: una sola transformación mueve todo. -->
+      <g class="mc-brazo">
+        <path d="M97 108 q20 -6 29 -18" fill="none" stroke="#f6bb8e" stroke-width="13" stroke-linecap="round"/>
+        <!-- El mango corto y la cabeza JUSTO en la mano. Con el mango largo, al levantar el
+             brazo la cabeza del pico quedaba por delante de la cara. -->
+        <path d="M124 92 L146 74" stroke="#8a5a33" stroke-width="7" stroke-linecap="round" fill="none"/>
+        <path d="M137 60 q14 7 20 26 l-8 2 q-6 -16 -19 -21 Z" fill="#c3cdda"/>
+        <path d="M137 60 q14 7 20 26 l-4 1 q-7 -17 -19 -23 Z" fill="#8f9bad"/>
+      </g>
+
+      <!-- Las chispas del golpe -->
+      <g class="mc-chispas">
+        <circle cx="150" cy="94"  r="2.8" fill="#ffd66b"/>
+        <circle cx="161" cy="88"  r="2.1" fill="#ffe9a8"/>
+        <circle cx="143" cy="86"  r="1.9" fill="#ffd66b"/>
+        <circle cx="166" cy="99"  r="1.7" fill="#ffe9a8"/>
+      </g>
+    </svg>
+
+    <div class="mc-paso" id="mc-paso">Conectando con la nube…</div>
+    <div class="mc-sub"  id="mc-sub">Esto puede tardar si la señal está débil</div>
+    <div class="mc-barra"><i id="mc-barra"></i></div>
+    <button class="mc-saltar" id="mc-saltar" onclick="mukiCargaOcultar(true)">Entrar sin esperar</button>
+  </div>
+</div>
 
 
 <!-- ═══════════════ PANTALLA LOGIN ═══════════════ -->
@@ -2329,7 +2482,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-310</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-311</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2527,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-310</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-311</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2695,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.03-310</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.03-311</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -8388,7 +8541,13 @@ async function sbLoadModuloEstado(modulo){
 // Estado de la ÚLTIMA lectura de cada módulo. Es lo que permite distinguir "la nube está vacía"
 // de "no pude leerla", que es la raíz de las pérdidas de datos entre equipos.
 const _sbEstadoUltimo={};
+/* Cada lectura de la nube avisa a la pantalla de espera al terminar. Es el único sitio donde
+   se puede medir el avance de verdad, porque todo lo que se baja pasa por aquí. */
 async function sbLoadModulo(modulo){
+  try{ const r=await _sbLoadModulo(modulo); return r; }
+  finally{ try{ mukiCargaAvance(modulo); }catch(e){} }
+}
+async function _sbLoadModulo(modulo){
   const r=await sbLoadModuloEstado(modulo);
   _sbEstadoUltimo[modulo]=r.estado;
   return r.estado==='ok' ? r.data : null;
@@ -29951,17 +30110,88 @@ function actualizarBadgeMes(){
   }catch(e){}
 }
 
+
+/* ══ EL MOTOR DE LA PANTALLA DE ESPERA ══════════════════════════════════════════════════════
+   La regla es una sola: NO INVENTAR PROGRESO. Ya había en el sistema una secuencia de avisos
+   de conexión movida por temporizadores —"Sincronizando inventarios" a los 1.5 s, "Cargando
+   frentes" a los 2.8 s— que decía lo mismo con señal y sin señal. Eso no es una espera, es una
+   animación: cuando la nube no contestaba, seguía anunciando módulos listos que nunca llegaron.
+
+   Aquí cada paso de la barra corresponde a una lectura que de verdad terminó. El contador se
+   alimenta de sbLoadModulo(), que es por donde pasa todo lo que se baja, así que la barra no
+   puede adelantarse a los datos. Lo que no se sabe es CUÁNTAS lecturas van a ser —depende del
+   usuario y de su rol—, de modo que el avance se calcula contra una cifra estimada y se le pone
+   un techo del 92 %: el 100 % lo da el final de la carga, no una cuenta.
+
+   Y dos seguros, porque una pantalla de espera que no se puede cerrar es peor que no tenerla:
+   a los 7 segundos aparece "Entrar sin esperar", y a los 45 se cierra sola. Los datos que falten
+   siguen llegando por detrás y se pintan cuando lleguen; nadie se queda mirando una roca.      */
+let _mcAbierta=false, _mcPasos=0, _mcTope=14, _mcT1=null, _mcT2=null, _mcCerrada=false;
+const MC_NOMBRES={
+  personal:'el personal', tareas:'los tareos', tareos_pend:'los tareos por aprobar',
+  almacen:'el almacén', reportes_guardia:'los reportes de guardia', mant_kits:'mantenimiento',
+  compresorista:'el compresorista', equipos_operacion:'los equipos', reuniones:'las reuniones',
+  personal_turno:'la distribución de guardias', personal_hist:'el historial de personal',
+  servicios_terceros:'los servicios de terceros', cierres_log:'los cierres de mes',
+  adelantos:'los adelantos', tombstones:'las bajas'
+};
+function mukiCargaMostrar(){
+  const el=document.getElementById('muki-carga'); if(!el || _mcCerrada) return;
+  _mcAbierta=true; _mcPasos=0;
+  el.classList.add('on');
+  mukiCargaPaso('Conectando con la nube…','Esto puede tardar si la señal está débil',4);
+  clearTimeout(_mcT1); clearTimeout(_mcT2);
+  // A los 7 segundos se ofrece entrar igual. Lo que falte sigue bajando por detrás.
+  _mcT1=setTimeout(()=>{ const b=document.getElementById('mc-saltar'); if(b) b.style.display='inline-block'; },7000);
+  // Y a los 45 se cierra sola: ninguna espera retiene a nadie para siempre.
+  _mcT2=setTimeout(()=>{ if(_mcAbierta) mukiCargaOcultar(true); },45000);
+}
+function mukiCargaPaso(txt,sub,pct){
+  if(!_mcAbierta) return;
+  const p=document.getElementById('mc-paso'), s2=document.getElementById('mc-sub'), b=document.getElementById('mc-barra');
+  if(p && txt!=null) p.textContent=txt;
+  if(s2 && sub!=null) s2.textContent=sub;
+  if(b && pct!=null) b.style.width=Math.max(4,Math.min(100,pct))+'%';
+}
+// Una lectura de la nube terminó. El avance sale de cuántas van, no del reloj.
+function mukiCargaAvance(modulo){
+  if(!_mcAbierta) return;
+  _mcPasos++;
+  if(_mcPasos>_mcTope-2) _mcTope=_mcPasos+2;      // si son más de las previstas, se estira
+  const pct=Math.min(92, 8+(_mcPasos/_mcTope)*84);
+  const nom=MC_NOMBRES[modulo]||modulo;
+  mukiCargaPaso('Trayendo '+nom+'…', _mcPasos+' de '+_mcTope+' · el muki sigue picando', pct);
+}
+function mukiCargaOcultar(forzado){
+  clearTimeout(_mcT1); clearTimeout(_mcT2);
+  const el=document.getElementById('muki-carga');
+  if(!el || !_mcAbierta){ _mcAbierta=false; return; }
+  if(forzado) _mcCerrada=true;                     // no reaparece en esta sesión
+  mukiCargaPaso(forzado?'Entrando…':'Listo — todo sincronizado', forzado?'Lo que falte sigue bajando solo':'', 100);
+  _mcAbierta=false;
+  setTimeout(()=>{ el.classList.remove('on');
+    const b=document.getElementById('mc-saltar'); if(b) b.style.display='none'; }, forzado?120:420);
+}
+
 async function initSistema(){
+  // Pase lo que pase ahí dentro —una tabla caída, un error de red—, la pantalla de espera se
+  // apaga. Quedarse encendida por un fallo sería dejar al usuario fuera de su propio sistema.
+  try{ return await _initSistema(); }
+  finally{ try{ mukiCargaOcultar(false); }catch(e){} }
+}
+async function _initSistema(){
   const now = new Date();
   const fb  = document.getElementById('fecha-badge');
   if(fb) fb.textContent = now.toLocaleDateString('es-PE',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
   document.querySelectorAll('input[type=date]').forEach(i=>i.value=hoy());
-  showNotif('⏳ Cargando datos...','warn');
+  try{ mukiCargaMostrar(); }catch(e){}
+  try{ mukiCargaPaso('Leyendo lo que ya está en el equipo…','Tus datos guardados aparecen primero',7); }catch(e){}
   try{ valLaborLoad(); }catch(e){}  // valorizaciones desde localStorage (también si la nube está offline)
   // Personal y tareos desde localStorage (para que persistan también offline o si falla la tabla)
   try{ const p=JSON.parse(localStorage.getItem(PERSONAL_KEY)||'[]'); if(Array.isArray(p)&&p.length) state.personal=p; }catch(e){}
   try{ const t=JSON.parse(localStorage.getItem(TAREAS_KEY)||'[]'); if(Array.isArray(t)&&t.length) state.tareas=t; }catch(e){}
   await cargarDesdeSB();
+  try{ mukiCargaPaso('Ordenando la información…','Casi listo',95); }catch(e){}
   // Unificar productos duplicados del maestro (mismo nombre, código autogenerado): automático.
   try{ if(typeof almacenUnificarMaestroDuplicados==='function') almacenUnificarMaestroDuplicados(); }catch(e){}
   // Limpieza única del agua fantasma (ART-00001): deja solo las unidades reales.
@@ -30008,6 +30238,10 @@ async function initSistema(){
   if(_volver && _ult.mod && _ult.pane){
     try{ if(typeof modTab==='function' && document.getElementById(_ult.mod+'-'+_ult.pane)) modTab(_ult.mod,_ult.pane); }catch(e){}
   }
+  /* Se apaga recién aquí: cuando el módulo del usuario ya está dibujado con sus datos. Si se
+     apagara al terminar la descarga, se vería un instante el tablero en blanco —que es
+     justamente lo que esta pantalla vino a tapar—. */
+  try{ mukiCargaOcultar(false); }catch(e){}
 }
 
 // Chips de módulos para crear usuarios
