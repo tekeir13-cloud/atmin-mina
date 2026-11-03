@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-309</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-310</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-309</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-310</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.03-309</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.03-310</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -21975,6 +21975,7 @@ const SERV_TIPOS=[
   {id:'habitabilidad',label:'Pago Habitabilidad Hotel Doña Cecilia',   placa:false},
   {id:'combhilder',label:'Pago Combustible Hilder Melgarejo',          placa:false},
   {id:'arena',    label:'Pago por Movimiento de Arena',                 placa:false},
+  {id:'coca',     label:'Liquidación Coca del Mes',                     placa:false},
   /* "Pagos Generales" juntaba internet, la botica, la tienda y lo que cayera: una sola
      liquidación para proveedores distintos, que a fin de mes no se podía repartir ni conciliar
      con nadie. Se separó en sus conceptos reales. El concepto viejo NO se borra —hay
@@ -22022,6 +22023,35 @@ function servCambiarMes(v){ _servMes=v||null; _servEdit=null; renderServiciosTer
    tecleado obligaba a borrarla y volver a cargarla, y con ella se iba la foto del vale y la de
    la liquidación firmada. Ahora se edita en su sitio y las fotos se conservan. */
 let _servEdit=null;                 // índice que se está editando, o null
+let _servDraft=null;                // lo que estaba escrito en el formulario, para no perderlo
+
+/* LA FECHA ES LA QUE MANDA. El selector del historial decía un mes y el campo de fecha podía
+   decir otro: el aviso de abajo seguía al selector, así que uno escribía 31 de octubre y seguía
+   leyendo "estás liquidando Noviembre". Ahora al cambiar la fecha el panel entero se va a ese
+   mes —el aviso, la tabla, el total y el selector— sin perder lo que ya estaba escrito arriba. */
+function servFechaCambia(){
+  const f=document.getElementById('serv-fecha')?.value||'';
+  const m=String(f).slice(0,7);
+  if(m.length!==7 || m===servMesVista()) return;
+  _servDraft={
+    tipo:  document.getElementById('serv-tipo')?.value||'',
+    monto: document.getElementById('serv-monto')?.value||'',
+    fecha: f,
+    obs:   document.getElementById('serv-obs')?.value||'',
+    placa: document.getElementById('serv-placa')?.value||''
+  };
+  _servMes=m;
+  renderServiciosTerceros();
+}
+// Devuelve al formulario lo que el usuario ya había escrito antes de cambiar de mes.
+function _servRestaurarDraft(){
+  if(!_servDraft) return;
+  const d=_servDraft; _servDraft=null;
+  const set=(id,v)=>{ const el=document.getElementById(id); if(el && v!=='' && v!=null) el.value=v; };
+  set('serv-tipo',d.tipo); set('serv-monto',d.monto); set('serv-fecha',d.fecha);
+  set('serv-obs',d.obs); set('serv-placa',d.placa);
+  try{ servTipoChange(); }catch(e){}
+}
 function servEditar(idx){ _servEdit=idx; renderServiciosTerceros();
   try{ document.getElementById('serv-tipo').scrollIntoView({behavior:'smooth',block:'center'}); }catch(e){} }
 function servCancelarEdicion(){ _servEdit=null; _servFotoB64=''; renderServiciosTerceros(); }
@@ -22101,7 +22131,7 @@ function renderServiciosTerceros(){
       </div>
       <div>
         <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Fecha</label>
-        <input id="serv-fecha" type="date" class="input-field" style="width:100%;box-sizing:border-box" value="${ed?(ed.fecha||servFechaPorDefecto()):servFechaPorDefecto()}">
+        <input id="serv-fecha" type="date" class="input-field" style="width:100%;box-sizing:border-box" value="${ed?(ed.fecha||servFechaPorDefecto()):servFechaPorDefecto()}" onchange="servFechaCambia()">
         <div style="font-size:11px;color:var(--text3);margin-top:3px">Se guarda en el mes de esta fecha — hoy estás liquidando <b style="color:#c9a84c">${nomMes(mesSel)}</b></div>
       </div>
       <div style="grid-column:1/-1">
@@ -22148,6 +22178,7 @@ function renderServiciosTerceros(){
     </table>
     </div>`}
   </div>`;
+  _servRestaurarDraft();
 }
 function servTipoChange(){
   const v=document.getElementById('serv-tipo')?.value;
