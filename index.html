@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-304</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-305</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-304</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-305</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.03-304</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.03-305</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -3152,6 +3152,13 @@ select option{background:var(--coal3);}
     <div class="section-title" style="margin-top:0">🔔 Tareos por aprobar</div>
     <div style="font-size:12px;color:var(--text3);margin:-6px 0 12px">Hojas que mandaron los jefes de guardia. Hasta que no se aprueben, no entran a Recursos Humanos ni las ve el trabajador en su consulta.</div>
     <div id="res-tareos-pend"></div>
+    <!-- TAREOS YA APROBADOS — lista desplegable. Operaciones aprueba y la hoja desaparece de la
+         pantalla: no quedaba dónde volver a verla sin ir a Recursos Humanos. Aquí queda el
+         archivo del mes, día por día, para consultar e imprimir. Solo se mira: corregir un tareo
+         aprobado es del Jefe de Finanzas. -->
+    <div class="section-title" style="margin-top:22px">✅ Tareos aprobados</div>
+    <div style="font-size:12px;color:var(--text3);margin:-6px 0 12px">Las hojas que ya entraron a Recursos Humanos. Haz clic en una para ver a quién se tareó. <b style="color:var(--text2)">Solo consulta</b> — una vez aprobado, el tareo lo corrige únicamente el Jefe de Finanzas desde Recursos Humanos.</div>
+    <div id="op-tareos-aprob"></div>
   </div>
   <div class="mod-pane" style="display:none" id="op-presentaciones"></div>
   <div class="mod-pane active" style="display:block" id="op-tablero">
@@ -5210,7 +5217,13 @@ const FRENTES=[
    labores de avance que se reportan en Operaciones; en la hoja de tareo no van, porque al jefe de
    guardia solo le toca decir en cuál de los dos frentes de personal estuvo cada trabajador.
    FRENTES no se toca: los tareos ya registrados se siguen leyendo igual. */
-const TAREO_FRENTES=['1','2'];
+/* LAS LABORES QUE OFRECE LA HOJA DE TAREO SON LAS VIGENTES, NO DOS ESCRITAS A MANO.
+   Estaba fijo en ['1','2'] —RA Brenda y CRNE—, así que una labor nueva no se podía tarear: al
+   jefe de guardia no le aparecía en el selector y su gente caía a RA Brenda, que no era donde
+   trabajó. Ahora sale de las labores habilitadas, las mismas de la pizarra. */
+Object.defineProperty(window,'TAREO_FRENTES',{configurable:true,get:()=>{
+  try{ return pizFrentes().map(f=>String(f.id)); }catch(e){ return ['1','2']; }
+}});
 // Labores vigentes: las que se pueden reportar hoy.
 function frentesActivos(){ return FRENTES.filter(f=>f.activo!==false); }
 // Labores a MOSTRAR en un tablero: las vigentes siempre, y una retirada solo si tiene datos en
@@ -19217,15 +19230,18 @@ function normalizarCargos(){
   });
 }
 
+/* LA FECHA DE LA HOJA LA ELIGE EL JEFE DE GUARDIA, DESDE EL 1 DEL MES.
+   En mina la hoja no siempre se llena el mismo día: se sale de guardia, no hay señal, y el tareo
+   se registra al bajar. Se deja todo el mes en curso abierto —del 1 a hoy— y se cierra el futuro,
+   que no se tarea. Lo que cierra una hoja no es el calendario sino la aprobación. */
 function initTareoFecha(){
   const el=document.getElementById('tareo-fecha');
-  if(el && !el.value) el.value=hoy();
-  if(el) {
-    el.removeAttribute('max');
-    el.removeAttribute('min');
-    el.removeAttribute('readonly');
-    el.removeAttribute('disabled');
-  }
+  if(!el) return;
+  if(!el.value) el.value=hoy();
+  el.min=hoy().slice(0,7)+'-01';
+  el.max=hoy();
+  el.removeAttribute('readonly');
+  el.removeAttribute('disabled');
 }
 
 // Cargos válidos que pueden ser Jefe de Turno
@@ -19788,8 +19804,9 @@ function renderTareas(){
         <div style="display:flex;align-items:center;gap:10px">
           
           <span style="font-size:11px;font-weight:700;background:rgba(26,39,68,0.15);color:#1a2744;border-radius:6px;padding:3px 10px">${h.tareas.length} trab.</span>
-          <button id="tareo-arch-edit-${hi}" onclick="event.stopPropagation();toggleEditTareoArch(${hi})" style="padding:4px 12px;font-size:11px;font-weight:700;border-radius:6px;border:1.5px solid #1a2744;background:#1a2744;color:#FFD700;cursor:pointer">✏ Editar</button>
-          <button onclick="event.stopPropagation();imprimirHojaTareo('${h.fecha}','${h.turno}')" style="padding:4px 12px;font-size:11px;font-weight:700;border-radius:6px;border:1px solid #1a2744;background:#fff;color:#1a2744;cursor:pointer">🖨 Imprimir</button>
+${rolEditaTareoAprobado()?`<button id="tareo-arch-edit-${hi}" onclick="event.stopPropagation();toggleEditTareoArch(${hi})" style="padding:4px 12px;font-size:11px;font-weight:700;border-radius:6px;border:1.5px solid #1a2744;background:#1a2744;color:#FFD700;cursor:pointer">✏ Editar</button>`:''}
+          <button onclick="event.stopPropagation();imprimirHojaTareo('${h.fecha}','${h.turno}')" style="padding:4px 12px;font-size:11px;font-weight:700;border-radius:6px;border:1px solid #1a2744;background:#fff;color:#1a2744;cursor:pointer">🖨 Turno</button>
+          <button onclick="event.stopPropagation();imprimirDiaTareo('${h.fecha}')" title="Día y noche del ${h.fecha} en una sola hoja" style="padding:4px 12px;font-size:11px;font-weight:700;border-radius:6px;border:1px solid #1a2744;background:#1a2744;color:#fff;cursor:pointer">🖨 Día completo</button>
           ${puedeBorrarTareo()?`<button onclick="event.stopPropagation();eliminarTareoArch('${h.fecha}','${h.turno}')" style="padding:4px 12px;font-size:11px;font-weight:700;border-radius:6px;border:1.5px solid #b91c1c;background:#b91c1c;color:#fff;cursor:pointer">🗑 Eliminar</button>`:''}
         </div>
       </div>
@@ -19886,6 +19903,70 @@ function imprimirHojaTareo(fecha,turno){
       '</body></html>');
     w.document.close(); setTimeout(()=>{ try{ w.print(); }catch(err){} },350);
   }catch(err){ console.warn('[hojaTareo]',err); showNotif('No se pudo abrir la hoja','error'); }
+}
+/* ── DÍA Y NOCHE DEL MISMO DÍA, EN UNA SOLA HOJA ─────────────────────────────────────────────
+   El tareo sale por turno, y así se aprueba: la hoja del día y la de la noche son dos. Pero el
+   día de trabajo es uno, y en Recursos Humanos se archiva y se firma por día: imprimir dos
+   papeles del 12 de octubre obligaba a juntarlos a mano, y si uno se perdía nadie notaba que
+   faltaba medio día. Esto arma un solo documento con los dos turnos, uno debajo del otro, con el
+   jefe de guardia y el visto de cada uno, y un resumen al pie con cuántas tareas suma el día.
+   Sin un solo monto en soles: el jornal es confidencial y esta hoja circula por el frente. */
+function imprimirDiaTareo(fecha){
+  try{
+    const e=escAttr;
+    const f=String(fecha||'').slice(0,10);
+    const FR={}; (typeof FRENTES!=='undefined'?FRENTES:[]).forEach(x=>FR[String(x.id)]=x.nombre);
+    try{ if(typeof tpendLoad==='function') tpendLoad(); }catch(err){}
+    const turnos=['DIA','NOCHE'].map(tn=>{
+      const items=(state.tareas||[]).filter(t=>t.fecha===f && (t.turno||'DIA')===tn);
+      const hoja=(state.tareosPend||[]).find(h=>h && h.fecha===f && String(h.turno)===tn && h.estado==='aprobado')||null;
+      return {tn, items, hoja};
+    }).filter(x=>x.items.length);
+    if(!turnos.length){ showNotif('No hay tareos registrados ese día','error'); return; }
+    const tareasDia=turnos.reduce((a,x)=>a+x.items.reduce((s,t)=>s+Number(t.mult||1),0),0);
+    const bloques=turnos.map(x=>{
+      const filas=x.items.slice().sort((a,b)=>{
+        const na=(state.personal||[]).find(p=>String(p.id)===String(a.trabajadorId));
+        const nb=(state.personal||[]).find(p=>String(p.id)===String(b.trabajadorId));
+        return String(na?na.nombre:'').localeCompare(String(nb?nb.nombre:''),'es');
+      }).map((t,i)=>{
+        const p=(state.personal||[]).find(y=>String(y.id)===String(t.trabajadorId));
+        const m=Number(t.mult||1);
+        return '<tr><td class="c">'+(i+1)+'</td><td>'+e(p?p.nombre:(t.nombre||t.trabajadorId||'—'))+'</td>'+
+          '<td>'+e(p?p.rol:'—')+'</td><td>'+e(FR[String(t.frente)]||t.frente||'—')+'</td>'+
+          '<td class="c"><b>'+(m===1?'1':String(m))+'</b></td><td>'+e(t.obs||'')+'</td><td class="fi"></td></tr>';
+      }).join('');
+      const sub=x.items.reduce((s,t)=>s+Number(t.mult||1),0);
+      return '<div class="blq"><div class="th">TURNO '+x.tn+' &nbsp;·&nbsp; '+x.items.length+
+        ' trabajador'+(x.items.length!==1?'es':'')+' &nbsp;·&nbsp; '+(Math.round(sub*100)/100)+' tarea'+(sub!==1?'s':'')+'</div>'+
+        '<div class="caja"><b>Jefe de guardia:</b> '+e((x.hoja&&x.hoja.jefe)||'—')+
+        ' &nbsp;·&nbsp; <b>Aprobado por:</b> '+e((x.hoja&&x.hoja.aprob&&x.hoja.aprob.resp)||'—')+
+        ((x.hoja&&x.hoja.aprob&&x.hoja.aprob.fecha)?' el '+fmtF(x.hoja.aprob.fecha):'')+'</div>'+
+        '<table><thead><tr><th>N°</th><th>TRABAJADOR</th><th>CARGO</th><th>LABOR</th><th>TAREA</th><th>OBSERVACIÓN</th><th>FIRMA</th></tr></thead>'+
+        '<tbody>'+filas+'</tbody></table></div>';
+    }).join('');
+    const w=window.open('','_blank','width=900,height=950'); if(!w) return;
+    w.document.write('<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Tareo del día '+e(f)+'</title>'+
+      '<style>body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:24px}'+
+      'h1{font-size:16px;margin:0;letter-spacing:.04em}.sub{font-size:11px;color:#555;margin:3px 0 12px}'+
+      '.caja{border:1px solid #ccc;padding:7px 11px;font-size:11.5px;line-height:1.6;margin:0 0 8px}'+
+      '.th{background:#1a2744;color:#FFD700;font-weight:800;font-size:11.5px;letter-spacing:.06em;padding:5px 11px;margin-bottom:8px}'+
+      'table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:5px 7px;font-size:11.5px}'+
+      'th{background:#eee;font-size:9.5px;letter-spacing:.06em}.c{text-align:center}.fi{width:104px}'+
+      '.blq{margin-bottom:18px;page-break-inside:avoid}'+
+      '.tot{margin-top:10px;border:1px solid #333;padding:7px 11px;font-size:12px}'+
+      '.fin{display:flex;gap:30px;margin-top:46px}.fin div{flex:1;border-top:1px solid #333;padding-top:5px;font-size:11px;text-align:center}'+
+      '</style></head><body>'+
+      '<h1>HOJA DE TAREO DIARIO — DÍA COMPLETO</h1>'+
+      '<div class="sub">TEMUAL · '+e((document.getElementById('tareo-nivel')||{}).value||'NV 2820')+
+      ' · '+fmtF(f)+' · '+turnos.map(x=>x.tn).join(' + ')+'</div>'+
+      bloques+
+      '<div class="tot"><b>TOTAL DEL DÍA:</b> '+turnos.reduce((a,x)=>a+x.items.length,0)+
+      ' registro(s) en '+turnos.length+' turno(s) &nbsp;·&nbsp; <b>'+(Math.round(tareasDia*100)/100)+'</b> tareas</div>'+
+      '<div class="fin"><div>Jefe de Guardia</div><div>Jefe de Operaciones / Residente</div><div>Recursos Humanos</div><div>Jefe de Finanzas</div></div>'+
+      '</body></html>');
+    w.document.close(); setTimeout(()=>{ try{ w.print(); }catch(err){} },350);
+  }catch(err){ console.warn('[diaTareo]',err); showNotif('No se pudo abrir la hoja del día','error'); }
 }
 /* BORRAR UN TAREO APROBADO ES DE RAÍZ, Y LO HACE UNA SOLA PERSONA. Un tareo en Recursos Humanos
    ya está en la planilla, en el costo y en lo que el trabajador ve en su consulta; sacarlo no es
@@ -21133,8 +21214,32 @@ function _diasDesde(fecha){
   const b=Date.UTC(+h.slice(0,4), +h.slice(5,7)-1, +h.slice(8,10));
   return Math.round((b-a)/86400000);
 }
-// ¿La hoja de esa fecha sigue dentro de la ventana de edición?
-function tareoEnVentana(fecha){ return _diasDesde(fecha) <= TAREO_DIAS_EDICION; }
+/* ¿La hoja de esa fecha sigue abierta por calendario? Todo el mes en curso lo está —se tarea
+   desde el 1— y los dos primeros días del mes siguiente también, para poder cerrar bien el fin
+   de mes. El futuro no se tarea. */
+function tareoEnVentana(fecha){
+  const f=String(fecha||'').slice(0,10);
+  if(f.length!==10) return false;
+  const d=_diasDesde(f);
+  if(d<0) return false;
+  return f.slice(0,7)===hoy().slice(0,7) || d<=TAREO_DIAS_EDICION;
+}
+/* APROBADO ES CERRADO. Una hoja aprobada ya entró a la planilla, al costo del mes y a lo que el
+   trabajador ve en su consulta: si el jefe de guardia —o cualquier otro— pudiera seguir moviendo
+   sus tareas, el día ya pagado cambiaría por detrás y nadie sabría cuál versión vale. Desde que
+   Operaciones le da el visto, la hoja solo la corrige el Jefe de Finanzas, que es quien responde
+   por la planilla, y la corrige desde Recursos Humanos. */
+function tareoAprobadoDe(fecha,turno){
+  try{
+    if(typeof tpendLoad==='function') tpendLoad();
+    const f=String(fecha||'').slice(0,10);
+    return (state.tareosPend||[]).find(h=>h && h.fecha===f && h.estado==='aprobado' &&
+             (turno==null || String(h.turno)===String(turno))) || null;
+  }catch(e){ return null; }
+}
+function rolEditaTareoAprobado(){
+  try{ return !!usuarioActivo && String(usuarioActivo.rol||'')==='jefe_finanzas'; }catch(e){ return false; }
+}
 /* ── HOJAS QUE TAREÓ EL JEFE DE GUARDIA EN EL MES ──────────────────────────────
    Desde el Tareo Mensual se ve, hoja por hoja, lo que registró cada guardia: qué día, qué
    turno, quién firmó y a quién tareó con qué marca. No es una copia: son las MISMAS tareas
@@ -21194,8 +21299,14 @@ function tareoHojasMesHTML(mesYM){
     }).join('')+'</div>';
 }
 // Guarda de escritura: devuelve true si se puede tocar el tareo de esa fecha; si no, avisa.
-function tareoEditable(fecha){
+function tareoEditable(fecha,turno){
   const m=String(fecha||'').slice(0,7);
+  // El candado de la aprobación va ANTES que cualquier otro permiso: ni Administración lo abre.
+  if(tareoAprobadoDe(fecha,turno)){
+    if(rolEditaTareoAprobado()) return true;
+    try{ showNotif('🔒 El tareo del '+String(fecha).slice(0,10)+' ya está APROBADO: entró a la planilla y a la consulta del trabajador. Solo el Jefe de Finanzas puede corregirlo, desde Recursos Humanos.','error'); }catch(e){}
+    return false;
+  }
   if(rolFinanzasTareo()) return true;                       // Finanzas y Administración editan siempre
   if(!puedeEditarTareoMes(m)){
     try{ showNotif('🔒 El tareo de '+m+' ya está archivado (mes cumplido). Solo Finanzas o Administración pueden corregirlo.','error'); }catch(e){}
@@ -24780,6 +24891,7 @@ function _tpendMarca(m){ const v=Number(m)||1; return v===1?'1':String(v); }
 function renderTareosPendientes(){
   const cont=document.getElementById('res-tareos-pend'); if(!cont) return;
   tpendLoad();
+  try{ renderTareosAprobadosOp(); }catch(e){}
   const pend=(state.tareosPend||[]).filter(h=>h && h.estado==='enviado')
     .sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
   if(!pend.length){ cont.innerHTML='<div class="card"><div class="empty-state" style="padding:16px;color:var(--text3)">No hay hojas de tareo esperando aprobación.</div></div>'; return; }
@@ -24810,6 +24922,67 @@ function renderTareosPendientes(){
       '</tr></thead><tbody>'+filas+'</tbody></table>'+
     '</div>';
   }).join('');
+}
+/* ── EL ARCHIVO DE TAREOS APROBADOS EN OPERACIONES ───────────────────────────────────────────
+   Una hoja aprobada salía de la pantalla de Operaciones y no volvía: para saber qué se aprobó el
+   martes había que entrar a Recursos Humanos, que no todos abren. Aquí queda la lista por mes,
+   desplegable, con el jefe de guardia, quién dio el visto y a quién se tareó con qué marca, más
+   el botón de impresión del turno y del día completo.
+   Es de lectura: no hay un solo control que escriba. Lo que se ve es exactamente lo que está en
+   la planilla —se lee de state.tareas, no de una copia—, así que si Finanzas corrige algo en
+   Recursos Humanos, aquí se ve corregido. */
+let _tapMes='', _tapAbierta='';
+const _TAP_MES=['','enero','febrero','marzo','abril','mayo','junio','julio','agosto','setiembre','octubre','noviembre','diciembre'];
+function _tapMesLbl(m){ const a=String(m||'').split('-'); const n=+a[1]; return (_TAP_MES[n]||m)+' '+a[0]; }
+function tapMesSel(v){ _tapMes=v||''; renderTareosAprobadosOp(); }
+function tapToggle(k){ _tapAbierta=(_tapAbierta===k)?'':k; renderTareosAprobadosOp(); }
+function renderTareosAprobadosOp(){
+  const box=document.getElementById('op-tareos-aprob'); if(!box) return;
+  try{ if(typeof tpendLoad==='function') tpendLoad(); }catch(e){}
+  const aps=(state.tareosPend||[]).filter(h=>h && h.estado==='aprobado');
+  const meses=[...new Set(aps.map(h=>String(h.fecha||'').slice(0,7)).filter(m=>m.length===7))].sort().reverse();
+  if(!meses.length){ box.innerHTML='<div class="card" style="padding:14px;color:var(--text3);font-size:12.5px">Todavía no hay tareos aprobados.</div>'; return; }
+  if(!_tapMes || meses.indexOf(_tapMes)<0) _tapMes=meses[0];
+  const hs=aps.filter(h=>String(h.fecha||'').slice(0,7)===_tapMes)
+    .sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')) || (a.turno<b.turno?-1:1));
+  const nom=id=>{ const p=(state.personal||[]).find(x=>String(x.id)===String(id)); return p?p.nombre:('#'+id); };
+  const sel='<select onchange="tapMesSel(this.value)" style="background:var(--coal4);border:1px solid var(--border);border-radius:7px;padding:6px 10px;color:var(--text);font-size:12.5px">'+
+    meses.map(m=>'<option value="'+m+'"'+(m===_tapMes?' selected':'')+'>'+_tapMesLbl(m)+'</option>').join('')+'</select>';
+  // Las tareas se leen de la planilla, no de la hoja: es lo que de verdad quedó registrado.
+  const detalle=h=>{
+    const items=(state.tareas||[]).filter(t=>t.fecha===h.fecha && (t.turno||'DIA')===String(h.turno))
+      .slice().sort((a,b)=>nom(a.trabajadorId).localeCompare(nom(b.trabajadorId),'es'));
+    if(!items.length) return '<div style="padding:10px 14px;color:var(--text3);font-size:11.5px">Sin registros en la planilla para esta hoja.</div>';
+    const tar=items.reduce((s,t)=>s+Number(t.mult||1),0);
+    return '<div style="padding:8px 14px 12px;background:var(--coal5);border-top:1px solid var(--border)">'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:5px">'+
+      items.map(t=>{ const m=Number(t.mult||1);
+        return '<div style="display:flex;align-items:center;gap:7px;font-size:11.5px">'+
+          '<span style="display:inline-block;min-width:30px;text-align:center;background:#1a2744;color:#FFD700;font-weight:800;font-size:10px;border-radius:5px;padding:2px 5px">'+(m===1?'1':String(m))+'</span>'+
+          '<span style="color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escAttr(nom(t.trabajadorId))+'</span>'+
+          (t.obs?'<span style="color:var(--text3);font-size:10.5px">· '+escAttr(t.obs)+'</span>':'')+'</div>'; }).join('')+
+      '</div><div style="margin-top:8px;font-size:11.5px;color:var(--text3)">Suma del turno: <b style="color:var(--text2)">'+(Math.round(tar*100)/100)+'</b> tareas</div></div>';
+  };
+  box.innerHTML='<div class="card" style="padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
+      '<span style="font-size:12.5px;color:var(--text3)">Mes:</span>'+sel+
+      '<span style="font-size:12px;color:var(--text3)">'+hs.length+' hoja'+(hs.length!==1?'s':'')+' aprobada'+(hs.length!==1?'s':'')+'</span></div>'+
+    '<div class="card" style="padding:0;overflow:hidden">'+hs.map(h=>{
+      const k=h.fecha+'__'+h.turno, ab=(_tapAbierta===k);
+      const a2=h.aprob||{};
+      return '<div style="border-top:1px solid var(--border)">'+
+        '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 14px">'+
+          '<button onclick="tapToggle(\''+k+'\')" style="flex:1;min-width:200px;display:flex;align-items:center;gap:10px;background:none;border:none;color:var(--text);cursor:pointer;font-family:inherit;text-align:left;font-size:12.5px;padding:0">'+
+            '<span style="color:var(--text3);font-size:11px">'+(ab?'▾':'▸')+'</span>'+
+            '<b style="min-width:92px">'+fmtF(h.fecha)+'</b>'+
+            '<span style="color:var(--text3)">'+(String(h.turno).toUpperCase()==='NOCHE'?'🌙 Noche':'☀ Día')+'</span>'+
+            '<span style="color:var(--text3)">'+((h.registros||[]).length)+' trab.</span>'+
+            '<span style="color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">jefe: '+escAttr(h.jefe||'—')+'</span>'+
+            '<span style="color:var(--green);font-weight:700">✅ '+escAttr(a2.resp||'—')+'</span>'+
+          '</button>'+
+          '<button class="btn btn-outline" style="font-size:11.5px;padding:4px 10px" onclick="imprimirHojaTareo(\''+h.fecha+'\',\''+h.turno+'\')">🖨 Turno</button>'+
+          '<button class="btn btn-outline" style="font-size:11.5px;padding:4px 10px" onclick="imprimirDiaTareo(\''+h.fecha+'\')" title="Día y noche en una sola hoja">🖨 Día completo</button>'+
+        '</div>'+(ab?detalle(h):'')+'</div>';
+    }).join('')+'</div>';
 }
 async function aprobarTareoHoja(id){
   if(typeof puedeVerTareosPorAprobar==='function' && !puedeVerTareosPorAprobar()){
@@ -24874,13 +25047,35 @@ function devolverTareoHoja(id){
    encuentra ya marcado al abrir su hoja de tareo, que no cambia en nada.                        */
 const PIZ_GUARDIAS=['A','B','C'];
 const PIZ_TURNOS=[['dia','🌞 Día'],['noche','🌙 Noche'],['libre','🏖️ Libre']];
-const PIZ_FRENTES=[{k:'CRNE',id:2,nom:'CR-NE'},{k:'RABRENDA',id:1,nom:'RA-BRENDA'}];
+/* LAS LABORES DE LA PIZARRA SALEN DE LAS LABORES VIGENTES, NO DE UNA LISTA APARTE.
+   Estaban escritas a mano —CR-NE y RA-BRENDA— así que abrir una labor nueva en Operaciones no la
+   hacía aparecer aquí: el residente no podía distribuir gente en ella y había que tocar el código.
+   Ahora se derivan de frentesActivos(): abrir o retirar una labor se refleja en la pizarra sola.
+   Los tajos quedan fuera: se miden en m³ rotos y no llevan dotación fija de personal.
+   La clave `k` tiene que ser estable y sin caracteres raros porque va en los ids del HTML y en lo
+   guardado; se saca del id de la labor, que no cambia. */
+/* Las dos labores de siempre tienen id numérico (1 y 2) pero en la pizarra guardada se escribieron
+   como RABRENDA y CRNE. Se respetan esas claves o las pizarras ya guardadas perderían su gente. */
+const PIZ_K_ALIAS={'1':'RABRENDA','2':'CRNE'};
+function pizKey(id){ return PIZ_K_ALIAS[String(id)] || String(id).toUpperCase().replace(/[^A-Z0-9]/g,''); }
+function pizFrentes(){
+  const fs=(typeof frentesActivos==='function')?frentesActivos():[];
+  return fs.filter(f=>!f.tajo).map(f=>({
+    k:pizKey(f.id), id:f.id, nom:f.nombre, color:f.color, emoji:f.emoji }));
+}
+// Compatibilidad: lo que antes era una constante ahora es la lista viva.
+Object.defineProperty(window,'PIZ_FRENTES',{get:()=>pizFrentes(), configurable:true});
 const PIZ_PUESTOS=[['compresorista','Compresorista'],['scoop','Scoop'],['dumper','Dumper'],['servicios','Servicios']];
 /* Los cargos que pide cada puesto del frente. M1 y M2 son los perforistas; AY, su ayudante. El
    panel solo ofrece gente cuyo cargo encaja, pero no obliga: en mina falta gente y hay que poder
    poner a quien esté. Si el cargo no coincide, el casillero queda en ámbar. */
 const PIZ_CARGOS=[['M1','M1'],['M2','M2'],['AY','Ayudante'],['','—']];
+/* Plantilla de puestos de cada labor. Las dos de siempre conservan la suya; cualquier labor nueva
+   arranca con M1–M2–AY, que es la dotación mínima de un frente, y el residente ajusta desde la
+   pizarra con los botones de agregar y quitar. */
+const PIZ_CUPOS_DEF=['M1','M2','AY'];
 const PIZ_CUPOS={CRNE:['M1','M2','AY'], RABRENDA:['M1','M1','AY','AY']};
+function pizCuposDe(k){ return (PIZ_CUPOS[k]||PIZ_CUPOS_DEF).slice(); }
 /* QUÉ CARGO PUEDE OCUPAR CADA CASILLERO. Cada puesto de la pizarra solo ofrece a la gente que
    tiene ese cargo en su ficha de Recursos Humanos: el casillero M1 no lista ayudantes, y el de
    supervisor solo lista capataces, jefes de guardia, el residente y su asistente.
@@ -24912,17 +25107,31 @@ let _piz=null;                       // la pizarra que se está editando
 function _pizVacia(){
   const g={};
   PIZ_GUARDIAS.forEach((G,i)=>{
-    g[G]={ turno:['dia','noche','libre'][i], supervisor:'',
-           frentes:{ CRNE:PIZ_CUPOS.CRNE.map(c=>({cargo:c,pid:''})),
-                     RABRENDA:PIZ_CUPOS.RABRENDA.map(c=>({cargo:c,pid:''})) },
+    const fr={}; pizFrentes().forEach(f=>{ fr[f.k]=pizCuposDe(f.k).map(c=>({cargo:c,pid:''})); });
+    g[G]={ turno:['dia','noche','libre'][i], supervisor:'', frentes:fr,
            puestos:{ compresorista:[''], scoop:[''], dumper:[''], servicios:[] } };
   });
   return { nv:'NV 2820', guardias:g };
 }
 function _pizCargar(){
   const d=state.distribucion||{};
-  if(d.pizarra && d.pizarra.guardias) return JSON.parse(JSON.stringify(d.pizarra));
-  return _pizVacia();
+  if(!(d.pizarra && d.pizarra.guardias)) return _pizVacia();
+  const piz=JSON.parse(JSON.stringify(d.pizarra));
+  /* SINCRONIZAR CON LAS LABORES DE HOY. Una pizarra guardada puede traer una labor que ya se
+     retiró, o faltarle una que se abrió después. Si se retiró, su casillero sale de la pizarra
+     —pero la gente que estaba ahí NO se pierde: se queda en la ficha y vuelve a aparecer en la
+     lista de disponibles—. Si se abrió una nueva, entra vacía con su dotación mínima. */
+  const vivas=pizFrentes();
+  PIZ_GUARDIAS.forEach(G=>{
+    const g=piz.guardias[G]; if(!g) return;
+    g.frentes=g.frentes||{};
+    const fr={};
+    vivas.forEach(f=>{ fr[f.k]=Array.isArray(g.frentes[f.k])&&g.frentes[f.k].length
+                              ? g.frentes[f.k]
+                              : pizCuposDe(f.k).map(c=>({cargo:c,pid:''})); });
+    g.frentes=fr;
+  });
+  return piz;
 }
 /* A quién se puede poner: personal activo de RRHH. Se excluye a quien ya está puesto en otro
    lado de la misma pizarra, para que nadie quede en dos guardias ni en dos frentes a la vez. */
