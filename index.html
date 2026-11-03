@@ -2329,7 +2329,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-308</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-309</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2374,7 +2374,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-308</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.03-309</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2542,7 +2542,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.03-308</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.03-309</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -22005,13 +22005,44 @@ function servMesesConDatos(){
 }
 let _servMes=null;
 function servMesVista(){ return _servMes || String(hoy()).slice(0,7); }
-function servCambiarMes(v){ _servMes=v||null; renderServiciosTerceros(); }
+function servCambiarMes(v){ _servMes=v||null; _servEdit=null; renderServiciosTerceros(); }
+
+/* ── LIQUIDAR UN MES QUE YA PASÓ ─────────────────────────────────────────────────────────────
+   Una liquidación no se cierra el último día del mes: octubre se termina de liquidar en los
+   primeros días de noviembre, cuando llegan los vales y las facturas. Faltaban dos cosas.
+
+   La primera: el formulario traía SIEMPRE la fecha de hoy. Quien estaba mirando octubre y
+   registraba un vale de octubre lo mandaba a noviembre sin enterarse —el registro desaparecía
+   de la tabla que tenía al frente y aparecía en el mes equivocado, en el informe equivocado—.
+   Ahora la fecha arranca en el mes que se está mirando (el último día de ese mes si ya pasó,
+   hoy si es el mes en curso), y si la fecha escrita cae fuera del mes elegido, se avisa antes
+   de guardar en lugar de dejarlo pasar.
+
+   La segunda: una liquidación guardada solo se podía imprimir o borrar. Corregir un monto mal
+   tecleado obligaba a borrarla y volver a cargarla, y con ella se iba la foto del vale y la de
+   la liquidación firmada. Ahora se edita en su sitio y las fotos se conservan. */
+let _servEdit=null;                 // índice que se está editando, o null
+function servEditar(idx){ _servEdit=idx; renderServiciosTerceros();
+  try{ document.getElementById('serv-tipo').scrollIntoView({behavior:'smooth',block:'center'}); }catch(e){} }
+function servCancelarEdicion(){ _servEdit=null; _servFotoB64=''; renderServiciosTerceros(); }
+// Día por defecto: hoy si el mes elegido es el corriente; si no, el último día de ese mes.
+function servFechaPorDefecto(){
+  const m=servMesVista(), h=hoy();
+  if(m===h.slice(0,7)) return h;
+  const [a,me]=m.split('-').map(Number);
+  return m+'-'+String(new Date(a, me, 0).getDate()).padStart(2,'0');
+}
 function renderServiciosTerceros(){
   const el=document.getElementById('rrhh-servicios');
   if(!el) return;
   const todos=servCargar();
   const mesSel=servMesVista();
-  const tipoOpts=servTiposActivos().map(t=>`<option value="${t.id}">${t.label}</option>`).join('');
+  // Al editar se precarga la ficha. El concepto retirado se ofrece SOLO si es el de esa ficha,
+  // para no obligar a cambiarlo al corregir un monto de una liquidación vieja.
+  const ed=(_servEdit!=null)?todos[_servEdit]:null;
+  if(_servEdit!=null && !ed) _servEdit=null;
+  const tipoOpts=SERV_TIPOS.filter(t=>!t.retirado||(ed&&ed.tipo===t.id))
+    .map(t=>`<option value="${t.id}"${ed&&ed.tipo===t.id?' selected':''}>${t.label}</option>`).join('');
   const totalMes=finCostoServicios(mesSel);
   // La tabla muestra el mes elegido; los índices apuntan siempre al arreglo completo.
   const registros=todos.map((r,i)=>({r,i})).filter(x=>servEnMes(x.r.fecha,mesSel));
@@ -22030,6 +22061,7 @@ function renderServiciosTerceros(){
       <td style="padding:10px 8px;text-align:center">${foto}</td>
       <td style="padding:10px 8px;text-align:center">${fotoImp}</td>
       <td style="padding:10px 8px;text-align:center;white-space:nowrap">
+        <button class="btn btn-outline" style="padding:4px 9px;font-size:11px;color:#c9a84c;border-color:#c9a84c;margin-right:4px" onclick="servEditar(${idx})" title="Corregir esta liquidación">✏️ Editar</button>
         <button class="btn btn-outline" style="padding:4px 9px;font-size:11px;color:#60a5fa;border-color:#60a5fa;margin-right:4px" onclick="servImprimirLiquidacion(${idx})" title="Imprimir liquidación">🖨️ Imprimir</button>
         <button class="btn btn-outline" style="padding:4px 9px;font-size:11px;color:#a3e635;border-color:#a3e635;margin-right:4px" onclick="servExcelLiquidacion(${idx})" title="Descargar liquidación en Excel">📄 Excel</button>
         <button class="btn btn-outline" style="padding:4px 9px;font-size:11px;color:#f87171;border-color:#f87171" onclick="servEliminar(${idx})">🗑</button>
@@ -22048,42 +22080,48 @@ function renderServiciosTerceros(){
     </div>
   </div>
   <div class="card" style="margin-bottom:16px">
-    <div class="section-title" style="margin-top:0">➕ Registrar Liquidación</div>
+    <div class="section-title" style="margin-top:0">${ed?'✏️ Editar Liquidación':'➕ Registrar Liquidación'}</div>
+    ${ed?`<div style="background:rgba(201,168,76,.12);border:1px solid #c9a84c;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--text2)">
+      Estás corrigiendo la liquidación del <b>${escAttr(ed.fecha||'')}</b>. Las fotos del vale y de la liquidación firmada se conservan si no subes otras.</div>`:''}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div style="grid-column:1/-1">
         <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Tipo de Servicio</label>
         <select id="serv-tipo" class="input-field" style="width:100%" onchange="servTipoChange()">
-          <option value="">— Seleccionar —</option>
+          <option value=""${ed?'':' selected'}>— Seleccionar —</option>
           ${tipoOpts}
         </select>
       </div>
-      <div id="serv-placa-wrap" style="display:none;grid-column:1/-1">
+      <div id="serv-placa-wrap" style="display:${(()=>{const t=SERV_TIPOS.find(x=>ed&&x.id===ed.tipo);return (t&&t.placa)?'block':'none';})()};grid-column:1/-1">
         <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Placa del Camión</label>
-        <input id="serv-placa" class="input-field" style="width:100%;box-sizing:border-box" placeholder="Ej: ABC-123">
+        <input id="serv-placa" class="input-field" style="width:100%;box-sizing:border-box" placeholder="Ej: ABC-123" value="${ed?escAttr(ed.placa||''):''}">
       </div>
       <div>
         <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Monto (S/)</label>
-        <input id="serv-monto" type="number" min="0" step="0.01" class="input-field" style="width:100%;box-sizing:border-box" placeholder="0.00">
+        <input id="serv-monto" type="number" min="0" step="0.01" class="input-field" style="width:100%;box-sizing:border-box" placeholder="0.00" value="${ed?(parseFloat(ed.monto)||0):''}">
       </div>
       <div>
         <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Fecha</label>
-        <input id="serv-fecha" type="date" class="input-field" style="width:100%;box-sizing:border-box" value="${hoy()}">
+        <input id="serv-fecha" type="date" class="input-field" style="width:100%;box-sizing:border-box" value="${ed?(ed.fecha||servFechaPorDefecto()):servFechaPorDefecto()}">
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">Se guarda en el mes de esta fecha — hoy estás liquidando <b style="color:#c9a84c">${nomMes(mesSel)}</b></div>
       </div>
       <div style="grid-column:1/-1">
         <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Observaciones (opcional)</label>
-        <input id="serv-obs" class="input-field" style="width:100%;box-sizing:border-box" placeholder="Detalle adicional...">
+        <input id="serv-obs" class="input-field" style="width:100%;box-sizing:border-box" placeholder="Detalle adicional..." value="${ed?escAttr(ed.obs||''):''}">
       </div>
       <div style="grid-column:1/-1">
         <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Foto del Vale / Liquidación</label>
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
           <input type="file" id="serv-foto-input" accept="image/*" style="display:none" onchange="servFotoPreview(this)">
           <button class="btn btn-outline" style="font-size:12px" onclick="document.getElementById('serv-foto-input').click()">📷 Adjuntar Foto</button>
-          <span id="serv-foto-name" style="font-size:12px;color:var(--text3)">Sin archivo</span>
+          <span id="serv-foto-name" style="font-size:12px;color:var(--text3)">${ed&&ed.foto?'Ya tiene vale adjunto — sube otro solo si lo quieres reemplazar':'Sin archivo'}</span>
         </div>
         <div id="serv-foto-prev" style="margin-top:8px;display:none"><img id="serv-foto-img" style="max-height:120px;border-radius:8px;border:1px solid var(--border)"></div>
       </div>
     </div>
-    <button class="btn btn-gold" style="margin-top:14px;width:100%;padding:12px" onclick="servRegistrar()">💾 Guardar Liquidación</button>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button class="btn btn-gold" style="flex:1;padding:12px" onclick="servRegistrar()">💾 ${ed?'Actualizar Liquidación':'Guardar Liquidación'}</button>
+      ${ed?'<button class="btn btn-outline" style="padding:12px 18px" onclick="servCancelarEdicion()">Cancelar</button>':''}
+    </div>
   </div>
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
@@ -22141,15 +22179,37 @@ function servRegistrar(){
   if(!tipo){showNotif('Seleccione el tipo de servicio','error');return;}
   if(!monto||monto<=0){showNotif('Ingrese un monto válido','error');return;}
   if(t&&t.placa&&!placa){showNotif('Ingrese la placa del camión','error');return;}
+  // La fecha manda sobre el mes que se está mirando, pero no en silencio: si no coinciden, el
+  // registro va a salir de la tabla que tiene al frente y hay que decirlo antes, no después.
+  const mesVista=servMesVista();
+  if(String(fecha).slice(0,7)!==mesVista){
+    const NM=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre'];
+    const nm=ym=>{const[a,m]=String(ym).split('-').map(Number);return NM[m-1]+' '+a;};
+    if(!confirm('Estás viendo '+nm(mesVista)+', pero la fecha dice '+fecha+'.\n\n'+
+      'Esta liquidación va a quedar en '+nm(String(fecha).slice(0,7))+': en el gasto y en el informe de terceros de ESE mes, '+
+      'y no la vas a ver en la tabla de '+nm(mesVista)+'.\n\n¿Es correcto?')) return;
+  }
   const arr=servCargar();
-  arr.push({tipo,monto,fecha,obs,placa:t&&t.placa?placa:'',foto:_servFotoB64});
-  servGuardar(arr);
-  _servFotoB64='';
-  showNotif('✅ Liquidación registrada','ok');
+  if(_servEdit!=null && arr[_servEdit]){
+    const a=arr[_servEdit];
+    a.tipo=tipo; a.monto=monto; a.fecha=fecha; a.obs=obs; a.placa=(t&&t.placa)?placa:'';
+    if(_servFotoB64) a.foto=_servFotoB64;          // las fotos se conservan si no se sube otra
+    _servEdit=null; _servFotoB64='';
+    servGuardar(arr);
+    showNotif('✏️ Liquidación actualizada','ok');
+  }else{
+    arr.push({tipo,monto,fecha,obs,placa:t&&t.placa?placa:'',foto:_servFotoB64});
+    _servFotoB64='';
+    servGuardar(arr);
+    showNotif('✅ Liquidación registrada','ok');
+  }
+  // La tabla se queda en el mes donde cayó el registro, no en el que se estaba mirando.
+  _servMes=String(fecha).slice(0,7);
   renderServiciosTerceros();
 }
 function servEliminar(idx){
   if(!confirm('¿Eliminar esta liquidación?'))return;
+  _servEdit=null;
   const arr=servCargar();
   arr.splice(idx,1);
   servGuardar(arr);
