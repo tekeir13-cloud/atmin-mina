@@ -2311,13 +2311,13 @@ select option{background:var(--coal3);}
 /* El fondo va limpio. Había tres arcos tenues dibujando una galería; en pantalla se leían como
    rayas sueltas detrás del logo y le quitaban el aire. Un respaldar liso deja que lo único que
    se mire sea la marca cargándose, que es de lo que se trata. */
-#muki-carga .mc-marca{margin:10px 0 14px}
+#muki-carga .mc-marca{margin:10px 0 16px}
 #muki-carga .mc-nombre{font-size:25px;font-weight:800;letter-spacing:.02em;color:#fff;line-height:1}
 #muki-carga .mc-nombre b{color:#2f9bff;font-weight:800}
 #muki-carga .mc-lema{font-size:10.5px;letter-spacing:.3em;color:#5b6a80;margin-top:9px;font-weight:700}
 #muki-carga .mc-paso{font-size:13.5px;color:#cbd5e1;min-height:19px;font-weight:600;margin-top:26px}
 #muki-carga .mc-sub{font-size:11.5px;color:#64748b;margin-top:5px;min-height:16px}
-#muki-carga .mc-saltar{margin-top:20px;background:none;border:1px solid rgba(148,163,184,.3);color:#94a3b8;
+#muki-carga .mc-saltar{margin-top:34px;background:none;border:1px solid rgba(148,163,184,.3);color:#94a3b8;
   border-radius:9px;padding:8px 18px;font-size:12px;cursor:pointer;font-family:inherit;display:none}
 #muki-carga .mc-saltar:hover{border-color:#3ea2ff;color:#cbd5e1}
 /* EL DESTELLO QUE DA VUELTAS. El largo exacto del contorno lo mide el navegador con
@@ -2410,8 +2410,13 @@ select option{background:var(--coal3);}
          el sistema sigue trabajando. Si se queda quieto, algo pasó — y eso también se ve. -->
 
 
-    <div class="mc-paso" id="mc-paso">Sincronizando con la nube…</div>
-    <div class="mc-sub"  id="mc-sub">Esto puede tardar si la señal está débil</div>
+    <!-- Sin letreros. La nube cargándose ya dice todo lo que hay que decir, y el avance se ve en
+         el aro, no en un número. Los dos renglones que había —el estado y la cuenta "8 de 14"—
+         eran información interna: al que entra a trabajar no le sirve saber cuántas tablas
+         faltan. Los nodos siguen en el HTML, ocultos, porque el motor les escribe el estado y
+         quitarlos obligaría a tocar cada llamada; así el código sigue siendo uno solo. -->
+    <div class="mc-paso" id="mc-paso" hidden></div>
+    <div class="mc-sub"  id="mc-sub"  hidden></div>
     <button class="mc-saltar" id="mc-saltar" onclick="mukiCargaOcultar(true)">Entrar sin esperar</button>
   </div>
 </div>
@@ -2441,7 +2446,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.04-314</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.04-315</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2486,7 +2491,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.04-314</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:#c9a84c">v2026.11.04-315</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2654,7 +2659,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.04-314</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.04-315</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -25420,6 +25425,9 @@ function pizCuposDe(k){ return (PIZ_CUPOS[k]||PIZ_CUPOS_DEF).slice(); }
 function _pizRol(p){
   return String((p&&p.rol)||'').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
 }
+/* Los puestos que NO se reparten en la pizarra de mina: oficina, jefatura y administración.
+   Se comparan sin tildes y en mayúsculas, igual que el resto de los filtros. */
+const PIZ_OFICINA=/OPERACION|FINANZA|ADMINISTRA|LOGISTIC|SECRETARI|CONTAB|CONTADOR|GERENTE|COMPRAS|SISTEMAS|RECURSOS HUMANOS|RR\.?\s?HH/;
 const PIZ_FILTRO={
   M1:  r=>/\bM\s*-?\s*1\b/.test(r) || /PERFORISTA.*1\b/.test(r),
   M2:  r=>/\bM\s*-?\s*2\b/.test(r) || /PERFORISTA.*2\b/.test(r),
@@ -25428,7 +25436,13 @@ const PIZ_FILTRO={
   compresorista: r=>/COMPRE/.test(r),
   scoop:  r=>/SCOOP|MULTIPLE/.test(r),
   dumper: r=>/DUMPER|MULTIPLE/.test(r),
-  servicios: ()=>true,
+  /* SERVICIOS ES PARA EL QUE ENTRA A MINA, NO PARA LA OFICINA. Antes ofrecía a TODO el padrón,
+     así que en la lista de servicios de una guardia aparecían finanzas, administración, logística
+     y la secretaria, gente que no baja al nivel y que nadie va a tarear ahí. No se arma con una
+     lista de cargos permitidos —serían veinte y se quedaría corta con el primer cargo nuevo—
+     sino al revés: entra todo el mundo MENOS los puestos de oficina y jefatura. Así, un cargo
+     que mañana se invente ya queda disponible sin tocar el código. */
+  servicios: r=>!PIZ_OFICINA.test(r),
   /* Los cargos nuevos de los casilleros. Se compara por pedazo de texto y sin tildes porque en
      las fichas el mismo cargo está escrito de varias formas —"OP. DUMPER", "Operador de Dumper",
      "CHOFER", "Conductor"—. CUALQUIERA no lleva prueba: su ausencia en esta tabla es lo que hace
@@ -25443,7 +25457,7 @@ const PIZ_FILTRO={
   SOLD:  r=>/SOLDAD/.test(r),
   ELEC:  r=>/ELECTRIC/.test(r),
   BOD:   r=>/BODEG|ALMACEN|SUPERVISOR DE MATERIALES/.test(r),
-  SERV:  ()=>true,
+  SERV:  r=>!PIZ_OFICINA.test(r),
   CAP:   r=>/CAPATAZ|JEFE DE GUARDIA|RESIDENTE|SUPERVISOR/.test(r)
 };
 function _pizCargoDe(p){
@@ -30170,7 +30184,11 @@ function mukiCargaMostrar(){
   mukiCargaPaso('Sincronizando con la nube…','Esto puede tardar si la señal está débil',4);
   clearTimeout(_mcT1); clearTimeout(_mcT2);
   // A los 7 segundos se ofrece entrar igual. Lo que falte sigue bajando por detrás.
-  _mcT1=setTimeout(()=>{ const b=document.getElementById('mc-saltar'); if(b) b.style.display='inline-block'; },7000);
+  /* El botón de escape se queda, pero aparece recién a los 14 segundos y no a los 7. Una carga
+     normal termina antes, así que en el uso de todos los días no se ve nada más que el logo; el
+     botón solo asoma cuando algo se trabó de verdad, que es para lo único que existe. Quitarlo
+     del todo dejaría al usuario encerrado en una pantalla sin salida con mala señal. */
+  _mcT1=setTimeout(()=>{ const b=document.getElementById('mc-saltar'); if(b) b.style.display='inline-block'; },14000);
   // Y a los 45 se cierra sola: ninguna espera retiene a nadie para siempre.
   _mcT2=setTimeout(()=>{ if(_mcAbierta) mukiCargaOcultar(true); },45000);
 }
