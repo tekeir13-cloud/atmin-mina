@@ -2460,7 +2460,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.04-320</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.04-321</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2505,7 +2505,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.04-320</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.04-321</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2673,7 +2673,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.04-320</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.04-321</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -22171,7 +22171,19 @@ const SERV_TIPOS=[
 ];
 // Los que se pueden elegir hoy. Los retirados siguen existiendo para leer el historial.
 function servTiposActivos(){ return SERV_TIPOS.filter(t=>!t.retirado); }
-function servCargar(){try{return JSON.parse(localStorage.getItem(SERV_KEY)||'[]');}catch{return[];}}
+/* LAS FOTOS DE VALES SE SUELTAN AL LEER, UNA SOLA VEZ. La función de adjuntarlas se retiró
+   porque nunca se usó, pero si algún equipo tiene campos de imagen guardados de alguna prueba
+   siguen ocupando el espacio que hacía fallar el guardado. Aquí se sueltan solos la primera vez
+   que se abre el panel y se reescribe la lista sin ellos.
+   Se borran ÚNICAMENTE los dos campos de imagen: monto, fecha, concepto, placa y observación
+   quedan intactos y la liquidación se sigue imprimiendo igual. */
+function servCargar(){
+  let arr=[]; try{ arr=JSON.parse(localStorage.getItem(SERV_KEY)||'[]')||[]; }catch(e){ return []; }
+  let habia=false;
+  arr.forEach(r=>{ if(r && (r.foto!==undefined || r.fotoImpreso!==undefined)){ delete r.foto; delete r.fotoImpreso; habia=true; } });
+  if(habia){ try{ _lsEscribir(SERV_KEY, arr); }catch(e){} }
+  return arr;
+}
 /* LA NUBE PRIMERO, EL EQUIPO DESPUÉS. Antes esta función escribía en el equipo con un setItem
    suelto, sin protección. Cuando no quedaba espacio, esa línea lanzaba el error y la función
    moría ahí: NUNCA llegaba a la línea que sube a la nube. Esa era la causa de "aparece la
@@ -22250,7 +22262,7 @@ function _servRestaurarDraft(){
 }
 function servEditar(idx){ _servEdit=idx; renderServiciosTerceros();
   try{ document.getElementById('serv-tipo').scrollIntoView({behavior:'smooth',block:'center'}); }catch(e){} }
-function servCancelarEdicion(){ _servEdit=null; _servFotoB64=''; renderServiciosTerceros(); }
+function servCancelarEdicion(){ _servEdit=null; renderServiciosTerceros(); }
 // Día por defecto: hoy si el mes elegido es el corriente; si no, el último día de ese mes.
 function servFechaPorDefecto(){
   const m=servMesVista(), h=hoy();
@@ -22277,17 +22289,11 @@ function renderServiciosTerceros(){
   const mesOpts=servMesesConDatos().map(ym=>`<option value="${ym}"${ym===mesSel?' selected':''}>${nomMes(ym)}</option>`).join('');
   const rows=registros.slice().reverse().map(({r,i:idx})=>{
     const t=SERV_TIPOS.find(x=>x.id===r.tipo)||{label:r.tipo};
-    const foto=r.foto?`<a href="${r.foto}" target="_blank" style="color:#2f9bff;font-size:11px">📷 Vale</a>`:'<span style="color:var(--text3);font-size:11px">—</span>';
-    /* Las que YA estaban guardadas se siguen viendo: retirar la función no es razón para
-       esconderle a nadie un documento que ya tenía. Lo que se quita es poder subir más. */
-    const fotoImp=r.fotoImpreso?`<a href="${r.fotoImpreso}" target="_blank" style="color:#22d3a5;font-size:11px">📸 Impreso</a>`:'<span style="color:var(--text3);font-size:11px">—</span>';
     return`<tr>
       <td style="padding:10px 8px;font-size:12px;color:var(--text2)">${r.fecha||''}</td>
       <td style="padding:10px 8px;font-size:12px">${t.label}${r.placa?` <span style="background:#1e293b;padding:2px 6px;border-radius:4px;font-size:11px;color:#2f9bff">${r.placa}</span>`:''}</td>
       <td style="padding:10px 8px;font-size:13px;font-weight:700;color:#22d3a5;text-align:right">S/ ${(parseFloat(r.monto)||0).toLocaleString('es-PE',{minimumFractionDigits:2})}</td>
       <td style="padding:10px 8px;font-size:12px;color:var(--text2)">${r.obs||'—'}</td>
-      <td style="padding:10px 8px;text-align:center">${foto}</td>
-      <td style="padding:10px 8px;text-align:center">${fotoImp}</td>
       <td style="padding:10px 8px;text-align:center;white-space:nowrap">
         <button class="btn btn-outline" style="padding:4px 9px;font-size:11px;color:#2f9bff;border-color:#2f9bff;margin-right:4px" onclick="servEditar(${idx})" title="Corregir esta liquidación">✏️ Editar</button>
         <button class="btn btn-outline" style="padding:4px 9px;font-size:11px;color:#60a5fa;border-color:#60a5fa;margin-right:4px" onclick="servImprimirLiquidacion(${idx})" title="Imprimir liquidación">🖨️ Imprimir</button>
@@ -22296,23 +22302,7 @@ function renderServiciosTerceros(){
       </td>
     </tr>`;
   }).join('');
-  /* Las fotos viejas siguen pesando en este equipo aunque ya no se puedan subir nuevas. Aquí se
-     dice cuánto ocupan y se ofrece soltarlas, pero NO se borran solas: son documentos del
-     usuario y la decisión es suya. Se mide el JSON real, no una estimación. */
-  const _conFoto=todos.filter(r=>r&&(r.foto||r.fotoImpreso));
-  let _pesoFotos=0;
-  try{ _conFoto.forEach(r=>{ _pesoFotos+=String(r.foto||'').length+String(r.fotoImpreso||'').length; }); }catch(e){}
-  const _avisoFotos=_conFoto.length?`
-    <div class="card" style="margin-bottom:14px;border-left:3px solid #fbbf24;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-      <div style="font-size:12.5px;color:var(--text2)">
-        📷 <b>${_conFoto.length}</b> liquidación${_conFoto.length!==1?'es':''} con foto guardada en este equipo —
-        ocupa${_conFoto.length!==1?'n':''} <b style="color:#fbbf24">${(_pesoFotos/1048576).toFixed(1)} MB</b> de los 4 MB que da el navegador.
-        <div style="font-size:11px;color:var(--text3);margin-top:3px">Las fotos nunca llegaron a la nube: solo están aquí. Soltarlas libera ese espacio y no toca ningún monto, fecha ni concepto.</div>
-      </div>
-      <button class="btn btn-outline" style="font-size:12px;padding:6px 14px;color:#fbbf24;border-color:#fbbf24;white-space:nowrap" onclick="servSoltarFotos()">🧹 Liberar espacio</button>
-    </div>`:'';
   el.innerHTML=`
-  ${_avisoFotos}
   <div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
     <div>
       <div class="section-title" style="margin:0">🤝 Servicios Terceros</div>
@@ -22383,8 +22373,6 @@ function renderServiciosTerceros(){
         <th style="padding:10px 8px;text-align:left;font-size:12px;color:var(--text3)">Servicio</th>
         <th style="padding:10px 8px;text-align:right;font-size:12px;color:var(--text3)">Monto</th>
         <th style="padding:10px 8px;text-align:left;font-size:12px;color:var(--text3)">Obs.</th>
-        <th style="padding:10px 8px;text-align:center;font-size:12px;color:var(--text3)">Vale</th>
-        <th style="padding:10px 8px;text-align:center;font-size:12px;color:var(--text3)">Liq. impresa</th>
         <th style="padding:10px 8px;text-align:center;font-size:12px;color:var(--text3)">Acciones</th>
       </tr></thead>
       <tbody>${rows}</tbody>
@@ -22399,33 +22387,6 @@ function servTipoChange(){
   const wrap=document.getElementById('serv-placa-wrap');
   if(wrap) wrap.style.display=(t&&t.placa)?'block':'none';
 }
-/* El adjunto de fotos de vales quedó retirado (ver el comentario del formulario). Se conserva
-   _servFotoB64 porque servRegistrar() todavía lo lee al guardar; vale siempre '' y así una
-   liquidación nueva nunca nace con foto. */
-const _servFotoB64='';
-
-/* SOLTAR LAS FOTOS YA GUARDADAS. Borra ÚNICAMENTE los dos campos de imagen de cada liquidación:
-   el monto, la fecha, el concepto, la placa y la observación quedan intactos, y la liquidación
-   sigue imprimiéndose igual. No se pierde nada que esté en la nube, porque estas fotos nunca
-   estuvieron en la nube: la sincronización las quitaba a propósito. */
-function servSoltarFotos(){
-  const arr=servCargar();
-  const con=arr.filter(r=>r&&(r.foto||r.fotoImpreso));
-  if(!con.length){ showNotif('No hay fotos guardadas en este equipo'); return; }
-  let bytes=0; con.forEach(r=>{ bytes+=String(r.foto||'').length+String(r.fotoImpreso||'').length; });
-  const mb=(bytes/1048576).toFixed(1);
-  if(!confirm('Soltar las fotos de '+con.length+' liquidación(es) de ESTE equipo.\n\n'+
-    'Se liberan unos '+mb+' MB.\n\n'+
-    'NO se toca el monto, la fecha, el concepto, la placa ni la observación: la liquidación\n'+
-    'queda completa y se sigue imprimiendo igual. Solo se sueltan las imágenes.\n\n'+
-    'Ojo: estas fotos nunca se subieron a la nube, así que no hay copia en otro lado.\n'+
-    'Si alguna le hace falta, ábrala y guárdela en el equipo antes de continuar.\n\n¿Continuar?')) return;
-  arr.forEach(r=>{ if(!r) return; delete r.foto; delete r.fotoImpreso; });
-  servGuardar(arr);
-  renderServiciosTerceros();
-  showNotif('🧹 '+mb+' MB liberados — '+con.length+' liquidación(es) sin foto','ok');
-}
-
 function servRegistrar(){
   const tipo=document.getElementById('serv-tipo')?.value;
   const monto=parseFloat(document.getElementById('serv-monto')?.value||'0');
@@ -22450,13 +22411,11 @@ function servRegistrar(){
   if(_servEdit!=null && arr[_servEdit]){
     const a=arr[_servEdit];
     a.tipo=tipo; a.monto=monto; a.fecha=fecha; a.obs=obs; a.placa=(t&&t.placa)?placa:'';
-    if(_servFotoB64) a.foto=_servFotoB64;          // las fotos se conservan si no se sube otra
-    _servEdit=null; _servFotoB64='';
+    _servEdit=null;
     servGuardar(arr);
     showNotif('✏️ Liquidación actualizada','ok');
   }else{
-    arr.push({tipo,monto,fecha,obs,placa:t&&t.placa?placa:'',foto:_servFotoB64});
-    _servFotoB64='';
+    arr.push({tipo,monto,fecha,obs,placa:t&&t.placa?placa:''});
     servGuardar(arr);
     showNotif('✅ Liquidación registrada','ok');
   }
@@ -22758,7 +22717,7 @@ async function servReporteMensual(){
   const wb=new ExcelJS.Workbook();
   wb.creator='MUKICLOUD';
   const ws=wb.addWorksheet('Reporte Terceros',{pageSetup:{paperSize:9,orientation:'landscape',fitToPage:true,fitToWidth:1}});
-  ws.columns=[{width:5},{width:14},{width:38},{width:10},{width:16},{width:12},{width:12},{width:12}];
+  ws.columns=[{width:5},{width:14},{width:38},{width:10},{width:16},{width:30}];
 
   const azul='1E3A5F', blanco='FFFFFF', fondoMedio='D9E2EC', fondoClaro='F0F4F8';
   const borde={style:'thin',color:{argb:'BBBBBB'}};
@@ -22767,18 +22726,18 @@ async function servReporteMensual(){
   const fill=argb=>({type:'pattern',pattern:'solid',fgColor:{argb}});
 
   let r=1;
-  ws.mergeCells(r,1,r,8);
+  ws.mergeCells(r,1,r,6);
   ws.getCell(r,1).value=`${proyecto} — REPORTE DE PAGOS A TERCEROS${mesSelec?' — '+mesSelec:''}`;
   ws.getCell(r,1).style={font:f({bold:true,size:14,color:{argb:blanco}}),fill:fill(azul),alignment:{horizontal:'center',vertical:'middle'}};
   ws.getRow(r).height=28; r++;
-  ws.mergeCells(r,1,r,8);
+  ws.mergeCells(r,1,r,6);
   ws.getCell(r,1).value=`Generado: ${fmtF(hoy())} · Total registros: ${filtrados.length}`;
   ws.getCell(r,1).style={font:f({size:10,italic:true,color:{argb:'666666'}}),alignment:{horizontal:'center'}};
   ws.getRow(r).height=18; r++;
   ws.getRow(r).height=8; r++;
 
   // Encabezados
-  const hdrs=['#','Fecha','Servicio','Placa','Monto S/','Vale','Liq. Impresa','Obs.'];
+  const hdrs=['#','Fecha','Servicio','Placa','Monto S/','Obs.'];
   hdrs.forEach((h,ci)=>{
     ws.getCell(r,ci+1).value=h;
     ws.getCell(r,ci+1).style={font:f({bold:true,size:10,color:{argb:blanco}}),fill:fill(azul),border:bordeAll,alignment:{horizontal:'center'}};
@@ -22791,7 +22750,9 @@ async function servReporteMensual(){
     const m=parseFloat(reg.monto)||0;total+=m;
     const isAlt=i%2===0;
     const rowFill=fill(isAlt?fondoClaro:'FFFFFF');
-    const vals=[i+1,reg.fecha||'',tp.label,reg.placa||'—',m,reg.foto?'✔ Sí':'—',reg.fotoImpreso?'✔ Sí':'Pendiente',reg.obs||''];
+    // Sin las dos columnas de fotos: el adjunto se retiró y columnas que siempre dirían "—"
+    // solo ensucian el reporte.
+    const vals=[i+1,reg.fecha||'',tp.label,reg.placa||'—',m,reg.obs||''];
     vals.forEach((v,ci)=>{
       const c=ws.getCell(r,ci+1);
       c.value=v;
@@ -22808,7 +22769,7 @@ async function servReporteMensual(){
   ws.getCell(r,1).style={font:f({bold:true,size:11,color:{argb:blanco}}),fill:fill(azul),border:bordeAll,alignment:{horizontal:'right',indent:1}};
   ws.getCell(r,5).value=total;
   ws.getCell(r,5).style={font:f({bold:true,size:12,color:{argb:'27AE60'}}),fill:fill('E8F8F0'),border:bordeAll,alignment:{horizontal:'right'},numFmt:'"S/ "#,##0.00'};
-  [6,7,8].forEach(c=>{ws.getCell(r,c).style={fill:fill(fondoMedio),border:bordeAll};});
+  [6].forEach(c=>{ws.getCell(r,c).style={fill:fill(fondoMedio),border:bordeAll};});
   ws.getRow(r).height=24;
 
   // ── HOJA ANEXA: PLANILLA COMPLETA del mismo período (tareos × jornal) ──
@@ -33625,10 +33586,26 @@ function eliminarReporteCompDe(fecha, turno){
    marcadores de migración, y en el siguiente arranque resiembra los 380 productos de fábrica y los
    sube a la nube, resucitando lo borrado del maestro para toda la unidad. */
 const LS_ESPEJOS_NUBE = ['atmin_almacen_histbackup','atmin_personal_snap','atmin_tareas_snap','atmin_sync_bcast'];
+/* HACER SITIO, DE LO MÁS BARATO A LO MÁS CARO. Cada nivel suelta algo que se puede recuperar:
+   nada de lo que se borra aquí existe SOLO en este equipo —todo está en la nube— así que liberar
+   nunca pierde información, solo obliga a volver a bajarla si hace falta.
+   Antes solo llegaba a los niveles 1 y 2, que sueltan cosas livianas: podía correr dos veces y no
+   liberar ni un kilobyte mientras las copias del día ocupaban decenas de megas al lado. Ahora el
+   nivel 2 suelta también esas copias y las fotos del personal, que es donde está el peso. */
 function _lsLiberar(nivel){
   const borrar=k=>{ try{ localStorage.removeItem(k); }catch(e){} };
   if(nivel>=1){ try{ Object.keys(localStorage).filter(k=>k.indexOf('atmin_borrador_')===0).forEach(borrar); }catch(e){} }
-  if(nivel>=2){ LS_ESPEJOS_NUBE.forEach(borrar); }
+  if(nivel>=2){
+    LS_ESPEJOS_NUBE.forEach(borrar);
+    // Las copias del día locales: la nube tiene las diez.
+    try{ Object.keys(localStorage).filter(k=>k.indexOf('atmin_punto_local_')===0).sort()
+          .slice(0,-1).forEach(borrar); }catch(e){}
+    // Las fotos del personal: viven en su propio módulo en la nube y se vuelven a bajar al abrir
+    // una ficha. Ocupan 1,2 MB de los 4 que hay.
+    try{ borrar('atmin_personal_fotos'); }catch(e){}
+    // Y el respaldo del historial del almacén, que es una copia de algo que ya está guardado.
+    try{ borrar('atmin_almacen_histbackup'); }catch(e){}
+  }
   if(nivel>=3 || nivel>=4){
     // Recorte del historial LOCAL. state.compresorista no se toca —lo que ya se subió sigue en la
     // nube y en memoria—: solo se escribe al teléfono una ventana más corta.
@@ -37373,7 +37350,11 @@ function restaurarDesdeArchivo(input){
 // clave, así que un respaldo hecho después de una pérdida pisaba al bueno y se quedaba uno sin
 // nada a lo que volver. Con una copia por día eso no puede pasar.
 const PUNTO_PREFIJO='punto_';
-const PUNTO_DIAS=10;                       // cuántos días hacia atrás se ofrecen
+const PUNTO_DIAS=10;                       // cuántos días hacia atrás se ofrecen (en la nube)
+/* Cuántas copias se guardan EN EL EQUIPO. La nube conserva las diez; el equipo solo necesita un
+   salvavidas por si no hay señal, y cada copia pesa. Con diez, la laptop se quedaba sin espacio
+   en días. */
+const PUNTO_DIAS_LOCAL=2;
 // El día del respaldo empieza a las 5 de la mañana, que es cuando arranca la jornada: la copia
 // se crea con la primera sesión que se abre después de esa hora. Quien entre a las 3 de la
 // madrugada sigue trabajando sobre el día anterior y no dispara una copia nueva.
@@ -37419,10 +37400,24 @@ async function puntoDiaGuardar(forzar){
     const snap=(typeof snapshotEstado==='function')?snapshotEstado():null;
     if(!snap) return false;
     await sbSyncModulo(clave, snap);
-    try{ localStorage.setItem('atmin_'+clave,'1'); localStorage.setItem('atmin_punto_local_'+dia, JSON.stringify(snap)); }catch(e){}
-    // Solo se conservan los últimos días en este equipo, para no llenar el almacenamiento.
+    /* LA COPIA QUE SE GUARDA EN EL EQUIPO VA SIN FOTOS Y SOLO DOS DÍAS ────────────────────
+       Esta era la causa número uno de que las laptops se quedaran sin espacio. La copia del día
+       llevaba adentro las fotos del personal y las de los vales: medida, pesaba 21 MB. Y se
+       guardaban DIEZ. Doscientos megas en un equipo donde el navegador da cuatro.
+       La copia COMPLETA —con fotos— sigue subiendo a la nube, que es donde tiene que estar y de
+       donde se restaura. La del equipo es solo un salvavidas por si no hay señal, y para eso no
+       necesita las fotos: con los datos alcanza. Sin ellas baja de 21 MB a unos 300 KB.
+       Y dos días en vez de diez: en la nube siguen estando los diez. */
+    try{ localStorage.setItem('atmin_'+clave,'1'); }catch(e){}
+    try{
+      const liviano={...snap};
+      delete liviano.personalFotos;                       // las 63 fotos: ya están en la nube
+      if(Array.isArray(liviano.serviciosTerceros))        // y los vales, sin imágenes
+        liviano.serviciosTerceros=liviano.serviciosTerceros.map(r=>{const{foto,fotoImpreso,...x}=r||{};return x;});
+      _lsEscribir('atmin_punto_local_'+dia, liviano);
+    }catch(e){}
     try{ Object.keys(localStorage).filter(k=>k.indexOf('atmin_punto_local_')===0)
-      .sort().slice(0,-PUNTO_DIAS).forEach(k=>localStorage.removeItem(k)); }catch(e){}
+      .sort().slice(0,-PUNTO_DIAS_LOCAL).forEach(k=>localStorage.removeItem(k)); }catch(e){}
     return true;
   }catch(e){ console.warn('punto del día',e); return false; }
 }
