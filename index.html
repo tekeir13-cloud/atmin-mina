@@ -2460,7 +2460,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.04-319</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.04-320</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2505,7 +2505,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.04-319</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.04-320</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2673,7 +2673,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.04-319</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.04-320</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -22172,7 +22172,17 @@ const SERV_TIPOS=[
 // Los que se pueden elegir hoy. Los retirados siguen existiendo para leer el historial.
 function servTiposActivos(){ return SERV_TIPOS.filter(t=>!t.retirado); }
 function servCargar(){try{return JSON.parse(localStorage.getItem(SERV_KEY)||'[]');}catch{return[];}}
-function servGuardar(arr){localStorage.setItem(SERV_KEY,JSON.stringify(arr)); try{ const light=(arr||[]).map(r=>{const{foto,fotoImpreso,...rest}=r;return rest;}); sbSyncModulo('servicios_terceros', light); }catch(e){}}
+/* LA NUBE PRIMERO, EL EQUIPO DESPUÉS. Antes esta función escribía en el equipo con un setItem
+   suelto, sin protección. Cuando no quedaba espacio, esa línea lanzaba el error y la función
+   moría ahí: NUNCA llegaba a la línea que sube a la nube. Esa era la causa de "aparece la
+   sincronización pero no se suben los datos" —no fallaba la nube, el código no la alcanzaba—.
+   Ahora se sube primero, que es la copia que de verdad importa, y la escritura local va
+   protegida con _lsEscribir, que hace sitio y no revienta si no puede. */
+function servGuardar(arr){
+  try{ const light=(arr||[]).map(r=>{const{foto,fotoImpreso,...rest}=r;return rest;});
+       sbSyncModulo('servicios_terceros', light); }catch(e){}
+  try{ _lsEscribir(SERV_KEY, arr); }catch(e){ try{ localStorage.setItem(SERV_KEY,JSON.stringify(arr)); }catch(e2){} }
+}
 // EXCEPCIÓN AL CICLO 26→25: los servicios de terceros se declaran y se pagan por MES
 // CALENDARIO. Una liquidación con fecha 28 de julio es gasto de JULIO (1–31 jul), aunque el
 // periodo operativo 2026-08 ya haya arrancado el 26 de julio. Misma regla que el tareo.
@@ -22268,7 +22278,9 @@ function renderServiciosTerceros(){
   const rows=registros.slice().reverse().map(({r,i:idx})=>{
     const t=SERV_TIPOS.find(x=>x.id===r.tipo)||{label:r.tipo};
     const foto=r.foto?`<a href="${r.foto}" target="_blank" style="color:#2f9bff;font-size:11px">📷 Vale</a>`:'<span style="color:var(--text3);font-size:11px">—</span>';
-    const fotoImp=r.fotoImpreso?`<a href="${r.fotoImpreso}" target="_blank" style="color:#22d3a5;font-size:11px">📸 Impreso</a>`:`<label style="cursor:pointer;font-size:11px;color:#60a5fa">📸 Subir<input type="file" accept="image/*" style="display:none" onchange="servFotoImpreso(${idx},this)"></label>`;
+    /* Las que YA estaban guardadas se siguen viendo: retirar la función no es razón para
+       esconderle a nadie un documento que ya tenía. Lo que se quita es poder subir más. */
+    const fotoImp=r.fotoImpreso?`<a href="${r.fotoImpreso}" target="_blank" style="color:#22d3a5;font-size:11px">📸 Impreso</a>`:'<span style="color:var(--text3);font-size:11px">—</span>';
     return`<tr>
       <td style="padding:10px 8px;font-size:12px;color:var(--text2)">${r.fecha||''}</td>
       <td style="padding:10px 8px;font-size:12px">${t.label}${r.placa?` <span style="background:#1e293b;padding:2px 6px;border-radius:4px;font-size:11px;color:#2f9bff">${r.placa}</span>`:''}</td>
@@ -22284,7 +22296,23 @@ function renderServiciosTerceros(){
       </td>
     </tr>`;
   }).join('');
+  /* Las fotos viejas siguen pesando en este equipo aunque ya no se puedan subir nuevas. Aquí se
+     dice cuánto ocupan y se ofrece soltarlas, pero NO se borran solas: son documentos del
+     usuario y la decisión es suya. Se mide el JSON real, no una estimación. */
+  const _conFoto=todos.filter(r=>r&&(r.foto||r.fotoImpreso));
+  let _pesoFotos=0;
+  try{ _conFoto.forEach(r=>{ _pesoFotos+=String(r.foto||'').length+String(r.fotoImpreso||'').length; }); }catch(e){}
+  const _avisoFotos=_conFoto.length?`
+    <div class="card" style="margin-bottom:14px;border-left:3px solid #fbbf24;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div style="font-size:12.5px;color:var(--text2)">
+        📷 <b>${_conFoto.length}</b> liquidación${_conFoto.length!==1?'es':''} con foto guardada en este equipo —
+        ocupa${_conFoto.length!==1?'n':''} <b style="color:#fbbf24">${(_pesoFotos/1048576).toFixed(1)} MB</b> de los 4 MB que da el navegador.
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">Las fotos nunca llegaron a la nube: solo están aquí. Soltarlas libera ese espacio y no toca ningún monto, fecha ni concepto.</div>
+      </div>
+      <button class="btn btn-outline" style="font-size:12px;padding:6px 14px;color:#fbbf24;border-color:#fbbf24;white-space:nowrap" onclick="servSoltarFotos()">🧹 Liberar espacio</button>
+    </div>`:'';
   el.innerHTML=`
+  ${_avisoFotos}
   <div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
     <div>
       <div class="section-title" style="margin:0">🤝 Servicios Terceros</div>
@@ -22324,15 +22352,14 @@ function renderServiciosTerceros(){
         <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Observaciones (opcional)</label>
         <input id="serv-obs" class="input-field" style="width:100%;box-sizing:border-box" placeholder="Detalle adicional..." value="${ed?escAttr(ed.obs||''):''}">
       </div>
-      <div style="grid-column:1/-1">
-        <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Foto del Vale / Liquidación</label>
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-          <input type="file" id="serv-foto-input" accept="image/*" style="display:none" onchange="servFotoPreview(this)">
-          <button class="btn btn-outline" style="font-size:12px" onclick="document.getElementById('serv-foto-input').click()">📷 Adjuntar Foto</button>
-          <span id="serv-foto-name" style="font-size:12px;color:var(--text3)">${ed&&ed.foto?'Ya tiene vale adjunto — sube otro solo si lo quieres reemplazar':'Sin archivo'}</span>
-        </div>
-        <div id="serv-foto-prev" style="margin-top:8px;display:none"><img id="serv-foto-img" style="max-height:120px;border-radius:8px;border:1px solid var(--border)"></div>
-      </div>
+      <!-- ADJUNTAR FOTO DEL VALE: RETIRADO. No se usaba, y era lo que llenaba la memoria de las
+           laptops. La foto entraba al tamaño que salía de la cámara —unos 4 MB en base64— y se
+           guardaba en el propio equipo, donde el navegador solo da 4 MB en total: un vale con
+           foto llenaba la cuota entero. Peor: esas fotos nunca llegaban a la nube, porque al
+           sincronizar se les quitaba a propósito. Se quedaban en esa laptop, creciendo, hasta que
+           no entraba nada más y el guardado empezaba a fallar.
+           Las fotos de Seguridad NO son este caso y se quedan: esas sí suben a la nube y en el
+           equipo solo queda un enlace. -->
     </div>
     <div style="display:flex;gap:10px;margin-top:14px">
       <button class="btn btn-gold" style="flex:1;padding:12px" onclick="servRegistrar()">💾 ${ed?'Actualizar Liquidación':'Guardar Liquidación'}</button>
@@ -22372,20 +22399,33 @@ function servTipoChange(){
   const wrap=document.getElementById('serv-placa-wrap');
   if(wrap) wrap.style.display=(t&&t.placa)?'block':'none';
 }
-let _servFotoB64='';
-function servFotoPreview(inp){
-  const file=inp.files[0];if(!file)return;
-  const name=document.getElementById('serv-foto-name');
-  if(name) name.textContent=file.name;
-  const reader=new FileReader();
-  reader.onload=e=>{
-    _servFotoB64=e.target.result;
-    const prev=document.getElementById('serv-foto-prev');
-    const img=document.getElementById('serv-foto-img');
-    if(prev&&img){img.src=_servFotoB64;prev.style.display='block';}
-  };
-  reader.readAsDataURL(file);
+/* El adjunto de fotos de vales quedó retirado (ver el comentario del formulario). Se conserva
+   _servFotoB64 porque servRegistrar() todavía lo lee al guardar; vale siempre '' y así una
+   liquidación nueva nunca nace con foto. */
+const _servFotoB64='';
+
+/* SOLTAR LAS FOTOS YA GUARDADAS. Borra ÚNICAMENTE los dos campos de imagen de cada liquidación:
+   el monto, la fecha, el concepto, la placa y la observación quedan intactos, y la liquidación
+   sigue imprimiéndose igual. No se pierde nada que esté en la nube, porque estas fotos nunca
+   estuvieron en la nube: la sincronización las quitaba a propósito. */
+function servSoltarFotos(){
+  const arr=servCargar();
+  const con=arr.filter(r=>r&&(r.foto||r.fotoImpreso));
+  if(!con.length){ showNotif('No hay fotos guardadas en este equipo'); return; }
+  let bytes=0; con.forEach(r=>{ bytes+=String(r.foto||'').length+String(r.fotoImpreso||'').length; });
+  const mb=(bytes/1048576).toFixed(1);
+  if(!confirm('Soltar las fotos de '+con.length+' liquidación(es) de ESTE equipo.\n\n'+
+    'Se liberan unos '+mb+' MB.\n\n'+
+    'NO se toca el monto, la fecha, el concepto, la placa ni la observación: la liquidación\n'+
+    'queda completa y se sigue imprimiendo igual. Solo se sueltan las imágenes.\n\n'+
+    'Ojo: estas fotos nunca se subieron a la nube, así que no hay copia en otro lado.\n'+
+    'Si alguna le hace falta, ábrala y guárdela en el equipo antes de continuar.\n\n¿Continuar?')) return;
+  arr.forEach(r=>{ if(!r) return; delete r.foto; delete r.fotoImpreso; });
+  servGuardar(arr);
+  renderServiciosTerceros();
+  showNotif('🧹 '+mb+' MB liberados — '+con.length+' liquidación(es) sin foto','ok');
 }
+
 function servRegistrar(){
   const tipo=document.getElementById('serv-tipo')?.value;
   const monto=parseFloat(document.getElementById('serv-monto')?.value||'0');
@@ -22434,16 +22474,9 @@ function servEliminar(idx){
   renderServiciosTerceros();
 }
 
-// Subir foto del documento impreso y firmado
-function servFotoImpreso(idx,inp){
-  const file=inp.files[0];if(!file)return;
-  const reader=new FileReader();
-  reader.onload=e=>{
-    const arr=servCargar();
-    if(arr[idx]){arr[idx].fotoImpreso=e.target.result;servGuardar(arr);showNotif('Foto de liquidación impresa guardada','ok');renderServiciosTerceros();}
-  };
-  reader.readAsDataURL(file);
-}
+/* servFotoImpreso() retirada junto con el adjunto de fotos de vales. Guardaba la imagen al
+   tamaño original de la cámara dentro del propio equipo —el mismo problema que la otra— y no se
+   usaba. Las que ya estaban guardadas se siguen viendo en el historial. */
 
 // Generar Excel de liquidación formal para imprimir
 async function servExcelLiquidacion(idx){
