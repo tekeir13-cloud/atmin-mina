@@ -2460,7 +2460,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.04-321</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.04-322</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2505,7 +2505,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.04-321</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.04-322</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2673,7 +2673,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.04-321</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.04-322</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -33585,10 +33585,16 @@ function eliminarReporteCompDe(fecha, turno){
    Lo que NO se toca, por más apretado que esté: `atmin_almacen`. Borrarlo deja al equipo sin los
    marcadores de migración, y en el siguiente arranque resiembra los 380 productos de fábrica y los
    sube a la nube, resucitando lo borrado del maestro para toda la unidad. */
-const LS_ESPEJOS_NUBE = ['atmin_almacen_histbackup','atmin_personal_snap','atmin_tareas_snap','atmin_sync_bcast'];
+/* Copias locales de cosas que la nube ya tiene: soltarlas no pierde nada, solo obliga a volver
+   a bajarlas. El respaldo del almacén SALIÓ de esta lista: no es un espejo de la nube sino la
+   copia que permite recuperar el historial tras una depuración, y vive solo en este equipo.
+   Estaba aquí desde antes y se borraba al primer apretón de espacio. Ahora se suelta recién en
+   el nivel 3, como último recurso. */
+const LS_ESPEJOS_NUBE = ['atmin_personal_snap','atmin_tareas_snap','atmin_sync_bcast'];
 /* HACER SITIO, DE LO MÁS BARATO A LO MÁS CARO. Cada nivel suelta algo que se puede recuperar:
    nada de lo que se borra aquí existe SOLO en este equipo —todo está en la nube— así que liberar
-   nunca pierde información, solo obliga a volver a bajarla si hace falta.
+   nunca pierde información, solo obliga a volver a bajarla si hace falta. Lo que NO cumple esa
+   condición se queda, por más que pese: está anotado abajo cuál y por qué.
    Antes solo llegaba a los niveles 1 y 2, que sueltan cosas livianas: podía correr dos veces y no
    liberar ni un kilobyte mientras las copias del día ocupaban decenas de megas al lado. Ahora el
    nivel 2 suelta también esas copias y las fotos del personal, que es donde está el peso. */
@@ -33597,15 +33603,21 @@ function _lsLiberar(nivel){
   if(nivel>=1){ try{ Object.keys(localStorage).filter(k=>k.indexOf('atmin_borrador_')===0).forEach(borrar); }catch(e){} }
   if(nivel>=2){
     LS_ESPEJOS_NUBE.forEach(borrar);
-    // Las copias del día locales: la nube tiene las diez.
+    // Las copias del día locales: la nube tiene las diez, así que soltarlas no pierde nada.
     try{ Object.keys(localStorage).filter(k=>k.indexOf('atmin_punto_local_')===0).sort()
           .slice(0,-1).forEach(borrar); }catch(e){}
-    // Las fotos del personal: viven en su propio módulo en la nube y se vuelven a bajar al abrir
-    // una ficha. Ocupan 1,2 MB de los 4 que hay.
-    try{ borrar('atmin_personal_fotos'); }catch(e){}
-    // Y el respaldo del historial del almacén, que es una copia de algo que ya está guardado.
-    try{ borrar('atmin_almacen_histbackup'); }catch(e){}
+    /* AQUÍ NO SE TOCAN DOS COSAS, Y CONVIENE QUE QUEDE ESCRITO POR QUÉ ────────────────────────
+       · Las FOTOS DEL PERSONAL (atmin_personal_fotos). Su módulo NO está entre los que se unen
+         en la nube: al subirlo se PISA la fila entera. Si aquí se borrara la copia local, la
+         siguiente foto que alguien cargue subiría un mapa con esa sola foto y borraría las de
+         los 63 en todos los equipos. Son 1,2 MB que no valen ese riesgo.
+       · El RESPALDO DEL ALMACÉN (atmin_almacen_histbackup) tampoco se toca en este nivel: vive
+         SOLO en este equipo y es la salida de emergencia tras una depuración. Se suelta recién
+         en el nivel 3, que solo se alcanza cuando hay un parte en juego. */
   }
+  // Último recurso: el respaldo de depuración del almacén. No está en la nube, así que se suelta
+  // solo cuando ya no queda otra y el parte del compresorista está en juego.
+  if(nivel>=3){ borrar('atmin_almacen_histbackup'); }
   if(nivel>=3 || nivel>=4){
     // Recorte del historial LOCAL. state.compresorista no se toca —lo que ya se subió sigue en la
     // nube y en memoria—: solo se escribe al teléfono una ventana más corta.
