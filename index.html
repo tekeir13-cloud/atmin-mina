@@ -2460,7 +2460,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.04-318</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.04-319</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2505,7 +2505,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.04-318</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.04-319</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2673,7 +2673,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.04-318</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.04-319</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -18980,9 +18980,21 @@ function exportarInventarioExcel(){
   const mes=document.getElementById('inv-mes-sel')?.value||document.getElementById('cc-mes-sel')?.value||almMesActual();
   const [anio,mesN]=mes.split('-');
   const nombreMes=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][parseInt(mesN)-1]||mes;
-  const sals=state.almacen.salidas.filter(s=>filtroMes(s.fecha,mes));
-  const ings=state.almacen.ingresos.filter(i=>filtroMes(i.fecha,mes));
-  const stock=calcStock();
+  /* EL EXCEL LEE EXACTAMENTE LO QUE SE VE EN PANTALLA ───────────────────────────────────────
+     Salían códigos dobles en la hoja de Stock. El motivo: esta exportación leía el stock EN
+     CRUDO con calcStock(), mientras la tabla de esta misma pestaña lo pasa por
+     filtrarPorMaestro(). Esa función es justamente la que deja fuera los artículos cuyo código
+     ya no está en el maestro y el mismo producto repetido por venir de dos fichas distintas.
+     Por eso el archivo mostraba filas que la pantalla no, y el mismo código aparecía dos veces.
+     Tampoco respetaba el filtro de almacén de arriba: con "Mantenimiento" elegido, el Excel
+     igual traía todo. Ahora las dos lecturas son la misma, y el encabezado dice qué almacén
+     contiene el archivo para que nadie lo confunda con el inventario completo. */
+  const filtroAlm=document.getElementById('inv-filtro-alm')?.value||'';
+  const coincideAlm=x=>!filtroAlm || x.almacen===filtroAlm;
+  const sals=state.almacen.salidas.filter(s=>filtroMes(s.fecha,mes)&&coincideAlm(s));
+  const ings=state.almacen.ingresos.filter(i=>filtroMes(i.fecha,mes)&&coincideAlm(i));
+  let stock=(typeof filtrarPorMaestro==='function')?filtrarPorMaestro(calcStock()):calcStock();
+  stock=stock.filter(coincideAlm);
   const S={
     titulo:{font:{bold:true,sz:16,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'B91C1C'}},alignment:{horizontal:'center',vertical:'center'}},
     sub:   {font:{bold:false,sz:11,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'7F1D1D'}},alignment:{horizontal:'center'}},
@@ -19020,7 +19032,8 @@ function exportarInventarioExcel(){
     ws['!autofilter']={ref:`A4:${XLSX.utils.encode_cell({r:Math.max(4,lastR),c:COL})}`};
     return ws;
   }
-  const subt=`${nombreMes} ${anio}  |  Exportado: ${new Date().toLocaleDateString('es-PE')}`;
+  const almTxt=filtroAlm?((typeof almLabel==='function')?almLabel(filtroAlm):filtroAlm):'Todos los almacenes';
+  const subt=`${nombreMes} ${anio}  |  ${almTxt}  |  Exportado: ${new Date().toLocaleDateString('es-PE')}`;
   // Hoja 1: SALIDAS (centro de costos)
   const ws1=sheet('SALIDAS — CENTRO DE COSTOS',subt,
     ['FECHA','NIVEL','ALMACÉN','ENTREGADO POR','CÓD. MÁQUINA','PRODUCTO','DESCRIPCIÓN','U.M.','P.U. SIN IGV','CANTIDAD','IMPORTE SIN IGV','ENTREGADO A (OPERARIO)'],
@@ -19048,8 +19061,9 @@ function exportarInventarioExcel(){
   XLSX.utils.book_append_sheet(wb,ws2,'Ingresos');
   XLSX.utils.book_append_sheet(wb,ws3,'Stock');
   XLSX.utils.book_append_sheet(wb,ws4,'Resumen');
-  XLSX.writeFile(wb,`Inventario_${nombreMes}_${anio}.xlsx`);
-  showNotif('✓ Excel exportado');
+  const sufijo=filtroAlm?('_'+String(almTxt).replace(/[^A-Za-zÁÉÍÓÚÑáéíóúñ0-9]+/g,'')):'';
+  XLSX.writeFile(wb,`Inventario_${nombreMes}_${anio}${sufijo}.xlsx`);
+  showNotif('✓ Excel exportado — '+stock.length+' productos de '+almTxt.toLowerCase());
 }
 
 // ── LOGÍSTICA (legacy) ──
