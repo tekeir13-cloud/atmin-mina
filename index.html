@@ -2460,7 +2460,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.04-323</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.05-324</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2505,7 +2505,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.04-323</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.05-324</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2673,7 +2673,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.04-323</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.05-324</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -19040,21 +19040,30 @@ function exportarInventarioExcel(){
   }
   const almTxt=filtroAlm?((typeof almLabel==='function')?almLabel(filtroAlm):filtroAlm):'Todos los almacenes';
   const subt=`${nombreMes} ${anio}  |  ${almTxt}  |  Exportado: ${new Date().toLocaleDateString('es-PE')}`;
+  /* EL CÓDIGO DEL PRODUCTO, EN LAS TRES HOJAS ───────────────────────────────────────────────
+     El archivo salía sin él: para cruzarlo con el maestro, con una orden de compra o con lo que
+     manda el proveedor había que buscar por nombre, y los nombres se escriben de mil formas.
+     Va como columna propia al lado del producto, no metido dentro del nombre.
+     Los movimientos ANTIGUOS se guardaron sin código. Para esos se resuelve desde el maestro con
+     la misma regla que usa el stock —si hay un solo producto con ese nombre, es ese—, de modo
+     que una salida de hace meses también sale con su código en vez de una celda vacía. */
+  const _cod=x=>{ try{ return _codigoDesdeMaestro(x.codigo, x.producto, x.descripcion)||''; }
+                  catch(e){ return String(x.codigo||''); } };
   // Hoja 1: SALIDAS (centro de costos)
   const ws1=sheet('SALIDAS — CENTRO DE COSTOS',subt,
-    ['FECHA','NIVEL','ALMACÉN','ENTREGADO POR','CÓD. MÁQUINA','PRODUCTO','DESCRIPCIÓN','U.M.','P.U. SIN IGV','CANTIDAD','IMPORTE SIN IGV','ENTREGADO A (OPERARIO)'],
-    sals.slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')).map(s=>[fmtF(s.fecha),nivelLabel(s.destino),s.almacen,s.solicitante||'',s.maquina||'',s.producto||'',s.descripcion||'',s.unidad,Number(s.precio)||0,Number(s.cantidad)||0,Number(s.importe)||0,(String(s.destino)==='operario')?(s.operario||''):'']),
-    [12,9,15,16,16,22,30,7,13,11,15,26],[8,10],[9]);
+    ['FECHA','NIVEL','ALMACÉN','ENTREGADO POR','CÓD. MÁQUINA','CÓDIGO','PRODUCTO','DESCRIPCIÓN','U.M.','P.U. SIN IGV','CANTIDAD','IMPORTE SIN IGV','ENTREGADO A (OPERARIO)'],
+    sals.slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')).map(s=>[fmtF(s.fecha),nivelLabel(s.destino),s.almacen,s.solicitante||'',s.maquina||'',_cod(s),s.producto||'',s.descripcion||'',s.unidad,Number(s.precio)||0,Number(s.cantidad)||0,Number(s.importe)||0,(String(s.destino)==='operario')?(s.operario||''):'']),
+    [12,9,15,16,16,16,22,30,7,13,11,15,26],[9,11],[10]);
   // Hoja 2: INGRESOS
   const ws2=sheet('INGRESOS DE MATERIAL',subt,
-    ['FECHA','VALE','ORIGEN','ALMACÉN','PRODUCTO','DESCRIPCIÓN','U.M.','CANTIDAD','PRECIO','TOTAL'],
-    ings.slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')).map(i=>[fmtF(i.fecha),i.vale||'',i.detalle||'',i.almacen,i.producto||'',i.descripcion||'',i.unidad,Number(i.cantidad)||0,Number(i.precio)||0,Number(i.total)||0]),
-    [12,10,18,15,22,30,7,11,12,14],[8,9],[7]);
+    ['FECHA','VALE','ORIGEN','ALMACÉN','CÓDIGO','PRODUCTO','DESCRIPCIÓN','U.M.','CANTIDAD','PRECIO','TOTAL'],
+    ings.slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')).map(i=>[fmtF(i.fecha),i.vale||'',i.detalle||'',i.almacen,_cod(i),i.producto||'',i.descripcion||'',i.unidad,Number(i.cantidad)||0,Number(i.precio)||0,Number(i.total)||0]),
+    [12,10,18,15,16,22,30,7,11,12,14],[9,10],[8]);
   // Hoja 3: STOCK
   const ws3=sheet('STOCK / INVENTARIO',subt,
-    ['ALMACÉN','PRODUCTO','DESCRIPCIÓN','U.M.','INGRESOS','SALIDAS','STOCK','P.U.','VALOR STOCK'],
-    stock.sort((a,b)=>a.almacen.localeCompare(b.almacen)||(a.producto||a.descripcion).localeCompare(b.producto||b.descripcion)).map(r=>[r.almacen,r.producto||'',r.descripcion,r.unidad,Number(r.ingreso)||0,Number(r.salida)||0,Number(r.stock)||0,Number(r.precio)||0,(Number(r.stock)||0)*(Number(r.precio)||0)]),
-    [15,22,30,7,11,11,11,12,15],[7,8],[4,5,6]);
+    ['ALMACÉN','CÓDIGO','PRODUCTO','DESCRIPCIÓN','U.M.','INGRESOS','SALIDAS','STOCK','P.U.','VALOR STOCK'],
+    stock.sort((a,b)=>a.almacen.localeCompare(b.almacen)||(a.producto||a.descripcion).localeCompare(b.producto||b.descripcion)).map(r=>[r.almacen,String(r.codigo||''),r.producto||'',r.descripcion,r.unidad,Number(r.ingreso)||0,Number(r.salida)||0,Number(r.stock)||0,Number(r.precio)||0,(Number(r.stock)||0)*(Number(r.precio)||0)]),
+    [15,16,22,30,7,11,11,11,12,15],[8,9],[5,6,7]);
   // Hoja 4: RESUMEN por nivel y almacén
   const combos={};sals.forEach(s=>{const key=nivelLabel(s.destino)+' | '+s.almacen;combos[key]=(combos[key]||0)+(Number(s.importe)||0);});
   const totalGasto=sals.reduce((a,s)=>a+(Number(s.importe)||0),0);
