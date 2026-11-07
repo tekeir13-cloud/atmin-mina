@@ -2460,7 +2460,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.06-325</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.07-326</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2505,7 +2505,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.06-325</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.07-326</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2673,7 +2673,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.06-325</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.07-326</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -6098,8 +6098,21 @@ async function cargarAlmacenCombustibleSB(){
          trabajo propio sin subir —se trabajó sin señal— se fusionan las dos, para no perderlo. */
       // Quien no publica RRHH no tiene nada propio que defender: copia la nube siempre.
       const _pPendiente = puedePublicarRRHH() && (typeof _sbPend!=='undefined') && ('personal' in _sbPend);
+      /* La nube manda, PERO un borrado sigue mandando sobre la nube. Si otro equipo subió su
+         lista antes de enterarse del borrado, la fila de la nube trae de vuelta al trabajador;
+         aquí se filtra con las lápidas —que ya se cargaron más arriba, a propósito antes que
+         ningún módulo— y en la próxima subida la nube queda limpia sola. Sin este filtro el
+         arranque deshacía lo que la fusión sí respetaba: dos caminos diciendo cosas distintas
+         sobre el mismo dato. */
+      const _pSinBorrados = a => (typeof tombHas==='function')
+        ? (a||[]).filter(x=>!(x && tombHas(x.id))) : (a||[]);
       if(Array.isArray(pNube)&&pNube.length&&!_pPendiente){
-        state.personal=pNube;
+        const _limpia=_pSinBorrados(pNube);
+        const _revividos=pNube.length-_limpia.length;
+        if(_revividos) console.warn('[rrhh] la nube traía '+_revividos+' trabajador(es) ya eliminado(s): se descartan por lápida');
+        state.personal=_limpia;
+        // La nube venía sucia: se la deja limpia para que el resto de equipos no la vuelva a leer así.
+        if(_revividos){ try{ sbSyncModulo('personal', state.personal); }catch(e){} }
         try{ if(typeof normalizarCargos==='function') normalizarCargos(); }catch(e){}
         try{localStorage.setItem(PERSONAL_KEY,JSON.stringify(state.personal));}catch(e){}
       }else if(Array.isArray(pNube)&&pNube.length){
@@ -21359,11 +21372,19 @@ async function eliminarPersonal(id){
   if(!p) return;
   if(!confirm(`¿Eliminar a ${p.nombre}? Esta acción no se puede deshacer.`)) return;
   state.personal=state.personal.filter(x=>String(x.id)!==String(id));
-  /* Sin lapida. Se va de la lista, se va de la fila de la base, y la lista que sube es la que
-     queda: en todos los equipos aparece igual. No se guarda ninguna marca de que existio.
-     La red de seguridad contra un borrado por error no es una lapida, es Versiones: ahi esta la
-     lista como estaba antes, y desde ahi se repone a quien haga falta. */
-  try{ if(typeof tombQuitar==='function') tombQuitar(id); }catch(e){}   // y se limpia la de antes, si la hubiera
+  /* LA LÁPIDA ES LO QUE HACE QUE EL BORRADO SE QUEDE BORRADO.
+     Aquí se llamaba a tombQuitar —se LEVANTABA la lápida al borrar—, y eso resucitaba al
+     trabajador en el acto. El camino era este: personalSave() sube el módulo, y la subida de
+     'personal' hace READ-MERGE-WRITE contra la nube (sbSyncModulo); esa unión es por id y la
+     nube todavía tiene la ficha, porque esta subida es justo la que iba a quitarla. La unión
+     solo descarta un id si tiene lápida… y acabábamos de quitarla. Resultado: el trabajador
+     volvía a state.personal, al disco y a la nube en el mismo clic, y reaparecía en todos los
+     equipos. Por eso el borrado "no se quedaba".
+     El mecanismo completo ya existía y era correcto —mergeById_ts consulta tombHas, el alta y
+     la edición levantan la lápida del id concreto, y caducan a los 90 días—: lo único invertido
+     era esta línea. Lo que no se puede volver a meter es tombRepararPersonal, que levantaba
+     lápidas adivinando por la hora y revivía a todos de golpe. */
+  try{ if(typeof tombAdd==='function') tombAdd(id); }catch(e){}
   try{ await sb.from('personal').delete().eq('id',id); }catch(e){}
   personalSave();poblarSelects();renderPersonal();renderCostoRRHH();
   showNotif(`🗑 ${p.nombre} eliminado`,'warn');
