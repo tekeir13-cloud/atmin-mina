@@ -33,11 +33,13 @@
   button.principal:disabled{opacity:.6;cursor:default}
   .aviso{margin-top:12px;font-size:12px;color:#fca5a5;text-align:center;line-height:1.45}
   .pie{margin-top:14px;font-size:11px;color:var(--text3);text-align:center;line-height:1.5}
-  .franja{height:46px;position:relative}
-  .franja .et{position:absolute;top:13px;left:14px;font-size:11px;font-weight:700;letter-spacing:.6px;
-        text-transform:uppercase;color:rgba(255,255,255,.92)}
-  .franja .flag{position:absolute;top:9px;right:12px;background:rgba(0,0,0,.35);color:#fff;
-        border-radius:999px;padding:4px 12px;font-size:11px;font-weight:700}
+  /* Si las tres piezas no entran a lo ancho, el rotulo y el boton bajan a una segunda linea.
+     Recortar el titulo hasta dejarlo en nada es peor que usar dos renglones. */
+  .franja{min-height:46px;display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:8px 12px}
+  .franja .et{font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;
+        color:rgba(255,255,255,.92);white-space:nowrap}
+  .franja .flag{margin-left:auto;background:rgba(0,0,0,.35);color:#fff;border-radius:999px;
+        padding:4px 12px;font-size:11px;font-weight:700;white-space:nowrap;flex:0 0 auto}
   .foto{width:132px;height:132px;border-radius:50%;object-fit:cover;display:block}
   .foto-ini{width:132px;height:132px;border-radius:50%;background:var(--card2);color:var(--text2);
         display:flex;align-items:center;justify-content:center;font-weight:800;font-size:46px}
@@ -57,7 +59,7 @@
         color:var(--text2);border-radius:10px;padding:11px;font-size:13px;cursor:pointer;font-family:inherit}
   .imprimir{background:rgba(0,0,0,.35);color:#fff;border:none;border-radius:999px;
         padding:4px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;
-        position:absolute;top:9px;right:12px}
+        white-space:nowrap;flex:0 0 auto;order:3}
   .firmas,.conf{display:none}
   /* Al imprimir manda el papel: fondo blanco, sin botones, y el pie de firmas visible.
      El trabajador firma al final y el administrador al costado. */
@@ -69,8 +71,8 @@
     .marca b,.marca b span{color:#1a2744}
     .card{background:#fff;border:none;border-radius:0}
     .franja{background:#fff !important;border-bottom:2px solid #1a2744;height:auto;padding-bottom:6px;margin-bottom:8px}
-    .franja .et{position:static;color:#1a2744;font-size:12px}
-    .franja .flag{background:#eee;color:#333;top:0}
+    .franja .et{color:#1a2744;font-size:12px}
+    .franja .flag{background:#eee;color:#333}
     .imprimir,.otra,.pie{display:none !important}
     .mini{background:#fff;border:1px solid #ccc}
     .mini u,.sec{color:#666}
@@ -157,49 +159,38 @@ function pintar(d){
     '<tr><td>'+esc(x.dia)+'</td>'+
     '<td><span class="chip" style="background:'+esc(x.color)+'">'+esc(x.marca)+'</span></td>'+
     '<td style="color:var(--text3)">'+esc(x.concepto)+'</td>'+
-    '<td style="text-align:right">'+x.tareas+'</td>'+
-    '<td style="text-align:right;color:var(--text2)">'+soles(x.monto)+'</td></tr>').join('');
+    '<td style="text-align:right">'+x.tareas+'</td></tr>').join('');
 
   app.innerHTML =
   '<div class="card">'+
     '<div class="franja" style="background:linear-gradient(135deg,'+b.color+' 0%,'+b.color+'66 100%)">'+
       '<span class="et">Tarjeta de tareo · '+esc(nombreMes(d.mes))+'</span>'+
       '<button class="imprimir" onclick="window.print()">🖨️ Imprimir</button>'+
-      '<span class="flag" style="right:96px">'+b.icono+' '+esc(b.txt)+'</span></div>'+
+      '<span class="flag">'+b.icono+' '+esc(b.txt)+'</span></div>'+
     '<div style="text-align:center;margin-top:14px;padding:0 16px">'+
       '<div style="display:inline-block;border-radius:50%;padding:4px;background:var(--card);box-shadow:0 0 0 2px '+b.color+'">'+
         (t.foto ? '<img class="foto" src="'+esc(t.foto)+'" alt="">' : '<div class="foto-ini">'+(ini||'—')+'</div>')+'</div>'+
       '<div style="margin-top:9px;font-size:18px;font-weight:800;line-height:1.2">'+esc(t.nombre)+'</div>'+
       '<div style="font-size:12px;font-weight:700;margin-top:2px;color:'+b.color+'">'+esc(t.cargo||'—')+'</div>'+
       '<div style="font-size:11px;color:var(--text3);margin-top:3px">DNI '+esc(t.dni)+
-        (t.guardia?' · Guardia '+esc(t.guardia):'')+' · Jornal '+soles(t.jornal)+'</div>'+
+        (t.guardia?' · Guardia '+esc(t.guardia):'')+'</div>'+
     '</div>'+
     '<div class="pad">'+
       '<div class="grid">'+
         mini('Días', r.diasTrab)+mini('Tareas', r.tareas)+mini('D. libres', r.dlTomados)+
         mini('Faltas', r.faltas, r.faltas?'#f87171':'')+
-        mini('Ganado', soles(r.pago), 'var(--gold)')+
-        mini('Neto', soles(r.neto), r.neto<r.pago?'#f59e0b':'var(--ok)')+
       '</div>'+
 
       '<div class="sec">Tareo de '+esc(nombreMes(d.mes))+'</div>'+
       (filas
         ? '<div style="overflow-x:auto;border-radius:10px"><table>'+
-          '<thead><tr><th>Día</th><th>Marca</th><th>Concepto</th><th style="text-align:right">Tareas</th><th style="text-align:right">Monto</th></tr></thead>'+
+          '<thead><tr><th>Día</th><th>Marca</th><th>Concepto</th><th style="text-align:right">Tareas</th></tr></thead>'+
           '<tbody>'+filas+'</tbody>'+
           '<tfoot><tr style="font-weight:800"><td colspan="3">Total del mes</td>'+
-          '<td style="text-align:right">'+r.tareas+'</td>'+
-          '<td style="text-align:right;color:var(--gold)">'+soles(r.pago)+'</td></tr></tfoot>'+
+          '<td style="text-align:right">'+r.tareas+'</td></tr></tfoot>'+
           '</table></div>'
         : '<div class="nota">Todavía no hay tareos registrados este mes.</div>')+
 
-      '<div class="sec">Pendientes</div>'+
-      '<div class="grid">'+
-        mini('Préstamo', soles(pen.prestamo), pen.prestamo?'#f87171':'')+
-        mini('Descuento', soles(pen.descuento), pen.descuento?'#f59e0b':'')+
-        mini('Neto a pagar', soles(r.neto), 'var(--ok)')+
-      '</div>'+
-      (pen.detalle ? '<div class="nota" style="margin-top:9px"><b>Detalle:</b> '+esc(pen.detalle)+'</div>' : '')+
       (pen.anotacion ? '<div class="sec">Anotaciones de RRHH</div><div class="nota">'+esc(pen.anotacion)+'</div>' : '')+
 
       // El pie de firmas solo aparece en el papel, no en la pantalla del celular.

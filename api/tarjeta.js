@@ -141,7 +141,6 @@ module.exports = async function handler(req, res) {
     const tareas = (await modulo('tareas')) || [];
     const mias = tareas.filter(t => t && String(t.trabajadorId) === String(p.id) && String(t.fecha || '').slice(0, 7) === mes);
 
-    const jornal = Number(p.jornal) || 0;
     const trabajo = mias.filter(t => t.tipo !== 'libre' && t.tipo !== 'falta' && t.tipo !== 'ausencia');
     const ausencias = mias.filter(t => t.tipo === 'ausencia');
     const diasTrab = new Set(trabajo.map(t => t.fecha)).size;
@@ -149,8 +148,6 @@ module.exports = async function handler(req, res) {
                     + ausencias.reduce((s, t) => s + (Number(t.mult) || 0), 0);
     const dlTomados = mias.filter(t => t.tipo === 'libre').length;
     const faltas = mias.filter(t => t.tipo === 'falta').length;
-    const comprados = Math.max(0, diasTrab / 2 - dlTomados);
-    const pago = (tareasNum + dlTomados + comprados) * jornal;
 
     const marcaDe = (t) => {
       if (t.tipo === 'libre') return 'DL';
@@ -167,13 +164,8 @@ module.exports = async function handler(req, res) {
         const M = MARCAS[v];
         const mult = M ? M.paga : (Number(v) || 0);
         return { dia: String(t.fecha).slice(8, 10), marca: v, concepto: M ? M.l : 'Tareo',
-                 color: M ? M.c : (COL_TAREA[v] || '#16a34a'), tareas: mult, monto: mult * jornal };
+                 color: M ? M.c : (COL_TAREA[v] || '#16a34a'), tareas: mult };
       });
-
-    const adel = (await modulo('adelantos')) || {};
-    const suyos = (adel.data || adel)[p.id] || {};
-    const prestamo = Number(suyos[mes]) || 0;
-    const descuento = Number(suyos[mes + '_desc']) || 0;
 
     // La foto ya no viaja dentro de `personal`: vive en su propio módulo, y aquí se pide solo
     // la de esta persona. Se acepta la vieja (p.foto) por si algún equipo aún no migró.
@@ -186,19 +178,29 @@ module.exports = async function handler(req, res) {
     const notas = (await modulo('tarjeta_notas')) || {};
     const nota = ((notas[p.id] || {})[mes]) || {};
 
-    const bandera = prestamo > 0 ? { color: '#ef4444', txt: 'Con préstamo', icono: '🔴' }
-      : (descuento > 0 || String(nota.descTexto || '').trim())
-        ? { color: '#f59e0b', txt: 'Descuento pendiente', icono: '🟠' }
-        : { color: '#22c55e', txt: 'Sin pendientes', icono: '🟢' };
+    /* La bandera salía de los préstamos y descuentos del trabajador. Eso no va en su tarjeta,
+       ni como importe ni como aviso: "Con préstamo" en la cabecera es decir que debe plata, y
+       la tarjeta se imprime y se pasa de mano en mano. Ahora la bandera solo refleja si RRHH le
+       dejó una anotación, que es lo que la tarjeta sí tiene que comunicarle. */
+    const bandera = String(nota.texto || '').trim()
+      ? { color: '#f59e0b', txt: 'Tienes un aviso de RRHH', icono: '🟠' }
+      : { color: '#22c55e', txt: 'Tarjeta al día', icono: '🟢' };
 
+    /* NI UNA CIFRA EN SOLES EN LA RESPUESTA. No basta con esconderlo en la página: lo que el
+       servidor manda se lee abriendo la consola del navegador, así que el jornal, lo ganado, el
+       neto, el monto de cada día, el préstamo y el descuento no salen de aquí. El trabajador ve
+       sus días, sus tareas y sus marcas, que es para lo que existe la tarjeta.
+       Los préstamos y descuentos salen enteros: ni el importe, ni el detalle que RRHH escribe a
+       mano —ahí es donde se anotan las cifras—, ni un aviso de que existen. El módulo de
+       adelantos ya ni se consulta: lo que no se pide no se puede filtrar mal después.
+       La anotación general de RRHH sí se queda: es el único mensaje que la tarjeta lleva. */
     return res.status(200).json({
       ok: true, mes,
       trabajador: { nombre: p.nombre || '', dni: p.dni || '', cargo: p.rol || '',
-                    guardia: p.guardia || '', jornal, foto },
-      resumen: { diasTrab, tareas: Math.round(tareasNum * 100) / 100, dlTomados, faltas, pago,
-                 neto: pago - prestamo - descuento },
+                    guardia: p.guardia || '', foto },
+      resumen: { diasTrab, tareas: Math.round(tareasNum * 100) / 100, dlTomados, faltas },
       dias,
-      pendientes: { prestamo, descuento, detalle: nota.descTexto || '', anotacion: nota.texto || '' },
+      pendientes: { anotacion: nota.texto || '' },
       bandera,
     });
   } catch (e) {
