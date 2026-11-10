@@ -2460,7 +2460,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.10-328</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.10-329</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2505,7 +2505,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.10-328</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.10-329</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2673,7 +2673,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.10-328</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.10-329</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -9220,30 +9220,73 @@ function guardarProductoCatalogo(){
   showNotif('Producto guardado','ok');
 }
 function eliminarProducto(id){
-  // AVISO CON MOVIMIENTOS: borrar un producto del maestro deja sus ingresos y salidas sin
-  // referencia, y el artículo desaparece del almacén con todo su stock aunque el historial lo
-  // siga mostrando. Antes se borraba en silencio y el stock se perdía de vista sin explicación.
+  /* DOS BORRADOS DISTINTOS, Y HAY QUE ELEGIR CUÁL.
+     Sacar la ficha del maestro deja sus ingresos y salidas huérfanos: el artículo desaparece de
+     la pantalla del almacén pero su importe SIGUE contando en el costo del mes, porque el costo
+     se calcula sobre los movimientos y no sobre el maestro. Eso es lo que se quiere cuando la
+     ficha está mal y los movimientos son buenos.
+     Cuando lo que sobra es el artículo entero —se creó por error, se cargó un stock que nunca
+     existió— hay que llevarse también los movimientos, o el gasto queda cargado para siempre a
+     algo que ya no está en ninguna lista y no hay manera de encontrarlo.
+     Se pregunta, con los números delante, en vez de decidirlo por el usuario. */
   const p=(state.almacen.productos||[]).find(x=>x.id===id);
   const cod=String((p&&p.codigo)||'').trim().toUpperCase();
-  let movs=0, neto=0;
+  const nom=(p&&p.nombre)||'este producto';
+  const coincide=m=>String(m&&m.codigo||'').trim().toUpperCase()===cod;
+  const S=n=>'S/ '+(Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const valor=m=>(typeof _almValorMov==='function')?_almValorMov(m)
+                 :(Number(m&&m.importe)||Number(m&&m.total)||(Number(m&&m.cantidad)||0)*(Number(m&&m.precio)||0));
+
+  let movs=0, neto=0, impIng=0, impSal=0;
+  const ings=[], sals=[], inis=[];
   if(cod){
-    const cuenta=(arr,signo)=>(arr||[]).forEach(m=>{
-      if(String(m&&m.codigo||'').trim().toUpperCase()===cod){ movs++; neto+=signo*(Number(m.cantidad)||0); }
-    });
-    cuenta(state.almacen.ingresos,1); cuenta(state.almacen.inventarioInicial,1); cuenta(state.almacen.salidas,-1);
+    (state.almacen.ingresos||[]).forEach(m=>{ if(coincide(m)){ ings.push(m); movs++; neto+=Number(m.cantidad)||0; impIng+=valor(m); } });
+    (state.almacen.inventarioInicial||[]).forEach(m=>{ if(coincide(m)){ inis.push(m); movs++; neto+=Number(m.cantidad)||0; impIng+=valor(m); } });
+    (state.almacen.salidas||[]).forEach(m=>{ if(coincide(m)){ sals.push(m); movs++; neto-=Number(m.cantidad)||0; impSal+=valor(m); } });
   }
-  if(movs){
-    if(!confirm('⚠ "'+((p&&p.nombre)||'este producto')+'" tiene '+movs+' movimiento(s) registrados'+
-      (neto?' y un stock de '+neto:'')+'.\n\nSi lo eliminas, esos movimientos quedan sin producto: el artículo DESAPARECE del almacén con su stock, aunque siga en el historial.\n\n'+
-      'Si lo que quieres es corregirlo, cancela y usa Editar — al cambiar el código los movimientos se arrastran solos.\n\n¿Eliminar de todas formas?')) return;
+
+  if(!movs){
+    if(!confirm('¿Eliminar "'+nom+'" del catálogo?\n\nNo tiene ningún movimiento registrado.')) return;
   }else{
-    if(!confirm('¿Eliminar este producto del catálogo?'))return;
+    if(!confirm('"'+nom+'" tiene '+movs+' movimiento(s) registrados'+(neto?' y un stock de '+neto:'')+'.\n\n'+
+      (ings.length?'  · '+ings.length+' ingreso(s) por '+S(impIng-inis.reduce((a,m)=>a+valor(m),0))+'\n':'')+
+      (inis.length?'  · '+inis.length+' línea(s) de inventario inicial\n':'')+
+      (sals.length?'  · '+sals.length+' salida(s) por '+S(impSal)+'\n':'')+
+      '\nSi solo quieres corregir la ficha, cancela y usa Editar: al cambiar el código los movimientos se arrastran solos.\n\n¿Continuar con la eliminación?')) return;
+
+    /* LA SEGUNDA PREGUNTA ES LA QUE IMPORTA. Aceptar se lleva el gasto del mes por delante, así
+       que el aviso dice el importe exacto que va a dejar de contar y que el Informe de Cierre de
+       ese mes cambia. Cancelar deja los movimientos, que es el comportamiento de siempre. */
+    const borrarMovs=confirm('¿Borrar también sus '+movs+' movimiento(s)?\n\n'+
+      'ACEPTAR — se van del almacén Y del costo del mes.\n'+
+      '   El gasto baja en '+S(impIng)+' y el consumo en '+S(impSal)+'.\n'+
+      '   El Informe de Cierre de esos meses cambia. Se aplica en todos los equipos.\n\n'+
+      'CANCELAR — los movimientos quedan en el historial y siguen contando en el costo.\n'+
+      '   Solo desaparece la ficha del maestro.');
+
+    if(borrarMovs){
+      /* Lápida a cada movimiento: sin ella la copia de otro equipo los devuelve en la siguiente
+         sincronización, y se vuelve a ver el stock fantasma que se quería quitar. */
+      const ids=[];
+      [ings,sals,inis].forEach(a=>a.forEach(m=>{ if(m&&m.id!=null) ids.push(m.id); }));
+      try{ ids.forEach(x=>{ if(typeof tombAdd==='function') tombAdd(x); }); }catch(e){}
+      const fuera=new Set(ids.map(String));
+      const quita=arr=>(arr||[]).filter(m=>!(m&&m.id!=null&&fuera.has(String(m.id))));
+      state.almacen.ingresos=quita(state.almacen.ingresos);
+      state.almacen.salidas=quita(state.almacen.salidas);
+      state.almacen.inventarioInicial=quita(state.almacen.inventarioInicial);
+      try{ showNotif('🗑 '+nom+': ficha y '+ids.length+' movimiento(s) eliminados','warn'); }catch(e){}
+    }else{
+      try{ showNotif('🗑 '+nom+' salió del maestro · sus movimientos quedan en el historial','warn'); }catch(e){}
+    }
   }
+
   state.almacen.productos=(state.almacen.productos||[]).filter(p=>p.id!==id);
   state.almacen.productosTs=Date.now();
   // Lápida: el borrado se impone en todos los equipos (inmune a fusiones y relojes distintos)
   try{ if(typeof tombAdd==='function') tombAdd('prod:'+id); }catch(e){}
   almacenSave();renderProductos();
+  try{ if(typeof renderStockVigente==='function' && document.getElementById('stock-vigente-wrap')) renderStockVigente(); }catch(e){}
 }
 function guardarPrecioInline(id,val){
   const p=(state.almacen.productos||[]).find(x=>x.id===id);
