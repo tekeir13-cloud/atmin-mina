@@ -2460,7 +2460,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.07-327</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.10-328</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2505,7 +2505,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.07-327</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.10-328</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2673,7 +2673,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.07-327</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.10-328</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -4343,7 +4343,7 @@ select option{background:var(--coal3);}
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
       <div class="form-group" style="margin:0"><label>Fecha</label><input type="date" id="in-fecha"></div>
       <div class="form-group" style="margin:0"><label>Origen</label><select id="in-detalle"><option value="Almacen Poderosa">Almacen Poderosa</option><option value="Logistica Trujillo">Logistica Trujillo</option><option value="Devolución">Devolución</option></select></div>
-      <div class="form-group" style="margin:0"><label>Almacén destino</label><select id="in-almacen"><option value="General">Insumos</option><option value="Mantenimiento">Mantenimiento</option></select></div>
+      <div class="form-group" style="margin:0"><label>Almacén destino</label><select id="in-almacen" onchange="cambiarAlmacenIngreso()"><option value="General">Insumos</option><option value="Mantenimiento">Mantenimiento</option></select></div>
     </div>
     <!-- Entrada de ítem -->
     <div style="background:var(--coal4);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
@@ -4354,7 +4354,7 @@ select option{background:var(--coal3);}
         <div class="form-group" style="margin:0"><label style="font-size:11px">U.M.</label><select id="in-unidad" style="font-size:13px"><option>UND</option><option>KG</option><option>BOL</option><option>ROLL</option><option>JGO</option><option>PZA</option><option>M</option></select></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 90px 110px 120px auto;gap:8px;align-items:flex-end">
-        <div class="form-group" style="margin:0"><label style="font-size:11px">Producto (nombre corto)</label><input type="text" id="in-producto" list="prod-datalist" oninput="autoFillProductoIngreso()" placeholder="Ej: Aleta / Cemento" style="font-size:13px"></div>
+        <div class="form-group" style="margin:0"><label style="font-size:11px">Producto (nombre corto) <span id="in-prod-aviso" style="color:var(--text3);font-weight:400"></span></label><input type="text" id="in-producto" list="prod-datalist" oninput="autoFillProductoIngreso()" placeholder="Ej: Aleta / Cemento" style="font-size:13px"></div>
         <div class="form-group" style="margin:0"><label style="font-size:11px">Cantidad</label><input type="number" id="in-cantidad" placeholder="100" min="0" step="any" oninput="calcTotalIngreso()" style="font-size:13px"></div>
         <div class="form-group" style="margin:0"><label style="font-size:11px">Precio unit. (S/)</label><input type="number" id="in-precio" placeholder="27.73" min="0" step="any" oninput="calcTotalIngreso()" style="font-size:13px"></div>
         <div class="form-group" style="margin:0"><label style="font-size:11px">Total ítem</label><div id="in-total" style="background:var(--coal3);border:1px solid var(--border);border-radius:7px;padding:8px 10px;font-family:'DM Mono',monospace;font-size:13px;color:var(--gold-light);font-weight:700">S/ 0.00</div></div>
@@ -9047,9 +9047,31 @@ function almacenLoad(){
 // dataset.codigo del input y viaja con el ingreso para que el stock se separe por código.
 // Normaliza un nombre para comparar sin diferencias de mayúsculas, acentos ni espacios.
 function _normNom(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim(); }
+/* ── EL ALMACÉN DESTINO MANDA SOBRE QUÉ PRODUCTOS SE OFRECEN ──────────────────────────────
+   Al registrar un ingreso se elige primero el almacén destino —Insumos o Mantenimiento— y el
+   autocompletado ofrecía igual TODO el maestro. Así es facilísimo registrar un filtro de motor
+   dentro de Insumos o un cemento dentro de Mantenimiento: el ingreso queda guardado con el
+   almacén equivocado, el stock se parte en dos sitios y después nadie entiende por qué el
+   Excel no cuadra con el anaquel. Ofrecer solo lo que corresponde evita el error en el origen,
+   que es donde sale barato.
+   Un producto sin almacén anotado cuenta como Insumos, igual que en el resto del sistema
+   (la etiqueta del maestro y el filtro de salidas ya lo tratan así). */
+function _almIngresoSel(){
+  const el=document.getElementById('in-almacen');
+  return (el && el.value) ? el.value : 'General';
+}
+function _almDe(p){ return (p && p.almacen==='Mantenimiento') ? 'Mantenimiento' : 'General'; }
+function _prodsDeAlmacenIngreso(){
+  const alm=_almIngresoSel();
+  return ((state.almacen&&state.almacen.productos)||[]).filter(x=>_almDe(x)===alm);
+}
 function _prodResolverIngreso(valRaw){
   const val=String(valRaw||'').trim().toLowerCase();
-  const prods=state.almacen.productos||[];
+  /* Se busca PRIMERO entre los del almacén elegido. Dos productos pueden llamarse igual en los
+     dos almacenes, y sin esto ganaba el que estuviera antes en el maestro, no el que se quiso. */
+  const _todos=(state.almacen&&state.almacen.productos)||[];
+  const _delAlm=(typeof _prodsDeAlmacenIngreso==='function')?_prodsDeAlmacenIngreso():_todos;
+  const prods=_delAlm.length?_delAlm.concat(_todos.filter(x=>_delAlm.indexOf(x)<0)):_todos;
   // 1) "nombre (codigo)" — formato del datalist
   const m=/\(([^()]+)\)\s*$/.exec(val);
   if(m){ const cod=m[1].trim(); const p=prods.find(x=>String(x.codigo||'').toLowerCase()===cod); if(p) return p; }
@@ -9075,11 +9097,36 @@ function autoFillProductoIngreso(){
   }
   // rebuild datalist — el value incluye el código para distinguir productos con el mismo nombre
   const dl=document.getElementById('prod-datalist');
-  if(dl){dl.innerHTML=(state.almacen.productos||[]).map(x=>`<option value="${escAttr(x.nombre+(x.codigo?' ('+x.codigo+')':''))}" label="${escAttr(x.codigo+' · '+x.nombre)}">`).join('');}
+  if(dl){dl.innerHTML=_prodsDeAlmacenIngreso().map(x=>`<option value="${escAttr(x.nombre+(x.codigo?' ('+x.codigo+')':''))}" label="${escAttr(x.codigo+' · '+x.nombre)}">`).join('');}
 }
 function poblarDatalistProductos(){
   const dl=document.getElementById('prod-datalist');
-  if(dl)dl.innerHTML=(state.almacen.productos||[]).map(x=>`<option value="${escAttr(x.nombre+(x.codigo?' ('+x.codigo+')':''))}">${x.codigo} · ${x.nombre}</option>`).join('');
+  const lista=_prodsDeAlmacenIngreso();
+  if(dl)dl.innerHTML=lista.map(x=>`<option value="${escAttr(x.nombre+(x.codigo?' ('+x.codigo+')':''))}">${x.codigo} · ${x.nombre}</option>`).join('');
+  // Cuántos hay, a la vista: si alguien no encuentra su producto, lo primero que debe mirar es
+  // si está buscándolo en el almacén que no es.
+  const av=document.getElementById('in-prod-aviso');
+  if(av) av.textContent=lista.length+' producto'+(lista.length!==1?'s':'')+' de '+
+    (_almIngresoSel()==='Mantenimiento'?'Mantenimiento':'Insumos');
+}
+/* Al cambiar el almacén destino se rehace la lista. Y si lo ya escrito pertenece al otro
+   almacén se limpia el renglón: dejarlo puesto es justo como se cuela un ingreso al almacén
+   equivocado —el nombre quedó de antes y nadie se fija—. */
+function cambiarAlmacenIngreso(){
+  const inp=document.getElementById('in-producto');
+  if(inp && inp.value.trim()){
+    const todos=(state.almacen&&state.almacen.productos)||[];
+    const esc=_normNom(inp.value).replace(/\s*\([^()]*\)\s*$/,'');
+    const hallado=todos.find(x=>_normNom(x.nombre)===esc ||
+      String(x.codigo||'').toLowerCase()===String(inp.value||'').trim().toLowerCase());
+    if(hallado && _almDe(hallado)!==_almIngresoSel()){
+      inp.value=''; inp.dataset.codigo='';
+      ['in-descripcion','in-precio'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+      if(typeof calcTotalIngreso==='function') calcTotalIngreso();
+      if(typeof showNotif==='function') showNotif('Ese producto es de '+(_almDe(hallado)==='Mantenimiento'?'Mantenimiento':'Insumos')+'. Se limpió el renglón.','warn');
+    }
+  }
+  poblarDatalistProductos();
 }
 // ── MAESTRO DE PRODUCTOS ──
 function nextCodigoProducto(){
