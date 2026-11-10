@@ -2460,7 +2460,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.10-329</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.10-330</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2505,7 +2505,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.10-329</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.10-330</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2673,7 +2673,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.10-329</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.10-330</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -20229,7 +20229,7 @@ function imprimirHojaTareo(fecha,turno){
       '<h1>HOJA DE TAREO DIARIO</h1><div class="sub">TEMUAL · '+e((document.getElementById('tareo-nivel')||{}).value||'NV 2820')+'</div>'+
       '<div class="caja"><b>Fecha:</b> '+fmtF(fecha)+' &nbsp;·&nbsp; <b>Turno:</b> '+e(turno)+
       ' &nbsp;·&nbsp; <b>Trabajadores:</b> '+items.length+'<br>'+
-      '<b>Jefe de guardia:</b> '+e((hoja&&hoja.jefe)||'—')+'<br>'+
+      '<b>Jefe de guardia:</b> '+e(_tareoJefeDeTurno(items,hoja)||'—')+'<br>'+
       '<b>Aprobado por:</b> '+e((hoja&&hoja.aprob&&hoja.aprob.resp)||'—')+
       ((hoja&&hoja.aprob&&hoja.aprob.fecha)?' el '+fmtF(hoja.aprob.fecha):'')+'</div>'+
       '<table><thead><tr><th>N°</th><th>TRABAJADOR</th><th>CARGO</th><th>LABOR</th><th>TAREA</th><th>OBSERVACIÓN</th><th>FIRMA</th></tr></thead>'+
@@ -20274,7 +20274,7 @@ function imprimirDiaTareo(fecha){
       const sub=x.items.reduce((s,t)=>s+Number(t.mult||1),0);
       return '<div class="blq"><div class="th">TURNO '+x.tn+' &nbsp;·&nbsp; '+x.items.length+
         ' trabajador'+(x.items.length!==1?'es':'')+' &nbsp;·&nbsp; '+(Math.round(sub*100)/100)+' tarea'+(sub!==1?'s':'')+'</div>'+
-        '<div class="caja"><b>Jefe de guardia:</b> '+e((x.hoja&&x.hoja.jefe)||'—')+
+        '<div class="caja"><b>Jefe de guardia:</b> '+e(_tareoJefeDeTurno(x.items,x.hoja)||'—')+
         ' &nbsp;·&nbsp; <b>Aprobado por:</b> '+e((x.hoja&&x.hoja.aprob&&x.hoja.aprob.resp)||'—')+
         ((x.hoja&&x.hoja.aprob&&x.hoja.aprob.fecha)?' el '+fmtF(x.hoja.aprob.fecha):'')+'</div>'+
         '<table><thead><tr><th>N°</th><th>TRABAJADOR</th><th>CARGO</th><th>LABOR</th><th>TAREA</th><th>OBSERVACIÓN</th><th>FIRMA</th></tr></thead>'+
@@ -21525,6 +21525,28 @@ const TAREO_MULTS=['1','1.25','1.5','1.75','2','2.25','2.5','2.75','3'];
 // queda archivado el 1 de agosto. Mientras el mes corre se edita con normalidad; una vez
 // archivado solo Gerencia y Finanzas pueden corregirlo, para que nadie altere un mes ya
 // costeado y cargado al ciclo.
+/* ── QUIÉN ERA EL JEFE DE GUARDIA DE ESE TURNO ───────────────────────────────────────────
+   La hoja impresa lo sacaba solo de hoja.jefe, el campo que escribe el jefe al enviar su tareo
+   para aprobación. Cuando el tareo se cargó directo desde la grilla mensual —o la hoja se
+   aprobó sin ese campo— salía un guión, y la hoja que se firma e imprime se queda sin decir
+   quién respondía por el turno. Es justo el dato que alguien busca cuando hay que preguntar
+   algo de ese día.
+   No hace falta pedirlo otra vez: el jefe de guardia está TAREADO en su propio turno, con su
+   cargo en la ficha. Si la hoja no lo trae, se lee de ahí. Si hubiera más de uno —relevo a
+   media guardia— se nombran los dos, porque inventar cuál de los dos manda sería peor que
+   decir que hubo dos. */
+function _tareoJefeDeTurno(items, hoja){
+  const puesto=String((hoja&&hoja.jefe)||'').trim();
+  if(puesto) return puesto;
+  try{
+    const vistos=[];
+    (items||[]).forEach(t=>{
+      const p=(state.personal||[]).find(y=>String(y.id)===String(t&&t.trabajadorId));
+      if(p && /JEFE\s+DE\s+GUARDIA/i.test(String(p.rol||'')) && vistos.indexOf(p.nombre)<0) vistos.push(p.nombre);
+    });
+    return vistos.length ? vistos.join(' · ') : '';
+  }catch(e){ return ''; }
+}
 function mesTareoArchivado(mesYM){
   const m=String(mesYM||'').slice(0,7);
   if(m.length!==7) return false;
