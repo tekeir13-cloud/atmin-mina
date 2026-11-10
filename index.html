@@ -2460,7 +2460,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.10-332</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.10-333</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2505,7 +2505,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.10-332</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.10-333</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2673,7 +2673,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.10-332</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.10-333</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -3015,8 +3015,6 @@ select option{background:var(--coal3);}
     <div class="kpi-grid">
       <div class="kpi-card"><div class="kpi-label">Tareados Hoy</div><div class="kpi-value gold" id="rr-activo">—</div></div>
       <div class="kpi-card"><div class="kpi-label">Ausentes Hoy</div><div class="kpi-value red" id="rr-ausente">—</div></div>
-      <div class="kpi-card" id="kpi-costo-hoy" style="display:none"><div class="kpi-label">Costo Tareo Hoy</div><div class="kpi-value warn" id="rr-costo-hoy">S/ 0</div></div>
-      <div class="kpi-card" id="kpi-costo-mes" style="display:none"><div class="kpi-label">Costo Acum. Mes</div><div class="kpi-value red" id="rr-costo-mes">S/ 0</div></div>
     </div>
 
     <!-- Botón inicial -->
@@ -19838,23 +19836,16 @@ function actualizarKpisTareo(fecha){
   const activos=state.personal.filter(p=>p.estado!=='baja');
   const hoyT=state.tareas.filter(t=>t.fecha===f);
   const mesT=state.tareas.filter(t=>enMesTareo(t.fecha,mes));
-  const costHoy=hoyT.reduce((s,t)=>{const p=state.personal.find(x=>x.id==t.trabajadorId);return s+((t.jornal??p?.jornal??0)*(t.mult||1));},0);
-  const costMes=mesT.reduce((s,t)=>{const p=state.personal.find(x=>x.id==t.trabajadorId);return s+((t.jornal??p?.jornal??0)*(t.mult||1));},0);
   const g=id=>document.getElementById(id);
   if(g('rr-activo')) g('rr-activo').textContent=hoyT.length;
   if(g('rr-ausente')) g('rr-ausente').textContent=activos.length-hoyT.length;
-  /* EN LA PANTALLA DEL TAREO NO SE VE PLATA. El jornal es confidencial y por esta pantalla pasa
-     media mina; lo que aquí importa son las tareas. Las dos tarjetas de costo solo aparecen para
-     quien tiene permiso de ver sueldos —Finanzas y Gerencia—; el resto ve los conteos y nada más.
-     Los importes completos siguen en la Planilla de Operarios y en el costeo de RRHH. */
-  const _verPlata=(typeof puedeVerSueldos==='function') && puedeVerSueldos();
-  const _kh=g('kpi-costo-hoy'), _km=g('kpi-costo-mes');
-  if(_kh) _kh.style.display=_verPlata?'':'none';
-  if(_km) _km.style.display=_verPlata?'':'none';
-  if(_verPlata){
-    if(g('rr-costo-hoy')) g('rr-costo-hoy').textContent=fmtS(costHoy);
-    if(g('rr-costo-mes')) g('rr-costo-mes').textContent=fmtS(costMes);
-  }
+  /* EN LA PANTALLA DEL TAREO NO SE VE PLATA, Y AHORA PARA NADIE.
+     Había dos tarjetas de costo que aparecían si el usuario podía ver sueldos. La idea era
+     razonable —Finanzas y Gerencia sí pueden— pero el sitio está mal: este panel vive dentro
+     del Reporte del Jefe de Guardia y de Monte Bravo, pantallas por las que pasa media mina y
+     que se dejan abiertas en una computadora compartida. Que el permiso sea correcto no evita
+     que el jornal de la guardia quede a la vista de quien se asome.
+     Los importes siguen donde corresponde: Planilla de Operarios y costeo de RRHH. */
 }
 
 async function guardarTareo(){
@@ -24931,25 +24922,110 @@ let _rgMes='';   // mes visible en la lista de reportes de jefe de guardia ('__t
 function renderHistorialTareosGuardia(){
   const box=document.getElementById('op-tareos-hist'); if(!box) return;
   try{ tpendLoad(); }catch(e){}
-  const hs=(state.tareosPend||[]).filter(h=>h && h.estado!=='eliminado')
-    .sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')) || (b.enviado||0)-(a.enviado||0))
-    .slice(0,30);
-  if(!hs.length){ box.innerHTML='<div class="card" style="padding:14px;color:var(--text3);font-size:12.5px">Todavía no mandaste ninguna hoja de tareo.</div>'; return; }
-  const E={ enviado:{t:'⏳ Pendiente de aprobación',c:'var(--amber)'},
+
+  /* EL HISTORIAL SE ARMA DE DOS SITIOS, PORQUE UN TAREO PUEDE LLEGAR POR DOS CAMINOS.
+     Antes se listaban solo las hojas de `tareosPend`, que son las que manda el jefe de guardia
+     para que las aprueben. Pero cuando tarea el Residente, el Administrador o Finanzas, el
+     tareo entra DIRECTO a la planilla y no crea hoja: no aparecía por ningún lado, y la
+     pantalla decía que no había nada mientras RRHH ya tenía los 17 trabajadores del día.
+     Ahora se recorre el mes y cada día+turno sale una vez: con el estado de su hoja si pasó por
+     aprobación, y como aprobado si ya está en la planilla sin hoja —que es exactamente lo que
+     significa haber entrado directo—. */
+  /* CADA JEFE TAREA SU TURNO, PERO LA JORNADA ES DE LOS DOS.
+     El bloque del día muestra los dos turnos porque así se ve la jornada completa, pero el jefe
+     de guardia solo responde por el suyo: marcarle el turno del otro como algo que le falta
+     sería echarle encima trabajo que no es suyo. Así que su turno va resaltado y el del otro
+     queda en gris, dicho con el nombre de quien lo mandó.
+     Quien supervisa —Residente, Administración, Finanzas, Gerencia— no tiene turno propio: para
+     ellos los dos turnos pesan igual, que es lo que necesitan ver. */
+  const _yo=((typeof usuarioActivo!=='undefined'&&usuarioActivo)?(usuarioActivo.nombre||usuarioActivo.rol||''):'').trim().toUpperCase();
+  const _soyJefe=(typeof usuarioActivo!=='undefined'&&usuarioActivo&&String(usuarioActivo.rol||'')==='jefe_guardia');
+  const _esMia=h=>{
+    if(!_soyJefe) return true;                       // sin turno propio: todo pesa igual
+    const a=String((h&&h.por)||'').trim().toUpperCase();
+    const b=String((h&&h.jefe)||'').trim().toUpperCase();
+    return !!_yo && (a===_yo || b===_yo);
+  };
+  const mes=(typeof _rgMes!=='undefined' && _rgMes && _rgMes!=='__todos')
+            ? _rgMes : (typeof hoy==='function' ? hoy().slice(0,7) : '');
+  const delMes=f=>!mes || String(f||'').slice(0,7)===mes;
+  const norm=t=>String(t||'DIA').toUpperCase()==='NOCHE'?'noche':'dia';
+
+  const por={};
+  (state.tareosPend||[]).filter(h=>h && h.estado!=='eliminado' && delMes(h.fecha)).forEach(h=>{
+    const k=h.fecha+'|'+norm(h.turno);
+    // Si hubo varios intentos del mismo turno, manda el último enviado.
+    if(!por[k] || (h.enviado||0)>(por[k].enviado||0)) por[k]={...h, _n:(h.registros||[]).length, _dir:false};
+  });
+  // Lo que ya está en la planilla y no tiene hoja: entró directo, o sea aprobado.
+  const cuenta={};
+  (state.tareas||[]).filter(t=>t && delMes(t.fecha)).forEach(t=>{
+    const k=t.fecha+'|'+norm(t.turno);
+    (cuenta[k]=cuenta[k]||{n:0,fecha:t.fecha,turno:norm(t.turno)}).n++;
+  });
+  Object.keys(cuenta).forEach(k=>{
+    if(por[k]) return;
+    const c=cuenta[k];
+    por[k]={ fecha:c.fecha, turno:c.turno, estado:'aprobado', _n:c.n, _dir:true, aprob:null };
+  });
+
+  /* LA JORNADA ES EL DÍA COMPLETO: DÍA + NOCHE.
+     Listar un renglón por turno dejaba la lectura a medias —dos líneas sueltas del 09/11 sin
+     decir que son la misma jornada— y, sobre todo, escondía lo único que el jefe necesita ver
+     de un vistazo: si al día le falta un turno por tarear. Ahora cada día es un bloque con sus
+     dos turnos dentro, su total de la jornada, y dicho en letras cuando falta uno. */
+  const dias={};
+  Object.values(por).forEach(h=>{ (dias[h.fecha]=dias[h.fecha]||{fecha:h.fecha,turnos:{}}).turnos[h.turno]=h; });
+  const lista=Object.values(dias).sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
+
+  const rotMes=(typeof finNombreMes==='function' && mes) ? finNombreMes(mes) : mes;
+  if(!lista.length){
+    box.innerHTML='<div class="card" style="padding:14px;color:var(--text3);font-size:12.5px">'+
+      'Sin tareos registrados'+(rotMes?' en '+escAttr(rotMes):'')+'.</div>';
+    return;
+  }
+  const E={ enviado:{t:'⏳ Pendiente',c:'var(--amber)'},
             aprobado:{t:'✅ Aprobado',c:'var(--green)'},
             devuelto:{t:'↩ Devuelto — hay que volver a tarear',c:'var(--red)'} };
-  box.innerHTML='<div class="card" style="padding:6px 0">'+hs.map(h=>{
+  const completos=lista.filter(d=>d.turnos.dia&&d.turnos.noche).length;
+  const totTrab=lista.reduce((s,d)=>s+['dia','noche'].reduce((a,t)=>a+((d.turnos[t]&&d.turnos[t]._n)||0),0),0);
+
+  const linTurno=(d,tn)=>{
+    const h=d.turnos[tn];
+    const nom=tn==='noche'?'🌙 Noche':'☀ Día';
+    if(!h) return `<div style="display:flex;gap:9px;align-items:center;padding:3px 0;font-size:12px;color:var(--text3)">
+        <span style="min-width:74px">${nom}</span><span style="font-style:italic">sin tarear</span></div>`;
     const e=E[h.estado]||E.enviado;
+    const mia=_esMia(h);
     const quien = h.estado==='aprobado' ? ((h.aprob&&h.aprob.resp)||'') : ((h.devuelto&&h.devuelto.resp)||'');
-    const n=(h.registros||[]).length;
-    return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 14px;border-bottom:1px solid var(--border);font-size:12.5px">
-      <b style="min-width:90px">${fmtF(h.fecha)}</b>
-      <span style="color:var(--text3)">${h.turno==='noche'?'🌙 Noche':'☀ Día'} · ${n} trab.</span>
+    const dim = mia ? '' : 'opacity:.55;';
+    return `<div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding:3px 0;font-size:12.5px;${dim}">
+      <span style="min-width:74px;color:var(--text2);font-weight:${mia?'800':'400'}">${nom}</span>
+      <span style="color:var(--text3)">${h._n} trab.</span>
       <span style="color:${e.c};font-weight:800">${e.t}</span>
       ${quien?`<span style="color:var(--text3)">por ${escAttr(quien)}</span>`:''}
-      ${h.estado==='devuelto'&&h.obs?`<span style="flex:1 0 100%;color:var(--red);font-size:11.5px">Motivo: ${escAttr(h.obs)}</span>`:''}
+      ${(!mia&&h.por)?`<span style="color:var(--text3);font-size:11.5px">· turno de ${escAttr(h.por)}</span>`:''}
+      ${h._dir?`<span style="color:var(--text3);font-size:11.5px">· ya está en la planilla</span>`:''}
+      ${h.estado==='devuelto'&&h.obs&&mia?`<span style="flex:1 0 100%;color:var(--red);font-size:11.5px">Motivo: ${escAttr(h.obs)}</span>`:''}
     </div>`;
-  }).join('')+'</div>';
+  };
+
+  box.innerHTML='<div class="card" style="padding:6px 0">'+
+    '<div style="padding:7px 14px;font-size:11.5px;color:var(--text3);border-bottom:1px solid var(--border)">'+
+      (rotMes?escAttr(rotMes)+' · ':'')+lista.length+' día'+(lista.length!==1?'s':'')+
+      ' · '+completos+' con la jornada completa · '+totTrab+' tareo'+(totTrab!==1?'s':'')+'</div>'+
+    lista.map(d=>{
+      const n=['dia','noche'].reduce((a,t)=>a+((d.turnos[t]&&d.turnos[t]._n)||0),0);
+      const falta=!(d.turnos.dia&&d.turnos.noche);
+      return `<div style="padding:9px 14px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:2px">
+          <b style="font-size:13px">${fmtF(d.fecha)}</b>
+          <span style="font-size:11.5px;color:var(--text3)">jornada: <b style="color:var(--text2)">${n} tareo${n!==1?'s':''}</b></span>
+          ${(falta&&!_soyJefe)?`<span style="font-size:11px;color:var(--amber);font-weight:700">· falta un turno</span>`:''}
+        </div>
+        ${linTurno(d,'dia')}${linTurno(d,'noche')}
+      </div>`;
+    }).join('')+'</div>';
 }
 
 function renderAvance(){
