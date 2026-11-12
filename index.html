@@ -2511,7 +2511,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.12-336</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.12-337</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2556,7 +2556,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.12-336</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.12-337</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2724,7 +2724,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.12-336</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.12-337</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -27836,6 +27836,36 @@ function combIngresoCiclo(tipo){
   return combCargar(tipo).filter(r=>_combEnCiclo(r&&r.fecha, v) && Number(r&&r.cantidad)>0)
     .reduce((s,r)=>s+(Number(r.cantidad)||0),0);
 }
+/* DE DÓNDE SALE EL SALDO. "Ingresado − consumido del ciclo" y el stock no tienen por qué
+   coincidir: el tanque es saldo corrido desde el corte, y antes del ciclo hubo más entradas y
+   más consumo. Cuando el número sorprende, la única forma de saber por qué es ver las cuatro
+   piezas que lo arman, una al lado de la otra. */
+function combDesglose(tipo){
+  const w=_combVentana();
+  const arr=combCargar(tipo);
+  const pos=r=>Number(r&&r.cantidad)>0;
+  const enC=r=>_combEnCiclo(r&&r.fecha,w);
+  const sum=f=>arr.filter(f).reduce((s,r)=>s+(Number(r.cantidad)||0),0);
+  const ingAntes=sum(r=>pos(r)&&!enC(r)), ingCiclo=sum(r=>pos(r)&&enC(r));
+  const manual=-sum(r=>!pos(r));
+  const consCiclo=combConsumo(tipo,true), consTotal=combConsumo(tipo,false);
+  return {ingAntes, ingCiclo, manual, consAntes:consTotal-consCiclo, consCiclo,
+          saldo:Math.round((ingAntes+ingCiclo-manual-consTotal)*10)/10, ini:w&&w.ini, corte:COMB_CORTE};
+}
+function combDesgloseHtml(tipo){
+  const d=combDesglose(tipo), n=x=>(Math.round(x*10)/10).toLocaleString('es-PE');
+  const fila=(t,v,c,sig)=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed var(--border)"><span>${t}</span><b style="color:${c}">${sig}${n(v)}</b></div>`;
+  return `<details style="margin-top:10px;font-size:11.5px;color:var(--text2)"><summary style="cursor:pointer;font-weight:700">¿De dónde sale el stock?</summary>
+    <div style="margin-top:6px">
+      ${fila('Ingresos antes del ciclo (desde '+fmtF(d.corte)+')',d.ingAntes,'#60a5fa','+ ')}
+      ${fila('Ingresos del ciclo',d.ingCiclo,'#60a5fa','+ ')}
+      ${d.manual?fila('Salidas manuales del tanque',d.manual,'#f87171','− '):''}
+      ${fila('Consumo antes del ciclo (partes)',d.consAntes,'#f87171','− ')}
+      ${fila('Consumo del ciclo (partes)',d.consCiclo,'#f87171','− ')}
+      <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12.5px"><span><b>Saldo</b></span><b style="color:${d.saldo<0?'#c084fc':'var(--text)'}">${n(d.saldo)} gln</b></div>
+      ${d.saldo<0?`<div style="color:#c084fc">Los partes declaran ${n(-d.saldo)} gln más de lo que consta que entró: falta registrar un abastecimiento o hay un parte mal digitado.</div>`:''}
+    </div></details>`;
+}
 function combStockTipo(tipo){
   return Math.round((combIngresos(tipo)-combConsumo(tipo,false))*10)/10;
 }
@@ -28101,6 +28131,7 @@ function renderCombustible(){
             <div style="font-size:9px;color:var(--text3)">galones</div>
           </div>
         </div>
+        ${combDesgloseHtml('pet')}
         <div style="margin-top:14px">${combFormHtml('pet')}</div>
       </div>
 
@@ -28132,6 +28163,7 @@ function renderCombustible(){
             <div style="font-size:9px;color:var(--text3)">galones</div>
           </div>
         </div>
+        ${combDesgloseHtml('gas')}
         <div style="margin-top:14px">${combFormHtml('gas')}</div>
       </div>
     </div>
