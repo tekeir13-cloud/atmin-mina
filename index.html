@@ -2511,7 +2511,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.12-339</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.12-340</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2556,7 +2556,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.12-339</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.12-340</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2724,7 +2724,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.12-339</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.12-340</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -27811,7 +27811,11 @@ function _combEnCiclo(fecha, v){ const d=String(fecha||'').slice(0,10); const w=
    como tal lo contaba dos veces.
    Lo que sí se cierra mes a mes es el CONSUMO, que es gasto y se monitorea por ciclo. Son dos
    cosas distintas: un mes puede cerrar con 6000 gln consumidos y dejar 450 gln en el tanque. */
-function combIngresos(tipo){ return combCargar(tipo).reduce((s,r)=>s+(Number(r&&r.cantidad)||0),0); }
+/* Desde el corte de noviembre 2026 los INGRESOS también arrancan en el corte: el tanque se lee
+   como si el 1 de noviembre hubiera empezado vacío. Nada anterior se borra ni se toca; solo deja
+   de sumarse al saldo. */
+function _combDesdeCorte(r){ const d=String((r&&r.fecha)||'').slice(0,10); return !d || d>=COMB_CORTE; }
+function combIngresos(tipo){ return combCargar(tipo).filter(_combDesdeCorte).reduce((s,r)=>s+(Number(r&&r.cantidad)||0),0); }
 /* CORTE DEL TANQUE.
    Al poner los tanques en cero se borraron los abastecimientos viejos, pero los partes del
    compresorista se conservaron enteros, como se pidió. El saldo corrido restaba entonces AÑOS de
@@ -27820,7 +27824,12 @@ function combIngresos(tipo){ return combCargar(tipo).reduce((s,r)=>s+(Number(r&&
    Ese consumo anterior ya lo pagó el combustible que se borró del registro. Desde el corte, el
    tanque cuenta TODO lo que entra —un abastecimiento es real lleve la fecha que lleve— pero solo
    descuenta el consumo del corte en adelante. */
-const COMB_CORTE = '2026-10-01';
+/* CORTE DE NOVIEMBRE 2026 — UNA SOLA VEZ, PEDIDO POR EL USUARIO.
+   El saldo corrido arrastraba consumo de octubre sin abastecimiento registrado y dejaba el tanque
+   en 0. Se fija el corte en el 1 de noviembre: desde ahí cuentan ingresos y consumo, y el saldo
+   de octubre no se hereda. Los registros de octubre y anteriores NO se modifican: siguen en el
+   historial y en los informes de su mes. Este corte es fijo: no se mueve solo cada mes. */
+const COMB_CORTE = '2026-11-01';
 function combConsumo(tipo, soloCiclo){
   const v=soloCiclo?_combVentana():null;
   const partes=(state.compresorista||[]).filter(r=>{
@@ -27845,7 +27854,7 @@ function combIngresoCiclo(tipo){
    piezas que lo arman, una al lado de la otra. */
 function combDesglose(tipo){
   const w=_combVentana();
-  const arr=combCargar(tipo);
+  const arr=combCargar(tipo).filter(_combDesdeCorte);
   const pos=r=>Number(r&&r.cantidad)>0;
   const enC=r=>_combEnCiclo(r&&r.fecha,w);
   const sum=f=>arr.filter(f).reduce((s,r)=>s+(Number(r.cantidad)||0),0);
