@@ -2511,7 +2511,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.12-338</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.12-339</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2556,7 +2556,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.12-338</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.12-339</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2724,7 +2724,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.12-338</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.12-339</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -34779,6 +34779,25 @@ function renderCompHistorial(){
     (r.petroleo||[]).forEach(p=>{ if(p.gln && compEquipoVigente(p.equipo)){ const e=compEquipoNorm(p.equipo); combEq[e]=combEq[e]||{pet:0,gas:0}; combEq[e].pet+=Number(p.gln)||0; } });
     (r.gasolina||[]).forEach(p=>{ if(p.gln && compEquipoVigente(p.equipo)){ const e=compEquipoNorm(p.equipo); combEq[e]=combEq[e]||{pet:0,gas:0}; combEq[e].gas+=Number(p.gln)||0; } });
   });
+  /* LO QUE SALIÓ DEL TANQUE Y NO ES DE UN EQUIPO VIGENTE. Las tarjetas solo cuentan equipos de
+     la lista actual, así que la suma de tarjetas quedaba por debajo del consumo del tanque sin
+     decir por qué. Lo que falta va aquí, con su motivo: envíos a Monte Bravo, equipos dados de
+     baja y líneas sin nombre. Sale del tanque igual; solo no es consumo de un equipo de 2820. */
+  const fuera={};
+  const _fueraAdd=(eq,gln,tipo)=>{ const k=esEnvioMB(eq)?'🏔️ Envío a Monte Bravo':(String(eq||'').trim()?('⛔ '+String(eq).trim()+' (fuera de la lista)'):'❓ Sin equipo anotado');
+    fuera[k]=fuera[k]||{pet:0,gas:0}; fuera[k][tipo]+=gln; };
+  repMes.forEach(r=>{
+    (r.petroleo||[]).forEach(p=>{ const g=Number(p&&p.gln)||0; if(g && !compEquipoVigente(p.equipo)) _fueraAdd(p.equipo,g,'pet'); });
+    (r.gasolina||[]).forEach(p=>{ const g=Number(p&&p.gln)||0; if(g && !compEquipoVigente(p.equipo)) _fueraAdd(p.equipo,g,'gas'); });
+  });
+  const totEq=Object.values(combEq).reduce((a,c)=>({pet:a.pet+c.pet,gas:a.gas+c.gas}),{pet:0,gas:0});
+  const totFu=Object.values(fuera).reduce((a,c)=>({pet:a.pet+c.pet,gas:a.gas+c.gas}),{pet:0,gas:0});
+  const nG=x=>x.toLocaleString('es-PE',{minimumFractionDigits:1,maximumFractionDigits:1});
+  const resumenComb=`<div style="margin-top:14px;background:var(--coal3);border:1px solid var(--border);border-radius:12px;padding:12px 14px;font-size:12.5px">
+    <div style="display:flex;justify-content:space-between;padding:3px 0"><span>Equipos de la lista</span><b>${nG(totEq.pet)} gln petróleo${totEq.gas?' · '+nG(totEq.gas)+' gln gasolina':''} · ${fS(totEq.pet*pPet+totEq.gas*pGas)}</b></div>
+    ${Object.keys(fuera).map(k=>`<div style="display:flex;justify-content:space-between;padding:3px 0;color:var(--text2)"><span>${escAttr(k)}</span><b>${nG(fuera[k].pet)} gln${fuera[k].gas?' · gas '+nG(fuera[k].gas):''}</b></div>`).join('')}
+    <div style="display:flex;justify-content:space-between;padding:6px 0 0;margin-top:4px;border-top:1px solid var(--border);font-weight:800"><span>Total que salió del tanque en el mes</span><span>${nG(totEq.pet+totFu.pet)} gln petróleo${(totEq.gas+totFu.gas)?' · '+nG(totEq.gas+totFu.gas)+' gln gasolina':''}</span></div>
+  </div>`;
   const eqList=Object.keys(combEq).sort((a,b)=>((combEq[b].pet+combEq[b].gas)-(combEq[a].pet+combEq[a].gas)));
   const maxGln=Math.max(1,...eqList.map(e=>combEq[e].pet+combEq[e].gas));
   const equiposCards=eqList.length?`<div class="card" style="margin-bottom:16px">
@@ -34795,6 +34814,7 @@ function renderCompHistorial(){
           <div style="margin-top:6px">${_histBar('',gln,maxGln,'#22d3a5','')}</div>
         </div>`;}).join('')}
     </div>
+    ${resumenComb}
   </div>`:'';
 
   // ── Horómetros acumulados por equipo ──
