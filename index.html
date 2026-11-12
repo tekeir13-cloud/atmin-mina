@@ -2511,7 +2511,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.12-337</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.12-338</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2556,7 +2556,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.12-337</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.12-338</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2724,7 +2724,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.12-337</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.12-338</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -6336,6 +6336,7 @@ async function cargarAlmacenCombustibleSB(){
       if(cMerged.length){
         state.compresorista=cMerged;
         try{localStorage.setItem(COMP_STORAGE_KEY,JSON.stringify(cMerged));}catch(e){}
+        try{ if(document.getElementById('log-combustible')&&typeof renderCombustible==='function') renderCombustible(); }catch(e){}
         await sbSyncModulo('compresorista', cMerged);
       }
     }
@@ -8697,7 +8698,9 @@ else if(Number(prevAlm.productosTs||0)>Number(data.productosTs||0)){ a.productos
     case 'reportes_guardia':   if(Array.isArray(data)){ state.reportesGuardia=(typeof mergeById_ts==='function')?mergeById_ts(state.reportesGuardia||[], data, (typeof _rgMetros==='function'?_rgMetros:null)):M(data, state.reportesGuardia||[]); setLS('atmin_reportes_guardia', state.reportesGuardia); try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){} } break;
     case 'mant_kits':          if(Array.isArray(data)){ state.mantenimiento=(typeof mergeMantKits==='function')?mergeMantKits(state.mantenimiento||[], data):M(data, state.mantenimiento||[]); setLS('atmin_mant_kits', state.mantenimiento); } break;
     case 'mant_repuestos':     if(Array.isArray(data)){ state.mantRepuestos=data; setLS('atmin_mant_repuestos', data); } break;
-    case 'compresorista':      if(Array.isArray(data)){ state.compresorista=(typeof _compMergeByTs==='function')?_compMergeByTs(state.compresorista||[], data):data; setLS('atmin_compresorista', state.compresorista); } break;
+    case 'compresorista':      if(Array.isArray(data)){ state.compresorista=(typeof _compMergeByTs==='function')?_compMergeByTs(state.compresorista||[], data):data; setLS('atmin_compresorista', state.compresorista);
+                                 /* El consumo del tanque sale de estos partes: si la pantalla de combustible ya estaba dibujada, se quedaba con el consumo en 0 hasta recargar. */
+                                 try{ if(document.getElementById('log-combustible')&&typeof renderCombustible==='function') renderCombustible(); }catch(e){} } break;
     case 'val_labor':          if(Array.isArray(data)){ state.valorizacionesLabor=data; setLS('atmin_valorizaciones_labor', data); } break;
     case 'distribucion':       if(data&&typeof data==='object'){ state.distribucion=data; setLS('atmin_distribucion', data); } break;
     case 'metas':              if(data&&typeof data==='object'){ state.metas=Object.assign(state.metas||{}, data); setLS('atmin_metas', state.metas); } break;
@@ -27849,7 +27852,8 @@ function combDesglose(tipo){
   const ingAntes=sum(r=>pos(r)&&!enC(r)), ingCiclo=sum(r=>pos(r)&&enC(r));
   const manual=-sum(r=>!pos(r));
   const consCiclo=combConsumo(tipo,true), consTotal=combConsumo(tipo,false);
-  return {ingAntes, ingCiclo, manual, consAntes:consTotal-consCiclo, consCiclo,
+  const partes=(state.compresorista||[]).filter(r=>String((r&&r.fecha)||'').slice(0,10)>=COMB_CORTE).length;
+  return {partes, ingAntes, ingCiclo, manual, consAntes:consTotal-consCiclo, consCiclo,
           saldo:Math.round((ingAntes+ingCiclo-manual-consTotal)*10)/10, ini:w&&w.ini, corte:COMB_CORTE};
 }
 function combDesgloseHtml(tipo){
@@ -27862,6 +27866,7 @@ function combDesgloseHtml(tipo){
       ${d.manual?fila('Salidas manuales del tanque',d.manual,'#f87171','− '):''}
       ${fila('Consumo antes del ciclo (partes)',d.consAntes,'#f87171','− ')}
       ${fila('Consumo del ciclo (partes)',d.consCiclo,'#f87171','− ')}
+      <div style="padding:3px 0;color:var(--text3)">Partes del compresorista leídos desde el corte: <b style="color:${d.partes?'var(--text2)':'#f87171'}">${d.partes}</b>${d.partes?'':' — si hubo consumo, los partes no cargaron en este equipo: recargue la página.'}</div>
       <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12.5px"><span><b>Saldo</b></span><b style="color:${d.saldo<0?'#c084fc':'var(--text)'}">${n(d.saldo)} gln</b></div>
       ${d.saldo<0?`<div style="color:#c084fc">Los partes declaran ${n(-d.saldo)} gln más de lo que consta que entró: falta registrar un abastecimiento o hay un parte mal digitado.</div>`:''}
     </div></details>`;
