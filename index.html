@@ -2511,7 +2511,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.12-340</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.13-341</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2556,7 +2556,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.12-340</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.13-341</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2724,7 +2724,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.12-340</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.13-341</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5987,6 +5987,7 @@ async function cargarDesdeSB(){
 async function cargarAlmacenCombustibleSB(){
   if(!SB_ONLINE) return;
   try{
+    _sbPrefetchModulos(['almacen', 'tombstones', 'tarjeta_notas', 'tareos_pend', 'tareas', 'servicios_terceros', 'reuniones', 'reportes_guardia', 'planilla_supervision', 'personal_turno', 'personal_hist', 'personal', 'montebravo', 'metas', 'mb_labores', 'mant_repuestos', 'mant_kits', 'historial_periodos', 'fin_ing_maq', 'equipos_operacion', 'distribucion', 'compresorista', 'compras', 'val_labor']);
     // ── ALMACÉN ──
     const almNube = await sbLoadModulo('almacen');
     // A partir de aquí ya leímos la nube: habilitar escritura (incl. bootstrap)
@@ -6423,6 +6424,7 @@ async function cargarAlmacenCombustibleSB(){
     if(typeof renderAlmacen==='function' && document.getElementById('log-almacen')) renderAlmacen();
     if(typeof renderDashboard==='function') renderDashboard();
   }catch(e){ console.error('cargarAlmacenCombustibleSB:',e); }
+  finally{ _sbPrefetch=null; }
 }
 
 function seedTarifario(){
@@ -8614,9 +8616,30 @@ const _sbModulosFusion=new Set(['almacen','personal','personal_turno','reportes_
 //   'vacio'      → se leyó bien y NO hay nada en la nube (aquí sí es seguro subir lo local)
 //   'pendiente'  → este equipo tiene un cambio sin subir; lo local manda
 //   'ilegible'   → sin conexión o error: NO tocar la nube bajo ningún concepto
+/* Lectura en bloque del arranque. Antes se pedían ~25 módulos uno detrás de otro: 25 idas y
+   vueltas seguidas, que con la señal de la mina son la mayor parte de la espera. Ahora van en una
+   sola consulta. Cada módulo se consume una vez; si la consulta falla, se cae a la lectura normal. */
+let _sbPrefetch=null;
+function _sbPrefetchModulos(lista){
+  _sbPrefetch=(async()=>{
+    const { data, error } = await sb.from('app_modulos').select('modulo,data').in('modulo', lista);
+    if(error || !Array.isArray(data)) return null;
+    const m={}; lista.forEach(k=>{ m[k]=null; });
+    data.forEach(r=>{ if(r && r.modulo) m[r.modulo]=(r.data==null?null:r.data); });
+    return m;
+  })().catch(()=>null);
+}
 async function sbLoadModuloEstado(modulo){
   if(!SB_ONLINE) return {estado:'ilegible', data:null};
   if((modulo in _sbPend) && !_sbModulosFusion.has(modulo)) return {estado:'pendiente', data:null};
+  // Arranque: si hay una lectura en bloque en curso, se toma de ahí (una sola ida y vuelta).
+  if(_sbPrefetch){
+    try{
+      const m=await _sbPrefetch;
+      if(m && (modulo in m)){ const d=m[modulo]; delete m[modulo];
+        return d==null ? {estado:'vacio', data:null} : {estado:'ok', data:d}; }
+    }catch(e){}
+  }
   try{
     const { data, error } = await sb.from('app_modulos').select('data').eq('modulo', modulo).limit(1);
     if(error) return {estado:'ilegible', data:null};
