@@ -2511,7 +2511,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.13-341</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.13-342</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2556,7 +2556,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.13-341</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.13-342</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2724,7 +2724,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.13-341</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.13-342</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -8622,7 +8622,9 @@ const _sbModulosFusion=new Set(['almacen','personal','personal_turno','reportes_
 let _sbPrefetch=null;
 function _sbPrefetchModulos(lista){
   _sbPrefetch=(async()=>{
-    const { data, error } = await sb.from('app_modulos').select('modulo,data').in('modulo', lista);
+    // Si la consulta en bloque no responde en 12 s, se abandona y cada módulo se pide por separado.
+    const tope=new Promise(r=>setTimeout(()=>r({data:null,error:'tiempo'}),12000));
+    const { data, error } = await Promise.race([sb.from('app_modulos').select('modulo,data').in('modulo', lista), tope]);
     if(error || !Array.isArray(data)) return null;
     const m={}; lista.forEach(k=>{ m[k]=null; });
     data.forEach(r=>{ if(r && r.modulo) m[r.modulo]=(r.data==null?null:r.data); });
