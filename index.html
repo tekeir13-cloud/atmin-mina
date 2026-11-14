@@ -2511,7 +2511,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.14-344</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.14-345</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2556,7 +2556,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.14-344</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.14-345</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2724,7 +2724,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.14-344</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.14-345</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -6150,7 +6150,13 @@ async function cargarAlmacenCombustibleSB(){
          una copia vieja de este equipo no tiene por qué volver a imponerse. Solo cuando hay
          trabajo propio sin subir —se trabajó sin señal— se fusionan las dos, para no perderlo. */
       // Quien no publica RRHH no tiene nada propio que defender: copia la nube siempre.
-      const _pPendiente = puedePublicarRRHH() && (typeof _sbPend!=='undefined') && ('personal' in _sbPend);
+      /* Al arrancar, la nube manda SIEMPRE: un pendiente de una sesión anterior es una copia vieja
+         y no puede imponerse a lo último que se guardó desde otro equipo. Se descarta. */
+      if(Array.isArray(pNube)&&pNube.length&&typeof _sbPend!=='undefined'&&('personal' in _sbPend)){
+        console.warn('[rrhh] había una lista de personal sin subir de una sesión anterior: se descarta, manda la del sistema');
+        delete _sbPend['personal']; try{ _sbPendSave(); }catch(e){}
+      }
+      const _pPendiente = false;
       /* La nube manda, PERO un borrado sigue mandando sobre la nube. Si otro equipo subió su
          lista antes de enterarse del borrado, la fila de la nube trae de vuelta al trabajador;
          aquí se filtra con las lápidas —que ya se cargaron más arriba, a propósito antes que
@@ -6163,7 +6169,7 @@ async function cargarAlmacenCombustibleSB(){
         const _limpia=_pSinBorrados(pNube);
         const _revividos=pNube.length-_limpia.length;
         if(_revividos) console.warn('[rrhh] la nube traía '+_revividos+' trabajador(es) ya eliminado(s): se descartan por lápida');
-        state.personal=_limpia;
+        state.personal=_limpia; try{ localStorage.setItem('atmin_personal_copia_ts', String(Date.now())); }catch(e){}
         // La nube venía sucia: se la deja limpia para que el resto de equipos no la vuelva a leer así.
         if(_revividos){ try{ sbSyncModulo('personal', state.personal); }catch(e){} }
         try{ if(typeof normalizarCargos==='function') normalizarCargos(); }catch(e){}
@@ -8448,12 +8454,25 @@ async function _sbSubirModulo(modulo){
     }
     try{
       const cloudRow = fila.data ? {data:fila.data} : null;
-      if(cloudRow && Array.isArray(cloudRow.data)){
-        const merged=mergeById_ts(dataObj, cloudRow.data);
-        dataObj=merged;
-        if(Array.isArray(_sbPend['personal'])) _sbPend['personal']=merged;   // reflejar la unión en la cola
-        try{ state.personal=merged; localStorage.setItem(PERSONAL_KEY, JSON.stringify(merged)); }catch(e){}
+      /* Una copia vieja no puede devolver a nadie: quien está aquí pero NO en la nube, y cuya
+         ficha no se tocó desde que este equipo copió la nube por última vez, fue eliminado en
+         otro equipo. Se quita antes de subir. Lo agregado o editado aquí después sí sube. */
+      if(cloudRow && Array.isArray(cloudRow.data) && cloudRow.data.length){
+        const enNube=new Set(cloudRow.data.map(x=>String(x&&x.id)));
+        const desde=Number(localStorage.getItem('atmin_personal_copia_ts')||0);
+        if(desde){
+          const antes=dataObj.length;
+          dataObj=dataObj.filter(x=>x && (enNube.has(String(x.id)) || Number(x._ts||0)>desde));
+          if(dataObj.length!==antes){
+            console.warn('[rrhh] '+(antes-dataObj.length)+' trabajador(es) de una copia vieja no se suben (ya no están en el sistema)');
+            _sbPend['personal']=dataObj;
+            try{ state.personal=dataObj; localStorage.setItem(PERSONAL_KEY, JSON.stringify(dataObj)); }catch(e){}
+          }
+        }
       }
+      /* PERSONAL YA NO SE UNE CON LA NUBE AL SUBIR. Unir significaba que la lista más larga
+         ganaba siempre: un equipo con copia vieja devolvía a los que se habían eliminado (pasó de
+         82 a 95 dos veces). Ahora sube la lista tal cual: lo último que se guarda es lo que queda. */
     }catch(e){}
   }
   // READ-MERGE-WRITE para los demás módulos que son listas de registros.
@@ -8717,7 +8736,7 @@ function _rtAplicarModulo(modulo, data){
    sin tocar nada. Ahora se unen por id/código y solo una lápida borra. */
 if(typeof _mergeProductos==='function'){ a.productos=_mergeProductos(prevAlm.productos||[], data.productos||[], prevAlm.productosTs, data.productosTs); a.productosTs=Math.max(Number(prevAlm.productosTs||0), Number(data.productosTs||0)); }
 else if(Number(prevAlm.productosTs||0)>Number(data.productosTs||0)){ a.productos=prevAlm.productos; a.productosTs=prevAlm.productosTs; } if(typeof _prodsVivos==='function') a.productos=_prodsVivos(a.productos); try{ if(typeof _almRestaurarFotos==='function') a=_almRestaurarFotos(a); }catch(e){} state.almacen=a; setLS('atmin_almacen', state.almacen); if(typeof _sbPend!=='undefined' && ('almacen' in _sbPend)){ try{ _sbPend['almacen']=(typeof _almClonLight==='function')?_almClonLight(state.almacen):{...state.almacen}; _sbPendSave(); }catch(e){} } try{ _almRefrescarModalesAbiertos(); }catch(e){} } break;
-    case 'personal':           if(Array.isArray(data)){ /* La nube manda: sin nada pendiente de subir, este equipo copia lo que hay en el sistema. */ const _pp=puedePublicarRRHH() && (typeof _sbPend!=='undefined') && ('personal' in _sbPend); state.personal=(!_pp)?data:((typeof mergeById_ts==='function')?mergeById_ts(state.personal||[], data):data); try{ if(typeof normalizarCargos==='function') normalizarCargos(); }catch(e){} setLS('atmin_personal_snap', state.personal); if(typeof _sbPend!=='undefined' && ('personal' in _sbPend)){ _sbPend['personal']=state.personal; try{ _sbPendSave(); }catch(e){} } } break;
+    case 'personal':           if(Array.isArray(data)){ /* La nube manda: sin nada pendiente de subir, este equipo copia lo que hay en el sistema. */ const _pp=puedePublicarRRHH() && (typeof _sbPend!=='undefined') && ('personal' in _sbPend); if(!_pp){ state.personal=data; try{ localStorage.setItem('atmin_personal_copia_ts', String(Date.now())); }catch(e){} } /* con un cambio propio en camino, manda el propio (se guardó después) */ try{ if(typeof normalizarCargos==='function') normalizarCargos(); }catch(e){} setLS('atmin_personal_snap', state.personal); if(typeof _sbPend!=='undefined' && ('personal' in _sbPend)){ _sbPend['personal']=state.personal; try{ _sbPendSave(); }catch(e){} } } break;
     case 'tareas':             if(Array.isArray(data)){ state.tareas=data; setLS('atmin_tareas_snap', data); } break;
     case 'equipos_operacion':  if(Array.isArray(data)){ state.equiposOp=(typeof mergeById_ts==='function')?mergeById_ts(state.equiposOp||[], data):data; setLS('atmin_equipos_op', state.equiposOp); try{ renderEquiposOp(); }catch(e){} } break;
     case 'reportes_guardia':   if(Array.isArray(data)){ state.reportesGuardia=(typeof mergeById_ts==='function')?mergeById_ts(state.reportesGuardia||[], data, (typeof _rgMetros==='function'?_rgMetros:null)):M(data, state.reportesGuardia||[]); setLS('atmin_reportes_guardia', state.reportesGuardia); try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){} } break;
@@ -24892,6 +24911,7 @@ function pHistRestaurar(t){
       quitados=sobran.length;
     }
   }
+  try{ localStorage.removeItem('atmin_personal_copia_ts'); }catch(e){}   // restaurar manda: sube tal cual
   try{ personalSave(); }catch(e){}
   try{ if(typeof poblarSelects==='function') poblarSelects(); }catch(e){}
   try{ if(typeof renderPersonal==='function') renderPersonal(); }catch(e){}
@@ -38170,6 +38190,7 @@ async function _restaurarSnap(snap, exacto, etiqueta){
     ['personal','tareas','valorizacionesLabor','reportesGuardia','compresorista','mantenimiento'].forEach(k=>{
       (snap[k]||[]).forEach(x=>{ if(x&&x.id!=null) ids.push(String(x.id)); }); });
     ids.forEach(id=>{ delete t[id]; }); tombPersist(); sbSyncModulo('tombstones',t); }catch(e){}
+  try{ localStorage.removeItem('atmin_personal_copia_ts'); }catch(e){} // restaurar es decisión explícita: lo restaurado sube aunque sea de una copia vieja
   try{ personalOrdenar(); }catch(e){}
   ['personalSave','tareasSave','valLaborSave','almacenSave'].forEach(fn=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(e){} });
   try{ sbSyncModulo('reportes_guardia', state.reportesGuardia); sbSyncModulo('compresorista', state.compresorista);
@@ -38419,6 +38440,7 @@ async function recuperarPersonal(){
   // Levantar sus lápidas: si desaparecieron por el fallo de sincronización, nadie decidió darlos de baja.
   try{ const t=tombLoad(); faltan.forEach(p=>{ delete t[String(p.id)]; }); tombPersist(); sbSyncModulo('tombstones', t); }catch(e){}
   faltan.forEach(p=>{ if(!p._ts) p._ts=Date.now(); });
+  try{ localStorage.removeItem('atmin_personal_copia_ts'); }catch(e){} // restaurar es decisión explícita: lo restaurado sube aunque sea de una copia vieja
   state.personal=(state.personal||[]).concat(faltan);
   try{ personalSave(); }catch(e){}
   try{ if(typeof normalizarCargos==='function') normalizarCargos(); }catch(e){}
@@ -38706,7 +38728,7 @@ function personalImportarExcel(input){
     try{
       if(typeof sbLoadModulo==='function' && typeof mergeById_ts==='function'){
         const nube=await sbLoadModulo('personal');
-        if(Array.isArray(nube)) state.personal=mergeById_ts(state.personal||[], nube);
+        if(Array.isArray(nube)&&nube.length) state.personal=nube;   // lo del sistema, tal cual (sin unir)
       }
     }catch(e){}
     let wb;
