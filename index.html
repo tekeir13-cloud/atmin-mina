@@ -2511,7 +2511,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.14-345</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.16-346</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2556,7 +2556,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.14-345</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.16-346</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2724,7 +2724,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.14-345</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.16-346</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -4194,6 +4194,7 @@ select option{background:var(--coal3);}
   <div class="mod-pane active" style="display:block" id="cmp-facturas">
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
       <button class="btn btn-gold cmp-accion" onclick="cmpAbrirFactura()">+ Registrar Factura</button>
+      <button class="btn btn-outline cmp-accion" style="border-color:#a78bfa;color:#a78bfa" onclick="cmpRecuperarDeCopias()" title="Busca en las copias de seguridad de la nube las facturas que falten aquí y las repone. No borra ni cambia nada.">♻ Recuperar facturas</button>
       <button class="btn btn-outline cmp-accion" style="border-color:#22d3a5;color:#22d3a5" onclick="document.getElementById('cmp-foto-input').click()" title="Lee el documento y autorrellena RUC, proveedor, fecha, producto y montos. El archivo no se guarda.">📷 Leer Factura (foto o PDF)</button>
       <button class="btn btn-outline cmp-accion" style="border-color:#f59e0b;color:#f59e0b" onclick="cmpAbrirRendicion()" title="Gastos sin factura: taxi, movilidad, peaje, encomienda, refrigerio…">🧾 Rendición de gasto</button>
       <input type="file" id="cmp-foto-input" accept="image/*,application/pdf,.pdf" style="display:none" onchange="cmpLeerFoto(this)">
@@ -8408,6 +8409,16 @@ async function _sbSubirModulo(modulo){
         }
         _personalBorradoOk=Date.now();   // confirmado: no volver a preguntar en esta sesión
       }
+    }
+  }
+  /* COMPRAS NO SE VACÍA DESDE UN EQUIPO SIN DATOS. Si la nube tiene facturas y lo que sube este
+     equipo no tiene ninguna, casi seguro es un equipo que no llegó a bajar el módulo: no se sube. */
+  if(modulo==='compras' && dataObj && typeof dataObj==='object' && !(dataObj.facturas||[]).length){
+    const fila=await _sbLeerFila('compras');
+    if(!fila.ok || (fila.data && Array.isArray(fila.data.facturas) && fila.data.facturas.length)){
+      console.warn('[sync] "compras" sin facturas no se sube encima de una nube con facturas');
+      delete _sbPend[modulo]; try{ _sbPendSave(); }catch(e){}
+      return true;
     }
   }
   // READ-MERGE-WRITE para 'almacen': antes de subir, fusionar con lo que ya hay en la nube para
@@ -36405,6 +36416,43 @@ function cmpEditarFactura(id){
   if(cmpBloqueaEdicion('Corregir una factura')) return;
   const f=comprasNorm().facturas.find(x=>x.id===id); if(!f) return;
   if(f.tipo==='rendicion') cmpAbrirRendicion(f); else cmpAbrirFactura(f);
+}
+/* RECUPERAR FACTURAS DESDE LAS COPIAS DE LA NUBE. Junta las facturas, presupuestos y meses
+   archivados de todas las copias (puntos de restauración y respaldos de cierre) y AGREGA solo lo
+   que falta aquí. No borra ni modifica nada de lo que ya está. */
+async function cmpRecuperarDeCopias(){
+  if(cmpBloqueaEdicion('Recuperar facturas')) return;
+  if(!SB_ONLINE||!sb){ showNotif('Sin conexión con la nube: no se pueden leer las copias.','error'); return; }
+  showNotif('Buscando facturas en las copias de la nube…');
+  let filas=[];
+  try{
+    const { data, error }=await sb.from('app_modulos').select('modulo,data').or('modulo.like.punto_%,modulo.like.backup_%');
+    if(error) throw error; filas=data||[];
+  }catch(e){ showNotif('No se pudieron leer las copias de la nube.','error'); return; }
+  const c=comprasNorm();
+  const clave=f=>f&&f.id!=null?'id:'+f.id:('k:'+[f.fecha,f.numero,f.ruc,f.conIgv].join('|'));
+  const tengo=new Set(c.facturas.map(clave)), tengoP=new Set(c.presupuestos.map(clave));
+  const nuevas=new Map(), nuevosP=new Map(), arch={};
+  filas.forEach(r=>{
+    const d=r&&r.data; if(!d||typeof d!=='object') return;
+    const snap=d.snap||d; const cm=snap&&snap.compras; if(!cm||typeof cm!=='object') return;
+    (cm.facturas||[]).forEach(f=>{ const k=clave(f); if(f&&!tengo.has(k)&&!nuevas.has(k)) nuevas.set(k,f); });
+    (cm.presupuestos||[]).forEach(f=>{ const k=clave(f); if(f&&!tengoP.has(k)&&!nuevosP.has(k)) nuevosP.set(k,f); });
+    Object.entries(cm.archivo||{}).forEach(([per,a])=>{ if(!(c.archivo&&c.archivo[per]) && a && (!arch[per] || (a.nFacturas||0)>(arch[per].nFacturas||0))) arch[per]=a; });
+  });
+  const nF=nuevas.size, nP=nuevosP.size, nA=Object.keys(arch).length;
+  if(!nF&&!nP&&!nA){ alert('Se revisaron '+filas.length+' copia(s) de la nube y no falta nada: no hay facturas que reponer.'); return; }
+  const porMes={}; [...nuevas.values()].forEach(f=>{ const m=String(f.fecha||'').slice(0,7)||'sin fecha'; porMes[m]=(porMes[m]||0)+1; });
+  const det=Object.keys(porMes).sort().map(m=>'  · '+(m==='sin fecha'?m:cmpMesLabel(m))+': '+porMes[m]+' factura(s)').join('\n');
+  if(!confirm('Se revisaron '+filas.length+' copia(s) de la nube. Faltan aquí:\n\n'+(det||'  · ninguna factura')+
+    '\n  · '+nP+' presupuesto(s)\n  · '+nA+' mes(es) archivado(s)\n\n¿Reponerlos? Solo se AGREGA lo que falta; no se borra ni se cambia nada.')) return;
+  c.facturas=c.facturas.concat([...nuevas.values()]);
+  c.presupuestos=c.presupuestos.concat([...nuevosP.values()]);
+  if(!c.archivo||typeof c.archivo!=='object') c.archivo={};
+  Object.assign(c.archivo, arch);
+  comprasSave();
+  try{ renderComprasFacturas(); }catch(e){}
+  showNotif('♻ Repuestas '+nF+' factura(s), '+nP+' presupuesto(s) y '+nA+' mes(es) archivado(s)');
 }
 function cmpEliminarFactura(id){
   if(cmpBloqueaEdicion('Eliminar una factura')) return;
