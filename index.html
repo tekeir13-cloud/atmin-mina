@@ -2511,7 +2511,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.16-347</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.16-348</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2556,7 +2556,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.16-347</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.16-348</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2724,7 +2724,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.16-347</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.16-348</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -4195,6 +4195,8 @@ select option{background:var(--coal3);}
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
       <button class="btn btn-gold cmp-accion" onclick="cmpAbrirFactura()">+ Registrar Factura</button>
       <button class="btn btn-outline cmp-accion" style="border-color:#a78bfa;color:#a78bfa" onclick="cmpRecuperarDeCopias()" title="Busca en las copias de seguridad de la nube las facturas que falten aquí y las repone. No borra ni cambia nada.">♻ Recuperar facturas</button>
+      <button class="btn btn-outline cmp-accion" style="border-color:#a78bfa;color:#a78bfa" onclick="document.getElementById('cmp-resp-input').click()" title="Repone las facturas que falten desde un archivo de respaldo descargado antes (mukicloud_respaldo_….json).">📂 Recuperar desde respaldo</button>
+      <input type="file" id="cmp-resp-input" accept=".json,application/json" style="display:none" onchange="cmpRecuperarDeArchivo(this)">
       <button class="btn btn-outline cmp-accion" style="border-color:#22d3a5;color:#22d3a5" onclick="document.getElementById('cmp-foto-input').click()" title="Lee el documento y autorrellena RUC, proveedor, fecha, producto y montos. El archivo no se guarda.">📷 Leer Factura (foto o PDF)</button>
       <button class="btn btn-outline cmp-accion" style="border-color:#f59e0b;color:#f59e0b" onclick="cmpAbrirRendicion()" title="Gastos sin factura: taxi, movilidad, peaje, encomienda, refrigerio…">🧾 Rendición de gasto</button>
       <input type="file" id="cmp-foto-input" accept="image/*,application/pdf,.pdf" style="display:none" onchange="cmpLeerFoto(this)">
@@ -36421,30 +36423,38 @@ function cmpEditarFactura(id){
    archivados de todas las copias (puntos de restauración y respaldos de cierre) y AGREGA solo lo
    que falta aquí. No borra ni modifica nada de lo que ya está. */
 async function cmpRecuperarDeCopias(){
+  try{ return await _cmpRecuperar(); }catch(e){ console.error('recuperar facturas',e); alert('No se pudo completar la recuperación: '+(e&&e.message||e)); }
+}
+async function _cmpRecuperar(){
   if(cmpBloqueaEdicion('Recuperar facturas')) return;
   let filas=[], leyoNube=false;
   if(SB_ONLINE&&sb){
     showNotif('Buscando facturas en las copias de la nube…');
     try{
-      const { data, error }=await sb.from('app_modulos').select('modulo,data').or('modulo.like.punto_%,modulo.like.backup_%');
+      // Si la nube no contesta en 15 s se pasa directo al archivo de respaldo: nada de quedarse colgado.
+      const tope=new Promise(r=>setTimeout(()=>r({data:null,error:'tiempo'}),15000));
+      const { data, error }=await Promise.race([sb.from('app_modulos').select('modulo,data').or('modulo.like.punto_%,modulo.like.backup_%'), tope]);
       if(!error){ filas=data||[]; leyoNube=true; }
     }catch(e){}
   }
   const fuentes=filas.map(r=>{ const d=r&&r.data; const snap=d&&(d.snap||d); return snap&&snap.compras; }).filter(x=>x&&typeof x==='object');
   const hecho=_cmpReponer(fuentes, leyoNube?('las '+filas.length+' copia(s) de la nube'):null);
   if(hecho) return;
-  // Nada en la nube (o no se pudo leer): ofrecer un archivo de respaldo descargado antes.
-  if(!confirm((leyoNube?'Las copias de la nube no tienen facturas que falten aquí.':'No se pudieron leer las copias de la nube.')+
-    '\n\n¿Quiere buscarlas en un archivo de respaldo descargado antes (mukicloud_respaldo_….json)?')) return;
-  const inp=document.createElement('input'); inp.type='file'; inp.accept='.json,application/json';
-  inp.onchange=()=>{ const f=inp.files&&inp.files[0]; if(!f) return;
-    const fr=new FileReader();
-    fr.onload=()=>{ let j=null; try{ j=JSON.parse(fr.result); }catch(e){ alert('El archivo no es un respaldo válido.'); return; }
-      const cm=(j&&j.datos&&j.datos.compras)||(j&&j.snap&&j.snap.compras)||(j&&j.compras);
-      if(!cm){ alert('Ese respaldo no trae datos de Compras.'); return; }
-      if(!_cmpReponer([cm],'el archivo '+f.name)) alert('El archivo '+f.name+' no tiene facturas que falten aquí.'); };
-    fr.readAsText(f); };
-  inp.click();
+  // Nada en la nube (o no se pudo leer). El navegador no deja abrir el selector de archivos solo,
+  // sin un clic: se indica el botón de al lado.
+  alert((leyoNube?'Las copias de la nube no tienen facturas que falten aquí.':'No se pudieron leer las copias de la nube (no contestó).')+
+    '\n\nUse el botón "📂 Recuperar desde respaldo" y elija el archivo mukicloud_respaldo_….json más reciente que tenga.');
+}
+function cmpRecuperarDeArchivo(inp){
+  if(cmpBloqueaEdicion('Recuperar facturas')){ inp.value=''; return; }
+  const f=inp.files&&inp.files[0]; if(!f) return;
+  const fr=new FileReader();
+  fr.onload=()=>{ inp.value='';
+    let j=null; try{ j=JSON.parse(fr.result); }catch(e){ alert('El archivo no es un respaldo válido.'); return; }
+    const cm=(j&&j.datos&&j.datos.compras)||(j&&j.snap&&j.snap.compras)||(j&&j.compras);
+    if(!cm){ alert('Ese respaldo no trae datos de Compras.'); return; }
+    if(!_cmpReponer([cm],'el archivo '+f.name)) alert('El archivo '+f.name+' no tiene facturas que falten aquí.'); };
+  fr.readAsText(f);
 }
 function _cmpReponer(fuentes, origen){
   if(!origen) return false;
