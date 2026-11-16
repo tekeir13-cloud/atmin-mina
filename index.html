@@ -2511,7 +2511,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.16-346</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.16-347</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2556,7 +2556,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.16-346</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.16-347</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2724,7 +2724,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.16-346</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.16-347</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -36422,30 +36422,47 @@ function cmpEditarFactura(id){
    que falta aquí. No borra ni modifica nada de lo que ya está. */
 async function cmpRecuperarDeCopias(){
   if(cmpBloqueaEdicion('Recuperar facturas')) return;
-  if(!SB_ONLINE||!sb){ showNotif('Sin conexión con la nube: no se pueden leer las copias.','error'); return; }
-  showNotif('Buscando facturas en las copias de la nube…');
-  let filas=[];
-  try{
-    const { data, error }=await sb.from('app_modulos').select('modulo,data').or('modulo.like.punto_%,modulo.like.backup_%');
-    if(error) throw error; filas=data||[];
-  }catch(e){ showNotif('No se pudieron leer las copias de la nube.','error'); return; }
+  let filas=[], leyoNube=false;
+  if(SB_ONLINE&&sb){
+    showNotif('Buscando facturas en las copias de la nube…');
+    try{
+      const { data, error }=await sb.from('app_modulos').select('modulo,data').or('modulo.like.punto_%,modulo.like.backup_%');
+      if(!error){ filas=data||[]; leyoNube=true; }
+    }catch(e){}
+  }
+  const fuentes=filas.map(r=>{ const d=r&&r.data; const snap=d&&(d.snap||d); return snap&&snap.compras; }).filter(x=>x&&typeof x==='object');
+  const hecho=_cmpReponer(fuentes, leyoNube?('las '+filas.length+' copia(s) de la nube'):null);
+  if(hecho) return;
+  // Nada en la nube (o no se pudo leer): ofrecer un archivo de respaldo descargado antes.
+  if(!confirm((leyoNube?'Las copias de la nube no tienen facturas que falten aquí.':'No se pudieron leer las copias de la nube.')+
+    '\n\n¿Quiere buscarlas en un archivo de respaldo descargado antes (mukicloud_respaldo_….json)?')) return;
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='.json,application/json';
+  inp.onchange=()=>{ const f=inp.files&&inp.files[0]; if(!f) return;
+    const fr=new FileReader();
+    fr.onload=()=>{ let j=null; try{ j=JSON.parse(fr.result); }catch(e){ alert('El archivo no es un respaldo válido.'); return; }
+      const cm=(j&&j.datos&&j.datos.compras)||(j&&j.snap&&j.snap.compras)||(j&&j.compras);
+      if(!cm){ alert('Ese respaldo no trae datos de Compras.'); return; }
+      if(!_cmpReponer([cm],'el archivo '+f.name)) alert('El archivo '+f.name+' no tiene facturas que falten aquí.'); };
+    fr.readAsText(f); };
+  inp.click();
+}
+function _cmpReponer(fuentes, origen){
+  if(!origen) return false;
   const c=comprasNorm();
   const clave=f=>f&&f.id!=null?'id:'+f.id:('k:'+[f.fecha,f.numero,f.ruc,f.conIgv].join('|'));
   const tengo=new Set(c.facturas.map(clave)), tengoP=new Set(c.presupuestos.map(clave));
   const nuevas=new Map(), nuevosP=new Map(), arch={};
-  filas.forEach(r=>{
-    const d=r&&r.data; if(!d||typeof d!=='object') return;
-    const snap=d.snap||d; const cm=snap&&snap.compras; if(!cm||typeof cm!=='object') return;
+  fuentes.forEach(cm=>{
     (cm.facturas||[]).forEach(f=>{ const k=clave(f); if(f&&!tengo.has(k)&&!nuevas.has(k)) nuevas.set(k,f); });
     (cm.presupuestos||[]).forEach(f=>{ const k=clave(f); if(f&&!tengoP.has(k)&&!nuevosP.has(k)) nuevosP.set(k,f); });
     Object.entries(cm.archivo||{}).forEach(([per,a])=>{ if(!(c.archivo&&c.archivo[per]) && a && (!arch[per] || (a.nFacturas||0)>(arch[per].nFacturas||0))) arch[per]=a; });
   });
   const nF=nuevas.size, nP=nuevosP.size, nA=Object.keys(arch).length;
-  if(!nF&&!nP&&!nA){ alert('Se revisaron '+filas.length+' copia(s) de la nube y no falta nada: no hay facturas que reponer.'); return; }
+  if(!nF&&!nP&&!nA) return false;
   const porMes={}; [...nuevas.values()].forEach(f=>{ const m=String(f.fecha||'').slice(0,7)||'sin fecha'; porMes[m]=(porMes[m]||0)+1; });
   const det=Object.keys(porMes).sort().map(m=>'  · '+(m==='sin fecha'?m:cmpMesLabel(m))+': '+porMes[m]+' factura(s)').join('\n');
-  if(!confirm('Se revisaron '+filas.length+' copia(s) de la nube. Faltan aquí:\n\n'+(det||'  · ninguna factura')+
-    '\n  · '+nP+' presupuesto(s)\n  · '+nA+' mes(es) archivado(s)\n\n¿Reponerlos? Solo se AGREGA lo que falta; no se borra ni se cambia nada.')) return;
+  if(!confirm('Revisado '+origen+'. Faltan aquí:\n\n'+(det||'  · ninguna factura')+
+    '\n  · '+nP+' presupuesto(s)\n  · '+nA+' mes(es) archivado(s)\n\n¿Reponerlos? Solo se AGREGA lo que falta; no se borra ni se cambia nada.')) return true;
   c.facturas=c.facturas.concat([...nuevas.values()]);
   c.presupuestos=c.presupuestos.concat([...nuevosP.values()]);
   if(!c.archivo||typeof c.archivo!=='object') c.archivo={};
@@ -36453,6 +36470,7 @@ async function cmpRecuperarDeCopias(){
   comprasSave();
   try{ renderComprasFacturas(); }catch(e){}
   showNotif('♻ Repuestas '+nF+' factura(s), '+nP+' presupuesto(s) y '+nA+' mes(es) archivado(s)');
+  return true;
 }
 function cmpEliminarFactura(id){
   if(cmpBloqueaEdicion('Eliminar una factura')) return;
