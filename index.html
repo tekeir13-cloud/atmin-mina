@@ -2511,7 +2511,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.16-349</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.17-350</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2556,7 +2556,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.16-349</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.17-350</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2724,7 +2724,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.16-349</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.17-350</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -4194,8 +4194,8 @@ select option{background:var(--coal3);}
   <div class="mod-pane active" style="display:block" id="cmp-facturas">
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
       <button class="btn btn-gold cmp-accion" onclick="cmpAbrirFactura()">+ Registrar Factura</button>
-      <button class="btn btn-outline cmp-accion" style="border-color:#a78bfa;color:#a78bfa" onclick="cmpRecuperarDeCopias()" title="Busca en las copias de seguridad de la nube las facturas que falten aquí y las repone. No borra ni cambia nada.">♻ Recuperar facturas</button>
-      <button class="btn btn-outline cmp-accion" style="border-color:#a78bfa;color:#a78bfa" onclick="document.getElementById('cmp-resp-input').click()" title="Repone las facturas que falten desde un archivo de respaldo descargado antes (mukicloud_respaldo_….json).">📂 Recuperar desde respaldo</button>
+      
+      
       <input type="file" id="cmp-resp-input" accept=".json,application/json" style="display:none" onchange="cmpRecuperarDeArchivo(this)">
       <button class="btn btn-outline cmp-accion" style="border-color:#22d3a5;color:#22d3a5" onclick="document.getElementById('cmp-foto-input').click()" title="Lee el documento y autorrellena RUC, proveedor, fecha, producto y montos. El archivo no se guarda.">📷 Leer Factura (foto o PDF)</button>
       <button class="btn btn-outline cmp-accion" style="border-color:#f59e0b;color:#f59e0b" onclick="cmpAbrirRendicion()" title="Gastos sin factura: taxi, movilidad, peaje, encomienda, refrigerio…">🧾 Rendición de gasto</button>
@@ -6109,6 +6109,7 @@ async function cargarAlmacenCombustibleSB(){
         if(local.length) await _sbSubirSiNubeVacia('comb_'+tipo, local);
       }
     }
+    try{ setTimeout(()=>{ try{ recuperarDeCopiasNube(); }catch(e){} }, 4000); }catch(e){}
     // Reseteo de tanques a cero: una sola vez por equipo, después de traer la nube.
     try{ if(typeof combResetTanques==='function') combResetTanques(); }catch(e){}
     // El historial de ingresos manda sobre el maestro: alinea nombres, une equivalentes y da de
@@ -8281,6 +8282,11 @@ function _sbPendSave(){
 let _sbFallo=0;
 // Cómo se une cada módulo con lo que ya hay en la nube ANTES de subirlo. Misma regla que al bajar.
 const _MERGE_AL_SUBIR = {
+  /* EL TANQUE YA NO SE REEMPLAZA ENTERO. Antes cada registro subía la lista completa de ese equipo
+     y pisaba la de la nube: un equipo que no había bajado los datos borraba todo el historial con
+     un solo ingreso. Ahora se une por id con lo que hay en la nube (los borrados dejan lápida). */
+  comb_pet:           (loc,nub)=> (typeof mergeSnapById==='function') ? mergeSnapById(loc,nub) : loc,
+  comb_gas:           (loc,nub)=> (typeof mergeSnapById==='function') ? mergeSnapById(loc,nub) : loc,
   compresorista:      (loc,nub)=> (typeof _compMergeByTs==='function') ? _compMergeByTs(loc,nub) : loc,
   reportes_guardia:   (loc,nub)=> (typeof mergeById_ts==='function')
                                     ? mergeById_ts(loc,nub,(typeof _rgMetros==='function'?_rgMetros:null)) : loc,
@@ -8304,6 +8310,8 @@ const _MERGE_AL_SUBIR = {
 };
 // Dónde vive cada uno en este equipo, para que la unión se vea también en pantalla.
 const _GUARDAR_TRAS_FUSION = {
+  comb_pet:           m=>{ try{ localStorage.setItem(COMB_KEY_PET, JSON.stringify(m)); }catch(e){} },
+  comb_gas:           m=>{ try{ localStorage.setItem(COMB_KEY_GAS, JSON.stringify(m)); }catch(e){} },
   compresorista:      m=>{ state.compresorista=m;     _lsSet('atmin_compresorista', m); },
   reportes_guardia:   m=>{ state.reportesGuardia=m;   _lsSet('atmin_reportes_guardia', m); },
   equipos_operacion:  m=>{ state.equiposOp=m;         _lsSet('atmin_equipos_op', m); },
@@ -27854,6 +27862,63 @@ function combResetTanques(){
     return true;
   }catch(e){ return false; }
 }
+/* RECUPERACIÓN AUTOMÁTICA (una vez por equipo) DEL TANQUE DE COMBUSTIBLE Y DE COMPRAS.
+   En noviembre de 2026 las listas del tanque y de Compras quedaron vacías en la nube: un equipo que
+   no había bajado los datos subió su lista corta encima. El sistema guarda copias en la nube (una
+   por día y una al cerrar cada mes); aquí se leen y se AGREGA solo lo que falte. No se borra ni
+   se cambia nada de lo que ya está, y no se toca ningún otro módulo. Si la nube no contesta, se
+   vuelve a intentar en el próximo arranque. */
+const RECUP_V='2026-11-17';
+async function recuperarDeCopiasNube(){
+  if(!SB_ONLINE||!sb||!CLOUD_SYNC_READY) return;
+  let hecho={}; try{ hecho=JSON.parse(localStorage.getItem('atmin_recup_copias')||'{}')||{}; }catch(e){}
+  if(hecho.v===RECUP_V) return;
+  let filas=null;
+  try{
+    const tope=new Promise(r=>setTimeout(()=>r({data:null,error:'tiempo'}),30000));
+    const { data, error }=await Promise.race([sb.from('app_modulos').select('modulo,data').or('modulo.like.punto_%,modulo.like.backup_%'), tope]);
+    if(!error && Array.isArray(data)) filas=data;
+  }catch(e){}
+  if(!filas) return;                                   // sin lectura buena: se reintenta otro día
+  const snaps=filas.map(r=>{ const d=r&&r.data; return d&&(d.snap||d); }).filter(x=>x&&typeof x==='object');
+  const res={};
+  // Combustible
+  for(const t of ['pet','gas']){
+    try{
+      const local=combCargar(t)||[];
+      const clave=r=>r&&r.id!=null?'id:'+r.id:'j:'+[r.fecha,r.hora,r.cantidad,r.placa].join('|');
+      const tengo=new Set(local.map(clave)); const nuevos=[];
+      snaps.forEach(sn=>{ const c=sn.combustible&&sn.combustible[t]; (Array.isArray(c)?c:[]).forEach(r=>{
+        if(!r) return; if(r.id!=null && typeof tombHas==='function' && tombHas(String(r.id))) return;
+        const k=clave(r); if(!tengo.has(k)){ tengo.add(k); nuevos.push(r); } }); });
+      if(nuevos.length){ combGuardar(t, local.concat(nuevos)); res[t]=nuevos.length; }
+    }catch(e){ console.warn('[recup] combustible',t,e); }
+  }
+  // Compras (solo la sesión que puede publicarlo; las demás lo verán al bajar la nube)
+  try{
+    if(typeof cmpPuedeEditar==='function' && cmpPuedeEditar()){
+      const fuentes=snaps.map(sn=>sn.compras).filter(x=>x&&typeof x==='object');
+      const c=comprasNorm();
+      const clave=f=>f&&f.id!=null?'id:'+f.id:('k:'+[f.fecha,f.numero,f.ruc,f.conIgv].join('|'));
+      const tF=new Set(c.facturas.map(clave)), tP=new Set(c.presupuestos.map(clave)); let nF=0,nP=0,nA=0;
+      if(!c.archivo||typeof c.archivo!=='object') c.archivo={};
+      fuentes.forEach(cm=>{
+        (cm.facturas||[]).forEach(f=>{ const k=clave(f); if(f&&!tF.has(k)){ tF.add(k); c.facturas.push(f); nF++; } });
+        (cm.presupuestos||[]).forEach(f=>{ const k=clave(f); if(f&&!tP.has(k)){ tP.add(k); c.presupuestos.push(f); nP++; } });
+        Object.entries(cm.archivo||{}).forEach(([per,a])=>{ if(a && !c.archivo[per]){ c.archivo[per]=a; nA++; } });
+      });
+      if(nF||nP||nA){ comprasSave(); res.compras=nF; }
+    }
+  }catch(e){ console.warn('[recup] compras',e); }
+  try{ localStorage.setItem('atmin_recup_copias', JSON.stringify({v:RECUP_V, ts:Date.now(), copias:filas.length, res})); }catch(e){}
+  console.log('[recup] copias leídas:',filas.length,'repuesto:',res);
+  if(Object.keys(res).length){
+    const p=[]; if(res.pet) p.push(res.pet+' registro(s) de petróleo'); if(res.gas) p.push(res.gas+' de gasolina'); if(res.compras) p.push(res.compras+' factura(s) de Compras');
+    try{ showNotif('♻ Recuperado desde las copias del sistema: '+p.join(', ')); }catch(e){}
+    try{ if(typeof renderCombustible==='function' && document.getElementById('log-combustible')) renderCombustible(); }catch(e){}
+    try{ if(window._currentPage==='compras' && typeof renderComprasFacturas==='function') renderComprasFacturas(); }catch(e){}
+  }
+}
 function combGuardar(tipo,arr){ const k=tipo==='gas'?COMB_KEY_GAS:COMB_KEY_PET; try{localStorage.setItem(k,JSON.stringify(arr));}catch(e){} sbSyncModulo('comb_'+(tipo==='gas'?'gas':'pet'), arr); }
 
 // Ventana del ciclo vigente (26 → 25). Sirve para el MONITOREO MENSUAL, no para el saldo.
@@ -28319,6 +28384,7 @@ function combEliminar(tipo,id,idx){
   if(i<0) i=Number(idx);
   if(!(i>=0&&i<arr.length)){ showNotif('⚠ No se encontró ese registro','error'); return; }
   if(arr[i]&&arr[i].apertura){ showNotif('⚠ La fila de apertura no se borra: es el saldo que viene del ciclo anterior','error'); return; }
+  try{ if(arr[i]&&arr[i].id!=null&&typeof tombAdd==='function') tombAdd(String(arr[i].id)); }catch(e){}   // que la fusión no lo devuelva
   arr.splice(i,1);
   combGuardar(tipo,arr);
   renderCombustible();
