@@ -2511,7 +2511,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.17-350</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.18-351</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2556,7 +2556,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.17-350</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.18-351</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2724,7 +2724,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.17-350</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.18-351</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -27871,16 +27871,22 @@ function combResetTanques(){
 const RECUP_V='2026-11-17';
 async function recuperarDeCopiasNube(){
   if(!SB_ONLINE||!sb||!CLOUD_SYNC_READY) return;
+  // En el celular no: es trabajo de una sola vez y lo hace cualquier computadora que entre.
+  try{ if(/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent||'')) return; }catch(e){}
   let hecho={}; try{ hecho=JSON.parse(localStorage.getItem('atmin_recup_copias')||'{}')||{}; }catch(e){}
   if(hecho.v===RECUP_V) return;
   let filas=null;
   try{
     const tope=new Promise(r=>setTimeout(()=>r({data:null,error:'tiempo'}),30000));
-    const { data, error }=await Promise.race([sb.from('app_modulos').select('modulo,data').or('modulo.like.punto_%,modulo.like.backup_%'), tope]);
+    /* SOLO SE PIDEN LAS DOS PARTES QUE INTERESAN (combustible y compras) de cada copia, no la copia
+       entera. Bajar las copias completas eran decenas de megas: en un celular colgaba la carga del
+       sistema y además se comía la cuota de la nube. */
+    const campos='modulo,c1:data->combustible,p1:data->compras,c2:data->snap->combustible,p2:data->snap->compras';
+    const { data, error }=await Promise.race([sb.from('app_modulos').select(campos).or('modulo.like.punto_%,modulo.like.backup_%'), tope]);
     if(!error && Array.isArray(data)) filas=data;
   }catch(e){}
   if(!filas) return;                                   // sin lectura buena: se reintenta otro día
-  const snaps=filas.map(r=>{ const d=r&&r.data; return d&&(d.snap||d); }).filter(x=>x&&typeof x==='object');
+  const snaps=filas.map(r=>({ combustible:(r&&(r.c1||r.c2))||null, compras:(r&&(r.p1||r.p2))||null }));
   const res={};
   // Combustible
   for(const t of ['pet','gas']){
