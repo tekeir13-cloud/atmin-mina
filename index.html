@@ -2511,7 +2511,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.19-354</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.19-355</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2556,7 +2556,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.19-354</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.19-355</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2724,7 +2724,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.19-354</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.19-355</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -8431,15 +8431,33 @@ async function _sbSubirModulo(modulo){
       }
     }
   }
-  /* COMPRAS NO SE VACÍA DESDE UN EQUIPO SIN DATOS. Si la nube tiene facturas y lo que sube este
-     equipo no tiene ninguna, casi seguro es un equipo que no llegó a bajar el módulo: no se sube. */
-  if(modulo==='compras' && dataObj && typeof dataObj==='object' && !(dataObj.facturas||[]).length){
+  /* COMPRAS SE UNE CON LA NUBE AL SUBIR, NO LA REEMPLAZA. Dos veces (11 y 19 de noviembre de 2026)
+     un equipo que no tenía las facturas viejas guardó la suya y la nube perdió los meses
+     anteriores. Ahora se juntan por id las facturas y presupuestos de los dos lados (lo borrado a
+     propósito deja lápida y no vuelve) y los meses archivados que falten. */
+  if(modulo==='compras' && dataObj && typeof dataObj==='object'){
     const fila=await _sbLeerFila('compras');
-    if(!fila.ok || (fila.data && Array.isArray(fila.data.facturas) && fila.data.facturas.length)){
-      console.warn('[sync] "compras" sin facturas no se sube encima de una nube con facturas');
-      delete _sbPend[modulo]; try{ _sbPendSave(); }catch(e){}
-      return true;
+    if(!fila.ok){
+      console.warn('[sync] no se pudo leer "compras" antes de subir: la subida queda en cola');
+      _sbPend[modulo]=dataObj; try{ _sbPendSave(); }catch(e){} _sbFallo=Date.now();
+      return false;
     }
+    try{
+      const nub=fila.data;
+      if(nub && typeof nub==='object'){
+        const muerto=x=>x&&x.id!=null&&typeof tombHas==='function'&&tombHas(String(x.id));
+        const unir=(a,b)=>{ const out=[], ids=new Set();
+          (a||[]).forEach(x=>{ if(!x||muerto(x)) return; out.push(x); if(x.id!=null) ids.add(String(x.id)); });
+          (b||[]).forEach(x=>{ if(!x||muerto(x)) return; if(x.id!=null&&ids.has(String(x.id))) return; out.push(x); if(x.id!=null) ids.add(String(x.id)); });
+          return out; };
+        const m={...nub, ...dataObj};
+        m.facturas=unir(dataObj.facturas, nub.facturas);
+        m.presupuestos=unir(dataObj.presupuestos, nub.presupuestos);
+        m.archivo={...(nub.archivo||{}), ...(dataObj.archivo||{})};
+        dataObj=m; _sbPend[modulo]=m;
+        try{ state.compras=m; localStorage.setItem(COMPRAS_KEY, JSON.stringify(m)); }catch(e){}
+      }
+    }catch(e){}
   }
   // READ-MERGE-WRITE para 'almacen': antes de subir, fusionar con lo que ya hay en la nube para
   // que esta subida NUNCA pise los movimientos que registró otra computadora. Sin esto, un
@@ -36572,6 +36590,7 @@ function cmpEliminarFactura(id){
   if(cmpBloqueaEdicion('Eliminar una factura')) return;
   const f=comprasNorm().facturas.find(x=>x.id===id); if(!f) return;
   if(!confirm('¿Eliminar la factura de '+(f.proveedor||'—')+' por '+cmpMoney(f.conIgv)+'?')) return;
+  try{ if(typeof tombAdd==='function') tombAdd(String(id)); }catch(e){}   // que la unión con la nube no la devuelva
   state.compras.facturas=state.compras.facturas.filter(x=>x.id!==id);
   comprasSave(); renderComprasFacturas();
   showNotif('🗑 Factura eliminada','warn');
@@ -37146,6 +37165,7 @@ function cmpEliminarPresupuesto(id){
   if(cmpBloqueaEdicion('Eliminar un presupuesto')) return;
   const p=comprasNorm().presupuestos.find(x=>x.id===id); if(!p) return;
   if(!confirm('¿Eliminar el presupuesto de '+cmpMoney(p.monto)+'?')) return;
+  try{ if(typeof tombAdd==='function') tombAdd(String(id)); }catch(e){}   // que la unión con la nube no la devuelva
   state.compras.presupuestos=state.compras.presupuestos.filter(x=>x.id!==id);
   comprasSave(); renderComprasPresupuestos();
   showNotif('🗑 Presupuesto eliminado','warn');
@@ -37365,6 +37385,7 @@ function cmpEliminarArchivada(per,idx){
   // Quitarla también de las facturas vivas (misma fecha + número + RUC)
   const mismo=x=>String(x.fecha||'')===String(f.fecha||'') && String(x.numero||'')===String(f.numero||'')
     && String(x.ruc||'')===String(f.ruc||'');
+  try{ (state.compras.facturas||[]).filter(mismo).forEach(x=>{ if(x.id!=null&&typeof tombAdd==='function') tombAdd(String(x.id)); }); }catch(e){}
   state.compras.facturas=(state.compras.facturas||[]).filter(x=>!mismo(x));
   // Recalcular el cuadro del mes con lo que queda
   const S=k=>a.facturas.reduce((s,x)=>s+(Number(x[k])||0),0);
