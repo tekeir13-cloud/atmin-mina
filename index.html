@@ -2409,6 +2409,32 @@ select option{background:var(--coal3);}
 </style>
 <!-- Excel, servido desde el proyecto por lo mismo que el cliente de nube: en un celular de mina la
      descarga de fuera puede no entrar, y entonces los botones de Excel fallan sin explicación. -->
+<script>
+/* ═══ MEMORIA LLENA: NUNCA LEER UNA COPIA VIEJA ═══════════════════════════════════════════════
+   En los celulares el almacenamiento del navegador (unos 5 MB) se llena. Cuando un dato nuevo
+   bajado de la nube no cabía, se quedaba guardada la copia VIEJA, y cada pantalla que volvía a
+   leer del almacenamiento reemplazaba lo nuevo por lo viejo: el jefe de guardia veía sus reportes
+   hasta una fecha y nada más, aunque la nube tenía todo. Ahora, si un dato no cabe, se borra la
+   copia vieja y el valor nuevo queda en memoria; toda lectura devuelve ese valor nuevo. Al
+   recargar la página ese dato se vuelve a bajar de la nube, que es lo correcto. */
+(function(){
+  try{
+    const S=window.Storage&&Storage.prototype; if(!S||S.__mukiMem) return;
+    const mem=new Map(); window._lsMem=mem;
+    const oGet=S.getItem, oSet=S.setItem, oDel=S.removeItem;
+    S.getItem=function(k){ if(this===window.localStorage && mem.has(String(k))) return mem.get(String(k)); return oGet.call(this,k); };
+    S.setItem=function(k,v){
+      try{ oSet.call(this,k,v); if(this===window.localStorage) mem.delete(String(k)); }
+      catch(e){
+        if(this===window.localStorage){ mem.set(String(k), String(v)); try{ oDel.call(this,k); }catch(_){} }
+        throw e;
+      }
+    };
+    S.removeItem=function(k){ if(this===window.localStorage) mem.delete(String(k)); return oDel.call(this,k); };
+    S.__mukiMem=true;
+  }catch(e){}
+})();
+</script>
 <script src="vendor/xlsx-js-style-1.2.0.js"></script>
 <script>
   if (typeof XLSX === 'undefined') {
@@ -2511,7 +2537,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.19-355</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.21-357</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2556,7 +2582,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.19-355</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.21-357</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2724,7 +2750,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.19-355</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.21-357</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -6269,6 +6295,9 @@ async function cargarAlmacenCombustibleSB(){
         await sbSyncModulo('reportes_guardia', merged);
       }
       try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){}
+      /* La lista de reportes ya estaba dibujada con lo que tenía el equipo: se vuelve a dibujar con lo
+         que llegó de la nube. Antes el celular seguía mostrando sus reportes viejos hasta cambiar de pantalla. */
+      try{ if(document.getElementById('rg-lista') && typeof renderAvance==='function') renderAvance(); }catch(e){}
     }
     // ── HOJAS DIARIAS DE EQUIPO (scoop y dumpers) — misma unión por id que los reportes ──
     {
@@ -8788,7 +8817,7 @@ else if(Number(prevAlm.productosTs||0)>Number(data.productosTs||0)){ a.productos
     case 'personal':           if(Array.isArray(data)){ /* La nube manda: sin nada pendiente de subir, este equipo copia lo que hay en el sistema. */ const _pp=puedePublicarRRHH() && (typeof _sbPend!=='undefined') && ('personal' in _sbPend); if(!_pp){ state.personal=data; try{ localStorage.setItem('atmin_personal_copia_ts', String(Date.now())); }catch(e){} } /* con un cambio propio en camino, manda el propio (se guardó después) */ try{ if(typeof normalizarCargos==='function') normalizarCargos(); }catch(e){} setLS('atmin_personal_snap', state.personal); if(typeof _sbPend!=='undefined' && ('personal' in _sbPend)){ _sbPend['personal']=state.personal; try{ _sbPendSave(); }catch(e){} } } break;
     case 'tareas':             if(Array.isArray(data)){ state.tareas=data; setLS('atmin_tareas_snap', data); } break;
     case 'equipos_operacion':  if(Array.isArray(data)){ state.equiposOp=(typeof mergeById_ts==='function')?mergeById_ts(state.equiposOp||[], data):data; setLS('atmin_equipos_op', state.equiposOp); try{ renderEquiposOp(); }catch(e){} } break;
-    case 'reportes_guardia':   if(Array.isArray(data)){ state.reportesGuardia=(typeof mergeById_ts==='function')?mergeById_ts(state.reportesGuardia||[], data, (typeof _rgMetros==='function'?_rgMetros:null)):M(data, state.reportesGuardia||[]); setLS('atmin_reportes_guardia', state.reportesGuardia); try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){} } break;
+    case 'reportes_guardia':   if(Array.isArray(data)){ state.reportesGuardia=(typeof mergeById_ts==='function')?mergeById_ts(state.reportesGuardia||[], data, (typeof _rgMetros==='function'?_rgMetros:null)):M(data, state.reportesGuardia||[]); setLS('atmin_reportes_guardia', state.reportesGuardia); try{ if(typeof sincronizarPerforacionReportes==='function') sincronizarPerforacionReportes(); }catch(e){} try{ if(document.getElementById('rg-lista') && typeof renderAvance==='function') renderAvance(); }catch(e){} } break;
     case 'mant_kits':          if(Array.isArray(data)){ state.mantenimiento=(typeof mergeMantKits==='function')?mergeMantKits(state.mantenimiento||[], data):M(data, state.mantenimiento||[]); setLS('atmin_mant_kits', state.mantenimiento); } break;
     case 'mant_repuestos':     if(Array.isArray(data)){ state.mantRepuestos=data; setLS('atmin_mant_repuestos', data); } break;
     case 'compresorista':      if(Array.isArray(data)){ state.compresorista=(typeof _compMergeByTs==='function')?_compMergeByTs(state.compresorista||[], data):data; setLS('atmin_compresorista', state.compresorista);
