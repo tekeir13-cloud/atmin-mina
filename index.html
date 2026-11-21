@@ -2537,7 +2537,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.21-357</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.21-358</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2582,7 +2582,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.21-357</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.21-358</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2750,7 +2750,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.21-357</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.21-358</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -6026,7 +6026,7 @@ async function cargarDesdeSB(){
 async function cargarAlmacenCombustibleSB(){
   if(!SB_ONLINE) return;
   try{
-    _sbPrefetchModulos(['almacen', 'tombstones', 'tarjeta_notas', 'tareos_pend', 'tareas', 'servicios_terceros', 'reuniones', 'reportes_guardia', 'planilla_supervision', 'personal_turno', 'personal_hist', 'personal', 'montebravo', 'metas', 'mb_labores', 'mant_repuestos', 'mant_kits', 'historial_periodos', 'fin_ing_maq', 'equipos_operacion', 'distribucion', 'compresorista', 'compras', 'val_labor']);
+    _sbPrefetchModulos(['almacen', 'tombstones', 'tarjeta_notas', 'tareos_pend', 'tareas', 'servicios_terceros', 'reuniones', 'reportes_guardia', 'planilla_supervision', 'personal_turno'].concat((typeof puedePublicarRRHH==='function'&&puedePublicarRRHH())?['personal_hist']:[]).concat(['personal', 'montebravo', 'metas', 'mb_labores', 'mant_repuestos', 'mant_kits', 'historial_periodos', 'fin_ing_maq', 'equipos_operacion', 'distribucion', 'compresorista', 'compras', 'val_labor']));
     // ── ALMACÉN ──
     const almNube = await sbLoadModulo('almacen');
     // A partir de aquí ya leímos la nube: habilitar escritura (incl. bootstrap)
@@ -6238,7 +6238,10 @@ async function cargarAlmacenCombustibleSB(){
       try{ if(typeof personalQuitarSueldos==='function') await personalQuitarSueldos(); }catch(e){}
       // Historial de versiones: se trae el de la nube, se une con el de este equipo y se deja
       // una foto del estado con el que arranca la jornada.
-      try{
+      /* El historial de versiones de personal (unos 270 KB) solo lo usan el Administrador y el Jefe
+         de Finanzas, que son los únicos que pueden restaurar una versión. Los demás —jefes de
+         guardia en el celular, sobre todo— ya no lo bajan al entrar. */
+      if(typeof puedePublicarRRHH==='function' && puedePublicarRRHH()) try{
         const hNube=await sbLoadModulo('personal_hist');
         if(Array.isArray(hNube) && typeof _MERGE_AL_SUBIR!=='undefined'){
           const f=_MERGE_AL_SUBIR['personal_hist'];
@@ -8940,7 +8943,13 @@ async function _syncPoll(){
       //  · diag_equipos  → el latido que cada equipo escribe cada 10 min; solo se lee en el
       //                    diagnóstico, a pedido. Sin esto, N equipos se avisan entre sí todo
       //                    el día de un dato que ninguno usa.
-      if(String(m).indexOf('backup_')===0 || m==='diag_equipos'){ _pollUpd[m]=upd; continue; }
+      //  · punto_*       → los puntos de restauración diarios: también son copias completas (unos
+      //                    10 MB cada una, hay decenas). Se pedían TODOS en el primer sondeo de cada
+      //                    equipo, cada vez que se abría la app: la consulta era tan pesada que la
+      //                    nube la cortaba y el equipo la volvía a intentar cada 20 s, todo el día.
+      //  · personal_hist → historial de versiones de personal: solo lo usan quienes pueden restaurar.
+      if(String(m).indexOf('backup_')===0 || String(m).indexOf('punto_')===0 || m==='diag_equipos' ||
+         (m==='personal_hist' && !(typeof puedePublicarRRHH==='function' && puedePublicarRRHH()))){ _pollUpd[m]=upd; continue; }
       pedir.push(m); porBajar[m]=upd;
     }
     _pollPrimera=false;
