@@ -2546,7 +2546,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.22-359</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.22-360</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2591,7 +2591,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.22-359</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.22-360</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2759,7 +2759,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.22-359</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.22-360</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5932,7 +5932,12 @@ async function init(){
   mostrarLogin();
   try{
     const rec=(typeof sesionRecordada==='function')?sesionRecordada():null;
-    if(rec) _loginRecordado(rec);
+    /* RECARGA HECHA POR EL SISTEMA (versión nueva, sincronización): la persona ya estaba adentro
+       en esta misma pestaña, así que vuelve a entrar sola. Antes caía en la pantalla de inicio y
+       parecía que el sistema la había echado. Abrir la app de cero sigue pidiendo el toque. */
+    let _reentrar=false; try{ _reentrar=sessionStorage.getItem('atmin_reentrar')==='1'; sessionStorage.removeItem('atmin_reentrar'); }catch(e){}
+    if(rec && _reentrar){ iniciarSesion(rec); }
+    else if(rec) _loginRecordado(rec);
   }catch(e){}
 
   // Intentar auto-login con timeout de 2s
@@ -39804,7 +39809,7 @@ document.addEventListener('webkitfullscreenchange',_syncFullscreenBtn);
       }
       return;
     }
-    _recargando=true; try{ location.reload(); }catch(e){}
+    _recargando=true; try{ _recargaSistema(); }catch(e){ try{ location.reload(); }catch(_){} }
   };
   // Queda a la vista para poder comprobar en campo por qué una actualización está esperando.
   try{ window.appOcupada=_appOcupada; }catch(e){}
@@ -40036,14 +40041,16 @@ async function publicarVistaOficial(){
   showNotif('✓ Vista publicada. Los demás equipos se están sincronizando.');
   try{ document.getElementById('diag-sync-modal')?.remove(); }catch(e){}
 }
+// Recarga hecha por el sistema: marca la pestaña para que la persona vuelva a entrar sola.
+function _recargaSistema(){ try{ if(typeof usuarioActivo!=='undefined' && usuarioActivo) sessionStorage.setItem('atmin_reentrar','1'); }catch(e){} try{ location.reload(); }catch(e){} }
 // Recibe el broadcast: si es nuevo, este equipo recarga para jalar la nube fresca y quedar igual.
 function _aplicarBroadcastSync(data){
   const v=Number(data&&data.v)||0;
   const visto=Number(localStorage.getItem('atmin_sync_bcast')||0);
   if(v<=visto) return;                       // ya aplicado o propio
-  localStorage.setItem('atmin_sync_bcast', String(v));
+  try{ localStorage.setItem('atmin_sync_bcast', String(v)); }catch(e){}
   try{ showNotif('🔄 Sincronizando con el equipo oficial…'); }catch(e){}
-  setTimeout(()=>{ try{ location.reload(); }catch(e){} }, 2000);  // recarga → arranque jala la nube
+  setTimeout(()=>{ _recargaSistema(); }, 2000);  // recarga → arranque jala la nube
 }
 /* JALAR LA NUBE A ESTE EQUIPO.
    Antes solo traía el almacén, el combustible y las configuraciones. Los reportes de jefe de
@@ -40178,7 +40185,7 @@ async function _verificarVersionPublicada(){
     sessionStorage.setItem('atmin_refresco_hecho','1');
     try{ if('caches' in window){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } }catch(e){}
     try{ const regs=await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(x=>x.unregister())); }catch(e){}
-    location.reload();
+    _recargaSistema();
   }catch(e){}
 }
 try{ setTimeout(_verificarVersionPublicada, 3000); }catch(e){}
