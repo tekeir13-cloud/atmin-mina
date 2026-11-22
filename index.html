@@ -2546,7 +2546,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.22-360</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.22-361</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2591,7 +2591,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.22-360</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.22-361</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2759,7 +2759,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.22-360</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.22-361</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -34227,7 +34227,9 @@ function eliminarReporteCompDe(fecha, turno){
    copia que permite recuperar el historial tras una depuración, y vive solo en este equipo.
    Estaba aquí desde antes y se borraba al primer apretón de espacio. Ahora se suelta recién en
    el nivel 3, como último recurso. */
-const LS_ESPEJOS_NUBE = ['atmin_personal_snap','atmin_tareas_snap','atmin_sync_bcast'];
+// atmin_sync_bcast NO va aquí: es una marca de 13 bytes y, si se borraba, el equipo volvía a
+// tomar como nuevo un aviso viejo de sincronización y se recargaba cada 20 s sin parar.
+const LS_ESPEJOS_NUBE = ['atmin_personal_snap','atmin_tareas_snap'];
 /* HACER SITIO, DE LO MÁS BARATO A LO MÁS CARO. Cada nivel suelta algo que se puede recuperar:
    nada de lo que se borra aquí existe SOLO en este equipo —todo está en la nube— así que liberar
    nunca pierde información, solo obliga a volver a bajarla si hace falta. Lo que NO cumple esa
@@ -40046,9 +40048,13 @@ function _recargaSistema(){ try{ if(typeof usuarioActivo!=='undefined' && usuari
 // Recibe el broadcast: si es nuevo, este equipo recarga para jalar la nube fresca y quedar igual.
 function _aplicarBroadcastSync(data){
   const v=Number(data&&data.v)||0;
-  const visto=Number(localStorage.getItem('atmin_sync_bcast')||0);
+  let visto=0; try{ visto=Math.max(Number(localStorage.getItem('atmin_sync_bcast')||0), Number(sessionStorage.getItem('atmin_sync_bcast')||0)); }catch(e){}
   if(v<=visto) return;                       // ya aplicado o propio
   try{ localStorage.setItem('atmin_sync_bcast', String(v)); }catch(e){}
+  try{ sessionStorage.setItem('atmin_sync_bcast', String(v)); }catch(e){}
+  /* Un aviso viejo no recarga a nadie: "publicar a todos" sirve para el momento en que se hace.
+     Si tiene más de 10 minutos, este equipo ya cargó la nube al abrir y no hay nada que alcanzar. */
+  if(Date.now()-v > 10*60*1000) return;
   try{ showNotif('🔄 Sincronizando con el equipo oficial…'); }catch(e){}
   setTimeout(()=>{ _recargaSistema(); }, 2000);  // recarga → arranque jala la nube
 }
