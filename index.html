@@ -2546,7 +2546,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.22-361</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.22-362</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2591,7 +2591,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.22-361</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.22-362</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2759,7 +2759,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.22-361</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.22-362</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -38201,13 +38201,32 @@ async function puntoDiaGuardar(forzar){
     if(!forzar){
       const yaLocal=localStorage.getItem('atmin_'+clave);
       if(yaLocal) return false;
-      const enNube=await sbLoadModuloEstado(clave);
-      if(enNube.estado==='ok' && enNube.data) { try{ localStorage.setItem('atmin_'+clave,'1'); }catch(e){} return false; }
-      if(enNube.estado==='ilegible') return false;      // sin lectura fiable, no se escribe
+      /* Para saber si la copia de hoy ya existe se pregunta SOLO por su nombre. Antes se bajaba la
+         copia entera (unos 10 MB) para mirar si estaba: en los equipos con la memoria llena la
+         marca local no se guardaba y eso pasaba en CADA arranque. */
+      let existe=null;
+      try{ const { data, error }=await sb.from('app_modulos').select('modulo').eq('modulo', clave).limit(1);
+           if(!error && Array.isArray(data)) existe=data.length>0; }catch(e){}
+      if(existe===null) return false;                    // sin lectura fiable, no se escribe
+      if(existe){ try{ localStorage.setItem('atmin_'+clave,'1'); }catch(e){} return false; }
     }
     const snap=(typeof snapshotEstado==='function')?snapshotEstado():null;
     if(!snap) return false;
-    await sbSyncModulo(clave, snap);
+    /* LA COPIA DE LA NUBE TAMBIÉN VA SIN FOTOS. Las fotos del personal tienen su propio módulo en la
+       nube y no se pierden; metidas en cada copia diaria la llevaban a unos 10 MB y, sumadas,
+       agotaron el disco de la base de datos (se cayó el 22/11/2026). */
+    const paraNube={...snap};
+    delete paraNube.personalFotos;
+    if(Array.isArray(paraNube.serviciosTerceros))
+      paraNube.serviciosTerceros=paraNube.serviciosTerceros.map(r=>{const{foto,fotoImpreso,...x}=r||{};return x;});
+    await sbSyncModulo(clave, paraNube);
+    // Y en la nube quedan solo las de los últimos días: antes no se borraba ninguna (llegaron a 98).
+    try{
+      const { data:filas }=await sb.from('app_modulos').select('modulo').like('modulo', PUNTO_PREFIJO+'20%');
+      const limite=_puntoUltimosDias(PUNTO_DIAS).slice(-1)[0];
+      (filas||[]).map(r=>r.modulo).filter(m=>m.slice(PUNTO_PREFIJO.length)<limite)
+        .forEach(m=>{ try{ sb.from('app_modulos').delete().eq('modulo', m).then(()=>{},()=>{}); }catch(e){} });
+    }catch(e){}
     /* LA COPIA QUE SE GUARDA EN EL EQUIPO VA SIN FOTOS Y SOLO DOS DÍAS ────────────────────
        Esta era la causa número uno de que las laptops se quedaran sin espacio. La copia del día
        llevaba adentro las fotos del personal y las de los vales: medida, pesaba 21 MB. Y se
