@@ -2546,7 +2546,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.23-378</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.23-379</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2591,7 +2591,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.23-378</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.23-379</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2759,7 +2759,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.23-378</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.23-379</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -7341,6 +7341,7 @@ const DM_CSS=`
 #d-mina .lgr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 10px;align-items:center;padding:8px 6px;border-radius:8px;cursor:pointer}#d-mina .lgr .lb{grid-column:1/3}#d-mina .lgr:hover{background:rgba(59,139,255,.07)}
 #d-mina .lgr .ln{font-size:12.5px;font-weight:700}#d-mina .lgr .lb{display:flex;flex-direction:column;gap:3px}#d-mina .lgr .lb i{display:block;height:7px;border-radius:3px;min-width:2px}
 #d-mina .lgr .lv{display:flex;gap:10px;text-align:right;font-size:12px;white-space:nowrap}
+#d-mina .tqs{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:12px}#d-mina .tqs .tq{margin-top:0}
 #d-mina .tq{display:flex;gap:12px;align-items:center;margin-top:12px;padding:8px;border:1px solid var(--dmL);border-radius:10px}
 #d-mina .ola{animation:dmOla 3s linear infinite}
 #d-mina .pie{font-size:11px;color:var(--dmT3);padding:0 22px 16px;line-height:1.5}
@@ -7428,6 +7429,7 @@ function _dmDatos(){
   let C=null; try{ C=cieDatos(mes); }catch(e){ console.warn('[dash] cieDatos',e); }
   // ── PETRÓLEO: el saldo de la pantalla de Combustible
   let P=null; try{ P=combDesglose('pet'); }catch(e){}
+  let G=null; try{ G=combDesglose('gas'); }catch(e){}   // tanque de gasolina, misma fuente
   // ── RECURSOS HUMANOS
   const act=(state.personal||[]).filter(p=>p.estado!=='baja');
   // La guardia sale de la distribución del Ingeniero Residente, igual que en la hoja de tareo.
@@ -7435,13 +7437,23 @@ function _dmDatos(){
   const guardia=p=>String(gmap[p.id]||p.guardia||'').toLowerCase();
   const hojas=(state.tareosPend||[]).filter(h=>enVentana(h.fecha,mes,AREA_OP));
   const cargos={}; act.forEach(p=>{ const c=String(p.rol||'—'); cargos[c]=(cargos[c]||0)+1; });
-  return {mes,w,nDias,dTransc,esp,dias,hoyIso,frentes,total,rg,conReporte,C,P,
+  return {mes,w,nDias,dTransc,esp,dias,hoyIso,frentes,total,rg,conReporte,C,P,G,
     rrhh:{activos:act.length,nv:act.filter(p=>(p.unidad||'NV2820')!=='MB').length,mb:act.filter(p=>p.unidad==='MB').length,
       dia:act.filter(p=>guardia(p)==='dia').length,noche:act.filter(p=>guardia(p)==='noche').length,
       hojas:hojas.length,hojasPend:hojas.filter(h=>h.estado!=='aprobado').length,
       cargos:Object.entries(cargos).sort((a,b)=>b[1]-a[1])}};
 }
 
+/* Tanque chico del cuadro de Logística. El nivel es lo que queda frente a lo que hubo en el
+   ciclo (saldo + consumido): no hay capacidad del tanque registrada, así que no se inventa una. */
+function _dmTqMini(T,nom,col,ola,dT){
+  if(!T) return '';
+  const lv=Math.max(0.03,Math.min(1,(T.saldo||0)/Math.max(1,(T.saldo||0)+(T.consCiclo||0)))), y=4+38*(1-lv), id='dmTq'+nom.charAt(0);
+  const d=T.consCiclo>0&&T.saldo>0?Math.floor(T.saldo/(T.consCiclo/Math.max(1,dT))):null;
+  const neg=(T.saldo||0)<0;   // salió más de lo que entró: falta registrar ingresos, no se disimula
+  return `<div class="tq clk" onclick="event.stopPropagation();dmShowLog(${nom==='Petróleo'?4:5})"><svg width="32" height="46" viewBox="0 0 32 46"><rect x="2" y="2" width="28" height="42" rx="7" fill="var(--dmP2)" stroke="var(--dmPL)" stroke-width="2"/><clipPath id="${id}"><rect x="4" y="4" width="24" height="38" rx="5"/></clipPath><g clip-path="url(#${id})"><rect x="0" y="${y}" width="32" height="44" fill="${col}" opacity=".85"/><path class="ola" d="M0 ${y} q6 -3 12 0 t12 0 t12 0 t12 0 V60 H0 Z" fill="${ola}" opacity=".5"/></g></svg>
+    <div style="min-width:0"><div class="cap">Tanque de ${nom.toLowerCase()}</div><div class="num" style="font-size:17px;font-weight:800;margin-top:3px;white-space:nowrap${neg?';color:var(--dmEr)':''}">${_dmF1(T.saldo)} gln${neg?`<div style="font-size:11px;font-weight:600;color:var(--dmWa);white-space:normal;font-family:'DM Sans',sans-serif">sin ingresos registrados: faltan cargar</div>`:''}${d!=null?` <span style="font-size:12px;color:var(--dmT2);font-weight:600">· ~${Math.max(0,d)} días</span>`:''}</div></div></div>`;
+}
 function renderDashMina(){
   const cont=document.getElementById('d-mina'); if(!cont) return;
   if(!document.getElementById('dm-css')){ const st=document.createElement('style'); st.id='dm-css'; st.textContent=DM_CSS; document.head.appendChild(st); }
@@ -7496,7 +7508,6 @@ function renderDashMina(){
   const rub=[['Insumos',C.matIngGen||0,C.matSalGen||0],['Explosivo',C.expIngS||0,C.expSalS||0],['Petróleo',C.petIngS||0,petGastoS],['Mantenimiento',C.matIngMant||0,C.matSalMant||0]];
   const mxR=Math.max(1,...rub.map(r=>Math.max(r[1],r[2])));
   const cT=rub.reduce((s,r)=>s+r[1],0), gT=rub.reduce((s,r)=>s+r[2],0);
-  const lvl=D.P?Math.max(0,Math.min(1,D.P.saldo/2000)):0;
   // ── mantenimiento
   const kits=C.kits||[], tipos={}; kits.forEach(k=>{const t=k.tipo||'Otro'; tipos[t]=(tipos[t]||0)+1;});
   const tc={Preventivo:'#a78bfa',Programado:'#60a5fa',Correctivo:'#ff5a5a'};
@@ -7526,8 +7537,7 @@ function renderDashMina(){
       <div class="lgl">${rub.map(([n,c,g],k)=>`<div class="lgr" onclick="event.stopPropagation();dmShowLog(${[0,3,4,0][k]})"><span class="ln">${n}</span>
         <span class="lb"><i style="width:${c/mxR*100}%;background:linear-gradient(90deg,#2a6fe0,#5aa2ff)"></i><i style="width:${g/mxR*100}%;background:linear-gradient(90deg,#f5a524,#f7c35c)"></i></span>
         <span class="lv num"><span style="color:var(--dmCo)">${_dmS(c)}</span><span style="color:var(--dmWa)">${_dmS(g)}</span></span></div>`).join('')}</div>
-      ${D.P?`<div class="tq clk" onclick="event.stopPropagation();dmShowLog(4)"><svg width="32" height="46" viewBox="0 0 32 46"><rect x="2" y="2" width="28" height="42" rx="7" fill="var(--dmP2)" stroke="var(--dmPL)" stroke-width="2"/><clipPath id="dmTq"><rect x="4" y="4" width="24" height="38" rx="5"/></clipPath><g clip-path="url(#dmTq)"><rect x="0" y="${4+38*(1-lvl)}" width="32" height="44" fill="#2dd4bf" opacity=".85"/><path class="ola" d="M0 ${4+38*(1-lvl)} q6 -3 12 0 t12 0 t12 0 t12 0 V60 H0 Z" fill="#7ff0de" opacity=".5"/></g></svg>
-        <div><div class="cap">Tanque de petróleo</div><div class="num" style="font-size:17px;font-weight:800;margin-top:3px">${_dmF0(D.P.saldo)} gln${dPet!=null?` <span style="font-size:12px;color:var(--dmT2);font-weight:600">· ~${Math.max(0,dPet)} días</span>`:''}</div></div></div>`:''}</div>
+      <div class="tqs">${_dmTqMini(D.P,'Petróleo','#2dd4bf','#7ff0de',D.dTransc)}${_dmTqMini(D.G,'Gasolina','#f59e0b','#fcd34d',D.dTransc)}</div></div>
     <div class="clk" onclick="dmShowMant()"><div class="mod" style="color:var(--dmMa)"><i style="background:#a78bfa"></i>Mantenimiento <span class="play">▶ presentación</span></div><div class="cap">${nomMes} · trabajos a máquinas</div>
       <div class="mv num">${kits.length}<small> trabajos</small></div>
       <div class="stk">${Object.entries(tipos).map(([t,v])=>`<i style="width:${v/Math.max(1,kits.length)*100}%;background:${tc[t]||'#64748b'}"></i>`).join('')}</div>
@@ -7833,8 +7843,8 @@ const _G={
        +`<text class="gfade" style="animation-delay:${1.6+i*.12}s" x="${L+w+10}" y="${y+20}" fill="var(--dmTx)" font-size="13" font-weight="800" font-family="DM Mono,monospace">${fmt?fmt(v):v}</text>`; });
     return s+'</svg>'; },
   // tanque con degradado y superficie en movimiento
-  tanque:(nivel,txt)=>{ const id=_gid('t'), yl=16+188*(1-nivel);
-    return `<svg viewBox="0 0 160 220" width="150" height="206"><defs>${_gVert(id,'#2dd4bf',.95,.45)}<clipPath id="${id}c"><rect x="16" y="16" width="128" height="188" rx="21"/></clipPath></defs><rect x="10" y="10" width="140" height="200" rx="26" fill="var(--dmP)" stroke="var(--dmPL)" stroke-width="4"/><g clip-path="url(#${id}c)"><g class="gtq"><rect x="16" y="${yl}" width="128" height="${188*nivel}" fill="url(#${id})"/><path class="gola" d="M-112 ${yl} q16 -7 32 0 t32 0 t32 0 t32 0 t32 0 t32 0 t32 0 t32 0 t32 0 V${yl+8} H-112Z" fill="#5eead4" opacity=".7"/></g></g><text x="80" y="120" text-anchor="middle" fill="var(--dmTx)" font-size="22" font-weight="800" class="gfade" style="animation-delay:2.6s">${txt}</text></svg>`; }
+  tanque:(nivel,txt,col,ola)=>{ col=col||'#2dd4bf'; ola=ola||'#5eead4'; const id=_gid('t'), yl=16+188*(1-nivel);
+    return `<svg viewBox="0 0 160 220" width="150" height="206"><defs>${_gVert(id,col,.95,.45)}<clipPath id="${id}c"><rect x="16" y="16" width="128" height="188" rx="21"/></clipPath></defs><rect x="10" y="10" width="140" height="200" rx="26" fill="var(--dmP)" stroke="var(--dmPL)" stroke-width="4"/><g clip-path="url(#${id}c)"><g class="gtq"><rect x="16" y="${yl}" width="128" height="${188*nivel}" fill="url(#${id})"/><path class="gola" d="M-112 ${yl} q16 -7 32 0 t32 0 t32 0 t32 0 t32 0 t32 0 t32 0 t32 0 t32 0 V${yl+8} H-112Z" fill="${ola}" opacity=".7"/></g></g><text x="80" y="120" text-anchor="middle" fill="var(--dmTx)" font-size="22" font-weight="800" class="gfade" style="animation-delay:2.6s">${txt}</text></svg>`; }
 };
 function _dmEtqDias(dias){ let ult=-9; const n=dias.length; return dias.map((d,i)=>{ const quiere=i===0||i===n-1||d.slice(8)==='01'||i%7===0; if(!quiere||i-ult<4||(i!==n-1&&n-1-i<4&&i%7!==0&&d.slice(8)!=='01')) return ''; if(i===n-1&&i-ult<4) return ''; ult=i; return _dmFecha(d); }); }
 
@@ -8011,6 +8021,9 @@ function dmShowLog(desde){
   const eo={}; (((state.almacen||{}).explosivos||{}).ingresos||[]).filter(r=>String(r.fecha||'').slice(0,7)===String(D.mes)).forEach(r=>{ const k=String(r.origen||'Sin origen').trim(); eo[k]=(eo[k]||0)+(Number(r.totalUnidades)||0)*(Number(pex[r.producto])||0); });
   const topEx=(C.expPorProd||[]).filter(x=>x.salS>0).sort((a,b)=>b.salS-a.salS).slice(0,7);
   const P=D.P||{}, dP=P.consCiclo>0?Math.floor(P.saldo/(P.consCiclo/Math.max(1,D.dTransc))):null;
+  const Gs=D.G||null, dG=Gs&&Gs.consCiclo>0&&Gs.saldo>0?Math.floor(Gs.saldo/(Gs.consCiclo/Math.max(1,D.dTransc))):null;
+  // gasolina por equipo: los mismos partes y la misma ventana que usa el tanque de gasolina
+  const gasEq=(()=>{ try{ const w=_combVentana(), m={}; (state.compresorista||[]).filter(r=>r&&_combEnCiclo(r.fecha,w)&&String(r.fecha||'').slice(0,10)>=COMB_CORTE).forEach(r=>(r.gasolina||[]).forEach(x=>{ const g=Number(x&&x.gln)||0; if(g) m[x.equipo]=(m[x.equipo]||0)+g; })); return Object.entries(m).sort((a,b)=>b[1]-a[1]); }catch(e){ return []; } })();
   const cols=['#3b8bff','#2dd4bf','#a78bfa','#f5a524','#f472b6','#60a5fa','#94a3b8'];
   const L=[
     _L.t(`${nom}: entró ${_dmS(cT)} y salió ${_dmS(gT)}`, `El <b>costo</b> es todo lo que ingresó; el <b>gasto</b> es lo que salió a la operación o se consumió. ${cT>=gT?'Entró más de lo que salió: la diferencia quedó en stock.':'Salió más de lo que entró: se usó stock que venía de antes.'}`)+
@@ -8026,9 +8039,13 @@ function dmShowLog(desde){
       `<div class="dos">${_L.kp(Object.entries(eo).map(([k,v])=>['Vino de '+k,_L.n(v,'S'),'ingresos del mes','var(--dmCo)']).concat([['Despachado',_L.n(C.expSalS||0,'S'),_dmF0(C.expSalU||0)+' unidades','var(--dmWa)'],['Stock en polvorín',_L.n(C.expStockS||0,'S'),_dmF0(C.expStockU||0)+' unidades']])).replace('class="kp"','class="kp compacta"')}
        ${_G.envoltura('Lo que más salió del polvorín',_G.barras(topEx.map(x=>[x.nombre.replace(/DETONADOR NO ELECTRICO /i,'').replace(/EMULNOR/i,'Emulnor'),x.salS]),'#f472b6',_dmS))}</div>`,
     _L.t('Petróleo', `El tanque tiene <b>${_dmF0(P.saldo||0)} galones</b>${dP!=null?`, unos <b>${Math.max(0,dP)} días</b> al consumo del ciclo`:''}. Se consumen en promedio <b>${_dmF0((P.consCiclo||0)/Math.max(1,D.dTransc))} gln por día</b>.`)+
-      `<div class="dos"><div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap"><div style="text-align:center">${_G.tanque(Math.max(0.04,Math.min(1,(P.saldo||0)/Math.max(1,C.petIn||0,P.saldo||0))),_dmF0(P.saldo||0)+' gln')}<div style="font-size:11px;color:var(--dmT3);max-width:160px;margin-top:4px">nivel frente a lo que entró en el mes</div></div>
+      `<div class="dos"><div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap"><div style="text-align:center">${_G.tanque(Math.max(0.04,Math.min(1,(P.saldo||0)/Math.max(1,(P.saldo||0)+(P.consCiclo||0)))),_dmF0(P.saldo||0)+' gln')}<div style="font-size:11px;color:var(--dmT3);max-width:160px;margin-top:4px">lo que queda de lo que hubo en el ciclo</div></div>
          ${_L.kp([['Entró',_L.n(C.petIn||0,'0','',' gln'),_dmS(C.petIngS||0),'var(--dmCo)'],['Se consumió',_L.n(C.petSalido||0,'0','',' gln'),_dmS(petG),'var(--dmWa)']]).replace('class="kp"','class="kp compacta" style="flex:1;min-width:180px;grid-template-columns:1fr"')}</div>
-       ${_G.envoltura('Consumo de petróleo por día',_G.columnas(dias.map(d=>(C.dPetCon&&C.dPetCon[d])||0),_dmEtqDias(dias),{col:'#2dd4bf',fmt:v=>Math.round(v)}))}</div>`
+       ${_G.envoltura('Consumo de petróleo por día',_G.columnas(dias.map(d=>(C.dPetCon&&C.dPetCon[d])||0),_dmEtqDias(dias),{col:'#2dd4bf',fmt:v=>Math.round(v)}))}</div>`,
+    _L.t('Gasolina', Gs&&Gs.saldo<0?`Se consumieron <b>${_dmF1(Gs.consCiclo||0)} gln</b> en el ciclo, pero <b>no hay ingresos de gasolina registrados</b>: el tanque queda en <b>${_dmF1(Gs.saldo)} gln</b>. Falta cargar los ingresos en Combustible.`:Gs?`El tanque tiene <b>${_dmF0(Gs.saldo||0)} galones</b>${dG!=null?`, unos <b>${Math.max(0,dG)} días</b> al consumo del ciclo`:''}. En el ciclo se consumieron <b>${_dmF1(Gs.consCiclo||0)} gln</b>.`:'Sin datos del tanque de gasolina.')+
+      `<div class="dos"><div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap"><div style="text-align:center">${_G.tanque(Math.max(0.04,Math.min(1,((Gs&&Gs.saldo)||0)/Math.max(1,((Gs&&Gs.saldo)||0)+((Gs&&Gs.consCiclo)||0)))),_dmF1((Gs&&Gs.saldo)||0)+' gln','#f59e0b','#fcd34d')}<div style="font-size:11px;color:var(--dmT3);max-width:160px;margin-top:4px">lo que queda de lo que hubo en el ciclo</div></div>
+         ${_L.kp([['Entró en el mes',_L.n(C.gasIn||0,'0','',' gln'),_dmS(C.gasIngS||0),'var(--dmCo)'],['Consumo del ciclo',_L.n((Gs&&Gs.consCiclo)||0,'1','',' gln'),'según los partes del compresorista','var(--dmWa)']]).replace('class="kp"','class="kp compacta" style="flex:1;min-width:180px;grid-template-columns:1fr"')}</div>
+       ${gasEq.length?_G.envoltura('Gasolina por equipo en el ciclo',_G.barras(gasEq,'#f59e0b',v=>_dmF1(v)+' gln')):_G.envoltura('Gasolina por equipo en el ciclo','<div class="nota" style="margin:30px 0">Los partes del ciclo no registran consumo de gasolina por equipo.</div>')}</div>`
   ];
   _dmShowSalida('Logística','var(--dmWa)',L,desde);
 }
