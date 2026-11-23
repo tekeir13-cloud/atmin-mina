@@ -2546,7 +2546,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.22-363</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.23-364</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2591,7 +2591,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.22-363</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.23-364</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2759,7 +2759,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.22-363</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.23-364</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -19933,8 +19933,8 @@ function tareoTurnoCambia(){
   if(f) f.value=(t==='DIA')?'dia':(t==='NOCHE')?'noche':'';
   tareoFiltraGuardia();
 }
-// Muestra solo las filas de la guardia elegida. Los trabajadores SIN guardia asignada
-// se muestran siempre (para no ocultar personal hasta que el Ing. Residente los clasifique).
+// Muestra solo las filas de la guardia elegida. Los trabajadores SIN guardia asignada NO salen
+// (pedido de la operación, nov. 2026: la hoja respeta estrictamente la distribución).
 // Al elegir una guardia se MARCAN automáticamente sus integrantes (solo ellos): la selección
 // queda vinculada a la distribución del Ing. Residente. Se puede ajustar a mano después.
 function tareoFiltraGuardia(){
@@ -19946,11 +19946,26 @@ function tareoFiltraGuardia(){
     const pg=r.dataset.guardia||'';
     const pu=r.dataset.unidad||'NV2820';
     const okU=(!u||pu===u);
-    const okG=(!g||!pg||pg===g);
-    r.style.display=(okU&&okG)?'flex':'none';
+    /* ESTRICTO: al elegir Día o Noche solo aparece la gente que la distribución puso en esa guardia.
+       Antes también salían los que no tenían guardia asignada, y podían terminar tareados en un
+       turno que no trabajaron. Quien no fue asignado no aparece: primero se asigna en la pizarra. */
+    const okG=(!g||pg===g);
+    const ver=okU&&okG;
+    r.style.display=ver?'flex':'none';
     const c=r.querySelector('.tareo-chk');
-    if(c){ if(!okU) c.checked=false; else if(g) c.checked=(pg===g); }
+    if(c){ if(!ver) c.checked=false; else if(g) c.checked=true; }
   });
+  // Si nadie quedó en esa guardia, se dice por qué en vez de mostrar una lista vacía.
+  const list=document.getElementById('tareo-personal-list');
+  if(list){
+    let av=document.getElementById('tareo-sin-asignados');
+    const visibles=[...document.querySelectorAll('.tareo-sel-row')].filter(r=>r.style.display!=='none').length;
+    if(!visibles && g){
+      if(!av){ av=document.createElement('div'); av.id='tareo-sin-asignados'; list.prepend(av); }
+      av.style.cssText='color:#f87171;padding:14px;text-align:center;font-size:13px;border:1px dashed #f87171;border-radius:8px';
+      av.textContent='Nadie está asignado a la guardia '+(g==='dia'?'Día':'Noche')+' en la distribución. El Ingeniero Residente tiene que asignar la gente en la pizarra.';
+    } else if(av) av.remove();
+  }
 }
 
 function marcarTodoTareo(val){
