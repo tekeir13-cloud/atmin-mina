@@ -2546,7 +2546,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.23-376</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.23-377</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2591,7 +2591,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.23-376</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.23-377</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2759,7 +2759,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.23-376</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.23-377</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -7635,7 +7635,7 @@ const DM_SHOW_CSS=`
 .dm-show .cab .mod{font-size:11px;font-weight:900;letter-spacing:2.6px;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .dm-show .cab .n{margin-left:auto;font-size:12px;color:var(--dmT3)}
 .dm-show .bt{width:38px;height:38px;border-radius:10px;border:1px solid var(--dmPL);background:transparent;color:var(--dmT2);font-size:16px;cursor:pointer;display:grid;place-items:center}
-.dm-show .lam{flex:1;display:flex;align-items:center;justify-content:center;padding:10px 6vw 30px;overflow:auto}
+.dm-show .lam{flex:1;display:flex;align-items:center;justify-content:center;padding:6px 3vw 14px;overflow:auto;min-height:0}
 .dm-show .cont{width:min(1100px,100%);animation:dmSubeL .6s cubic-bezier(.2,.8,.2,1) both}
 @keyframes dmSubeL{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
 .dm-show .tit{font-size:clamp(24px,3.4vw,44px);font-weight:800;letter-spacing:-.8px;line-height:1.1}
@@ -7681,6 +7681,7 @@ function dmShowAbrir(modulo,color,laminas,desde,op){
    <div class="pie"><button class="bt" onclick="dmShowIr(-1)" title="Anterior">◀</button><button class="bt" onclick="dmShowIr(1)" title="Siguiente">▶</button></div>`;
   document.body.appendChild(el); requestAnimationFrame(()=>el.classList.add('on'));
   _dmShow={el,laminas,modulo,color,musica:!!op.musica,sinVoz:!!op.sinVoz,bucle:op.bucle||null,i:Math.max(0,Math.min(laminas.length-1,desde||0)),t0:0,pausa:false,dur:11000,raf:0,trans:0};
+  el.addEventListener('pointerdown',()=>{ const a=_dmMusica; if(a&&a._bloq&&_dmShow&&!_dmShow.pausa){ a._bloq=false; a.play().catch(()=>{ a._bloq=true; }); } });
   el.querySelector('#dm-show-lam').addEventListener('click',e=>{ if(e.target.closest('button,a')) return; dmShowIr(e.clientX<window.innerWidth/3?-1:1); });
   el.querySelector('#dm-show-pausa').onclick=()=>{ const s=_dmShow; if(!s) return; s.pausa=!s.pausa; if(!s.pausa){ s.t0=performance.now()-s.trans; _dmShowNarrar(); } else if(_dmCola.quien==='show') _dmCallar(); el.querySelector('#dm-show-pausa').textContent=s.pausa?'▶':'❚❚'; };
   _dmShowPintar(); _dmShowTick();
@@ -7698,8 +7699,20 @@ function _dmShowPintar(){
     const fmt=v=>f==='S'?_dmS(v):f==='1'?_dmF1(v):_dmF0(v);
     const paso=now=>{ const p=Math.min(1,(now-t0)/1100), q=1-Math.pow(1-p,3); e.textContent=(e.dataset.pre||'')+fmt(fin*q)+(e.dataset.suf||''); if(p<1) requestAnimationFrame(paso); };
     requestAnimationFrame(paso); });
+  _dmShowAjustar(); setTimeout(_dmShowAjustar,1300);
   _dmShowNarrar();
 }
+/* Las láminas se diseñaron a 1100 px de ancho. En una pantalla grande o un televisor quedaban
+   chicas en el centro: aquí se agrandan hasta llenar el espacio disponible (sin pasarse). */
+function _dmShowAjustar(){
+  const s=_dmShow; if(!s) return; const lam=s.el.querySelector('#dm-show-lam'), c=lam&&lam.querySelector('.cont'); if(!c) return;
+  if(c.classList.contains('es-portada')||window.innerWidth<900){ c.style.zoom=''; return; }   // en el celular se queda como está
+  c.style.zoom=1; const cs=getComputedStyle(lam);
+  const W=lam.clientWidth-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight), H=lam.clientHeight-parseFloat(cs.paddingTop)-parseFloat(cs.paddingBottom);
+  const w=c.scrollWidth, h=c.scrollHeight; if(!w||!h) return;
+  const z=Math.min(W/w, H/h, 2.2); c.style.zoom=z>1.02?z.toFixed(3):(z<0.98?Math.max(0.7,z).toFixed(3):'');
+}
+try{ window.addEventListener('resize',()=>{ if(_dmShow) _dmShowAjustar(); }); }catch(e){}
 function _dmShowTick(){
   const s=_dmShow; if(!s) return;
   const ahora=performance.now();
@@ -7747,7 +7760,8 @@ const DM_G_CSS=`
 .dm-show .ley2{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:10px;font-size:12.5px;color:var(--dmT2)}
 .dm-show .ley2 i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
 .dm-show .ley2 b{color:var(--dmTx);font-family:'DM Mono',ui-monospace,monospace;margin-left:4px}
-.dm-show .kp.compacta{grid-template-columns:1fr 1fr;margin-top:0}.dm-show .kp.compacta .v{font-size:clamp(20px,2.1vw,28px);white-space:nowrap}`;
+.dm-show .kp.compacta{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:0}.dm-show .kp.compacta .v{font-size:clamp(18px,2.5vw,34px);white-space:nowrap}@media (max-width:640px){.dm-show .kp.compacta>div{padding:14px 14px}.dm-show .kp .l{font-size:11px}}
+@media (min-width:900px){.dm-show .cont:not(.es-portada) .tit{font-size:38px}.dm-show .cont:not(.es-portada) .bajada{font-size:17px}.dm-show .kp .v{font-size:33px}.dm-show .kp.compacta .v{font-size:28px}.dm-show .fl{font-size:15px}}.dm-show .kp .l{font-size:12.5px}.dm-show .kp .s{font-size:14px}`;
 const _G={
   envoltura:(titulo,svg,extra)=>`<div class="gw"><div class="gt"><span>${titulo}</span></div><span class="cargando">CALCULANDO…</span>${svg}${extra||''}</div>`,
   // columnas por día; opcional línea acumulada contra meta
@@ -7884,20 +7898,22 @@ function _dmShowSalida(modulo,color,L,desde){
    Una sola presentación con los cuatro módulos, al día de hoy, con música de fondo y NIA
    narrando encima. Las láminas son LAS MISMAS de cada cuadro: no hay otra fuente de cifras. */
 let _dmMusica=null;
-async function _dmMusicaIniciar(){
+/* La música arranca EN EL MISMO TOQUE del botón. Antes se esperaba a bajar el archivo completo
+   y recién después se pedía play(): para entonces el navegador ya no lo consideraba un gesto del
+   usuario y lo bloqueaba en silencio (en la web no sonaba nada). */
+function _dmMusicaIniciar(){
   try{
-    const a=new Audio(); a.loop=true; a.volume=0; _dmMusica=a;
-    // Se baja entera (no por pedazos) para que el teléfono la guarde y suene también sin señal.
-    let src='media/nia_fondo.mp3';
-    try{ const r=await fetch(src); if(r.ok){ const bl=await r.blob(); src=URL.createObjectURL(bl); a._url=src; } }catch(e){}
-    if(_dmMusica!==a) return; a.src=src; await a.play().catch(()=>{});
+    const a=new Audio('media/nia_fondo.mp3'); a.loop=true; a.preload='auto'; a.volume=0.45; _dmMusica=a;
+    const p=a.play(); if(p&&p.catch) p.catch(e=>{ a._bloq=true; console.warn('[show] música bloqueada hasta el próximo toque',e&&e.name); });
+    // Además se baja entera una vez para que quede guardada y suene en interior mina sin señal.
+    try{ fetch('media/nia_fondo.mp3').catch(()=>{}); }catch(e){}
   }catch(e){ console.warn('[nia] música',e); }
 }
 function _dmMusicaParar(){ const a=_dmMusica; _dmMusica=null; if(!a) return; try{ a.pause(); if(a._url) URL.revokeObjectURL(a._url); }catch(e){} }
 function _dmMusicaVolumen(){   // la música baja cuando NIA habla: la voz va siempre encima
   const a=_dmMusica, s=_dmShow; if(!a) return;
   const meta=(!s||s.pausa)?0:((!s.sinVoz&&_dmCola.activa)?0.07:(s.sinVoz?0.45:0.22)); a.volume=Math.max(0,Math.min(1,a.volume+(meta-a.volume)*0.08));
-  if(s&&s.pausa&&!a.paused&&a.volume<0.01) a.pause(); else if(s&&!s.pausa&&a.paused&&a.src) a.play().catch(()=>{});
+  if(s&&s.pausa&&!a.paused&&a.volume<0.01) a.pause(); else if(s&&!s.pausa&&a.paused&&!a._bloq&&!a._pidiendo){ a._pidiendo=true; a.play().then(()=>{a._pidiendo=false;}).catch(()=>{ a._pidiendo=false; a._bloq=true; }); }
 }
 /* Al terminar vuelve a empezar, y cada vuelta se arma DE NUEVO con lo que hay en ese momento:
    el sistema baja de la nube cada 20 s, así que lo que se registró mientras corría ya aparece
