@@ -2546,7 +2546,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.23-364</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.23-365</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2591,7 +2591,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.23-364</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.23-365</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2759,7 +2759,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.23-364</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.23-365</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -2866,6 +2866,8 @@ select option{background:var(--coal3);}
 
 <!-- DASHBOARD -->
 <div class="page active" id="page-dashboard">
+  <!-- ── LA MINA VIVA: portada con los cuatro módulos (Operaciones, Logística, Mantenimiento, RRHH) ── -->
+  <div id="d-mina"></div>
   <!-- ── PANEL EJECUTIVO (Gerencia General) ── -->
   <div id="d-ejecutivo"></div>
   <!-- ── Resumen del día + avance + alertas (reconstruido, intuitivo) ── -->
@@ -7262,7 +7264,336 @@ function renderDashEjecutivo(){
 }
 
 // ── DASHBOARD ──
+/* ══ DASHBOARD · LA MINA VIVA ═══════════════════════════════════════════════════════════════
+   La portada reúne los cuatro módulos —Operaciones, Logística, Mantenimiento y Recursos Humanos—
+   en una sola lectura. No calcula nada por su cuenta: cada cifra sale de la misma función que la
+   muestra en su módulo, para que el mismo mes no diga dos cosas distintas en dos pantallas.
+     · Avance y metas  → state.perforacion (de los reportes del Jefe de Guardia) y metaMensualFrente
+     · Logística       → cieDatos(mes), el mismo cálculo del Informe de Cierre
+     · Mantenimiento   → cieDatos(mes): trabajos, horas hombre y mano de obra (las piezas ya se
+                         cuentan al salir del almacén; por eso al costo solo entra la mano de obra)
+     · Petróleo        → combDesglose('pet'), el saldo de la pantalla de Combustible
+     · Personal        → state.personal (activos, unidad, guardia) y las hojas de tareo
+   Todo va dibujado aquí mismo, sin librerías de internet: en interior mina no hay CDN. */
+const DM_CSS=`
+#d-mina{--dmR:#06090f;--dmL:#1b2638;--dmT2:#9aa8bd;--dmT3:#5f6e85;--dmA:#3b8bff;--dmW:#f5a524;--dmE:#ff5a5a;--dmG:#3ddc84;
+ background:var(--dmR);color:#e9eef6;border:1px solid var(--dmL);border-radius:16px;overflow:hidden;margin-bottom:18px;position:relative;font-family:'DM Sans',system-ui,sans-serif}
+#d-mina .num{font-family:'DM Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+#d-mina .cap{font-size:10px;font-weight:800;letter-spacing:2.2px;text-transform:uppercase;color:var(--dmT3)}
+#d-mina .mod{display:inline-flex;align-items:center;gap:7px;font-size:10px;font-weight:900;letter-spacing:2.2px;text-transform:uppercase;margin-bottom:8px}
+#d-mina .mod i{width:8px;height:8px;border-radius:2px;display:inline-block}
+#d-mina .sec{padding:20px 22px;border-top:1px solid var(--dmL)}#d-mina .sec:first-child{border-top:0}
+#d-mina .hero{display:grid;grid-template-columns:minmax(260px,380px) 1fr;gap:28px;align-items:end}
+#d-mina .big{font-size:76px;line-height:.9;font-weight:800;letter-spacing:-3px}
+#d-mina .big small{font-size:22px;letter-spacing:0;color:var(--dmT2);font-weight:600;margin-left:6px}
+#d-mina .ver{display:inline-flex;gap:8px;margin-top:12px;font-size:13px;font-weight:700;padding:6px 11px;border-radius:8px}
+#d-mina .sub{font-size:13px;color:var(--dmT2);margin-top:9px;line-height:1.5}#d-mina .sub b{color:#e9eef6}
+#d-mina .pulso{display:flex;align-items:flex-end;gap:3px;height:120px;border-bottom:1px solid var(--dmL);margin-top:8px}
+#d-mina .pd{flex:1;height:100%;display:flex;align-items:flex-end;cursor:pointer;border-radius:3px}
+#d-mina .pd:hover{background:rgba(59,139,255,.08)}
+#d-mina .pd i{display:block;width:100%;border-radius:2px 2px 0 0;transform-origin:bottom;animation:dmSube .8s cubic-bezier(.2,.8,.2,1) both}
+#d-mina .pdx{display:flex;justify-content:space-between;font-size:10px;color:var(--dmT3);margin-top:5px}
+#d-mina .corte{position:relative;border-radius:12px;padding:16px 14px 10px 0;overflow:hidden;
+ background:radial-gradient(circle at 20% 30%,#151e2e 1px,transparent 1.5px) 0 0/26px 26px,radial-gradient(circle at 70% 60%,#131b29 1.4px,transparent 2px) 0 0/34px 34px,linear-gradient(180deg,#0d1422,#0a0f19 30%,#0c1321 60%,#0a0f19)}
+#d-mina .pique{position:absolute;left:150px;top:0;bottom:0;width:16px;background:repeating-linear-gradient(180deg,#0f1828 0 12px,#1d2a40 12px 13px);border:1px solid #22324c}
+#d-mina .jaula{position:absolute;left:151px;top:6px;width:14px;height:18px;border-radius:2px;background:#2a3b58;border:1px solid #5aa2ff99;animation:dmJaula 14s ease-in-out infinite}
+#d-mina .jaula:after{content:"";position:absolute;left:5px;top:3px;width:3px;height:3px;border-radius:50%;background:#ffd27a}
+#d-mina .gal{display:grid;grid-template-columns:140px 1fr 190px;gap:0 30px;align-items:center;padding:7px 0;cursor:pointer;border-radius:8px;position:relative}
+#d-mina .gal:hover,#d-mina .gal.sel{background:rgba(59,139,255,.07)}
+#d-mina .gn{text-align:right;font-weight:800;font-size:13px}
+#d-mina .tr{position:relative;height:22px;background:#05080d;border-radius:3px}
+#d-mina .fill{position:absolute;left:0;top:4px;bottom:4px;border-radius:2px;transform-origin:left;animation:dmCrece 1.6s cubic-bezier(.2,.8,.2,1) both}
+#d-mina .cara{position:absolute;top:0;bottom:0;width:8px;clip-path:polygon(0 0,100% 18%,40% 38%,100% 58%,30% 78%,100% 100%,0 100%);opacity:0;animation:dmAparece .4s forwards}
+#d-mina .lamp{position:absolute;top:50%;width:18px;height:18px;margin:-9px 0 0 -14px;border-radius:50%;background:#ffe3a3;filter:blur(5px);opacity:0;animation:dmAparece .4s forwards,dmTitila 2.4s infinite}
+#d-mina .vag{position:absolute;top:6px;left:4px;width:16px;height:9px;border:1px solid #c9d4e4aa;border-radius:2px;background:#0b111c;animation:dmVagon var(--t) linear infinite}
+#d-mina .meta{position:absolute;top:-4px;bottom:-4px;left:0;border:1px dashed #c9d4e48c;border-radius:3px;pointer-events:none}
+#d-mina .hoy{position:absolute;top:-7px;bottom:-7px;width:2px;background:#e9eef6;border-radius:2px}
+#d-mina .gv{font-size:13.5px;font-weight:800;line-height:1.25}.gv small{color:var(--dmT2);font-weight:600;font-size:11.5px}
+#d-mina .gp{font-size:11px;font-weight:800}
+#d-mina .ley{display:flex;flex-wrap:wrap;gap:14px;font-size:11px;color:var(--dmT2)}#d-mina .ley i{display:inline-block;width:14px;height:7px;border-radius:2px;margin-right:5px}
+#d-mina .cuatro{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}#d-mina .cuatro>div{min-width:0}
+#d-mina .cuatro>div{padding:20px 22px;border-left:1px solid var(--dmL)}#d-mina .cuatro>div:first-child{border-left:0}
+#d-mina .clk{cursor:pointer;transition:background .15s}#d-mina .clk:hover{background:rgba(59,139,255,.05)}
+#d-mina .tk{display:grid;grid-template-columns:4px 1fr auto;gap:10px;align-items:center;padding:9px 6px;border-top:1px dashed #1f2b3f;border-radius:6px}
+#d-mina .tk .e{align-self:stretch;border-radius:3px}#d-mina .tk .q{font-size:13px;font-weight:700}#d-mina .tk .d{font-size:12px;color:var(--dmT2);margin-top:2px}
+#d-mina .tk .w{font-size:9.5px;font-weight:900;letter-spacing:1.4px;padding:3px 7px;border-radius:5px}
+#d-mina .bf{display:grid;grid-template-columns:minmax(0,1fr) 96px minmax(0,1fr);align-items:center;height:28px;border-radius:6px}
+#d-mina .bf .l{display:flex;justify-content:flex-end;align-items:center;gap:6px}#d-mina .bf .r{display:flex;align-items:center;gap:6px}
+#d-mina .bf i{display:block;height:12px}#d-mina .bf .l i{background:linear-gradient(270deg,#5aa2ff,#2a6fe0);border-radius:3px 0 0 3px}
+#d-mina .bf .r i{background:linear-gradient(90deg,#f5a524,#f7c35c);border-radius:0 3px 3px 0}
+#d-mina .bf .c{text-align:center;font-size:11.5px;font-weight:800}#d-mina .bf .v{font-size:11px;color:var(--dmT2);white-space:nowrap}
+#d-mina .tot{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:12px;border-top:1px solid var(--dmL);padding-top:10px}
+#d-mina .tot b{display:block;font-size:14px;margin-top:3px;white-space:nowrap}#d-mina .tot .cap{white-space:nowrap;letter-spacing:1.4px}
+#d-mina .mv{font-size:32px;font-weight:800;letter-spacing:-1px;margin-top:4px}#d-mina .mv small{font-size:13px;color:var(--dmT2);font-weight:600;letter-spacing:0}
+#d-mina .mn{font-size:12px;color:var(--dmT2);margin-top:4px;line-height:1.45}#d-mina .mn b{color:#e9eef6}
+#d-mina .stk{display:flex;height:10px;border-radius:4px;overflow:hidden;margin:10px 0 6px;background:#16233c}#d-mina .stk i{display:block;height:100%}
+#d-mina .lst{display:grid;grid-template-columns:1fr auto;gap:3px 10px;font-size:12px;margin-top:8px}
+#d-mina .lst span:nth-child(even){font-family:'DM Mono',ui-monospace,monospace;color:var(--dmT2);text-align:right}
+#d-mina .dots{display:flex;flex-wrap:wrap;gap:3px;margin-top:10px;max-width:260px}#d-mina .dots i{width:8px;height:8px;border-radius:2px;display:block}
+#d-mina .tq{display:flex;gap:12px;align-items:center;margin-top:12px;padding:8px;border:1px solid var(--dmL);border-radius:10px}
+#d-mina .ola{animation:dmOla 3s linear infinite}
+#d-mina .pie{font-size:11px;color:var(--dmT3);padding:0 22px 16px;line-height:1.5}
+.dm-velo{position:fixed;inset:0;z-index:900;background:rgba(2,4,8,.55);opacity:0;pointer-events:none;transition:opacity .25s}
+.dm-velo.on{opacity:1;pointer-events:auto}
+.dm-panel{position:fixed;top:0;right:0;height:100vh;width:min(440px,100vw);z-index:901;background:#0b111c;color:#e9eef6;border-left:1px solid #22324c;transform:translateX(102%);transition:transform .35s cubic-bezier(.2,.8,.2,1);padding:22px;overflow:auto;box-shadow:-30px 0 60px rgba(0,0,0,.5);font-family:'DM Sans',system-ui,sans-serif}
+.dm-panel.on{transform:none}
+.dm-panel .x{position:absolute;top:14px;right:14px;width:32px;height:32px;border-radius:8px;border:1px solid #22324c;display:grid;place-items:center;color:#9aa8bd;cursor:pointer;font-size:16px;background:none}
+.dm-panel .cap{font-size:10px;font-weight:800;letter-spacing:2.2px;text-transform:uppercase;color:#5f6e85}
+.dm-panel .t{font-size:23px;font-weight:800;margin:6px 0 4px}.dm-panel .d{font-size:13px;color:#9aa8bd;line-height:1.5}.dm-panel .d b{color:#e9eef6}
+.dm-panel .k{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}.dm-panel .k>div{background:#101827;border:1px solid #1b2638;border-radius:10px;padding:10px 12px}
+.dm-panel .k b{display:block;font-size:19px;margin-top:4px;font-family:'DM Mono',ui-monospace,monospace}
+.dm-panel .f{display:grid;grid-template-columns:54px 52px 1fr 64px;gap:8px;font-size:12.5px;padding:8px 0;border-top:1px solid #1b2638;align-items:center}
+.dm-panel .f .m{text-align:right;font-family:'DM Mono',ui-monospace,monospace;font-weight:700}
+.dm-panel .f .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#9aa8bd}
+.dm-panel .tp{display:grid;grid-template-columns:1fr 96px;gap:8px;font-size:12.5px;padding:7px 0;border-top:1px solid #1b2638}
+.dm-panel .tp .m{text-align:right;font-family:'DM Mono',ui-monospace,monospace}
+.dm-panel .tp .b{grid-column:1/3;height:5px;background:#16233c;border-radius:3px;overflow:hidden;margin-top:-3px}.dm-panel .tp .b i{display:block;height:100%}
+.dm-panel .ir{display:inline-block;margin-top:16px;padding:10px 14px;border-radius:9px;background:#1668cf;color:#fff;font-weight:800;font-size:13px;cursor:pointer;border:0}
+@keyframes dmCrece{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes dmSube{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes dmAparece{to{opacity:1}}
+@keyframes dmTitila{0%,100%{opacity:.55}45%{opacity:.25}50%{opacity:.7}70%{opacity:.4}}
+@keyframes dmJaula{0%,100%{transform:translateY(0)}50%{transform:translateY(var(--baja,300px))}}
+@keyframes dmVagon{from{left:4px}to{left:var(--d)}}
+@keyframes dmOla{to{transform:translateX(-24px)}}
+@media (max-width:1100px){#d-mina .cuatro{grid-template-columns:repeat(2,minmax(0,1fr))}#d-mina .cuatro>div:nth-child(3){border-left:0}#d-mina .cuatro>div:nth-child(n+3){border-top:1px solid var(--dmL)}}
+@media (max-width:820px){
+ #d-mina .hero{grid-template-columns:1fr;gap:16px}#d-mina .big{font-size:58px}
+ #d-mina .pique,#d-mina .jaula{display:none}
+ #d-mina .corte{padding:12px 10px}
+ #d-mina .gal{grid-template-columns:1fr auto;gap:4px 10px;padding:8px 6px}
+ #d-mina .gn{text-align:left;grid-column:1}#d-mina .gv{grid-column:2;grid-row:1;text-align:right}#d-mina .gv .gp{display:none}#d-mina .tr{grid-column:1/3;grid-row:2}
+ #d-mina .cuatro{grid-template-columns:minmax(0,1fr)}#d-mina .tot b{font-size:13px}#d-mina .tot .cap{letter-spacing:.8px}#d-mina .bf{grid-template-columns:minmax(0,1fr) 92px minmax(0,1fr)}#d-mina .bf .v{font-size:10.5px}#d-mina .cuatro>div{border-left:0;border-top:1px solid var(--dmL)}#d-mina .cuatro>div:first-child{border-top:0}
+ #d-mina .sec{padding:16px 14px}#d-mina .cuatro>div{padding:16px 14px}
+}
+@media (prefers-reduced-motion:reduce){#d-mina *,.dm-panel{animation:none!important;transition:none!important}}`;
+
+let _dmCache=null;
+function _dmF1(n){ return (Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:1,maximumFractionDigits:1}); }
+function _dmF0(n){ return Math.round(Number(n)||0).toLocaleString('es-PE'); }
+function _dmS(n){ n=Number(n)||0; return 'S/ '+(Math.abs(n)>=1000?(n/1000).toLocaleString('es-PE',{maximumFractionDigits:1})+' mil':_dmF0(n)); }
+function _dmISO(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function _dmFecha(iso){ const p=String(iso||'').split('-'); return p.length===3?p[2]+'/'+p[1]:iso; }
+
+function _dmDatos(){
+  /* El mes EN CURSO, no el que tenga elegido el panel ejecutivo: ese salta a la última valorización
+     (podía mostrar junio en noviembre). La portada dice cómo va la mina hoy. */
+  const mes=(typeof finMesActual==='function')?finMesActual():hoy().slice(0,7);
+  const w=ventanaMes(mes, AREA_OP);
+  const ini=new Date(w.ini+'T00:00:00'), fin=new Date(w.fin+'T00:00:00');
+  const nDias=Math.round((fin-ini)/86400000)+1;
+  const hoyIso=hoy(), dTransc=Math.max(1,Math.min(nDias,(typeof diasTranscurridosPeriodo==='function')?diasTranscurridosPeriodo(mes):nDias));
+  const esp=dTransc/nDias;
+  const dias=[]; for(let i=0;i<nDias;i++){ const d=new Date(ini); d.setDate(d.getDate()+i); dias.push(_dmISO(d)); }
+  const M=state.metas||{}, diasMeta=M.dias||M.diasMes||26;
+  // ── OPERACIONES: avance por labor (la misma fuente que el resto del Dashboard)
+  const perf=(state.perforacion||[]).filter(p=>enVentana(p.fecha,mes,AREA_OP));
+  const visibles=frentesVisibles(f=>perf.some(p=>String(p.frente)===String(f.id))).filter(f=>!f.tajo);
+  const frentes=visibles.map(f=>{
+    const serie=dias.map(dd=>perf.filter(p=>String(p.frente)===String(f.id)&&String(p.fecha).slice(0,10)===dd).reduce((s,p)=>s+(Number(p.metros)||0),0));
+    return {id:f.id,k:f.key,n:f.nombre,av:Math.round(serie.reduce((a,b)=>a+b,0)*10)/10,meta:metaMensualFrente(f.id,diasMeta)||0,serie};
+  }).filter(f=>f.meta>0||f.av>0);
+  const total=dias.map((dd,i)=>frentes.reduce((s,f)=>s+f.serie[i],0));
+  // Reportes del jefe de guardia del ciclo (para el detalle y para saber qué días faltan)
+  const rg=(state.reportesGuardia||[]).filter(r=>enVentana(r.fecha,mes,AREA_OP));
+  const conReporte=new Set(rg.map(r=>String(r.fecha).slice(0,10)));
+  // ── LOGÍSTICA y MANTENIMIENTO: el cálculo del Informe de Cierre
+  let C=null; try{ C=cieDatos(mes); }catch(e){ console.warn('[dash] cieDatos',e); }
+  // ── PETRÓLEO: el saldo de la pantalla de Combustible
+  let P=null; try{ P=combDesglose('pet'); }catch(e){}
+  // ── RECURSOS HUMANOS
+  const act=(state.personal||[]).filter(p=>p.estado!=='baja');
+  // La guardia sale de la distribución del Ingeniero Residente, igual que en la hoja de tareo.
+  const gmap=(state.distribucion&&state.distribucion._guardias)||{};
+  const guardia=p=>String(gmap[p.id]||p.guardia||'').toLowerCase();
+  const hojas=(state.tareosPend||[]).filter(h=>enVentana(h.fecha,mes,AREA_OP));
+  const cargos={}; act.forEach(p=>{ const c=String(p.rol||'—'); cargos[c]=(cargos[c]||0)+1; });
+  return {mes,w,nDias,dTransc,esp,dias,hoyIso,frentes,total,rg,conReporte,C,P,
+    rrhh:{activos:act.length,nv:act.filter(p=>(p.unidad||'NV2820')!=='MB').length,mb:act.filter(p=>p.unidad==='MB').length,
+      dia:act.filter(p=>guardia(p)==='dia').length,noche:act.filter(p=>guardia(p)==='noche').length,
+      hojas:hojas.length,hojasPend:hojas.filter(h=>h.estado!=='aprobado').length,
+      cargos:Object.entries(cargos).sort((a,b)=>b[1]-a[1])}};
+}
+
+function renderDashMina(){
+  const cont=document.getElementById('d-mina'); if(!cont) return;
+  if(!document.getElementById('dm-css')){ const st=document.createElement('style'); st.id='dm-css'; st.textContent=DM_CSS; document.head.appendChild(st); }
+  let D; try{ D=_dmDatos(); }catch(e){ console.warn('[dash] datos',e); cont.innerHTML=''; return; }
+  _dmCache=D;
+  const metaTot=D.frentes.reduce((s,f)=>s+f.meta,0), avTot=D.frentes.reduce((s,f)=>s+f.av,0);
+  const falta=Math.max(0,metaTot-avTot), quedan=Math.max(0,D.nDias-D.dTransc);
+  const ult7=D.total.slice(Math.max(0,D.dTransc-7),D.dTransc), prom7=ult7.length?ult7.reduce((a,b)=>a+b,0)/ult7.length:0;
+  const pct=metaTot?avTot/metaTot:0, va=pct>=D.esp;
+  const nomMes=(typeof finNombreMes==='function')?finNombreMes(D.mes):D.mes;
+  const colF=f=>{const p=f.meta?f.av/f.meta:null; return p==null?'#64748b':f.av===0?'#ff5a5a':p<D.esp*.75?'#f5a524':'#3b8bff';};
+  // ── pulso del ciclo
+  const mxDia=Math.max(1,...D.total)*1.1, porDia=quedan?falta/quedan:0;
+  const pulso=D.dias.map((dd,i)=>{
+    const v=D.total[i], fut=dd>D.hoyIso, sinR=!fut&&!D.conReporte.has(dd)&&dd<D.hoyIso;
+    const h=fut?(porDia/mxDia*100):(v/mxDia*100);
+    const st=fut?`height:${Math.max(3,h)}%;background:none;border:1px dashed #3ddc84;border-bottom:0`:sinR?'height:3px;background:#ff5a5a':`height:${Math.max(v?2:0,h)}%;background:${i>=D.dTransc-7?'#5aa2ff':'#2a5fae'};animation-delay:${i*30}ms`;
+    return `<div class="pd" onclick="dmAbrirDia('${dd}')" title="${_dmFecha(dd)}"><i style="${st}"></i></div>`;}).join('');
+  // ── corte de la mina
+  const fr=[...D.frentes].sort((a,b)=>(b.meta?b.av/b.meta:-1)-(a.meta?a.av/a.meta:-1));
+  const mxF=Math.max(1,...fr.map(f=>Math.max(f.av,f.meta)));
+  const gal=fr.map((f,i)=>{
+    const p=f.meta?f.av/f.meta:null, col=colF(f), wA=f.av/mxF*100, wM=f.meta/mxF*100, dl=i*120;
+    const etiq=p==null?'sin meta':p>=1?Math.round(p*100)+' % · pasó su meta':p<D.esp*.75?Math.round(p*100)+' % · debería ir en '+_dmF1(f.meta*D.esp)+' m':Math.round(p*100)+' %';
+    return `<div class="gal" data-k="${f.k}" onclick="dmAbrirFrente('${f.k}')">
+      <div class="gn">${f.n}</div>
+      <div class="tr">
+        ${f.meta?`<span class="meta" style="width:${wM}%"></span><span class="hoy" style="left:${wM*D.esp}%"></span>`:''}
+        ${f.av>0?`<span class="fill" style="width:${wA}%;background:${col};animation-delay:${dl}ms"></span>
+          <span class="cara" style="left:${wA}%;background:${col};animation-delay:${dl+1400}ms"></span>
+          <span class="lamp" style="left:${wA}%;animation-delay:${dl+1400}ms,0s"></span>
+          ${wA>12?`<span class="vag" style="--d:calc(${wA}% - 24px);--t:${(4+wA/14).toFixed(1)}s;animation-delay:${(i*.7)%3}s"></span>`:''}`
+        :`<span style="position:absolute;left:10px;top:3px;font-size:11.5px;font-weight:700;color:#ff8a8a">sin avance en el ciclo — portal sin abrir</span>`}
+      </div>
+      <div class="gv num">${_dmF1(f.av)}<small> ${f.meta?'/ '+f.meta+' m':'m'}</small><div class="gp" style="color:${col}">${etiq}</div></div>
+    </div>`;}).join('');
+  // ── atención
+  const atras=D.frentes.filter(f=>f.meta>0&&f.av/f.meta<D.esp*.75);
+  const faltan=D.dias.filter(dd=>dd<D.hoyIso&&!D.conReporte.has(dd)).slice(-3);
+  const C=D.C||{}, kitsPend=(C.kits||[]).filter(k=>!((k.aprobLog||{}).ok&&(k.aprobOps||{}).ok)).length;
+  const dPet=D.P&&D.P.consCiclo>0?Math.floor(D.P.saldo/(D.P.consCiclo/Math.max(1,D.dTransc))):null;
+  const tks=[
+    ...atras.map(f=>[f.av===0?'#ff5a5a':'#f5a524',f.av===0?'PARADA':'ATRASO',f.n,f.av===0?'0 m en el ciclo · revisar si se reporta en otra labor':_dmF1(f.av)+' de '+f.meta+' m · debería ir en '+_dmF1(f.meta*D.esp),`dmAbrirFrente('${f.k}')`]),
+    ...(faltan.length?[['#f5a524','FALTA','Reporte de guardia','sin reporte del '+faltan.map(_dmFecha).join(', '),`dmAbrirDia('${faltan[faltan.length-1]}')`]]:[]),
+    ...(dPet!=null&&dPet<4?[['#ff5a5a','PETRÓLEO','Tanque bajo','alcanza ~'+Math.max(0,dPet)+' días al ritmo del ciclo',"dmAbrirRubro('Petróleo')"]]:[]),
+    ...(kitsPend?[['#f5a524','APROBAR','Mantenimiento',kitsPend+' trabajo(s) esperan aprobación',"dmAbrirMant()"]]:[]),
+    ...(D.rrhh.hojasPend?[['#f5a524','APROBAR','Hojas de tareo',D.rrhh.hojasPend+' hoja(s) por aprobar',"dmAbrirRRHH()"]]:[]),
+  ];
+  if(!tks.length) tks.push(['#3ddc84','AL DÍA','Todo en orden','ninguna labor atrasada ni reportes pendientes','']);
+  // ── logística: costo (ingresó) contra gasto (salió o se consumió)
+  const petGastoS=(Number(C.petSalido)||0)*(Number(C.pPet)||0);
+  const rub=[['Insumos',C.matIngGen||0,C.matSalGen||0],['Explosivo',C.expIngS||0,C.expSalS||0],['Petróleo',C.petIngS||0,petGastoS],['Mantenimiento',C.matIngMant||0,C.matSalMant||0]];
+  const mxR=Math.max(1,...rub.map(r=>Math.max(r[1],r[2])));
+  const cT=rub.reduce((s,r)=>s+r[1],0), gT=rub.reduce((s,r)=>s+r[2],0);
+  const lvl=D.P?Math.max(0,Math.min(1,D.P.saldo/2000)):0;
+  // ── mantenimiento
+  const kits=C.kits||[], tipos={}; kits.forEach(k=>{const t=k.tipo||'Otro'; tipos[t]=(tipos[t]||0)+1;});
+  const tc={Preventivo:'#a78bfa',Programado:'#60a5fa',Correctivo:'#ff5a5a'};
+  const porEq={}; kits.forEach(k=>{const e=k.equipoBase||k.equipo||'—'; porEq[e]=(porEq[e]||0)+1;});
+  const R=D.rrhh;
+  cont.innerHTML=`
+  <div class="sec"><div class="hero">
+    <div><div class="mod" style="color:#5aa2ff"><i style="background:#3b8bff"></i>Operaciones</div>
+      <div class="cap">Avance del ciclo · ${_dmFecha(D.w.ini)} → ${_dmFecha(D.w.fin)} · día ${D.dTransc} de ${D.nDias}</div>
+      <div class="big num">${_dmF1(avTot)}<small>/ ${_dmF0(metaTot)} m</small></div>
+      <div class="ver" style="${va?'background:rgba(61,220,132,.1);color:#8df0b8;border:1px solid rgba(61,220,132,.25)':'background:rgba(245,165,36,.1);color:#f7c35c;border:1px solid rgba(245,165,36,.3)'}">${va?'▲':'▼'} ${Math.round(pct*100)} % de la meta · se esperaba ${Math.round(D.esp*100)} % al día ${D.dTransc}</div>
+      <div class="sub">${falta>0?(quedan?`Faltan <b>${_dmF1(falta)} m</b> en ${quedan} día${quedan!==1?'s':''}: <b>${_dmF1(porDia)} m/día</b>. `:`Faltaron <b>${_dmF1(falta)} m</b>. `):'<b>Meta del ciclo cumplida.</b> '}El ritmo de la última semana es <b>${_dmF1(prom7)} m/día</b>.</div></div>
+    <div><div class="cap" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px"><span>Pulso del ciclo · metros por día · toque un día</span><span style="letter-spacing:1px"><span style="color:#5aa2ff">■</span> última semana <span style="color:#ff5a5a">▬</span> sin reporte <span style="color:#3ddc84">⬚</span> lo que falta por día</span></div>
+      <div class="pulso">${pulso}</div><div class="pdx"><span>${_dmFecha(D.w.ini)}</span><span>${_dmFecha(D.w.fin)}</span></div></div>
+  </div></div>
+  <div class="sec">
+    <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 16px;margin-bottom:10px"><span style="font-size:18px;font-weight:800">Corte de la mina</span>
+      <span class="cap" style="letter-spacing:1.4px">cada labor es una galería · su largo es lo avanzado · punteado = meta del mes · trazo blanco = dónde debería ir hoy</span>
+      <span class="ley" style="margin-left:auto"><span><i style="background:#3b8bff"></i>en meta</span><span><i style="background:#f5a524"></i>atrasada</span><span><i style="background:#ff5a5a"></i>sin avance</span><span><i style="background:#64748b"></i>sin meta</span></span></div>
+    <div class="corte" style="--baja:${Math.max(60,fr.length*36-20)}px"><span class="pique"></span><span class="jaula"></span>${gal||'<div class="sub" style="padding:10px 20px">Todavía no hay avance reportado en este ciclo.</div>'}</div>
+  </div>
+  <div class="sec" style="padding:0"><div class="cuatro">
+    <div><div class="mod" style="color:#5aa2ff"><i style="background:#3b8bff"></i>Operaciones</div><div class="cap">Lo que pide atención</div>
+      ${tks.map(([c,w,q,d,fn])=>`<div class="tk ${fn?'clk':''}" ${fn?`onclick="${fn}"`:''}><span class="e" style="background:${c}"></span><div><div class="q">${q}</div><div class="d">${d}</div></div><span class="w" style="color:${c};background:${c}22">${w}</span></div>`).join('')}</div>
+    <div><div class="mod" style="color:#f7c35c"><i style="background:#f5a524"></i>Logística</div><div class="cap">${nomMes} · costo contra gasto</div>
+      <div class="bf" style="height:20px;margin-top:8px"><div class="cap" style="text-align:right;color:#7fb3ff;padding-right:6px;white-space:nowrap">← Costo</div><div></div><div class="cap" style="color:#f7c35c;padding-left:6px;white-space:nowrap">Gasto →</div></div>
+      ${rub.map(([n,c,g])=>`<div class="bf clk" onclick="dmAbrirRubro('${n}')"><div class="l"><span class="v num">${_dmS(c)}</span><i style="width:${c/mxR*80}px"></i></div><div class="c">${n}</div><div class="r"><i style="width:${g/mxR*80}px"></i><span class="v num">${_dmS(g)}</span></div></div>`).join('')}
+      <div class="tot"><div><span class="cap" style="color:#7fb3ff">Costo</span><b class="num">${_dmS(cT)}</b></div><div><span class="cap" style="color:#f7c35c">Gasto</span><b class="num">${_dmS(gT)}</b></div><div><span class="cap">${cT>=gT?'Quedó en stock':'Salió de stock'}</span><b class="num" style="color:${cT>=gT?'#8df0b8':'#f7c35c'}">${cT>=gT?'+':'−'}${_dmS(Math.abs(cT-gT))}</b></div></div>
+      ${D.P?`<div class="tq clk" onclick="dmAbrirRubro('Petróleo')"><svg width="32" height="46" viewBox="0 0 32 46"><rect x="2" y="2" width="28" height="42" rx="7" fill="#0a111c" stroke="#26344c" stroke-width="2"/><clipPath id="dmTq"><rect x="4" y="4" width="24" height="38" rx="5"/></clipPath><g clip-path="url(#dmTq)"><rect x="0" y="${4+38*(1-lvl)}" width="32" height="44" fill="#2dd4bf" opacity=".85"/><path class="ola" d="M0 ${4+38*(1-lvl)} q6 -3 12 0 t12 0 t12 0 t12 0 V60 H0 Z" fill="#7ff0de" opacity=".5"/></g></svg>
+        <div><div class="cap">Tanque de petróleo</div><div class="num" style="font-size:17px;font-weight:800;margin-top:3px">${_dmF0(D.P.saldo)} gln${dPet!=null?` <span style="font-size:12px;color:#9aa8bd;font-weight:600">· ~${Math.max(0,dPet)} días</span>`:''}</div></div></div>`:''}</div>
+    <div class="clk" onclick="dmAbrirMant()"><div class="mod" style="color:#c4b5fd"><i style="background:#a78bfa"></i>Mantenimiento</div><div class="cap">${nomMes} · trabajos a máquinas</div>
+      <div class="mv num">${kits.length}<small> trabajos</small></div>
+      <div class="stk">${Object.entries(tipos).map(([t,v])=>`<i style="width:${v/Math.max(1,kits.length)*100}%;background:${tc[t]||'#64748b'}"></i>`).join('')}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11.5px;color:#9aa8bd">${Object.entries(tipos).map(([t,v])=>`<span><b style="color:${tc[t]||'#94a3b8'}">■</b> ${t} ${v}</span>`).join('')}</div>
+      <div class="mn" style="margin-top:8px"><b>${_dmF1(C.mantHoras||0)} h</b> hombre · <b>${_dmS(C.mantMO||0)}</b> de mano de obra${kitsPend?` · <b style="color:#f7c35c">${kitsPend} por aprobar</b>`:''}</div>
+      <div class="cap" style="margin-top:12px">Máquinas más atendidas</div>
+      <div class="lst">${Object.entries(porEq).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([e,n])=>`<span>${e}</span><span>${n}</span>`).join('')||'<span>—</span><span></span>'}</div></div>
+    <div class="clk" onclick="dmAbrirRRHH()"><div class="mod" style="color:#6ee7b7"><i style="background:#3ddc84"></i>Recursos Humanos</div><div class="cap">Personal y tareo</div>
+      <div class="mv num">${R.activos}<small> trabajadores</small></div>
+      <div class="mn">${R.nv} en NV 2820 · ${R.mb} en Monte Bravo</div>
+      <div class="dots">${'<i style="background:#3b8bff"></i>'.repeat(R.dia)}${'<i style="background:#8b5cf6"></i>'.repeat(R.noche)}${'<i style="background:#1e293b"></i>'.repeat(Math.max(0,R.activos-R.dia-R.noche))}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11.5px;color:#9aa8bd;margin-top:6px"><span><b style="color:#3b8bff">■</b> guardia Día ${R.dia}</span><span><b style="color:#8b5cf6">■</b> guardia Noche ${R.noche}</span></div>
+      <div class="mn" style="margin-top:8px">Hojas de tareo del ciclo: <b>${R.hojas-R.hojasPend} aprobadas</b>${R.hojasPend?` · <b style="color:#f7c35c">${R.hojasPend} por aprobar</b>`:''}</div>
+      <div class="cap" style="margin-top:12px">Cargos principales</div>
+      <div class="lst">${R.cargos.slice(0,5).map(([c,n])=>`<span>${c.charAt(0)+c.slice(1).toLowerCase()}</span><span>${n}</span>`).join('')}</div></div>
+  </div></div>
+  <div class="pie">Costo = lo que ingresó · gasto = lo que salió o se consumió. Logística y Mantenimiento salen del Informe de Cierre del mes (mantenimiento al costo de horas hombre: las piezas ya se cuentan al salir del almacén). El avance va por el ciclo 26 → 25 de Operaciones.</div>`;
+}
+
+// ── PANEL DE DETALLE ──
+function _dmPanel(html){
+  let v=document.getElementById('dm-velo'), p=document.getElementById('dm-panel');
+  if(!v){ v=document.createElement('div'); v.id='dm-velo'; v.className='dm-velo'; v.onclick=dmCerrar; document.body.appendChild(v); }
+  if(!p){ p=document.createElement('div'); p.id='dm-panel'; p.className='dm-panel'; document.body.appendChild(p); }
+  p.innerHTML='<button class="x" onclick="dmCerrar()" aria-label="Cerrar">✕</button>'+html;
+  requestAnimationFrame(()=>{ v.classList.add('on'); p.classList.add('on'); });
+}
+function dmCerrar(){ const v=document.getElementById('dm-velo'),p=document.getElementById('dm-panel'); if(v)v.classList.remove('on'); if(p)p.classList.remove('on');
+  document.querySelectorAll('#d-mina .gal.sel').forEach(x=>x.classList.remove('sel')); }
+try{ document.addEventListener('keydown',e=>{ if(e.key==='Escape') dmCerrar(); }); }catch(e){}
+function _dmBarras(serie,col){ const mx=Math.max(1,...serie); return `<div style="display:flex;align-items:flex-end;gap:2px;height:80px;margin-top:8px;border-bottom:1px solid #1b2638">${serie.map(v=>`<i style="flex:1;display:block;height:${v?Math.max(3,v/mx*100):0}%;background:${col};border-radius:2px 2px 0 0"></i>`).join('')}</div>`; }
+function _dmMetrosRep(r,k){ try{ const x=r&&r[k]; return Number((x&&x.metros)||0); }catch(e){ return 0; } }
+function dmAbrirFrente(k){
+  const D=_dmCache; if(!D) return; const f=D.frentes.find(x=>x.k===k); if(!f) return;
+  document.querySelectorAll('#d-mina .gal').forEach(x=>x.classList.toggle('sel',x.dataset.k===k));
+  const p=f.meta?f.av/f.meta:null, col=p==null?'#94a3b8':f.av===0?'#ff5a5a':p<D.esp*.75?'#f5a524':'#3b8bff';
+  const reps=D.rg.filter(r=>_dmMetrosRep(r,k)>0).sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
+  const faltaF=Math.max(0,f.meta-f.av);
+  _dmPanel(`<div class="cap">Labor · galería</div><div class="t" style="color:${col}">${f.n}</div>
+    <div class="d">${p==null?'Esta labor no tiene meta asignada este mes.':f.av===0?'No tiene ningún metro reportado en el ciclo. Conviene confirmar con los jefes de guardia si la están reportando en otra labor.':p>=1?`Ya pasó su meta: lleva <b>${Math.round(p*100)} %</b>.`:`Va en <b>${Math.round(p*100)} %</b> de su meta; a esta altura debería ir en <b>${_dmF1(f.meta*D.esp)} m</b>.`}</div>
+    <div class="k"><div><span class="cap">Avanzado</span><b>${_dmF1(f.av)} m</b></div><div><span class="cap">Meta del mes</span><b>${f.meta?f.meta+' m':'—'}</b></div>
+      <div><span class="cap">Reportes con metros</span><b>${reps.length}</b></div><div><span class="cap">${faltaF>0?'Le falta':'Sobre la meta'}</span><b>${f.meta?_dmF1(faltaF>0?faltaF:f.av-f.meta)+' m':'—'}</b></div></div>
+    <div class="cap">Metros por día en el ciclo</div>${_dmBarras(f.serie,col)}
+    <div class="cap" style="margin:18px 0 4px">Reportes del jefe de guardia</div>
+    ${reps.length?reps.map(r=>`<div class="f"><span>${_dmFecha(r.fecha)}</span><span style="color:#5f6e85">${r.turno||''}</span><span class="n">${r.jefe||r.jefeGuardia||'—'}</span><span class="m">${_dmF1(_dmMetrosRep(r,k))} m</span></div>`).join(''):'<div class="d">Sin reportes con metros en el ciclo.</div>'}
+    <button class="ir" onclick="dmCerrar();navigate('operaciones')">Ir a Operaciones →</button>`);
+}
+function dmAbrirDia(iso){
+  const D=_dmCache; if(!D) return;
+  const reps=D.rg.filter(r=>String(r.fecha).slice(0,10)===iso);
+  const filas=[]; reps.forEach(r=>D.frentes.forEach(f=>{ const m=_dmMetrosRep(r,f.k); if(m>0) filas.push([f.n,r.turno||'',r.jefe||r.jefeGuardia||'—',m]); }));
+  const tot=filas.reduce((s,x)=>s+x[3],0), fut=iso>D.hoyIso;
+  const metaTot=D.frentes.reduce((s,f)=>s+f.meta,0), avTot=D.frentes.reduce((s,f)=>s+f.av,0), quedan=Math.max(1,D.nDias-D.dTransc);
+  _dmPanel(`<div class="cap">Pulso del ciclo · un día</div><div class="t">${_dmFecha(iso)}</div>
+    <div class="d">${fut?`Día que todavía no llega. Para cerrar el ciclo en meta hacen falta <b>${_dmF1(Math.max(0,metaTot-avTot)/quedan)} m</b> por día.`:reps.length?`Se avanzaron <b>${_dmF1(tot)} m</b> en ${reps.length} reporte(s) de guardia.`:'<b style="color:#ff8a8a">No hay ningún reporte de guardia este día.</b> Si se trabajó, falta que el jefe de guardia lo registre.'}</div>
+    ${filas.length?'<div class="cap" style="margin:18px 0 4px">Por labor</div>'+filas.sort((a,b)=>b[3]-a[3]).map(x=>`<div class="f" style="grid-template-columns:1fr 52px 110px 60px"><span style="font-weight:700">${x[0]}</span><span style="color:#5f6e85">${x[1]}</span><span class="n">${x[2]}</span><span class="m">${_dmF1(x[3])} m</span></div>`).join(''):''}`);
+}
+function _dmTop(arr,col){ const mx=Math.max(1,...arr.map(x=>x[1])); return arr.map(([a,v])=>`<div class="tp"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a}</span><span class="m">${_dmS(v)}</span><div class="b"><i style="width:${v/mx*100}%;background:${col}"></i></div></div>`).join(''); }
+function dmAbrirRubro(n){
+  const D=_dmCache; if(!D) return; const C=D.C||{};
+  const map={Insumos:[C.matIngGen,C.matSalGen],Explosivo:[C.expIngS,C.expSalS],'Petróleo':[C.petIngS,(C.petSalido||0)*(C.pPet||0)],Mantenimiento:[C.matIngMant,C.matSalMant]};
+  const [c,g]=(map[n]||[0,0]).map(x=>Number(x)||0), dif=c-g;
+  let det='';
+  if(n==='Insumos') det='<div class="cap" style="margin:18px 0 4px">¿A dónde salió?</div>'+_dmTop((C.porDest||[]).map(x=>[x.nombre||x.destino||x.k||'—',Number(x.gen)||0]).filter(x=>x[1]>0),'#f5a524');
+  else if(n==='Mantenimiento') det='<div class="cap" style="margin:18px 0 4px">Mano de obra por máquina</div>'+_dmTop((C.mantPorEquipo||[]).map(x=>[x.nombre+' · '+_dmF1(x.horas)+' h',Number(x.mo)||0]).sort((a,b)=>b[1]-a[1]).slice(0,8),'#a78bfa');
+  else if(n==='Explosivo') det='<div class="cap" style="margin:18px 0 4px">Lo que más salió del polvorín</div>'+_dmTop((C.expPorProd||[]).map(x=>[x.nombre,Number(x.salS)||0]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]).slice(0,8),'#f5a524');
+  else if(n==='Petróleo'&&D.P) det=`<div class="k"><div><span class="cap">En tanque</span><b>${_dmF0(D.P.saldo)} gln</b></div><div><span class="cap">Consumido en el ciclo</span><b>${_dmF0(D.P.consCiclo)} gln</b></div></div><div class="d">Los galones consumidos salen de los partes del compresorista; el tanque es el saldo de la pantalla de Combustible.</div>`;
+  _dmPanel(`<div class="cap">Logística · ${(typeof finNombreMes==='function')?finNombreMes(D.mes):D.mes}</div><div class="t">${n}</div>
+    <div class="k"><div><span class="cap" style="color:#7fb3ff">Costo · ingresó</span><b>${_dmS(c)}</b></div><div><span class="cap" style="color:#f7c35c">Gasto · salió</span><b>${_dmS(g)}</b></div></div>
+    <div class="d">${dif>=0?`Entró <b>${_dmS(dif)}</b> más de lo que salió: quedó en stock.`:`Salió <b>${_dmS(-dif)}</b> más de lo que entró: se usó stock que venía de antes.`}</div>${det}
+    <button class="ir" onclick="dmCerrar();navigate('${n==='Mantenimiento'?'mantenimiento':'logistica'}')">Ir a ${n==='Mantenimiento'?'Mantenimiento':'Logística'} →</button>`);
+}
+function dmAbrirMant(){
+  const D=_dmCache; if(!D) return; const C=D.C||{}, kits=(C.kits||[]).slice().sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
+  _dmPanel(`<div class="cap">Mantenimiento</div><div class="t">${kits.length} trabajos</div>
+    <div class="k"><div><span class="cap">Horas hombre</span><b>${_dmF1(C.mantHoras||0)} h</b></div><div><span class="cap">Mano de obra</span><b>${_dmS(C.mantMO||0)}</b></div></div>
+    <div class="d">Al costo del mes entra solo la mano de obra: los repuestos ya se contaron cuando salieron del almacén de Logística.</div>
+    <div class="cap" style="margin:18px 0 4px">Trabajos del mes</div>
+    ${kits.slice(0,25).map(k=>`<div class="f" style="grid-template-columns:44px 1fr 48px"><span>${_dmFecha(k.fecha)}</span><span><b>${k.equipo||'—'}</b><br><span style="color:#9aa8bd">${k.tipo||''}${k.desc?' · '+String(k.desc).slice(0,60):''}</span></span><span class="m">${_dmF1(k.horasMant||0)} h</span></div>`).join('')||'<div class="d">Sin trabajos este mes.</div>'}
+    <button class="ir" onclick="dmCerrar();navigate('mantenimiento')">Ir a Mantenimiento →</button>`);
+}
+function dmAbrirRRHH(){
+  const D=_dmCache; if(!D) return; const R=D.rrhh;
+  _dmPanel(`<div class="cap">Recursos Humanos</div><div class="t">${R.activos} trabajadores</div>
+    <div class="k"><div><span class="cap">NV 2820</span><b>${R.nv}</b></div><div><span class="cap">Monte Bravo</span><b>${R.mb}</b></div>
+      <div><span class="cap">Guardia Día</span><b>${R.dia}</b></div><div><span class="cap">Guardia Noche</span><b>${R.noche}</b></div></div>
+    <div class="d">Hojas de tareo del ciclo: <b>${R.hojas-R.hojasPend} aprobadas</b>, ${R.hojasPend} por aprobar. La guardia de cada uno sale de la distribución del Ingeniero Residente.</div>
+    <div class="cap" style="margin:18px 0 4px">Por cargo</div>
+    ${R.cargos.map(([c,n])=>`<div class="tp"><span>${c.charAt(0)+c.slice(1).toLowerCase()}</span><span class="m">${n}</span><div class="b"><i style="width:${n/Math.max(1,R.cargos[0][1])*100}%;background:#3ddc84"></i></div></div>`).join('')}
+    <button class="ir" onclick="dmCerrar();navigate('rrhh')">Ir a Recursos Humanos →</button>`);
+}
+
 function renderDashboard(){
+  try{ renderDashMina(); }catch(e){ console.warn('[dash] mina viva',e); }
   renderDashEjecutivo();
   renderDashResumenHoy();
   renderDashAvanceMeta();
