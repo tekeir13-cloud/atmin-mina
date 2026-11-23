@@ -2546,7 +2546,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.23-382</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.23-383</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2591,7 +2591,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.23-382</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.23-383</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2759,7 +2759,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.23-382</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.23-383</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -32983,7 +32983,7 @@ function iaTrato(){
   return IA_TRATOS[rol] || 'Señor';
 }
 // «Señor Amador,» — el trato listo para encabezar una frase.
-function iaSR(){ return iaTrato()+','; }
+function iaSR(){ return iaTrato()+', '; }
 // Buenos días / tardes / noches, según la hora de quien pregunta.
 function iaFranja(){
   const h=new Date().getHours();
@@ -33022,8 +33022,8 @@ function renderIARecomendaciones(){
 
   // 1. Meta de producción
   if(m.meta>0){
-    const diasMes=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate();
-    const diasPasados=new Date().getDate();
+    const diasMes=m.diasCiclo||new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate();
+    const diasPasados=m.diasPasados||new Date().getDate();
     const metaEsperada=Math.round((diasPasados/diasMes)*m.meta);
     const deficit=metaEsperada-m.metros;
     if(m.cum<60 && m.diasRestMes<=10)
@@ -33259,6 +33259,27 @@ function _iaMetrics(){
         m.proyMes=m.prom>0?Math.round(m.metros+m.prom*m.diasRestMes):m.metros;
       }
     }catch(e){ m.proyMes=m.metros; }
+    /* AVANCE, META Y PROYECCIÓN: LOS MISMOS DEL DASHBOARD. El avance se mide por el ciclo de
+       Operaciones (26 → 25), no por el mes calendario: antes NIA contaba los días que faltaban
+       hasta el 30 y usaba la meta vieja de dos frentes, así que proyectaba con 7 días de más
+       y contra la mitad de la meta. Ahora toma la ventana, la meta por labor y el avance de
+       _dmDatos(), que es lo que muestra la portada. */
+    try{
+      const D=(typeof _dmDatos==='function')?_dmDatos():null;
+      if(D&&D.frentes){
+        m.metros=Math.round(D.frentes.reduce((a,f)=>a+f.av,0)*10)/10;
+        m.meta=Math.round(D.frentes.reduce((a,f)=>a+f.meta,0));
+        m.cum=m.meta>0?Math.round(m.metros/m.meta*100):0;
+        m.diasCiclo=D.nDias; m.diasPasados=D.dTransc; m.esp=D.esp;
+        m.diasRestMes=Math.max(0,D.nDias-D.dTransc);
+        m.prom=m.metros/Math.max(1,D.dTransc);
+        m.proyMes=Math.round(Math.max(m.metros, m.prom*D.nDias));
+        m.iniCiclo=D.w&&D.w.ini; m.finCiclo=D.w&&D.w.fin;
+        const fr=id=>(D.frentes.find(f=>String(f.id)===String(id))||{}).av||0;
+        m.f1=fr(1); m.f2=fr(2);
+        m.labores=D.frentes.filter(f=>f.av>0).sort((a,b)=>b.av-a.av).map(f=>({n:f.n,av:f.av,meta:f.meta}));
+      }
+    }catch(e){ console.warn('metrics ciclo',e); }
   }catch(e){ console.warn('metrics',e); }
   return m;
 }
@@ -33496,6 +33517,18 @@ function _iaRespuestaMB(q, fS){
     `Pregúnteme por sus sacos, su petróleo, su planilla, sus disparos o su gasto operativo.`;
 }
 
+// Proyección de cierre del ciclo de Operaciones (cierra el 25). Mismas cifras que el dashboard.
+function _iaProyeccion(m,SR){
+  const fF=d=>{ try{ return fmtF(d); }catch(e){ return d||''; } };
+  const fin=m.finCiclo?` el ${fF(m.finCiclo)}`:'';
+  const pctP=m.meta>0?Math.round(m.proyMes/m.meta*100):0;
+  let t=`${SR}el ciclo de Operaciones cierra${fin}. A la fecha (día ${m.diasPasados||'—'} de ${m.diasCiclo||'—'}) el avance acumulado es de ${m.metros.toFixed(1)} m, el ${m.cum} % de la meta de ${m.meta} m. `;
+  if(m.diasRestMes>0) t+=`Al ritmo promedio de ${m.prom.toFixed(1)} m/día y con ${m.diasRestMes} día${m.diasRestMes!==1?'s':''} restante${m.diasRestMes!==1?'s':''}, la proyección al cierre es de ${m.proyMes} m, equivalente al ${pctP} % de la meta.`;
+  else t+=`El ciclo ya cerró con ${m.metros.toFixed(1)} m.`;
+  if(m.meta>0&&m.metros<m.meta&&m.diasRestMes>0){ const req=(m.meta-m.metros)/m.diasRestMes; t+=` Para cumplir la meta se requieren ${req.toFixed(1)} m/día${req>m.prom*1.15?', por encima del ritmo actual':''}.`; }
+  else if(m.meta>0&&m.metros>=m.meta) t+=` La meta del ciclo ya fue superada.`;
+  return t;
+}
 function _iaRespuestaLocal(texto){
   const m=_iaMetrics();
   const fS=v=>'S/ '+(Number(v)||0).toFixed(2);
@@ -33582,9 +33615,9 @@ function _iaRespuestaLocal(texto){
   if(has('disparo','voladura','guardia'))
     return `${SR}en el día de hoy se han registrado ${m.disparosHoy||0} disparo${m.disparosHoy!==1?'s':''} en los frentes. ${m.rgHoy>0?'Hay '+m.rgHoy+' reporte'+(m.rgHoy!==1?'s':'')+' de guardia del día.':'Aún no hay reporte de guardia registrado hoy.'}`;
   if(has('proyecci','proyecta','pronostic','pronóstic','predicci','estimad','cuanto vamos a llegar','como vamos a terminar','alcanzar la meta','como termina','llegamos a la meta'))
-    return `${SR}al ritmo actual de ${m.prom.toFixed(1)} m/día y con ${m.diasRestMes} días restantes en el mes, la proyección es alcanzar ${m.proyMes} m de los ${m.meta} m de meta (${m.cum}% completado).`;
+    return _iaProyeccion(m,SR);
   if(has('metro','avance','perfora','rampa','cortada'))
-    return `${SR}el avance acumulado es de ${m.metros.toFixed(1)} m (Rampa ${m.f1.toFixed(1)} m · Cortada Noroeste ${m.f2.toFixed(1)} m), con ${m.cum}% de cumplimiento. Promedio diario: ${m.prom.toFixed(1)} m/día.`;
+    return `${SR}el avance acumulado del ciclo${m.finCiclo?' (cierra el '+fmtF(m.finCiclo)+')':''} es de ${m.metros.toFixed(1)} m, con ${m.cum} % de cumplimiento${m.labores&&m.labores.length?': '+m.labores.slice(0,5).map(l=>l.n+' '+l.av.toFixed(1)+' m').join(' · '):''}. Promedio diario: ${m.prom.toFixed(1)} m/día.`;
 
   // ── Financiero ──
   if(has('utilidad','ganancia','margen','rentab','resultado'))
@@ -33632,7 +33665,7 @@ function _iaRespuestaLocal(texto){
 
   // ── Meta / cumplimiento ──
   if(has('cumplimiento','meta','programa','proyecta','como vamos'))
-    return `${SR}el cumplimiento del programa es ${m.cum}% — ${m.metros.toFixed(1)} m de ${m.meta} m meta. Con ${m.prom.toFixed(1)} m/día de promedio y ${m.diasRestMes} días restantes, la proyección es ${m.proyMes} m.`;
+    return _iaProyeccion(m,SR);
 
   // ── Resumen ejecutivo ──
   if(has('resumen','ejecutivo','panorama','todo','dame un','como esta','cómo está'))
@@ -33641,8 +33674,8 @@ function _iaRespuestaLocal(texto){
   // ── Recomendaciones del día ──
   if(has('recomendacion','recomendación','consejo','alerta','que debo','qué debo','que me recomienda','qué me recomienda','que hay que hacer','sugerencia','prioridad')){
     // Generar resumen de recomendaciones como texto de chat
-    const diasMes=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate();
-    const diasPasados=new Date().getDate();
+    const diasMes=m.diasCiclo||new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate();
+    const diasPasados=m.diasPasados||new Date().getDate();
     const petReal=Math.round(m.petStockReal||0);
     const total=m.activos+m.ausentes;
     const items=[];
