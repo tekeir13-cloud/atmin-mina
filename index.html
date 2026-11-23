@@ -6705,7 +6705,7 @@ function nv2820Stock(){
 // Figuras (emoji) por explosivo del catálogo
 const EXPLO_FIG={M1000:'🧨',M3000:'🧨',M5000:'🧨',CARMEX18:'🧵',CARMEX240:'🧵',FAMECORTE:'🪢',NEITHER:'🌀',CORDON5G:'🧶'};
 // Todos los FANEL comparten icono, sea cual sea la medida: son variantes del mismo detonador.
-function exploFig(id){ if(/^FANEL\d+_/.test(String(id||''))) return '⏱'; return EXPLO_FIG[id]||'🧨'; }
+function exploFig(id){ if(/^(FANEL|EXANEL)\d+_/.test(String(id||''))) return '⏱'; return EXPLO_FIG[id]||'🧨'; }
 // Stock de explosivos en almacén (ingresos − salidas de state.almacen.explosivos), en unidades
 function exploStockTotal(){
   const cat=(typeof EXPLO_CATALOGO!=='undefined')?EXPLO_CATALOGO:[];
@@ -15384,6 +15384,19 @@ const FANEL240_CATALOGO=_fanelMedida('240','2.40');
 // Las medidas nuevas se AÑADEN al final: los ids de las que ya existen no se tocan, así ningún
 // movimiento ya registrado queda huérfano.
 const FANEL_TODOS=FANEL3_CATALOGO.concat(FANEL42_CATALOGO, FANEL240_CATALOGO);
+/* ══ EXANEL 3.0 MTR — 16 SUBPRODUCTOS (E3-1 a E3-16) — nuevo, noviembre 2026 ══
+   Mismo esquema que los FANEL: un producto en 16 variantes que se define UNA vez aquí y de aquí
+   sale solo al polvorín NV3190, a los ingresos y salidas, al reporte del Jefe de Guardia, al del
+   Compresorista y al Excel.
+   PENDIENTE: el precio de cada E3 y las unidades por caja. Mientras falten, el precio va en 0 y el
+   gasto de este producto NO se valoriza. Se completa aquí, en estas dos líneas. */
+const EXANEL3_UPCAJA=100;                                   // PENDIENTE: confirmar unidades por caja
+const EXANEL3_PRECIOS=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];    // PENDIENTE: precio de E3-1 … E3-16
+const EXANEL3_CATALOGO=EXANEL3_PRECIOS.map((precio,i)=>({
+  id:'EXANEL3_'+(i+1),
+  nombre:'EXANEL 3.0 MTR E3-'+(i+1),
+  upCaja:EXANEL3_UPCAJA, unidad:'und', precio
+}));
 /* ══ UNIDADES DE LA OPERACIÓN ══
    NV2820 es la unidad histórica: TODO lo registrado hasta hoy es suyo, y por eso es la que manda
    por defecto en cualquier registro que no diga otra cosa. Monte Bravo se suma con su propia
@@ -15409,6 +15422,7 @@ const EXPLO_CATALOGO=[
   // genérico de "cajas" dé rollos correctos.
   {id:'CORDON5G',nombre:'CORDON DETONANTE 5G',upCaja:750,unidad:'rollo',mPorRollo:750,precio:0.959},
   ...FANEL_TODOS,
+  ...EXANEL3_CATALOGO,
 ];
 // ¿Este explosivo entra al Stock Remanente? Hoy entran TODOS —los FANEL también, que antes
 // quedaban fuera y no se podían ni ingresar ni despachar—.
@@ -34327,13 +34341,13 @@ compCargarLocal();
 // Los 48 FANEL (2.40 m, 3 m y 4.2 m) se agregan desde FANEL_TODOS, no a mano: el Compresorista
 // los reporta para trazabilidad (el gasto se sigue contando solo cuando salen de Logística).
 const COMP_EXPLOSIVOS = ['M1000','M3000','M5000','CARMEX18','CARMEX240','FAMECORTE','NEITHER','CORDON5G']
-  .concat(FANEL_TODOS.map(c=>c.id));
+  .concat(FANEL_TODOS.map(c=>c.id), EXANEL3_CATALOGO.map(c=>c.id));
 const COMP_EXPLO_LABEL = Object.assign(
   {'M1000':'EMULNOR 1000 1" X 7"','M3000':'EMULNOR 3000 1" X 8"','M5000':'EMULNOR 5000 1" X 8"','CARMEX18':'CARMEX 1.8" MTRS','CARMEX240':'CARMEX 2.40" MTRS','FAMECORTE':'FAME CORTE','NEITHER':'MECHA RAPIDA DE IGNISION','CORDON5G':'CORDON DETONANTE 5G'},
-  Object.fromEntries(FANEL_TODOS.map(c=>[c.id,c.nombre])));
+  Object.fromEntries(FANEL_TODOS.concat(EXANEL3_CATALOGO).map(c=>[c.id,c.nombre])));
 const COMP_PRECIOS_EXP_DEFAULT = Object.assign(
   {'M1000':1.36,'M3000':1.54,'M5000':2.34,'CARMEX18':3.81,'CARMEX240':4.10,'FAMECORTE':4.00,'NEITHER':2.00,'CORDON5G':0.959},
-  Object.fromEntries(FANEL_TODOS.map(c=>[c.id,c.precio])));
+  Object.fromEntries(FANEL_TODOS.concat(EXANEL3_CATALOGO).map(c=>[c.id,c.precio])));
 const COMP_ACEROS = ['BARRA CONICA 4\' X 7/8"','BARRA CONICA 6\' X 7/8"','BARRA CONICA 8\' X 7/8"','BROCA DESCARTABLE DE BOTONES 36 MM','BROCA DESCARTABLE DE BOTONES 32 MM','BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'','BARRA DE ALUMINIO PARA ACUÑAR 1" X 10\'','BARRA DE ALUMINIO PARA ACUÑAR 1" X 12'];
 const COMP_PRECIOS_ACEROS_DEFAULT = {'BARRA CONICA 4\' X 7/8"':249.17,'BARRA CONICA 6\' X 7/8"':330.29,'BARRA CONICA 8\' X 7/8"':411.41,'BROCA DESCARTABLE DE BOTONES 36 MM':76.88,'BROCA DESCARTABLE DE BOTONES 32 MM':74.91,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 8\'':102.6,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 10\'':118.35,'BARRA DE ALUMINIO PARA ACUÑAR 1" X 12':141.9};
 
