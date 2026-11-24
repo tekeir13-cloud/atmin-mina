@@ -396,13 +396,6 @@ function scCaos(t){
       {size:58,y:H*.40,start:2.3,stagger:.05,ab:1.2,lh:78});
     X.restore();
   }
-  const c2=prog(u,4.9,5.4);
-  if(c2>0){
-    X.save(); X.globalAlpha=eOut(c2)*cl(1-prog(u,6.8,7.5));
-    tracked('EL COSTO OPERATIVO REAL SE CONOCÍA CUANDO YA SE HABÍA GASTADO',W/2,SAFE.bot-56,
-      {size:30,weight:800,track:9,align:'center',color:C.gold,glow:'rgba(59,155,255,.35)'});
-    X.restore();
-  }
   vignette(1.0); grain(Math.round(u*FPS),.06);
   flash(t,15.6,.35,'#fff',.9);
 }
@@ -1524,6 +1517,63 @@ function scMercado(t){
   vignette(.92); grain(Math.round(u*FPS),.045); flash(t,77,.18,'#fff',.35);
 }
 
+/* 84,1–89,1 · Lo que hay ahora */
+function scAhora(t){
+  const u=t-84.1;
+  X.fillStyle='#04060c'; X.fillRect(0,0,W,H);
+  const g=X.createRadialGradient(W/2,H*.52,60,W/2,H*.52,W*.75);
+  g.addColorStop(0,'rgba(8,28,56,.95)'); g.addColorStop(1,'#04060c'); X.fillStyle=g; X.fillRect(0,0,W,H);
+  const sal=cl(1-prog(u,4.3,4.75));
+  kinetic([[{t:'Ahora'},{t:'el'},{t:'costo'},{t:'operativo'},{t:'está'},{t:'en'},{t:'línea.',c:'#3b9bff',g:'rgba(59,155,255,.5)'}]],u,
+    {size:60,y:SAFE.top+106,start:.25,stagger:.05,alpha:sal,ab:1});
+  // los tres dispositivos
+  const cy=H*.52, eq=[['celular',120,250],['laptop',300,210],['escritorio',250,200]];
+  const gx=120, totW=eq.reduce((a,b)=>a+b[1],0)+gx*2, x0=W/2-totW/2;
+  let xa=x0;
+  eq.forEach((E,i)=>{
+    const p=eOut(prog(u,.9+i*.3,1.6+i*.3));
+    const cx=xa+E[1]/2; xa+=E[1]+gx;
+    if(p<=0)return;
+    X.save(); X.globalAlpha=p*sal; X.translate(0,(1-p)*18);
+    lightBeam(cx,cy,190,'rgb(59,155,255)',.14);
+    X.strokeStyle='#3b9bff'; X.lineWidth=3.4; X.fillStyle='rgba(12,24,44,.9)';
+    if(i===0){ rr(cx-E[1]/2,cy-E[2]/2,E[1],E[2],18); X.fill(); X.stroke();
+      X.fillStyle='rgba(59,155,255,.5)'; rr(cx-24,cy-E[2]/2+14,48,5,2.5); X.fill(); }
+    if(i===1){ rr(cx-E[1]/2,cy-E[2]/2,E[1],E[2]-50,12); X.fill(); X.stroke();
+      X.fillStyle='rgba(12,24,44,.9)'; rr(cx-E[1]/2-34,cy+E[2]/2-54,E[1]+68,16,8); X.fill(); X.stroke(); }
+    if(i===2){ rr(cx-E[1]/2,cy-E[2]/2,E[1],E[2]-54,12); X.fill(); X.stroke();
+      X.fillStyle='#3b9bff'; rr(cx-7,cy+E[2]/2-56,14,34,4); X.fill();
+      rr(cx-44,cy+E[2]/2-24,88,10,5); X.fill(); }
+    // las barritas del tablero dentro
+    X.fillStyle='rgba(143,211,255,.55)';
+    for(let k=0;k<3;k++) rr(cx-E[1]/2+22,cy-E[2]/2+(i===0?44:34)+k*22,(E[1]-44)*(.5+k*.2),8,4), X.fill();
+    X.restore();
+  });
+  // las dos condiciones
+  const cp=eOut(prog(u,2.1,2.8));
+  if(cp>0){
+    const lin=[['EN LÍNEA','el costo del día, al segundo','#22d3a5'],
+               ['SIN SEÑAL','se reporta y se consulta igual','#f59e0b']];
+    lin.forEach((L,i)=>{
+      const p=eOut(prog(u,2.2+i*.3,2.9+i*.3)); if(p<=0)return;
+      X.save(); X.globalAlpha=cp*sal*p;
+      const bw=600, x=W/2+(i? 20 : -620);
+      X.fillStyle='rgba(255,255,255,.04)'; rr(x,SAFE.bot-168,bw,86,14); X.fill();
+      X.strokeStyle=L[2]; X.lineWidth=1.8; X.globalAlpha=cp*sal*p*.6; X.stroke();
+      X.globalAlpha=cp*sal*p;
+      X.fillStyle=L[2]; rr(x,SAFE.bot-168,5,86,2.5); X.fill();
+      tracked(L[0],x+28,SAFE.bot-132,{size:21,weight:900,track:4,color:L[2]});
+      txt(L[1],x+28,SAFE.bot-102,{size:22,weight:600,color:'#c2ccda'});
+      X.restore();
+    });
+  }
+  X.save(); X.globalAlpha=eOut(prog(u,3.2,3.9))*sal;
+  tracked('EN CUALQUIER PUNTO DE LA MINA',W/2,SAFE.bot-40,
+    {size:23,weight:800,track:5,align:'center',color:'#fff'});
+  X.restore();
+  vignette(.92); grain(Math.round(u*FPS),.045); flash(t,84.1,.2,'#fff',.38);
+}
+
 /* 93–102 · Las fichas de los fundadores, una cada una */
 function fi(size,weight){ return 'italic '+weight+' '+size+'px '+FONT }
 const FICHAS=[
@@ -1535,7 +1585,8 @@ const FICHAS=[
        'integrando operaciones, costos y control gerencial en tiempo real.'],
   cred:[['MBA — Blackwell Global University, USA','PMP® — Project Management Professional'],
         ['Lean Six Sigma Black Belt — Tec de Monterrey','Ingeniero Industrial — UPN'],
-        ['Business Intelligence y Analítica — PUCP','Harvard Business School · IE Business School']],
+        ['Advanced Data Analytics — IBM','Business Intelligence y Analítica — PUCP'],
+        ['Desarrollo Económico — IE Business School','']],
   res:[['7','Proyectos Lean Six Sigma','dirigidos e implementados'],
        ['US$ 3,5 M','En ahorros','generados']],
   tags:['MINERÍA','MANUFACTURA','PROYECTOS','LEAN SIX SIGMA','CONSULTORÍA']},
@@ -1568,8 +1619,12 @@ function scFicha(t,k){
   X.save(); X.globalAlpha=ent*sal;
   const im=IMGS[F.img];
   X.save(); X.beginPath(); X.arc(cx,cy,R,0,7); X.clip();
-  if(im&&im.complete&&im.naturalWidth) X.drawImage(im,cx-R-14,cy-R-24,(R+14)*2,(R+24)*2*1.1);
-  else { X.fillStyle='#121a28'; X.fillRect(cx-R,cy-R,R*2,R*2) }
+  if(im&&im.complete&&im.naturalWidth){
+    // cubrir el círculo sin estirar: se escala por el lado menor
+    const e=(R*2.12)/Math.min(im.naturalWidth,im.naturalHeight);
+    const dw=im.naturalWidth*e, dh=im.naturalHeight*e;
+    X.drawImage(im,cx-dw/2,cy-dh/2-R*.10,dw,dh);
+  } else { X.fillStyle='#121a28'; X.fillRect(cx-R,cy-R,R*2,R*2) }
   X.restore();
   X.shadowColor=A; X.shadowBlur=30; X.strokeStyle=A; X.lineWidth=5;
   X.beginPath(); X.arc(cx,cy,R,0,7); X.stroke(); X.shadowBlur=0;
@@ -1627,7 +1682,8 @@ function scFicha(t,k){
       fila.forEach((C,j)=>{
         const p2=eOut(prog(u,2.15+(i*2+j)*.11,2.75+(i*2+j)*.11)); if(p2<=0)return;
         X.save(); X.globalAlpha=cp*sal*p2;
-        const x=x0+j*560, y=SAFE.top+594+i*34;
+        if(!C) return;
+        const x=x0+j*560, y=SAFE.top+586+i*32;
         txt('›',x,y,{size:19,weight:800,color:A});
         txt(C,x+20,y,{size:20,weight:600,color:'#c2ccda'});
         X.restore();
@@ -1776,13 +1832,14 @@ const TL=[
   {a:49.5,b:59.5,fn:scRed,off:41},
   {a:59.5,b:76.3,fn:scVentanas,off:51},
   {a:76.3,b:84.1,fn:scAgentes,off:64},
-  {a:84.1,b:92.9,fn:scEvidencia,off:70},
-  {a:92.9,b:104.9,fn:scMercado,off:77},
-  {a:104.9,b:111.9,fn:scPercy,off:93},
-  {a:111.9,b:118.9,fn:scEdison,off:97.5},
-  {a:118.9,b:125.9,fn:scCierreAlma,off:102}
+  {a:84.1,b:89.1,fn:scAhora,off:84.1},     // lo que hay ahora
+  {a:89.1,b:97.9,fn:scEvidencia,off:70},
+  {a:97.9,b:109.9,fn:scMercado,off:77},
+  {a:109.9,b:116.9,fn:scPercy,off:93},
+  {a:116.9,b:123.9,fn:scEdison,off:97.5},
+  {a:123.9,b:130.9,fn:scCierreAlma,off:102}
 ];
-const DUR=125.9, TOTAL=DUR*FPS;
+const DUR=130.9, TOTAL=DUR*FPS;
 function RENDER(frame){
   const t=frame/FPS;
   X.setTransform(1,0,0,1,0,0);
