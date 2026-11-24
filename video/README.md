@@ -1,4 +1,4 @@
-# Video institucional MukiCloud
+# Videos ALMATRIX · MukiCloud
 
 Pieza de motion graphics de 74 s, 1920×1080, renderizada cuadro por cuadro.
 No se edita en un programa de video: **el video es código**. Se cambia el texto
@@ -42,3 +42,51 @@ El panel del Dashboard reproduce cifras reales del ciclo (259.4 / 248 m, el cort
 de la mina por labor). Los otros cuatro paneles son **ilustrativos**: se
 reemplazan por capturas reales del sistema cuando haya acceso. Ningún nombre ni
 DNI de trabajador aparece en el video: el módulo de personal se muestra por cargo.
+
+---
+
+# Maestro ALMATRIX · MukiCloud (90 s)
+
+`almatrix.html` — la pieza para el Premio Eureka. Se renderiza igual:
+
+```bash
+node render-almatrix.mjs salida.mp4
+```
+
+## Por qué está armado así
+
+Almatrix es la empresa y MukiCloud es su producto, pero no se juntan mitad y
+mitad: en el propio método, **MukiCloud es la fase 4**. El libro lo dice en la
+fase Automatizar — *"un ERP como MUKICLOUD"* — y NIA aparece en la fase 5. Así
+que el método es la espina del relato y el producto es la prueba de que
+funciona. Las nueve fases se agrupan en los tres módulos de la oferta
+(Operación · Digital · Marca y Mercado), porque nueve bloques en 90 segundos no
+se recuerdan y tres sí.
+
+| Tiempo | Escena |
+|---|---|
+| 0:00–0:06 | "La tendencia es automatizarlo todo con IA. ¿Y si ese fuera el error?" |
+| 0:06–0:11 | La premisa: automatizar un proceso inestable acelera sus defectos |
+| 0:11–0:18 | Los dos eslabones se enganchan → ALMATRIX · Smart Interactions |
+| 0:18–0:26 | El método: las nueve fases y los tres módulos |
+| 0:26–0:37 | Fase 01 Analizar: la mina a oscuras, seis islas de información |
+| 0:37–1:04 | Módulo Digital: MukiCloud, la arquitectura al segundo y los tableros |
+| 1:04–1:11 | Evidencia en A&TM · Pataz: −9,5 % · −47 % · −96 % · −31 % |
+| 1:11–1:18 | Mercado: 10 700 productores, 6 minas al mes 12 |
+| 1:18–1:30 | Los fundadores y el enunciado de marca |
+
+## La marca, dibujada en código
+
+`marca.html` tiene el isotipo de ALMATRIX como código, no como imagen: dos
+eslabones que se enganchan solos (`join` de 0 a 1). Los huecos se recortan del
+dibujo entero, así se ven huecos de verdad sobre cualquier fondo y ninguno de
+los dos eslabones tapa al otro. Por eso el logo puede animarse y escalarse sin
+perder filo.
+
+## Datos y personas
+
+Las cifras de A&TM, el mercado y el método salen del pitch y del libro del
+método. **Ningún nombre ni DNI de trabajador aparece en los videos.** Los
+retratos de los fundadores (`percy.png`, `edison.png`) se extrajeron del propio
+video institucional de ALMATRIX, del cuadro donde la foto está a plena luz y
+antes de que entren los rótulos.
