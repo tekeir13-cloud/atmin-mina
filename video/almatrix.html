@@ -1517,6 +1517,54 @@ function scMercado(t){
   vignette(.92); grain(Math.round(u*FPS),.045); flash(t,77,.18,'#fff',.35);
 }
 
+/* 109,9–113,4 · La frase de Percy, con su propio aire */
+function wrapIt(texto,cx,y,ancho,size,lh,color,alpha){
+  X.save(); X.globalAlpha=X.globalAlpha*(alpha==null?1:alpha);
+  X.font=fi(size,500); X.textAlign='center'; X.fillStyle=color;
+  const pal=texto.split(' '); let linea='', yy=y, n=0;
+  pal.forEach(w=>{
+    const pr=linea? linea+' '+w : w;
+    if(X.measureText(pr).width>ancho && linea){ X.fillText(linea,cx,yy); linea=w; yy+=lh; n++ }
+    else linea=pr;
+  });
+  if(linea){ X.fillText(linea,cx,yy); n++ }
+  X.restore(); return n;
+}
+const FRASES=[
+ {a:'#3b9bff', a2:'#8fd3ff', nom:'Ing. Percy Alcántara', rol:'LÍDER DE EXCELENCIA OPERACIONAL',
+  l1:'La excelencia operacional convierte cada recurso en valor, cada proceso en ventaja y cada desafío en evolución.',
+  l2:'Es la disciplina de alcanzar lo extraordinario.'},
+ {a:'#d4af37', a2:'#f2d98a', nom:'Ing. Edison Vásquez', rol:'LÍDER DE SUPPLY CHAIN',
+  l1:'La automatización es el punto donde la eficiencia encuentra a la inteligencia.',
+  l2:'Convertimos datos en decisiones y liberamos a la operación de sus límites.'}];
+function scFrase(t,k){
+  const u=t-(k?120.4:109.9), F=FRASES[k];
+  X.fillStyle='#000'; X.fillRect(0,0,W,H);
+  const g=X.createRadialGradient(W/2,H*.48,60,W/2,H*.5,W*.7);
+  g.addColorStop(0, k?'rgba(38,28,6,.92)':'rgba(8,26,56,.92)'); g.addColorStop(1,'#000');
+  X.fillStyle=g; X.fillRect(0,0,W,H);
+  const sal=cl(1-prog(u,3.0,3.45));
+  lightBeam(W/2,H*.46,620, k?'rgb(212,175,55)':'rgb(59,155,255)',.12*cl(prog(u,.1,1.2)));
+  X.save(); X.globalAlpha=eOut(prog(u,.1,.7))*sal*.2;
+  txt('"',W/2,SAFE.top+252,{size:300,weight:900,color:F.a,align:'center'});
+  X.restore();
+  const p1=eOut(prog(u,.25,1.15)), p2=eOut(prog(u,1.3,2.15));
+  if(p1>0){ X.save(); X.globalAlpha=sal*p1; X.translate(0,(1-p1)*14);
+    wrapIt(F.l1,W/2,SAFE.top+296,1500,46,64,'#f2f5fa'); X.restore() }
+  if(p2>0){ X.save(); X.globalAlpha=sal*p2; X.translate(0,(1-p2)*14);
+    wrapIt(F.l2,W/2,SAFE.top+496,1500,40,58,F.a2); X.restore() }
+  const fp=eOut(prog(u,2.2,2.8));
+  if(fp>0){ X.save(); X.globalAlpha=fp*sal;
+    X.strokeStyle=F.a; X.lineWidth=2;
+    X.beginPath(); X.moveTo(W/2-70,SAFE.bot-126); X.lineTo(W/2+70,SAFE.bot-126); X.stroke();
+    txt(F.nom,W/2,SAFE.bot-74,{size:32,weight:800,color:'#fff',align:'center'});
+    tracked(F.rol,W/2,SAFE.bot-40,{size:17,weight:700,track:4,align:'center',color:'#8b9ab0'});
+    X.restore() }
+  vignette(.95); grain(Math.round(u*FPS),.05); flash(t,k?120.4:109.9,.2,'#fff',.35);
+}
+function scFrasePercy(t){ scFrase(t,0) }
+function scFraseEdison(t){ scFrase(t,1) }
+
 /* 84,1–89,1 · Lo que hay ahora */
 function scAhora(t){
   const u=t-84.1;
@@ -1579,7 +1627,7 @@ function fi(size,weight){ return 'italic '+weight+' '+size+'px '+FONT }
 const FICHAS=[
  {img:'percy', acento:'#3b9bff', nombre:'Ing. Percy Alcántara', rol:'LÍDER DE EXCELENCIA OPERACIONAL',
   t1:'EXCELENCIA', t2:' OPERACIONAL',
-  frase:['"La excelencia operacional no es una meta:','es un sistema que se sostiene solo."'],
+  frase:[],
   bio:['Ingeniero Industrial y consultor en optimización de procesos, gestión de proyectos y',
        'transformación digital. Dirige proyectos de desarrollo en el sector minero e industrial,',
        'integrando operaciones, costos y control gerencial en tiempo real.'],
@@ -1592,7 +1640,7 @@ const FICHAS=[
   tags:['MINERÍA','MANUFACTURA','PROYECTOS','LEAN SIX SIGMA','CONSULTORÍA']},
  {img:'edison', acento:'#d4af37', nombre:'Ing. Edison Vásquez', rol:'LÍDER DE SUPPLY CHAIN',
   t1:'SUPPLY CHAIN', t2:' & PROCUREMENT',
-  frase:['"El riesgo se gestiona antes de que exista,','no después de que ocurre."'],
+  frase:[],
   bio:['Lideró proyectos en la INDUSTRIA DE DEFENSA y automoción, en General Dynamics',
        'European Land Systems y Martinrea International: contratos CAPEX/OPEX y',
        'homologación de proveedores globales bajo IATF 16949, donde el error no se perdona.'],
@@ -1633,7 +1681,7 @@ function scFicha(t,k){
   X.restore();
   // la frase
   const fp=eOut(prog(u,.75,1.4));
-  if(fp>0){ X.save(); X.globalAlpha=fp*sal; X.font=fi(25,600); X.textAlign='center'; X.fillStyle='#c2ccda';
+  if(fp>0&&F.frase.length){ X.save(); X.globalAlpha=fp*sal; X.font=fi(25,600); X.textAlign='center'; X.fillStyle='#c2ccda';
     F.frase.forEach((L,i)=>X.fillText(L,cx,cy+R+96+i*38)); X.restore() }
   // nombre y cargo
   const np=eOut(prog(u,.5,1.1));
@@ -1835,11 +1883,13 @@ const TL=[
   {a:84.1,b:89.1,fn:scAhora,off:84.1},     // lo que hay ahora
   {a:89.1,b:97.9,fn:scEvidencia,off:70},
   {a:97.9,b:109.9,fn:scMercado,off:77},
-  {a:109.9,b:116.9,fn:scPercy,off:93},
-  {a:116.9,b:123.9,fn:scEdison,off:97.5},
-  {a:123.9,b:130.9,fn:scCierreAlma,off:102}
+  {a:109.9,b:113.4,fn:scFrasePercy,off:109.9},
+  {a:113.4,b:120.4,fn:scPercy,off:93},
+  {a:120.4,b:123.9,fn:scFraseEdison,off:120.4},
+  {a:123.9,b:130.9,fn:scEdison,off:97.5},
+  {a:130.9,b:137.9,fn:scCierreAlma,off:102}
 ];
-const DUR=130.9, TOTAL=DUR*FPS;
+const DUR=137.9, TOTAL=DUR*FPS;
 function RENDER(frame){
   const t=frame/FPS;
   X.setTransform(1,0,0,1,0,0);
