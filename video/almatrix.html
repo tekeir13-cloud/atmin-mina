@@ -1060,42 +1060,32 @@ function scCierre(t){
 
 function rrP(g,x,y,w,h,r){r=Math.min(r,w/2,h/2);g.moveTo(x+r,y);
   g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath()}
-/* Figura de fondo del gancho: un rombo redondeado girando despacio */
-function diamante(cx,cy,S,col){ const g=X; g.save(); g.translate(cx,cy); g.rotate(Math.PI/4);
-  g.beginPath(); rrP(g,-S/2,-S/2,S,S,S*0.26); g.fillStyle=col; g.fill(); g.restore() }
-/* El logotipo oficial de ALMATRIX.
-   Se dibuja en modo "screen": el negro del archivo desaparece sobre
-   cualquier fondo oscuro y el blanco queda limpio, con su antialias. */
-/* El halo se pinta una sola vez en un lienzo chico y después se escala.
-   Dibujar el degradado en cada cuadro costaba 200 ms; así cuesta nada. */
-let haloCv=null;
-function halo(){
-  if(haloCv) return haloCv;
-  haloCv=document.createElement('canvas'); haloCv.width=haloCv.height=256;
-  const g2=haloCv.getContext('2d');
-  const gr=g2.createRadialGradient(128,128,4,128,128,126);
-  gr.addColorStop(0,'rgba(120,180,255,1)'); gr.addColorStop(.45,'rgba(90,150,235,.42)');
-  gr.addColorStop(1,'rgba(90,150,235,0)');
-  g2.fillStyle=gr; g2.fillRect(0,0,256,256);
-  return haloCv;
-}
-function imgScreen(im,x,y,w,h,a,glow){
-  if(!im||!im.complete||!im.naturalWidth) return;
-  X.save(); X.globalCompositeOperation='screen';
-  if(glow){ X.globalAlpha=a*glow*.5;
-    const R=Math.max(w,h)*.95;
-    X.drawImage(halo(),x+w/2-R,y+h/2-R,R*2,R*2) }
-  X.globalAlpha=a; X.drawImage(im,x,y,w,h); X.restore();
-}
+/* La marca ALMATRIX: dos eslabones entrelazados.
+   Los huecos se recortan del dibujo entero, así se ven huecos de verdad
+   sobre cualquier fondo y ninguno de los dos los tapa. */
+function rombo(g,cx,cy,S,r){ g.save(); g.translate(cx,cy); g.rotate(Math.PI/4);
+  rrP(g,-S/2,-S/2,S,S,r); g.restore() }
+function diamante(cx,cy,S,col){ const g=X; g.beginPath(); rombo(g,cx,cy,S,S*0.26);
+  g.fillStyle=col; g.fill() }
 function marcaAlmatrix(cx,cy,S,a,join,oscuro){
-  const im=IMGS['alma-marca']; if(!im||!im.naturalWidth) return;
-  const h=S*1.9, w=h*(im.naturalWidth/im.naturalHeight);
-  imgScreen(im,cx-w/2,cy-h/2,w,h,a,.6);
-}
-function lockupAlma(cx,cy,ancho,a,brillo){
-  const im=IMGS['alma-lockup']; if(!im||!im.naturalWidth) return;
-  const w=ancho, h=w*(im.naturalHeight/im.naturalWidth);
-  imgScreen(im,cx-w/2,cy-h/2,w,h,a,brillo==null?.5:brillo);
+  const g=X, sep=lerp(S*0.95,S*0.30,join);
+  const c1x=cx-sep, c2x=cx+sep, hS=S*0.455;
+  const az='#0a84ff', bl=oscuro?'#0b0d12':'#ffffff';
+  g.save(); g.globalAlpha=a;
+  g.beginPath();
+  g.rect(cx-S*2.4,cy-S*2.4,S*4.8,S*4.8);
+  rombo(g,c1x,cy,hS,hS*0.30);
+  rombo(g,c2x,cy,hS,hS*0.30);
+  g.clip('evenodd');
+  diamante(c1x,cy,S,bl);
+  diamante(c2x,cy,S,az);
+  if(join>0.5){                       // el blanco vuelve al frente abajo
+    g.save(); g.beginPath();
+    g.rect(cx-S*2.4,cy,S*4.8,S*2.4); g.clip();
+    diamante(c1x,cy,S,bl);
+    g.restore();
+  }
+  g.restore();
 }
 function lockup(cx,cy,S,a,join,oscuro){
   marcaAlmatrix(cx-S*2.05,cy,S,a,join,oscuro);
@@ -1110,9 +1100,8 @@ function lockup(cx,cy,S,a,join,oscuro){
 
 /* ══ Imágenes de los fundadores ══ */
 const IMGS={}; let listas=0;
-['percy','edison','alma-marca','alma-lockup'].forEach(n=>{const im=new Image();
-  im.onload=()=>{listas++; if(listas>=4)window.LISTO=true};
-  im.onerror=()=>{listas++; if(listas>=4)window.LISTO=true}; im.src=n+'.png'; IMGS[n]=im});
+['percy','edison'].forEach(n=>{const im=new Image(); im.onload=()=>{listas++; if(listas>=2)window.LISTO=true};
+  im.onerror=()=>{listas++; if(listas>=2)window.LISTO=true}; im.src=n+'.png'; IMGS[n]=im});
 
 /* ══ ESCENAS NUEVAS DEL MAESTRO ALMATRIX ══ */
 
@@ -1191,14 +1180,22 @@ function scAlmatrix(t){
   X.fillStyle='#000'; X.fillRect(0,0,W,H);
   const g=X.createRadialGradient(W/2,H*.44,60,W/2,H*.5,W*.7);
   g.addColorStop(0,'rgba(8,26,56,.95)'); g.addColorStop(1,'#000'); X.fillStyle=g; X.fillRect(0,0,W,H);
-  const ent=eOut(prog(u,.35,1.9));
-  lightBeam(W/2,H*.44,lerp(140,640,ent),'rgb(59,155,255)',.26*cl(prog(u,.3,2.2)));
-  const esc=lerp(1.14,1,eOut(prog(u,.35,2.4)));
-  lockupAlma(W/2,H*.46,1180*esc,cl(prog(u,.3,1.1)),.45+.25*Math.sin(u*1.6));
-  const kp=prog(u,1.5,2.4);
-  if(kp>0&&kp<1){ X.save(); X.globalCompositeOperation='screen'; X.globalAlpha=(1-kp)*.5;
-    X.strokeStyle='#8fd3ff'; X.lineWidth=(1-kp)*7+1;
-    X.beginPath(); X.ellipse(W/2,H*.46,eOut(kp)*680,eOut(kp)*330,0,0,7); X.stroke(); X.restore() }
+  const join=eOut(prog(u,.4,2.0));
+  lightBeam(W/2,H*.42,lerp(120,620,join),'rgb(10,132,255)',.3*cl(prog(u,.4,2.4)));
+  X.save(); X.globalAlpha=cl(prog(u,.15,.7));
+  marcaAlmatrix(W/2,H*.40,168,1,join);
+  X.restore();
+  // el golpe del enganche
+  const kp=prog(u,1.75,2.6);
+  if(kp>0&&kp<1){ X.save(); X.globalCompositeOperation='screen'; X.globalAlpha=(1-kp)*.6;
+    X.strokeStyle='#8fd3ff'; X.lineWidth=(1-kp)*8+1;
+    X.beginPath(); X.ellipse(W/2,H*.40,eOut(kp)*560,eOut(kp)*320,0,0,7); X.stroke(); X.restore() }
+  const wp=eOut(prog(u,2.1,2.9));
+  if(wp>0){ X.save(); X.globalAlpha=wp; X.textAlign='center'; X.textBaseline='middle';
+    txt('ALMATRIX',W/2,H*.655,{size:104,weight:900,color:'#fff',align:'center',base:'middle',
+      glow:'rgba(10,132,255,.45)',glowSize:40});
+    tracked('SMART INTERACTIONS',W/2,H*.655+72,{size:24,weight:500,track:12,align:'center',color:'#9fb0c6'});
+    X.restore() }
   kinetic([[{t:'En'},{t:'ALMATRIX'},{t:'nos'},{t:'ocupamos'},{t:'de'},{t:'lo'},{t:'más'},{t:'importante:'}],
            [{t:'entregar'},{t:'valor.',c:'#0a84ff',g:'rgba(10,132,255,.55)'}]],u,
     {size:44,y:H*.80,start:3.3,stagger:.045,lh:58,alpha:cl(1-prog(u,6.5,7))});
@@ -1791,8 +1788,11 @@ function scCierreAlma(t){
   const lp=eOut(prog(u,4.2,5.2));
   if(lp>0){
     X.save(); X.globalAlpha=lp;
-    lightBeam(W/2,H*.5,560,'rgb(59,155,255)',.16);
-    lockupAlma(W/2,H*.5,1220,lp,.42+.22*Math.sin(u*1.4));
+    lightBeam(W/2,H*.42,520,'rgb(59,155,255)',.16);
+    marcaAlmatrix(W/2,H*.40,156,1,1);
+    txt('ALMATRIX',W/2,H*.645,{size:104,weight:900,color:'#fff',align:'center',base:'middle',
+      glow:'rgba(10,132,255,.4)',glowSize:38});
+    tracked('SMART INTERACTIONS',W/2,H*.645+72,{size:24,weight:500,track:12,align:'center',color:'#9fb0c6'});
     X.restore();
   }
   vignette(.95); grain(Math.round(u*FPS),.05);

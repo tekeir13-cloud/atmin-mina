@@ -75,15 +75,19 @@ se recuerdan y tres sí.
 | 1:11–1:18 | Mercado: 10 700 productores, 6 minas al mes 12 |
 | 1:18–1:30 | Los fundadores y el enunciado de marca |
 
-## La marca
+## La marca, dibujada en código
 
-`alma-marca.png` y `alma-lockup.png` son el logotipo oficial de ALMATRIX,
-recortados del archivo original. En el video se dibujan en modo **screen**: el
-negro del archivo desaparece sobre cualquier fondo oscuro y el blanco conserva
-su antialias. No es una versión redibujada — es el logo exacto.
+`marca.html` tiene el isotipo de ALMATRIX como código, no como imagen: dos
+eslabones que se enganchan solos (`join` de 0 a 1). Los huecos se recortan del
+dibujo entero, así se ven huecos de verdad sobre cualquier fondo y ninguno de
+los dos eslabones tapa al otro. Por eso la marca puede animarse y escalarse sin
+perder filo, y por eso tiene un gesto propio en pantalla: los eslabones entran
+separados y se enganchan.
 
-Si algún día hace falta sobre fondo claro, hay que exportar una versión en
-negro desde el archivo de marca: el modo screen solo sirve sobre oscuro.
+Hubo una vuelta con un monograma en A. Se descartó: a tamaño chico el hueco
+interior se cerraba y el trazo curvo se fundía con la pata, y al ser blanco
+puro rompía la familia de color con la nube azul de MukiCloud. Queda en el
+historial, commit `3a46f8d`, por si alguna vez se retoma.
 
 ## Datos y personas
 
