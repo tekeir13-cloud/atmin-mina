@@ -1066,15 +1066,26 @@ function diamante(cx,cy,S,col){ const g=X; g.save(); g.translate(cx,cy); g.rotat
 /* El logotipo oficial de ALMATRIX.
    Se dibuja en modo "screen": el negro del archivo desaparece sobre
    cualquier fondo oscuro y el blanco queda limpio, con su antialias. */
+/* El halo se pinta una sola vez en un lienzo chico y después se escala.
+   Dibujar el degradado en cada cuadro costaba 200 ms; así cuesta nada. */
+let haloCv=null;
+function halo(){
+  if(haloCv) return haloCv;
+  haloCv=document.createElement('canvas'); haloCv.width=haloCv.height=256;
+  const g2=haloCv.getContext('2d');
+  const gr=g2.createRadialGradient(128,128,4,128,128,126);
+  gr.addColorStop(0,'rgba(120,180,255,1)'); gr.addColorStop(.45,'rgba(90,150,235,.42)');
+  gr.addColorStop(1,'rgba(90,150,235,0)');
+  g2.fillStyle=gr; g2.fillRect(0,0,256,256);
+  return haloCv;
+}
 function imgScreen(im,x,y,w,h,a,glow){
   if(!im||!im.complete||!im.naturalWidth) return;
-  X.save(); X.globalAlpha=a;
-  if(glow){ const g=X.createRadialGradient(x+w/2,y+h/2,10,x+w/2,y+h/2,Math.max(w,h)*.85);
-    g.addColorStop(0,'rgba(120,180,255,'+(glow*.24)+')'); g.addColorStop(1,'rgba(0,0,0,0)');
-    X.globalCompositeOperation='screen'; X.fillStyle=g;
-    X.fillRect(x-w*.6,y-h*.6,w*2.2,h*2.2) }
-  X.globalCompositeOperation='screen';
-  X.drawImage(im,x,y,w,h); X.restore();
+  X.save(); X.globalCompositeOperation='screen';
+  if(glow){ X.globalAlpha=a*glow*.5;
+    const R=Math.max(w,h)*.95;
+    X.drawImage(halo(),x+w/2-R,y+h/2-R,R*2,R*2) }
+  X.globalAlpha=a; X.drawImage(im,x,y,w,h); X.restore();
 }
 function marcaAlmatrix(cx,cy,S,a,join,oscuro){
   const im=IMGS['alma-marca']; if(!im||!im.naturalWidth) return;
