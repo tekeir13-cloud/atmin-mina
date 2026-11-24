@@ -87,12 +87,19 @@ function measure(s,size,w=800){X.save();X.font=f(size,w);const m=X.measureText(s
 
 /* ── Tipografía cinética: palabra por palabra, escalonada ─────────── */
 function kinetic(lines,t,o={}){
-  const size=o.size||86, lh=o.lh||size*1.22, cx=o.x||W/2, top=o.y||H/2;
+  const cx=o.x||W/2, top=o.y||H/2, maxW=W-96;
   const stag=o.stagger==null?.07:o.stagger, dur=o.dur||.5, start=o.start||0;
-  let i=0, totalW=[];
-  lines.forEach(ln=>totalW.push(ln.map(w=>measure(w.t||w,size,w.w||o.weight||800))));
+  const peso=w=>w.w||o.weight||800;
+  let size=o.size||86, lh=o.lh||size*1.22, gap=o.gap==null?size*.26:o.gap;
+  const medir=()=>lines.map(ln=>ln.map(w=>measure(w.t||w,size,peso(w))));
+  let totalW=medir();
+  // si la línea más ancha no cabe en el cuadro, encoge todo el bloque
+  const ancho=()=>Math.max.apply(null,lines.map((ln,li)=>
+    totalW[li].reduce((a,b)=>a+b,0)+gap*(ln.length-1)));
+  const amax=ancho();
+  if(amax>maxW){ const k=maxW/amax; size*=k; lh*=k; gap*=k; totalW=medir(); }
+  let i=0;
   lines.forEach((ln,li)=>{
-    const gap=o.gap==null?size*.26:o.gap;
     let lw=totalW[li].reduce((a,b)=>a+b,0)+gap*(ln.length-1);
     let x=cx-lw/2, y=top+li*lh;
     ln.forEach((w,wi)=>{
@@ -104,7 +111,7 @@ function kinetic(lines,t,o={}){
           color:w.c||o.color||C.ink, glow:w.g||o.glow, glowSize:o.glowSize, ab:o.ab});
         X.restore();
       }
-      x+=totalW[li][wi]+(o.gap==null?size*.26:o.gap);
+      x+=totalW[li][wi]+gap;
     });
   });
 }
@@ -161,7 +168,7 @@ function firma(cx,cy,size,a,sweep){
 }
 /* ── Capas de acabado: viñeta, grano, barras cine, destello ───────── */
 function vignette(strength=.9){
-  const g=X.createRadialGradient(W/2,H*.48,H*.28,W/2,H*.5,W*.72);
+  const g=X.createRadialGradient(W/2,H*.48,H*.42,W/2,H*.5,H*.76);
   g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,'+strength+')');
   X.fillStyle=g; X.fillRect(0,0,W,H);
 }
@@ -296,11 +303,12 @@ function scTunel(t){
   // texto
   const ta=prog(t,1.1,2.0);
   if(ta>0){
-    tracked('EN EL FRENTE DE TRABAJO, NO EN LA OFICINA',W/2,SAFE.bot-118,{size:26,weight:800,track:5,
+    tracked('EN EL FRENTE DE TRABAJO, NO EN LA OFICINA',W/2,SAFE.bot-224,{size:26,weight:800,track:5,
       align:'center',color:C.gold,alpha:eOut(ta)*cl(1-prog(t,3.5,4))});
   }
-  kinetic([[{t:'Aquí'},{t:'nace'},{t:'el'},{t:'costo'},{t:'de'},{t:'cada'},{t:'metro.',c:C.ink,g:'rgba(59,155,255,.5)'}]],t,
-    {size:70,y:SAFE.bot-40,start:1.5,stagger:.06,ab:1.3,alpha:cl(1-prog(t,3.5,4))});
+  kinetic([[{t:'Aquí'},{t:'nace'},{t:'el'},{t:'costo'}],
+           [{t:'de'},{t:'cada'},{t:'metro.',c:C.ink,g:'rgba(59,155,255,.5)'}]],t,
+    {size:66,y:SAFE.bot-116,lh:80,start:1.5,stagger:.06,ab:1.3,alpha:cl(1-prog(t,3.5,4))});
   vignette(1.02); flash(t,0,.5,'#000',1);
 }
 
