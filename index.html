@@ -2570,7 +2570,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.25-389</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.25-390</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2615,7 +2615,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.25-389</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.25-390</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2783,7 +2783,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.25-389</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.25-390</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5707,6 +5707,37 @@ function _dmLimpiarCapas(quedaEnDashboard){
   try{ if(!quedaEnDashboard && typeof dmShowCerrar==='function') dmShowCerrar(true); }catch(e){}
   try{ const v=document.getElementById('dm-velo'); if(v) v.classList.remove('on'); }catch(e){}
 }
+/* GUARDIÁN DE PANTALLA OSCURA. Revisa cada 1.5 s si hay una capa vacía (un velo sin ventana
+   encima) cubriendo la pantalla. Si la encuentra dos veces seguidas, la quita y dice cuál era.
+   También devuelve el brillo si alguien dejó un filtro u opacidad sobre la página entera. */
+(function(){
+  let sospechosas=new Map();
+  const alfa=c=>{ const m=String(c||'').match(/rgba?\(([^)]+)\)/); if(!m) return 0; const p=m[1].split(',').map(x=>parseFloat(x)); return p.length>3?p[3]:1; };
+  function revisar(){
+    try{
+      const vw=innerWidth, vh=innerHeight, encontradas=[];
+      // filtro u opacidad sobre la página entera
+      [document.documentElement,document.body,document.querySelector('.main'),document.querySelector('.content')].forEach(e=>{
+        if(!e) return; const c=getComputedStyle(e);
+        if((c.filter&&c.filter!=='none') || Number(c.opacity)<0.95){ e.style.filter='none'; e.style.opacity='1'; encontradas.push((e.id||e.tagName.toLowerCase())+' (filtro/opacidad)'); }
+      });
+      document.querySelectorAll('body > *, body > * > *').forEach(e=>{
+        if(e.id==='login-screen'||e.id==='muki-carga'||e.classList.contains('dm-show')||e.id==='ficha-print') return;
+        const c=getComputedStyle(e); if(c.position!=='fixed'||c.display==='none'||c.visibility==='hidden'||Number(c.opacity)<0.05||c.pointerEvents==='none'&&alfa(c.backgroundColor)<0.15) return;
+        const r=e.getBoundingClientRect(); if(r.width<vw*0.9||r.height<vh*0.9) return;
+        const a=alfa(c.backgroundColor); if(a<0.15&&(!c.backdropFilter||c.backdropFilter==='none')) return;
+        if(e.id==='dm-velo'){ const pn=document.getElementById('dm-panel'); if(pn&&pn.classList.contains('on')) return; }
+        // ¿tiene algo visible encima (la ventana del modal)? entonces no es un velo huérfano
+        const hijoVisible=[...e.querySelectorAll('*')].some(h=>{ const rr=h.getBoundingClientRect(); return rr.width*rr.height>vw*vh*0.03 && getComputedStyle(h).visibility!=='hidden' && getComputedStyle(h).display!=='none'; });
+        if(hijoVisible) return;
+        const k=e.id||e.className||e.tagName; const n=(sospechosas.get(e)||0)+1; sospechosas.set(e,n);
+        if(n>=2){ e.classList.remove('on','show'); e.style.display='none'; sospechosas.delete(e); encontradas.push(String(k).slice(0,40)); }
+      });
+      if(encontradas.length){ console.warn('[pantalla] capa oscura quitada:',encontradas); try{ showNotif('Se quitó una capa que oscurecía la pantalla: '+encontradas.join(', '),'warn'); }catch(e){} }
+    }catch(e){}
+  }
+  try{ setInterval(revisar,1500); }catch(e){}
+})();
 function navigate(page){
   // Al cambiar de módulo se cierra lo que el Dashboard deja abierto encima (panel lateral con su
   // velo oscuro, presentación). Si no, el velo se quedaba sobre el módulo nuevo y la pantalla
