@@ -2570,7 +2570,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.25-388</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.25-389</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2615,7 +2615,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.25-388</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.25-389</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2783,7 +2783,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.25-388</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.25-389</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5698,12 +5698,20 @@ function _vistaLeer(){
     return (Date.now()-v.t < 12*3600*1000) ? v : null;
   }catch(e){ return null; }
 }
+/* Lo que el Dashboard pone por encima de todo (panel lateral con su velo oscuro al 55 %, y la
+   presentación) tiene que irse cuando se sale de él: al cambiar de módulo, al cerrar sesión o al
+   volver a la pantalla de ingreso. Si no, el velo se quedaba encima y toda la app —incluso la
+   pantalla de inicio— se veía opaca. */
+function _dmLimpiarCapas(quedaEnDashboard){
+  try{ if(typeof dmCerrar==='function') dmCerrar(); }catch(e){}
+  try{ if(!quedaEnDashboard && typeof dmShowCerrar==='function') dmShowCerrar(true); }catch(e){}
+  try{ const v=document.getElementById('dm-velo'); if(v) v.classList.remove('on'); }catch(e){}
+}
 function navigate(page){
   // Al cambiar de módulo se cierra lo que el Dashboard deja abierto encima (panel lateral con su
   // velo oscuro, presentación). Si no, el velo se quedaba sobre el módulo nuevo y la pantalla
   // se veía oscura hasta tocarla.
-  try{ if(typeof dmCerrar==='function') dmCerrar(); }catch(e){}
-  try{ if(typeof dmShowCerrar==='function' && page!=='dashboard') dmShowCerrar(true); }catch(e){}
+  _dmLimpiarCapas(page==='dashboard');
   // Monte Bravo va cerrado: solo su compresorista, el Gerente General y el Jefe de Finanzas.
   // Se comprueba por ROL y no solo por la lista de módulos, para que ningún atajo —un enlace
   // guardado, la última vista, un perfil viejo de la nube— abra el módulo por la puerta de atrás.
@@ -5995,6 +6003,7 @@ async function init(){
 }
 
 function mostrarLogin(){
+  _dmLimpiarCapas(false);
   document.getElementById('login-screen').style.display = 'flex';
   mostrarBottomNav(false);
   try { document.getElementById('login-email').focus(); } catch(e){}
@@ -31766,6 +31775,7 @@ function aplicarPermisosNavegacion(mods){
 }
 
 async function doLogout(){
+  _dmLimpiarCapas(false);
   try{ await sb.auth.signOut(); }catch(e){}
   sesionOlvidar();
   usuarioActivo = null;
