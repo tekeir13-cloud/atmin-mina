@@ -2599,7 +2599,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.25-391</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.25-392</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2644,7 +2644,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.25-391</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.25-392</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2812,7 +2812,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.25-391</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.25-392</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -5466,6 +5466,26 @@ let SB_ONLINE = false;
 // desde la nube. Evita que un dispositivo con localStorage vacío suba el demo
 // y pise los datos reales del equipo.
 let CLOUD_SYNC_READY = false;
+/* CANDADO DE LA SESIÓN DE RENDICIÓN. El módulo de rendición es aparte: con la sesión de su
+   administrador, lo ÚNICO que se puede escribir en la nube es 'rendiciones' (y las lápidas de los
+   proyectos que borre). Cualquier otra escritura —partes, almacén, seguridad, lo que sea que la app
+   reenvíe al arrancar— se descarta aquí, en la conexión misma, antes de salir del equipo. Las
+   lecturas no se tocan. Con cualquier otro usuario esto no hace nada. */
+function _blindarSesionRendicion(){
+  if(!sb || sb._blindadoRend || typeof sb.from!=='function') return;
+  const orig=sb.from.bind(sb);
+  const nada=new Proxy(function(){},{ get:(t,k)=>k==='then'?(ok=>Promise.resolve({data:null,error:null}).then(ok)):(()=>nada), apply:()=>nada });
+  sb.from=function(tabla){
+    const q=orig(tabla);
+    if(!(typeof usuarioActivo!=='undefined' && usuarioActivo && usuarioActivo.rol==='rendicion')) return q;
+    const permitido=pl=>tabla==='app_modulos' && [].concat(pl||[]).every(r=>r && (r.modulo==='rendiciones'||r.modulo==='tombstones'));
+    ['insert','upsert'].forEach(fn=>{ const o=q[fn]; if(typeof o!=='function') return;
+      q[fn]=function(pl,...a){ if(permitido(pl)) return o.call(q,pl,...a); console.warn('[rendición] escritura bloqueada en',tabla,[].concat(pl||[]).map(r=>r&&r.modulo).join(',')); return nada; }; });
+    ['update','delete'].forEach(fn=>{ if(typeof q[fn]!=='function') return; q[fn]=function(){ console.warn('[rendición] '+fn+' bloqueado en',tabla); return nada; }; });
+    return q;
+  };
+  sb._blindadoRend=true;
+}
 const _isHttps = location.protocol === 'https:' || location.hostname === 'localhost';
 if(!_isHttps){
   console.warn('Modo offline — archivo local detectado');
@@ -5474,6 +5494,7 @@ try {
   if(_isHttps && typeof supabase !== 'undefined'){
     sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     SB_ONLINE = true;
+    try{ _blindarSesionRendicion(); }catch(e){}
   } else {
     throw new Error('offline');
   }
@@ -9626,7 +9647,7 @@ const MODULO_PANTALLA = { almacen:'logistica', almacen_histbackup:'logistica', t
    asistente y Operaciones —más Administración y Finanzas, que son los dueños del padrón—. Nadie
    más, para que un equipo cualquiera no reparta el personal por su cuenta. */
 const MODULO_DUENOS = {
-  rendiciones: ['rendicion','jefe_finanzas','gerente_general'],
+  rendiciones: ['rendicion'],
   personal_turno: ['ingeniero_residente','asistente_residente','jefe_operaciones',
                    'administrador','jefe_finanzas','gerente_general'],
 };
@@ -31564,8 +31585,8 @@ const MONTEBRAVO_ROLES = ['monte_bravo','gerente_general','jefe_finanzas','ingen
 function rolVeMonteBravo(rol){ return MONTEBRAVO_ROLES.indexOf(rol)>=0; }
 
 const ROLES_MODULOS = {
-  gerente_general:      TODOS_MODULOS.concat(['rendicion']),
-  jefe_finanzas:        TODOS_MODULOS.concat(['rendicion']),
+  gerente_general:      TODOS_MODULOS,
+  jefe_finanzas:        TODOS_MODULOS,
   // Rendición de gastos de terceros: su administrador solo ve ese módulo.
   rendicion:            ['rendicion'],
   jefe_operaciones:     ['logistica','operaciones','mantenimiento','compresorista','seguridad'],
@@ -37200,13 +37221,13 @@ const _origRenderTabla = typeof renderTablaCompresorista === 'function' ? render
 // Cada mes calendario vive solo: del 1 al ultimo dia (cmpVentana).
 /* ══════════ RENDICIÓN DE GASTOS DE TERCEROS ══════════
    Módulo aparte y sencillo: cada PROYECTO (un evento, un encargo, un viaje) lleva sus pagos a
-   personas y sus gastos, y el sistema suma todo. Lo administra su propio usuario; el Jefe de
-   Finanzas y el Gerente General también lo ven y pueden corregirlo.
+   personas y sus gastos, y el sistema suma todo. Es un módulo APARTE: solo entra su administrador
+   (Omar), y su sesión no puede escribir en ningún otro módulo (ver _blindarSesionRendicion).
    Se guarda en la nube como 'rendiciones' (lista de proyectos) y se une por proyecto: gana la
    edición más reciente de cada uno. Un proyecto borrado deja lápida y no vuelve.
    Un monto que no se conoce se deja VACÍO, no en cero: la pantalla lo marca como pendiente. */
 const REND_KEY='atmin_rendiciones';
-const REND_DUENOS=['rendicion','jefe_finanzas','gerente_general'];
+const REND_DUENOS=['rendicion'];   // solo su administrador (Omar)
 const REND_CATEGORIAS=['Vuelos','Camioneta / transporte','Viáticos','Hospedaje','Alimentación','Inscripción','Agua y otros','Uniformes','Materiales','Otros'];
 let _rendSel=null;            // proyecto abierto
 let _rendT=null;              // guardado diferido
@@ -37302,6 +37323,7 @@ function renderRendicion(){
       <div style="flex:1;min-width:220px">
         <input ${ro} class="rend-tit" value="${escAttr(p.nombre)}" onchange="rendCampo('nombre',this.value)">
       </div>
+      <button class="btn btn-gold" onclick="rendInforme()">📄 Descargar informe (PDF)</button>
       <button class="btn btn-outline" onclick="rendExcel()">⬇ Excel</button>
       ${ed?`<button class="btn btn-outline" style="border-color:#ef4444;color:#ef4444" onclick="rendEliminar('${p.id}')">Eliminar</button>`:''}
     </div>
@@ -37333,6 +37355,100 @@ function renderRendicion(){
     </div>
     ${ed?'':'<div style="font-size:12px;color:var(--text3);margin-top:10px">Solo lectura: este módulo lo edita su administrador.</div>'}`;
 }
+/* INFORME DEL PROYECTO EN PDF. Se arma con lo registrado hasta este momento y se abre listo para
+   imprimir: en el cuadro de impresión se elige "Guardar como PDF". Portada con el estilo de los
+   informes de la casa, en el azul del logo. Las filas sin monto se listan aparte como pendientes:
+   el informe no las cuenta como cero ni las esconde. */
+function rendInforme(){
+  const p=_rendP(); if(!p) return;
+  const t=rendTotales(p), E=s=>escAttr(s==null?'':String(s));
+  const M=v=>v==null?'<span class="pend">pendiente</span>':_rendS(v);
+  const ahora=new Date(), dd=n=>String(n).padStart(2,'0');
+  const emit=dd(ahora.getDate())+'/'+dd(ahora.getMonth()+1)+'/'+ahora.getFullYear()+' '+dd(ahora.getHours())+':'+dd(ahora.getMinutes());
+  const u=p._ts?new Date(p._ts):null;
+  const hasta=u?(dd(u.getDate())+'/'+dd(u.getMonth()+1)+'/'+u.getFullYear()+' '+dd(u.getHours())+':'+dd(u.getMinutes())):emit;
+  const fF=f=>{ const m=String(f||'').match(/^(\d{4})-(\d{2})-(\d{2})/); return m?m[3]+'/'+m[2]+'/'+m[1]:E(f); };
+  const pend=[].concat((p.personas||[]).filter(x=>x.total==null).map(x=>'Pago a '+(x.nombre||'—')+(x.detalle?' ('+x.detalle+')':'')),
+                       (p.gastos||[]).filter(x=>x.monto==null).map(x=>(x.categoria||'Gasto')+(x.descripcion?' — '+x.descripcion:'')));
+  const quien=(usuarioActivo&&usuarioActivo.nombre)||p.responsable||'—';
+  const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Rendición — ${E(p.nombre)}</title>
+  <style>
+    @page{size:A4;margin:12mm 14mm}
+    *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;padding:22px 26px;font-size:11.5px}
+    .port{height:94vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;border:3px solid #111;padding:40px;page-break-after:always;break-after:page}
+    .port .tit{font-size:21px;font-weight:700;letter-spacing:3px;text-transform:uppercase}
+    .port .pro{font-size:36px;font-weight:900;margin-top:10px;line-height:1.15}
+    .port .lin{width:120px;height:3px;background:#1668cf;margin:22px 0}
+    .port .dat{font-size:12.5px;color:#444;line-height:1.9}
+    .port .tot{margin-top:30px;border:2px solid #111;padding:16px 34px}
+    .port .tot .lbl{display:block;font-size:11px;letter-spacing:1.5px;color:#555;margin:0 0 8px}
+    .port .tot .num{display:block;font-size:32px;font-weight:900;line-height:1}
+    .port .pie{margin-top:54px;padding-top:26px;border-top:1px solid #ccc;width:300px}
+    .marca{font-size:30px;font-weight:900;letter-spacing:5px;line-height:1}.marca span{color:#1668cf}
+    .slogan{font-size:9.5px;letter-spacing:5.5px;color:#777;margin-top:7px}
+    h2{font-size:12.5px;letter-spacing:1.5px;text-transform:uppercase;border-bottom:2px solid #1668cf;padding-bottom:4px;margin:16px 0 8px}
+    .cab{display:flex;justify-content:space-between;gap:12px;font-size:10.5px;color:#555;border-bottom:1px solid #ccc;padding-bottom:8px}
+    .cab b{color:#111}
+    .res{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;break-inside:avoid}
+    .res div{border:1px solid #bbb;padding:8px 10px}.res span{display:block;font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:#666}
+    .res b{display:block;font-size:15px;margin-top:3px}.res .big{border:2px solid #111}.res .big b{font-size:18px}
+    table{width:100%;border-collapse:collapse;margin-top:4px}
+    th{background:#eef3fb;text-align:left;font-size:9.5px;letter-spacing:.6px;text-transform:uppercase;border:1px solid #9aa;padding:4px 6px}
+    td{border:1px solid #bbb;padding:3.5px 6px;vertical-align:top}
+    tr{break-inside:avoid;page-break-inside:avoid}
+    .r{text-align:right;white-space:nowrap}
+    tfoot td{font-weight:700;background:#f6f8fb}
+    .pend{color:#b45309;font-style:italic}
+    .nota{font-size:10.5px;color:#555;margin-top:8px}
+    ul{margin:6px 0 0 18px;padding:0} li{margin:2px 0}
+    .firmas{display:flex;gap:40px;margin-top:42px;font-size:10.5px;break-inside:avoid}
+    .firmas div{flex:1;border-top:1px solid #111;padding-top:6px;text-align:center}
+    .noimp{position:fixed;top:10px;right:10px;background:#1668cf;color:#fff;border:0;border-radius:8px;padding:10px 16px;font-weight:700;cursor:pointer;font-size:13px}
+    @media print{body{padding:0}.noimp{display:none}.port{height:95vh;border-width:2px}}
+  </style></head><body>
+  <button class="noimp" onclick="window.print()">Imprimir / Guardar PDF</button>
+  <div class="port">
+    <div class="tit">Informe de rendición de gastos</div>
+    <div class="pro">${E(p.nombre)}</div>
+    <div class="lin"></div>
+    <div class="dat">
+      ${p.fecha?'Fecha: <b>'+E(p.fecha)+'</b><br>':''}
+      Responsable: <b>${E(p.responsable||'—')}</b><br>
+      Estado: <b>${p.estado==='cerrado'?'Rendido':'En curso'}</b><br>
+      Información registrada hasta el <b>${hasta}</b><br>
+      Emitido el ${emit} por <b>${E(quien)}</b>
+    </div>
+    <div class="tot"><span class="lbl">TOTAL A LA FECHA</span><span class="num">${_rendS(t.total)}</span></div>
+    <div class="pie"><div class="marca">MUKI<span>CLOUD</span></div><div class="slogan">SMART INTERACTIONS</div></div>
+  </div>
+  <div class="cab"><span><b>${E(p.nombre)}</b>${p.fecha?' · '+E(p.fecha):''}</span><span>Registrado hasta el ${hasta}</span></div>
+  <h2>Resumen</h2>
+  <div class="res">
+    <div><span>Pagos a personas</span><b>${_rendS(t.pagos)}</b></div>
+    <div><span>Adelantos entregados</span><b>${_rendS(t.adel)}</b></div>
+    <div><span>Saldo por pagar (se debe)</span><b>${_rendS(t.debe)}</b></div>
+    <div><span>Gastos</span><b>${_rendS(t.gastos)}</b></div>
+    <div><span>Filas sin monto</span><b>${t.sinMonto}</b></div>
+    <div class="big"><span>Total a la fecha</span><b>${_rendS(t.total)}</b></div>
+  </div>
+  <div class="nota">Total = pagos a personas + gastos. Las filas sin monto no suman hasta que se registren.</div>
+  <h2>Pagos a personas</h2>
+  <table><thead><tr><th style="width:4%">N°</th><th>Nombre</th><th>Detalle / cargo</th><th class="r">Adelanto</th><th class="r">Se debe</th><th class="r">Total pago</th></tr></thead><tbody>
+    ${(p.personas||[]).map((x,i)=>`<tr><td>${i+1}</td><td>${E(x.nombre)}</td><td>${E(x.detalle)}</td><td class="r">${x.adelanto==null?'':_rendS(x.adelanto)}</td><td class="r">${x.debe==null?'':_rendS(x.debe)}</td><td class="r">${M(x.total)}</td></tr>`).join('')||'<tr><td colspan="6" style="color:#777">Sin pagos registrados.</td></tr>'}
+  </tbody><tfoot><tr><td colspan="3">Subtotal pagos</td><td class="r">${_rendS(t.adel)}</td><td class="r">${_rendS(t.debe)}</td><td class="r">${_rendS(t.pagos)}</td></tr></tfoot></table>
+  <h2>Gastos</h2>
+  <table><thead><tr><th style="width:4%">N°</th><th>Concepto</th><th>Descripción</th><th>Fecha</th><th>Comprobante</th><th class="r">Monto</th></tr></thead><tbody>
+    ${(p.gastos||[]).map((x,i)=>`<tr><td>${i+1}</td><td>${E(x.categoria)}</td><td>${E(x.descripcion)}</td><td>${fF(x.fecha)}</td><td>${E(x.comprobante)}</td><td class="r">${M(x.monto)}</td></tr>`).join('')||'<tr><td colspan="6" style="color:#777">Sin gastos registrados.</td></tr>'}
+  </tbody><tfoot><tr><td colspan="5">Subtotal gastos</td><td class="r">${_rendS(t.gastos)}</td></tr></tfoot></table>
+  ${pend.length?`<h2>Pendientes de registrar monto</h2><ul>${pend.map(x=>'<li>'+E(x)+'</li>').join('')}</ul>`:''}
+  <div class="firmas"><div><b>${E(p.responsable||'')}</b><br>Responsable de la rendición</div><div>&nbsp;<br>Revisado por</div></div>
+  <script>window.addEventListener('load',()=>setTimeout(()=>{ try{ window.print(); }catch(e){} },350));<\/script>
+  </body></html>`;
+  const w=window.open('','_blank');
+  if(!w){ showNotif('El navegador bloqueó la ventana del informe. Permite las ventanas emergentes para MukiCloud e intenta de nuevo.','error'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
+
 function rendExcel(){
   const p=_rendP(); if(!p) return;
   if(typeof XLSX==='undefined'){ showNotif('La librería de Excel no cargó. Recarga e intenta de nuevo.','error'); return; }
