@@ -791,10 +791,19 @@ select option{background:var(--coal3);}
 #ficha-print td,#ficha-print th{ border:1px solid #000; padding:0.8mm 1.4mm; vertical-align:top; }
 #ficha-print .et{ font-size:6.6pt; text-transform:uppercase; display:block; line-height:1.1; }
 #ficha-print .va{ font-size:9.2pt; min-height:4.6mm; display:block; color:#000; font-weight:600; line-height:1.2; white-space:normal; overflow-wrap:anywhere; word-break:normal; }
-#ficha-print th{ background:#f2f2f2; font-size:7pt; text-transform:uppercase; text-align:left;
+#ficha-print th{ white-space:normal; overflow-wrap:break-word; hyphens:auto; background:#f2f2f2; font-size:6.6pt; text-transform:uppercase; text-align:left;
   letter-spacing:normal !important; font-weight:bold; line-height:1.1; }
 #ficha-print table td .va{ letter-spacing:normal !important; }
 #ficha-print .fp-firma{ page-break-inside:avoid; break-inside:avoid; margin-top:1.5mm; }
+#ficha-print .hoja{ height:266mm; display:flex; flex-direction:column; box-sizing:border-box; overflow:hidden; }
+#ficha-print .hoja.natural{ height:auto !important; }
+#ficha-print .va.largo{ font-size:7.6pt; }
+#ficha-print .hoja.natural .fp-cuerpo{ flex:none; }
+#ficha-print .fp-cuerpo{ flex:1; display:flex; flex-direction:column; justify-content:space-between; }
+#ficha-print .fp-blq{ break-inside:avoid; page-break-inside:avoid; }
+#ficha-print .fp-blq .fp-sec{ margin-top:0; }
+#ficha-print table.fp-g6, #ficha-print table.fp-fijo{ table-layout:fixed; }
+#ficha-print .fp-enc{ min-height:26mm !important; }
 #ficha-print .fp-par{ display:grid; grid-template-columns:1fr 1fr; gap:2mm; }
 #ficha-print .fp-par>div{ min-width:0; }
 #ficha-print .fp-firmas{ margin-top:1.5mm; }
@@ -2551,7 +2560,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.25-385</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.25-386</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2596,7 +2605,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.25-385</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.25-386</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2764,7 +2773,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.25-385</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.25-386</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -22382,26 +22391,30 @@ const FICHA_ORDEN=['personales','domicilio','essalud','laboral','conyuge','famil
 // dejar holgura: el navegador redondea al maquetar y unas décimas de más tiran una sección
 // entera a la página siguiente.
 const FICHA_ALTO_UTIL_MM=264;
+const FICHA_HOJA_MM=266;   // alto de cada hoja impresa (A4 menos márgenes de 13 mm, con holgura)
 const FICHA_JURAMENTO='Declaro bajo juramento que los datos proporcionados son exactos, autorizando a la Institución en la que laboro a efectuar las verificaciones que juzgue necesarias; así mismo me comprometo a presentar los documentos que me soliciten. En igual forma declaro válidos la dirección domiciliaria y el correo electrónico para las comunicaciones formales entre la empresa y mi persona.';
 function _fpEsc(v){ return escAttr(v==null?'':String(v)); }
 function _fpCampos(sec,f,porFila){
-  const cs=sec.campos, out=[];
+  const cs=sec.campos, out=[], span=6/porFila;
   for(let i=0;i<cs.length;i+=porFila){
     const grupo=cs.slice(i,i+porFila);
-    out.push('<tr>'+grupo.map(c=>`<td><span class="et">${_fpEsc(c.l)}</span><span class="va">${_fpEsc(f[c.k])}</span></td>`).join('')+
-      (grupo.length<porFila?'<td colspan="'+(porFila-grupo.length)+'"></td>':'')+'</tr>');
+    out.push('<tr>'+grupo.map((c,k)=>{ const sp=(k===grupo.length-1)?6-span*k:span;   // el último ocupa lo que sobra
+      const v=String(f[c.k]==null?'':f[c.k]), lg=v.length>(sp>=3?40:26)?' largo':'';
+      return `<td colspan="${sp}"><span class="et">${_fpEsc(c.l)}</span><span class="va${lg}">${_fpEsc(v)}</span></td>`; }).join('')+'</tr>');
   }
-  return '<table>'+out.join('')+'</table>';
+  return '<table class="fp-g6"><colgroup>'+'<col style="width:16.666%">'.repeat(6)+'</colgroup>'+out.join('')+'</table>';
 }
 function _fpFilas(sec,f){
   const arr=(f&&f[sec.filas])||[];
   const min=Math.max(arr.length, sec.min||2);       // deja renglones en blanco para rellenar a mano
-  let h='<table><tr>'+sec.cols.map(c=>`<th>${_fpEsc(c.l)}</th>`).join('')+'</tr>';
+  const W=FICHA_ANCHOS[sec.filas]||[];
+  let h='<table class="fp-fijo"><colgroup>'+sec.cols.map((c,k)=>`<col style="width:${W[k]||(100/sec.cols.length)}%">`).join('')+'</colgroup><tr>'+sec.cols.map(c=>`<th>${_fpEsc(c.l)}</th>`).join('')+'</tr>';
   for(let i=0;i<min;i++){
     h+='<tr>'+sec.cols.map(c=>`<td><span class="va">${_fpEsc((arr[i]||{})[c.k])}</span></td>`).join('')+'</tr>';
   }
   return h+'</table>';
 }
+const FICHA_ANCHOS={fam:[46,18,22,14], eme:[42,18,40], sup:[13,17,18,8,8,18,18], idi:[34,22,22,22]};
 const FICHA_COLS={personales:3, domicilio:3, essalud:2, laboral:2, conyuge:3, pension:2, basica:2, cuenta:3};
 function _fpSeccion(id,f,porFila){
   const sec=FICHA_SECCIONES.find(x=>x.id===id); if(!sec) return '';
@@ -22463,7 +22476,7 @@ function imprimirFichaTrabajador(pid){
     ? `<img src="${escAttr(_fotoFicha)}" class="fp-foto">`
     : `<div class="fp-foto fp-foto-vacia">FOTO</div>`;
   // La foto va SOLO en la primera hoja.
-  const enc=(t,conFoto)=>`<div class="fp-enc${conFoto?'':' fp-enc-simple'}">${conFoto?cajaFoto:''}
+  const enc=(t,conFoto)=>`<div class="fp-enc">${conFoto?cajaFoto:''}
     <div class="fp-tit">FICHA DE DATOS PERSONALES DEL TRABAJADOR</div>
     <div class="fp-sub">${_fpEsc(nombre)}${(f.dni||p.dni)?' · DNI '+_fpEsc(f.dni||p.dni):''} — ${t}</div></div>`;
   /* TODO EN UNA SOLA HOJA. Antes las secciones se repartían en hojas y la ficha salía en 2 o 3
@@ -22479,13 +22492,20 @@ function imprimirFichaTrabajador(pid){
         <td style="width:26%"><div class="fp-huella">HUELLA DIGITAL</div></td>
       </tr></table>
     </div>`;
-  // Dos hojas como máximo, con letra legible y columnas anchas: ningún nombre se corta. Las
-  // secciones nunca se parten entre hojas y la firma va al final de la última.
-  const hojas=_fpRepartir(cont, f, i=>enc('Hoja '+(i+1)+' de 2', i===0), firmaHTML);
-  const n=hojas.length;
-  cont.innerHTML=hojas.map((secs,i)=>
-    `<div class="hoja">${enc('Hoja '+(i+1)+' de '+n, i===0)}${secs.map(x=>x.html).join('')}${i===n-1?firmaHTML:''}</div>`
-  ).join('');
+  /* DOS HOJAS FIJAS Y PAREJAS. Cada hoja tiene el mismo encabezado y el mismo alto, y su
+     contenido se reparte para llegar de arriba abajo: las dos quedan alineadas al imprimirse.
+     Hoja 1: datos del trabajador y su familia. Hoja 2: formación, cuenta y declaración jurada. */
+  const H1=['personales','domicilio','essalud','laboral','conyuge','familiares','emergencia'];
+  const H2=['pension','basica','superior','idiomas','cuenta'];
+  const bloque=ids=>ids.map(id=>`<div class="fp-blq">${_fpSeccion(id,f)}</div>`).join('');
+  cont.innerHTML=`<div class="hoja">${enc('Hoja 1 de 2',true)}<div class="fp-cuerpo">${bloque(H1)}</div></div>`
+               +`<div class="hoja">${enc('Hoja 2 de 2',false)}<div class="fp-cuerpo">${bloque(H2)}<div class="fp-blq">${firmaHTML}</div></div></div>`;
+  // Si una ficha trae tantas filas que una hoja no alcanza, esa hoja se reduce en proporción
+  // (nunca pasa a una tercera).
+  cont.classList.add('midiendo');
+  cont.querySelectorAll('.hoja').forEach(h=>{ h.classList.add('natural'); const a=_fpMm(h.getBoundingClientRect().height); h.classList.remove('natural');
+    if(a>FICHA_HOJA_MM){ const z=FICHA_HOJA_MM/a*0.99; h.style.zoom=z.toFixed(3); h.style.height=(FICHA_HOJA_MM/z).toFixed(1)+'mm'; } });   // el alto se compensa: reducida, la hoja sigue midiendo lo mismo
+  cont.classList.remove('midiendo');
   document.body.classList.add('imprimiendo-ficha');
   // La limpieza va SOLO en afterprint. Un temporizador corto quitaba el modo impresión mientras
   // el diálogo seguía abierto y entonces se imprimía la aplicación entera en vez de la ficha.
