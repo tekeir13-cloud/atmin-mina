@@ -2570,7 +2570,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.27-394</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.27-395</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2615,7 +2615,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.27-394</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.27-395</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2783,7 +2783,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.27-394</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.27-395</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -9251,6 +9251,13 @@ function renderDashAlertas(){
 // localStorage y se recarga al arrancar, así un tareo capturado sin señal se sube aunque el
 // celular se haya apagado en el camino a superficie.
 const SBPEND_KEY='atmin_sb_pend';
+/* CADA CAMBIO NUEVO LLEVA SU NÚMERO. La cola se vaciaba solo si lo que subió era "el mismo
+   objeto" que seguía en la cola. Personal filtra la lista antes de subir —y filtrar crea una lista
+   nueva aunque no quite a nadie—, así que la subida entraba bien pero la cola nunca se vaciaba:
+   el chip "1 sin subir (personal)" no se iba, la lista se reenviaba entera cada vuelta del
+   sondeo y, mientras tanto, el equipo dejaba de recibir lo que cambiaban los demás. Ahora se
+   cuenta cada cambio real: si al terminar la subida no llegó otro, la cola se vacía. */
+const _sbPendVer={};
 const _sbPend=(function(){ try{ const d=JSON.parse(localStorage.getItem(SBPEND_KEY)||'{}'); return (d&&typeof d==='object')?d:{}; }catch(e){ return {}; } })();
 /* La cola de pendientes es la red de seguridad de quien trabaja sin señal: lo que no se pudo subir
    espera aquí hasta que haya cobertura. Guardarla con un `catch` vacío significaba que, con el
@@ -9373,6 +9380,7 @@ async function _sbSubirModulo(modulo){
   // Módulo que no es de esta sesión: se deja quieto en la cola, no se sube desde aquí.
   if(typeof puedePublicarModulo==='function' && !puedePublicarModulo(modulo)) return true;
   let dataObj=_sbPend[modulo];
+  const _ver0=_sbPendVer[modulo]||0;     // si llega otro cambio mientras sube, ese no se da por subido
   /* PERSONAL REEMPLAZA LA LISTA DE TODOS, ASÍ QUE SE MIRA ANTES DE PISARLA.
      Al dejar de fusionarse, la lista que sube es la que queda en todos los equipos. Eso es lo que
      se quiere al borrar a alguien, y es un peligro si el equipo que sube arrastra una copia vieja:
@@ -9544,7 +9552,7 @@ async function _sbSubirModulo(modulo){
       err=r&&r.error;
     }catch(e){ err=e||new Error('upsert'); }
     if(!err){
-      if(_sbPend[modulo]===dataObj){ delete _sbPend[modulo]; _sbPendSave(); }
+      if(_sbPend[modulo]===dataObj || (_sbPendVer[modulo]||0)===_ver0){ delete _sbPend[modulo]; _sbPendSave(); }
       // La fila buena ya quedó escrita con todo unido: el buzón de este equipo ya no hace falta.
       if(_obxUsado.has(modulo)){
         _obxUsado.delete(modulo);
@@ -9630,6 +9638,7 @@ async function sbSyncModulo(modulo, dataObj){
   }
   // Los demás módulos ajenos al trabajo de esta sesión: no se publican desde aquí.
   if(!puedePublicarModulo(modulo)) return;
+  _sbPendVer[modulo]=(_sbPendVer[modulo]||0)+1;
   _sbPend[modulo]=dataObj;               // recordar SIEMPRE el último estado a subir
   _sbPendSave();                         // persistir: la cola sobrevive si cierran la app sin señal
   if(!CLOUD_SYNC_READY) return;          // aún no cargó la nube: se subirá en el primer flush
@@ -26023,6 +26032,7 @@ async function personalPublicar(){
   showNotif('Publicando '+n+' fichas…');
   try{
     _personalBorradoOk=Date.now();            // decision tomada aqui: la guarda no vuelve a preguntar
+    _sbPendVer['personal']=(_sbPendVer['personal']||0)+1;
     _sbPend['personal']=state.personal;
     try{ _sbPendSave(); }catch(e){}
     await _sbSubirModulo('personal');
