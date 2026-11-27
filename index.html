@@ -2570,7 +2570,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.25-393</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.27-394</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2615,7 +2615,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.25-393</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.27-394</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2783,7 +2783,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.25-393</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.27-394</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -35887,7 +35887,61 @@ function _guardarReporteComp() {
   _borrOk();                       // el parte quedó guardado: el borrador ya no hace falta
   compAvisoLimpiar();
   cerrarModalCompresorista();
-  showNotif('Reporte guardado · datos acumulados del mes','ok');
+  showNotif('Parte guardado en el equipo · confirmando que llegó a la nube…','ok');
+  // No basta con haber INTENTADO subirlo: se comprueba en la nube que el parte está (ver abajo).
+  try{ const _r=reporte; setTimeout(()=>compVerificarSubida(_r.fecha,_r.turno,_r._ts,0),1500); }catch(e){}
+}
+/* ¿EL PARTE LLEGÓ DE VERDAD A LA NUBE?
+   El 26/11 un parte de noche se guardó en el teléfono —salió hasta su resumen para WhatsApp— y nunca
+   llegó a la nube: la app lo daba por guardado con solo haber lanzado la subida, sin esperar a
+   saber si entró. Con señal mala o el teléfono lleno, el parte se perdía al cerrar la app sin que
+   nadie se enterara. Ahora, después de guardar, se lee la nube y se busca ESE parte (fecha, turno y
+   la versión recién guardada). Si no está, aparece un aviso rojo que no se va hasta que llega, se
+   reintenta solo cada 30 s y se ofrece descargar una copia del parte para no perderlo. */
+const _compVerif={};
+async function compVerificarSubida(fecha,turno,ts,intento){
+  const k=fecha+'|'+turno; let llego=false;
+  try{
+    if(typeof SB_ONLINE!=='undefined' && SB_ONLINE){
+      try{ await sbSyncModulo('compresorista', state.compresorista||[]); }catch(e){}
+      const f=await _sbLeerFila('compresorista');
+      if(f.ok && Array.isArray(f.data)) llego=f.data.some(r=>r && r.fecha===fecha && r.turno===turno && Number(r._ts||0)>=Number(ts||0));
+    }
+  }catch(e){}
+  clearTimeout(_compVerif[k]);
+  if(llego){
+    delete _compVerif[k]; compPintarAvisoSubida();
+    showNotif('✅ Parte '+fecha+' · '+turno+' confirmado en la nube','ok');
+    return true;
+  }
+  _compVerif[k]=setTimeout(()=>compVerificarSubida(fecha,turno,ts,(intento||0)+1),30000);
+  compPintarAvisoSubida();
+  return false;
+}
+function compPintarAvisoSubida(){
+  let el=document.getElementById('comp-aviso-subida');
+  const pend=Object.keys(_compVerif);
+  if(!pend.length){ if(el) el.remove(); return; }
+  if(!el){ el=document.createElement('div'); el.id='comp-aviso-subida';
+    el.style.cssText='position:fixed;left:12px;right:12px;bottom:12px;z-index:9998;background:#7f1d1d;color:#fff;border:2px solid #fca5a5;border-radius:12px;padding:12px 14px;font-size:13px;box-shadow:0 8px 30px rgba(0,0,0,.45);max-width:720px;margin:0 auto';
+    document.body.appendChild(el); }
+  el.innerHTML='<b>⚠ Parte todavía NO llegó a la nube:</b> '+pend.map(k=>k.replace('|',' · ')).join(', ')
+    +'<div style="margin-top:4px;font-size:12px;opacity:.9">Está guardado en este equipo. No cierres ni borres la app: se reintenta solo cada 30 s. Si no hay señal, descarga la copia y envíala a sistemas.</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">'
+    +'<button class="btn" style="background:#fff;color:#7f1d1d;font-weight:800;padding:6px 12px" onclick="compReintentarSubidas()">Reintentar ahora</button>'
+    +'<button class="btn" style="background:transparent;color:#fff;border:1px solid #fff;padding:6px 12px" onclick="compDescargarPartesPendientes()">⬇ Descargar copia del parte</button></div>';
+}
+function compReintentarSubidas(){
+  Object.keys(_compVerif).forEach(k=>{ const [f,t]=k.split('|'); const r=(state.compresorista||[]).find(x=>x&&x.fecha===f&&x.turno===t); compVerificarSubida(f,t,r?r._ts:0,1); });
+}
+function compDescargarPartesPendientes(){
+  try{
+    const partes=Object.keys(_compVerif).map(k=>{ const [f,t]=k.split('|'); return (state.compresorista||[]).find(x=>x&&x.fecha===f&&x.turno===t); }).filter(Boolean);
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([JSON.stringify({descargado:new Date().toISOString(),partes},null,1)],{type:'application/json'}));
+    a.download='parte-compresorista-pendiente-'+(partes[0]?partes[0].fecha:hoy())+'.json';
+    document.body.appendChild(a); a.click(); a.remove();
+  }catch(e){ showNotif('No se pudo descargar la copia: '+(e&&e.message||e),'error'); }
 }
 
 function mostrarResumenComp(r) {
