@@ -58,3 +58,9 @@ Pendiente de confirmar antes de implementar:
 - Si ESCM usa el óptimo de rampa (27.5).
 - Si la económica se topa en 100 % (en el ejemplo va sin tope).
 - Promedio de la física pesado por metros (propuesto) o simple.
+
+### 27/11/2026 — óptimos por sección (implementado, v401)
+Rampa 27.5 y CRNE 23.6 kg/m son los fijados. ESCM usa 27.5 (misma sección que rampa). Galería 20.6,
+chimenea 11.7 y subnivel 7.4 kg/m se calculan de esos dos según el área: kg/m³ lineal con el área entre
+los dos puntos conocidos (2.24 a 12.25 m², 2.62 a 9 m²). Calzan con las medianas del ciclo 26/10–25/11
+(20.0, 11.3 y 8.6). Una sola fuente: `EFOP.tipos` → `FC_OPTIMOS`.
