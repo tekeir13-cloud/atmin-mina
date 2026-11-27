@@ -25,3 +25,36 @@ exactamente 2·2·1 disparos; si cada guardia acarrea lo que dispara; si TJ 5100
 Diseño propuesto: el parte del jefe de guardia ya guarda metros, pernos y malla por disparo; solo se
 agregan "puntales instalados" (chimenea) y "¿se acarreó lo disparado?", la sección de cada labor como
 configuración de Finanzas, y un panel con S/ producidos vs meta y disparos 2·2·1.
+
+---
+
+## Actualización 27/11/2026 — decisiones del usuario y corrida de ejemplo
+
+Archivos nuevos:
+- `Ejemplo_Eficiencia_Operativa.pdf` / `.html` — corrida del ciclo 26/10–25/11 con los 58 partes reales.
+- `Ejemplo_Eficiencia_Fisica_por_Seccion.pdf` / `.html` — factor de carga por sección y distribución de disparos.
+
+Confirmado:
+- **Meta del gráfico económico: S/ 20,705.45**, banda naranja ±2,000 (abajo rojo, arriba verde).
+- **CRNE: sección 3 × 3, S/ 1,710 por metro, perno de 6'.** El perno de 6' no tiene precio ni cantidad
+  estándar todavía: se registra en el parte pero no suma soles.
+- ESCM con tarifa de rampa y subnivel a S/ 1,500/m: confirmados.
+- La meta en soles manda; si no se cumple el 2·2·1, la guardia se marca en rojo.
+- Acarreo: se asume siempre (nada queda en la cámara). Se quita la pregunta del parte, pero el informe
+  muestra el volumen acarreado total.
+- TJ 5100: se registra, no se valoriza.
+- Sostenimiento (foto del usuario): galería 2.7×2.7 → 7 PH7+M a S/ 60; rampa 3.5×3.5 → 11 PH7+M a S/ 75;
+  chimenea → puntales (S/ 310 c/u).
+- **Eficiencia global = física × económica.** Física = óptimo ÷ factor real (tope 100 %), pesada por metros
+  en la guardia. Económica = S/ producidos ÷ 20,705.45. Global del mes = promedio de las globales de cada
+  guardia. Rojo < 70 %, naranja 70–75 %, verde > 75 %.
+- Pantalla pedida en Operaciones → Tablero, debajo del factor de carga: gráfico "Eficiencia operativa"
+  (S/ por reporte y acumulado por jefe), tabla de acumulado con 1.º/2.º/3.º, comparativo física/económica,
+  panel del día (solo quien reportó) y eficiencia del mes por jefe.
+
+Pendiente de confirmar antes de implementar:
+- Óptimo de factor de carga (kg/m) para galería, chimenea y subnivel (hoy solo Rampa 27.5 y CRNE 23.6;
+  en los ejemplos se usó la mediana real del ciclo como referencia provisional).
+- Si ESCM usa el óptimo de rampa (27.5).
+- Si la económica se topa en 100 % (en el ejemplo va sin tope).
+- Promedio de la física pesado por metros (propuesto) o simple.
