@@ -48,7 +48,7 @@ Confirmado:
 - **Eficiencia global = física × económica.** Física = óptimo ÷ factor real (tope 100 %), pesada por metros
   en la guardia. Económica = S/ producidos ÷ 20,705.45. Global del mes = promedio de las globales de cada
   guardia. Rojo < 70 %, naranja 70–75 %, verde > 75 %.
-- Pantalla pedida en Operaciones → Tablero, debajo del factor de carga: gráfico "Eficiencia operativa"
+- Pantalla pedida en Operaciones → Tablero, debajo del factor de carga: gráfico "Eficiencia operativa" (con una dona del día al costado del acumulado: qué parte del producido puso cada reporte)
   (S/ por reporte y acumulado por jefe), tabla de acumulado con 1.º/2.º/3.º, comparativo física/económica,
   panel del día (solo quien reportó) y eficiencia del mes por jefe.
 
