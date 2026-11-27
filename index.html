@@ -2570,7 +2570,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.27-397</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.27-398</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2615,7 +2615,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.27-397</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.27-398</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2783,7 +2783,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.27-397</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.27-398</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -3414,6 +3414,7 @@ select option{background:var(--coal3);}
     <div style="margin-bottom:8px"><div class="section-title" style="margin:0">🎯 Tablero de Operaciones</div><div style="font-size:12px;color:var(--text3);margin-top:4px">Vista consolidada de avance, taladros, personal y explosivos — <span id="tab-mes-label"></span></div></div>
     <div class="kpi-grid" id="tab-kpis"></div>
     <div id="d-voladura" style="margin-top:8px"></div>
+    <div id="d-efop"></div>
     <div id="tab-frentes" style="margin-top:8px"></div>
     <div id="tab-alertas" style="margin-top:8px"></div>
   </div>
@@ -7468,6 +7469,18 @@ const DM_CSS=`
 }
 @media (prefers-reduced-motion:reduce){#d-mina *,.dm-panel{animation:none!important;transition:none!important}}`;
 
+/* ═══ QUÉ CICLO DE OPERACIONES SE MUESTRA ═══════════════════════════════════════════════════
+   null → el ciclo vigente (26 → 25 de hoy). Un periodo 'AAAA-MM' → ese ciclo, aunque ya haya cerrado.
+   El 27/11/2026 se pidió revisar en los tableros el ciclo 26/10 → 25/11 antes de pasar al vigente:
+   por eso queda en '2026-11'. Para volver al ciclo real basta con poner null.
+   SOLO CAMBIA LO QUE SE MIRA —portada, factor de carga, tablero y eficiencia operativa—. Guardar,
+   cerrar, bloquear y el resto de Operaciones siguen con el ciclo real. */
+const OPS_CICLO_VISTA='2026-11';
+function opsPeriodoVista(){
+  const real=(typeof periodoActual==='function')?periodoActual(AREA_OP):hoy().slice(0,7);
+  return (OPS_CICLO_VISTA && OPS_CICLO_VISTA<real)?OPS_CICLO_VISTA:real;
+}
+function opsVistaFijada(){ try{ return opsPeriodoVista()!==periodoActual(AREA_OP); }catch(e){ return false; } }
 let _dmCache=null;
 function _dmF1(n){ return (Number(n)||0).toLocaleString('es-PE',{minimumFractionDigits:1,maximumFractionDigits:1}); }
 function _dmF0(n){ return Math.round(Number(n)||0).toLocaleString('es-PE'); }
@@ -7484,7 +7497,7 @@ function _dmDatos(){
      Recursos Humanos y los tanques cierran por mes de calendario, del 1 al último día: esos usan
      `mes`. Son dos ciclos distintos y cada cuadro dice el suyo. */
   const mes=hoy().slice(0,7);                                                    // calendario
-  const mesOp=(typeof finMesActual==='function')?finMesActual(AREA_OP):mes;      // ciclo 26→25
+  const mesOp=(typeof opsPeriodoVista==='function')?opsPeriodoVista():finMesActual(AREA_OP);   // ciclo 26→25 que se muestra
   const w=ventanaMes(mesOp, AREA_OP);
   const ini=new Date(w.ini+'T00:00:00'), fin=new Date(w.fin+'T00:00:00');
   const nDias=Math.round((fin-ini)/86400000)+1;
@@ -7595,7 +7608,7 @@ function renderDashMina(){
   cont.innerHTML=`
   <div class="sec"><div class="hero">
     <div><div class="mod" style="color:var(--dmA2);display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span><i style="background:#3b8bff"></i>Operaciones</span><span style="flex-basis:100%;display:flex;gap:8px;flex-wrap:wrap;margin-top:4px"><button id="dm-nia-btn" onclick="dmNiaLee()" title="Un toque: NIA lee el resumen del mes. Otro toque: se calla." style="background:rgba(59,139,255,.12);border:1px solid rgba(59,139,255,.35);color:var(--dmA2);border-radius:999px;padding:5px 12px;font:800 11px 'DM Sans',sans-serif;letter-spacing:1px;cursor:pointer">${(_dmCola.activa&&_dmCola.quien==='mes')?'⏹ CALLAR A NIA':'🔊 QUE NIA LEA EL MES'}</button><button onclick="dmShowTodo()" title="Una sola presentación con los cuatro módulos, al día de hoy, con música de fondo" style="background:linear-gradient(90deg,#1668cf,#3b8bff);border:0;color:#fff;border-radius:999px;padding:6px 14px;font:800 11px 'DM Sans',sans-serif;letter-spacing:1px;cursor:pointer;box-shadow:0 4px 14px rgba(22,104,207,.35)">▶ INICIAR PRESENTACIÓN INTERACTIVA</button></span></div>
-      <div class="cap">Avance del ciclo · ${_dmFecha(D.w.ini)} → ${_dmFecha(D.w.fin)} · día ${D.dTransc} de ${D.nDias}</div>
+      <div class="cap">Avance del ciclo · ${_dmFecha(D.w.ini)} → ${_dmFecha(D.w.fin)} · día ${D.dTransc} de ${D.nDias}${(typeof opsVistaFijada==='function'&&opsVistaFijada())?' · <b style="color:var(--dmWa)">ciclo anterior, en revisión</b>':''}</div>
       <div class="big num">${_dmF1(avTot)}<small>/ ${_dmF0(metaTot)} m</small></div>
       <div class="ver" style="${va?'background:rgba(61,220,132,.1);color:var(--dmOk);border:1px solid rgba(61,220,132,.25)':'background:rgba(245,165,36,.1);color:var(--dmWa);border:1px solid rgba(245,165,36,.3)'}">${va?'▲':'▼'} ${Math.round(pct*100)} % de la meta · se esperaba ${Math.round(D.esp*100)} % al día ${D.dTransc}</div>
       <div class="sub">${falta>0?(quedan?`Faltan <b>${_dmF1(falta)} m</b> en ${quedan} día${quedan!==1?'s':''}: <b>${_dmF1(porDia)} m/día</b>. `:`Faltaron <b>${_dmF1(falta)} m</b>. `):'<b>Meta del ciclo cumplida.</b> '}El ritmo de la última semana es <b>${_dmF1(prom7)} m/día</b>.</div></div>
@@ -8353,7 +8366,7 @@ function fcVentanaLbl(){
 function fcVentana(){
   const hoyStr=hoy();
   try{
-    const per=(typeof periodoActual==='function')?periodoActual(AREA_OP):'';
+    const per=(typeof opsPeriodoVista==='function')?opsPeriodoVista():((typeof periodoActual==='function')?periodoActual(AREA_OP):'');
     const v=(typeof ventanaMes==='function')?ventanaMes(per, AREA_OP):null;
     if(v && v.ini) return { ini:v.ini, fin:(hoyStr<v.fin?hoyStr:v.fin), periodo:per };
   }catch(e){}
@@ -8642,6 +8655,195 @@ function renderDashVoladura(){
     +'<div class="table-wrap" style="overflow-x:auto">'+fcGraficoCruzadoSVG(series)+'</div>'
     +'<div id="d-voladura-dia">'+fcDetalleDiaHTML(_fcDiaSel)+'</div>'
     +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-top:14px">'+bloques+'</div>'
+  +'</div>';
+}
+/* ═══ EFICIENCIA OPERATIVA — LO QUE PRODUCE CADA JEFE DE GUARDIA ═══════════════════════════════
+   Pedido del 27/11/2026, sobre la propuesta guardada en docs/propuestas/parte_valorizado/.
+   Cada parte del jefe de guardia se valoriza con el modelo del Excel de Temual:
+     avance (S/ por metro según la sección) + carguío y acarreo (toneladas × S/ 27.80)
+     + sostenimiento (PH7 + malla: galería S/ 60, rampa y ESCM S/ 75).
+   Toneladas = metros × ancho × alto × 2.7. El acarreo se da por hecho: nada queda en la cámara.
+   Física   = óptimo de la sección ÷ factor de carga real (kg/m), tope 100 %, pesada por metros.
+   Económica = S/ producidos ÷ meta. Global = física × económica (<70 rojo · 70–75 naranja · >75 verde).
+   Global del mes de un jefe = promedio de las globales de sus guardias.
+   LO QUE FALTA DEFINIR SE DICE, NO SE INVENTA: galería, chimenea y subnivel todavía no tienen
+   óptimo de factor de carga; se mide contra la mediana real del ciclo y se rotula "provisional".
+   Chimenea sin puntales (el parte aún no los registra), perno de 6' de la CRNE y subnivel sin
+   precio de sostenimiento, TJ 5100 se registra pero no se valoriza. */
+const EFOP={
+  meta:20705.45, holgura:2000, pTon:3.30+14.50+3.50+6.50, dens:2.7,
+  tipos:{
+    rampa:   {n:'Rampa',    a:3.5,h:3.5, pm:2150, pp:75, opt:27.5, g:'R'},
+    escm:    {n:'ESCM',     a:3.5,h:3.5, pm:2150, pp:75, opt:27.5, g:'R', optNota:'óptimo de rampa, por confirmar'},
+    crne:    {n:'Cortada',  a:3,  h:3,   pm:1710, pp:0,  opt:23.6, g:'O'},
+    galeria: {n:'Galería',  a:2.7,h:2.7, pm:1650, pp:60, opt:null, g:'G'},
+    chimenea:{n:'Chimenea', a:1.5,h:2.4, pm:1350, pp:0,  opt:null, g:'C'},
+    subnivel:{n:'Subnivel', a:1.2,h:1.8, pm:1500, pp:0,  opt:null, g:'O'},
+  },
+  porFrente:{brenda:'rampa',escm4410:'escm',escm4675:'escm',crne:'crne',glse4:'galeria',glnw4:'galeria',glnw5:'galeria',
+             ch6905:'chimenea',escm69052:'subnivel'},
+};
+const EFOP_COLJ=['#3b82f6','#a855f7','#14b8a6','#ec4899','#84cc16'];
+function efopTipoDeFrente(f){
+  if(!f || f.tajo) return null;                       // TJ 5100: se registra, no se valoriza
+  if(EFOP.porFrente[f.key]) return EFOP.porFrente[f.key];
+  const n=String(f.nombre||'');
+  if(/^RA\b/i.test(n)) return 'rampa'; if(/^GL/i.test(n)) return 'galeria'; if(/^CH\b/i.test(n)) return 'chimenea';
+  return null;                                        // labor sin tarifa: se avisa, no se adivina
+}
+// Toda la cuenta de un ciclo en un solo lugar: tablero, dona y tablas leen de aquí.
+function efopDatos(per){
+  const w=ventanaMes(per, AREA_OP);
+  const reps=(state.reportesGuardia||[]).filter(r=>{const f=String(r&&r.fecha||'').slice(0,10); return f>=w.ini&&f<=w.fin;});
+  const disp=[], sinTarifa={};
+  const G=reps.map(r=>{
+    const g={id:r.id,f:String(r.fecha).slice(0,10),t:r.turno||'',jefe:String(r.jefe||'—').trim(),val:0,ton:0,dis:{G:0,R:0,C:0},ds:[]};
+    FRENTES.forEach(fr=>{
+      const bl=r[fr.key]; if(!bl) return;
+      const lista=(bl.disparos&&bl.disparos.length)?bl.disparos:(Number(bl.metros)>0?[{metros:bl.metros,kg:bl.kg,masas:bl.masas}]:[]);
+      const m=Number(bl.metros)||lista.reduce((a,d)=>a+(Number(d.metros)||0),0), pe=Number(bl.perno)||0;
+      if(!(m>0) && !pe) return;
+      const tk=efopTipoDeFrente(fr);
+      if(!tk){ if(!fr.tajo && m>0) sinTarifa[fr.nombre]=(sinTarifa[fr.nombre]||0)+m; return; }
+      const T=EFOP.tipos[tk], ton=m*T.a*T.h*EFOP.dens;
+      g.val+=m*T.pm+ton*EFOP.pTon+pe*T.pp; g.ton+=ton;
+      lista.forEach(d=>{ const dm=Number(d.metros)||0; if(!(dm>0)) return;
+        if(T.g==='R')g.dis.R++; else if(T.g==='G')g.dis.G++; else if(T.g==='C')g.dis.C++;
+        const kg=(typeof fcKilos==='function')?fcKilos(d):0; const o={tk,m:dm,fc:kg>0?kg/dm:0,lab:fr.nombre}; g.ds.push(o); disp.push(o); });
+    });
+    g.ok221=g.dis.G>=2&&g.dis.R>=2&&g.dis.C>=1;
+    return g;
+  }).filter(g=>g.val>0||g.ds.length).sort((a,b)=>a.f.localeCompare(b.f)||(String(a.t).toLowerCase().startsWith('d')?-1:1));
+  // Referencia de cada sección: su óptimo, o la mediana real del ciclo si todavía no tiene uno.
+  const ref={}, prov={};
+  Object.keys(EFOP.tipos).forEach(k=>{ const T=EFOP.tipos[k];
+    if(T.opt){ ref[k]=T.opt; return; }
+    const v=disp.filter(d=>d.tk===k&&d.fc>0).map(d=>d.fc).sort((a,b)=>a-b);
+    if(v.length){ const h=v.length>>1; ref[k]=Math.round((v.length%2?v[h]:(v[h-1]+v[h])/2)*10)/10; prov[k]=true; } });
+  G.forEach(g=>{
+    const c=g.ds.filter(d=>d.fc>0&&ref[d.tk]); const mm=c.reduce((a,d)=>a+d.m,0);
+    g.fis=mm?c.reduce((a,d)=>a+Math.min(1,ref[d.tk]/d.fc)*d.m,0)/mm:null;
+    g.eco=g.val/EFOP.meta; g.glo=g.fis==null?null:g.fis*g.eco; });
+  const jefes=[...new Set(G.map(g=>g.jefe))].sort();
+  const J=jefes.map((j,i)=>{ const gs=G.filter(g=>g.jefe===j), gv=gs.filter(g=>g.glo!=null), av=(a,k)=>a.length?a.reduce((s,g)=>s+g[k],0)/a.length:null;
+    return {j,col:EFOP_COLJ[i%EFOP_COLJ.length],gs:gs.length,tot:gs.reduce((s,g)=>s+g.val,0),ton:gs.reduce((s,g)=>s+g.ton,0),
+      fis:av(gv,'fis'),eco:av(gv,'eco'),glo:av(gv,'glo'),ok:gs.filter(g=>g.ok221).length,meta:gs.filter(g=>g.val>=EFOP.meta).length,
+      r:gv.filter(g=>g.glo<.70).length,o:gv.filter(g=>g.glo>=.70&&g.glo<.75).length,v:gv.filter(g=>g.glo>=.75).length}; });
+  const dias=[]; { const t=new Date(w.ini+'T12:00:00'), fin=new Date(w.fin+'T12:00:00'); while(t<=fin&&dias.length<62){ dias.push(t.toISOString().slice(0,10)); t.setDate(t.getDate()+1);} }
+  return {per,w,G,J,dias,ref,prov,sinTarifa};
+}
+let _efopDia='';
+function efopVerDia(f){ _efopDia=f; try{ renderEficienciaOperativa(); }catch(e){} }
+function renderEficienciaOperativa(){
+  const cont=document.getElementById('d-efop'); if(!cont) return;
+  const per=(typeof opsPeriodoVista==='function')?opsPeriodoVista():periodoActual(AREA_OP);
+  let D; try{ D=efopDatos(per); }catch(e){ console.warn('[efop]',e); cont.innerHTML=''; return; }
+  const {G,J,dias,w}=D, M=EFOP.meta, H=EFOP.holgura;
+  const colJ=j=>(J.find(x=>x.j===j)||{}).col||'#64748b';
+  const S0=v=>'S/ '+Math.round(v||0).toLocaleString('es-PE');
+  const P=v=>v==null?'—':(v*100).toFixed(1)+' %';
+  const colV=v=>v<M-H?'#ef4444':v>M+H?'#22c55e':'#f59e0b';
+  const colG=v=>v==null?'var(--text3)':v<.70?'#ef4444':v<.75?'#f59e0b':'#22c55e';
+  const dm=f=>f.slice(8,10)+'/'+f.slice(5,7);
+  const corto=j=>{const p=String(j).split(' ');return p.length>=3?p[0]+' '+p[1]:j;};
+  const conRep=[...new Set(G.map(g=>g.f))].sort();
+  if(!_efopDia || !conRep.includes(_efopDia)) _efopDia=conRep[conRep.length-1]||'';
+  // ── 1 · producido por reporte (una barra por guardia; Día a la izquierda, Noche a la derecha)
+  const g1=(()=>{ if(!G.length) return '';
+    const W=1180,Hh=270,ML=52,MR=14,MT=16,MB=30,iw=W-ML-MR,ih=Hh-MT-MB;
+    const hi=Math.max(M+H,...G.map(g=>g.val))*1.08, y=v=>MT+ih-v/hi*ih, paso=iw/dias.length, bw=Math.max(3,paso*0.36);
+    let s='';
+    for(let k=0;k<=5;k++){const v=hi*k/5;s+=`<line x1="${ML}" x2="${W-MR}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="var(--border)" opacity="${k?.45:.9}"/><text x="${ML-6}" y="${(y(v)+3).toFixed(1)}" font-size="9.5" text-anchor="end" fill="var(--text3)">${Math.round(v/1000)}k</text>`;}
+    s+=`<rect x="${ML}" y="${y(M+H).toFixed(1)}" width="${iw}" height="${(y(M-H)-y(M+H)).toFixed(1)}" fill="#f59e0b" opacity=".14"/>`;
+    s+=`<line x1="${ML}" x2="${W-MR}" y1="${y(M).toFixed(1)}" y2="${y(M).toFixed(1)}" stroke="var(--text)" stroke-width="1.3" stroke-dasharray="7 4" opacity=".8"/><text x="${W-MR-4}" y="${(y(M)-5).toFixed(1)}" font-size="10" font-weight="700" text-anchor="end" fill="var(--text)">meta ${S0(M)} · ±${H.toLocaleString('es-PE')}</text>`;
+    dias.forEach((f,i)=>{ if(f===_efopDia) s+=`<rect x="${(ML+paso*i).toFixed(1)}" y="${MT}" width="${paso.toFixed(1)}" height="${ih}" fill="var(--text)" opacity=".06"/>`; });
+    G.forEach(g=>{ const i=dias.indexOf(g.f); if(i<0) return; const dia=String(g.t).toLowerCase().startsWith('d');
+      const x=ML+paso*i+paso/2+(dia?-bw-1:1), yy=y(g.val);
+      s+=`<g style="cursor:pointer" onclick="efopVerDia('${g.f}')"><rect x="${x.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${(MT+ih-yy).toFixed(1)}" rx="2" fill="${colV(g.val)}"><title>${dm(g.f)} · ${g.t} · ${escAttr(g.jefe)} · ${S0(g.val)} · global ${P(g.glo)}</title></rect>`
+        +`<rect x="${x.toFixed(1)}" y="${MT+ih+2}" width="${bw.toFixed(1)}" height="3" fill="${colJ(g.jefe)}"/></g>`; });
+    const et=dias.length<=16?1:2;
+    dias.forEach((f,i)=>{ if(i%et) return; s+=`<text x="${(ML+paso*i+paso/2).toFixed(1)}" y="${Hh-8}" font-size="9" text-anchor="middle" fill="var(--text3)">${dm(f)}</text>`; });
+    return `<svg viewBox="0 0 ${W} ${Hh}" width="100%" style="display:block">${s}</svg>`; })();
+  // ── 2 · acumulado del ciclo por jefe
+  const g2=(()=>{ if(!G.length) return '';
+    const W=760,Hh=250,ML=46,MR=140,MT=14,MB=26,iw=W-ML-MR,ih=Hh-MT-MB;
+    const ser=J.map(x=>{let a=0;return dias.map(f=>{G.filter(g=>g.jefe===x.j&&g.f===f).forEach(g=>a+=g.val);return a;});});
+    const hi=Math.max(1,...ser.flat())*1.08, paso=iw/dias.length, X=i=>ML+paso*i+paso/2, Y=v=>MT+ih-v/hi*ih;
+    let s='';
+    for(let k=0;k<=4;k++){const v=hi*k/4;s+=`<line x1="${ML}" x2="${ML+iw}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="var(--border)" opacity="${k?.45:.9}"/><text x="${ML-6}" y="${(Y(v)+3).toFixed(1)}" font-size="9.5" text-anchor="end" fill="var(--text3)">${Math.round(v/1000)}k</text>`;}
+    const L=dias.length-1, et=ser.map((a,i)=>({i,y:Y(a[L])})).sort((p,q)=>p.y-q.y);
+    for(let k=1;k<et.length;k++) if(et[k].y-et[k-1].y<30) et[k].y=et[k-1].y+30;
+    const yE={}; et.forEach(o=>yE[o.i]=o.y);
+    ser.forEach((a,i)=>{ const c=J[i].col;
+      s+=`<polyline points="${a.map((v,k)=>X(k).toFixed(1)+','+Y(v).toFixed(1)).join(' ')}" fill="none" stroke="${c}" stroke-width="2.4" stroke-linejoin="round"/>`
+       +`<circle cx="${X(L).toFixed(1)}" cy="${Y(a[L]).toFixed(1)}" r="4" fill="${c}" stroke="var(--coal3)" stroke-width="1.5"/>`
+       +`<text x="${(X(L)+10).toFixed(1)}" y="${(yE[i]+1).toFixed(1)}" font-size="10.5" font-weight="800" fill="var(--text)">${S0(a[L])}</text>`
+       +`<text x="${(X(L)+10).toFixed(1)}" y="${(yE[i]+13).toFixed(1)}" font-size="9" fill="var(--text3)">${escAttr(corto(J[i].j))}</text>`; });
+    const et2=dias.length<=16?1:3;
+    dias.forEach((f,i)=>{ if(i%et2) return; s+=`<text x="${X(i).toFixed(1)}" y="${Hh-8}" font-size="9" text-anchor="middle" fill="var(--text3)">${dm(f)}</text>`; });
+    return `<svg viewBox="0 0 ${W} ${Hh}" width="100%" style="display:block">${s}</svg>`; })();
+  // ── dona del día: qué parte del producido puso cada reporte
+  const gd=G.filter(g=>g.f===_efopDia), totD=gd.reduce((a,g)=>a+g.val,0);
+  const dona=(()=>{ if(!gd.length) return '<div style="font-size:12px;color:var(--text3);padding:20px 6px;text-align:center">Sin reportes ese día.</div>';
+    const R0=78,R1=50,C=95; let a0=-Math.PI/2, arcs='';
+    const pt=(r,a)=>(C+r*Math.cos(a)).toFixed(2)+','+(C+r*Math.sin(a)).toFixed(2);
+    gd.forEach(g=>{ const da=totD?g.val/totD*2*Math.PI:0, a1=a0+da;
+      if(gd.length===1){ arcs+=`<circle cx="${C}" cy="${C}" r="${(R0+R1)/2}" fill="none" stroke="${colJ(g.jefe)}" stroke-width="${R0-R1}"/>`; }
+      else { const gap=.02,b0=a0+gap,b1=a1-gap,big=(b1-b0)>Math.PI?1:0;
+        arcs+=`<path d="M${pt(R0,b0)} A${R0},${R0} 0 ${big} 1 ${pt(R0,b1)} L${pt(R1,b1)} A${R1},${R1} 0 ${big} 0 ${pt(R1,b0)} Z" fill="${colJ(g.jefe)}"><title>${g.t} · ${escAttr(g.jefe)} · ${S0(g.val)}</title></path>`;
+        const am=(a0+a1)/2; if(da>.35) arcs+=`<text x="${(C+64*Math.cos(am)).toFixed(1)}" y="${(C+64*Math.sin(am)+4).toFixed(1)}" font-size="11" font-weight="800" fill="#fff" text-anchor="middle">${Math.round(g.val/totD*100)}%</text>`; }
+      a0=a1; });
+    const ord=[...gd].sort((a,b)=>b.val-a.val);
+    return `<div style="display:flex;justify-content:center"><svg viewBox="0 0 190 190" width="140" height="140">${arcs}<text x="${C}" y="${C-5}" font-size="9" fill="var(--text3)" text-anchor="middle">producido del día</text><text x="${C}" y="${C+12}" font-size="14" font-weight="800" fill="var(--text)" text-anchor="middle">${S0(totD)}</text></svg></div>`
+      +ord.map((g,i)=>`<div style="display:flex;gap:7px;align-items:flex-start;font-size:11px;line-height:1.35;margin-top:5px"><span style="width:9px;height:9px;border-radius:50%;background:${colJ(g.jefe)};margin-top:3px;flex:none"></span><div><b>${escAttr(corto(g.jefe))}</b> <span style="color:var(--text3)">· ${g.t}</span><br><b style="color:${colV(g.val)}">${S0(g.val)}</b> <span style="color:var(--text3)">· ${totD?Math.round(g.val/totD*100):0} %${ord.length>1?(i===0?' · produjo más':i===ord.length-1?' · produjo menos':''):''}</span></div></div>`).join('')
+      +(ord.length>1?`<div style="font-size:11px;color:var(--text2);border-top:1px solid var(--border);margin-top:7px;padding-top:6px;text-align:center">Diferencia entre reportes: <b>${S0(ord[0].val-ord[ord.length-1].val)}</b></div>`:''); })();
+  // ── tablas
+  const th='padding:6px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);text-align:left;border-bottom:1px solid var(--border)';
+  const td='padding:6px 8px;border-bottom:1px solid var(--border);white-space:nowrap';
+  const pill=v=>`<span style="display:inline-block;background:${colG(v)};color:#fff;font-weight:800;border-radius:99px;padding:2px 10px;font-size:11.5px">${P(v)}</span>`;
+  const rk=[...J].sort((a,b)=>(b.glo==null?-1:b.glo)-(a.glo==null?-1:a.glo)), MED=['🥇 1.º','🥈 2.º','🥉 3.º'];
+  const totT=G.reduce((s,g)=>s+g.val,0), tonT=G.reduce((s,g)=>s+g.ton,0);
+  const tAcum=`<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr><th style="${th}">Puesto</th><th style="${th}">Jefe de guardia</th><th style="${th};text-align:right">Producido en el ciclo</th><th style="${th};text-align:center">Guardias</th><th style="${th};text-align:right">Promedio por guardia</th><th style="${th};text-align:right">Acarreado</th><th style="${th};text-align:center">En meta</th><th style="${th};text-align:center">Con 2·2·1</th></tr></thead><tbody>`
+    +rk.map((x,i)=>`<tr><td style="${td};font-weight:800">${MED[i]||(i+1)+'.º'}</td><td style="${td}"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${x.col};margin-right:7px"></span><b>${escAttr(x.j)}</b></td><td style="${td};text-align:right;font-weight:800">${S0(x.tot)}</td><td style="${td};text-align:center">${x.gs}</td><td style="${td};text-align:right;color:${colV(x.tot/Math.max(1,x.gs))};font-weight:700">${S0(x.tot/Math.max(1,x.gs))}</td><td style="${td};text-align:right">${Math.round(x.ton).toLocaleString('es-PE')} t</td><td style="${td};text-align:center">${x.meta}</td><td style="${td};text-align:center;color:${x.ok/Math.max(1,x.gs)<.5?'#ef4444':'var(--text)'};font-weight:700">${x.ok} de ${x.gs}</td></tr>`).join('')
+    +`<tr style="background:var(--coal4)"><td style="${td}"></td><td style="${td};font-weight:800">Total del ciclo</td><td style="${td};text-align:right;font-weight:800">${S0(totT)}</td><td style="${td};text-align:center">${G.length}</td><td style="${td};text-align:right">${S0(totT/Math.max(1,G.length))}</td><td style="${td};text-align:right;font-weight:800">${Math.round(tonT).toLocaleString('es-PE')} t</td><td style="${td};text-align:center">${G.filter(g=>g.val>=M).length}</td><td style="${td};text-align:center">${G.filter(g=>g.ok221).length} de ${G.length}</td></tr></tbody></table>`;
+  const tComp=`<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr><th style="${th}">Jefe de guardia</th><th style="${th};text-align:center">Física</th><th style="${th};text-align:center">Económica</th><th style="${th};text-align:center">Global del mes</th><th style="${th};text-align:center">🔴 / 🟠 / 🟢</th></tr></thead><tbody>`
+    +rk.map(x=>`<tr><td style="${td}"><b>${escAttr(corto(x.j))}</b></td><td style="${td};text-align:center">${P(x.fis)}</td><td style="${td};text-align:center">${P(x.eco)}</td><td style="${td};text-align:center">${pill(x.glo)}</td><td style="${td};text-align:center">${x.r} / ${x.o} / ${x.v}</td></tr>`).join('')+'</tbody></table>';
+  const tDia=gd.length?`<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr><th style="${th}">Turno</th><th style="${th}">Jefe</th><th style="${th};text-align:right">Producido</th><th style="${th};text-align:center">Física</th><th style="${th};text-align:center">Económica</th><th style="${th};text-align:center">Global</th><th style="${th};text-align:center">G·R·C</th></tr></thead><tbody>`
+    +gd.map(g=>`<tr><td style="${td}">${g.t}</td><td style="${td}"><b>${escAttr(corto(g.jefe))}</b></td><td style="${td};text-align:right;color:${colV(g.val)};font-weight:700">${S0(g.val)}</td><td style="${td};text-align:center">${P(g.fis)}</td><td style="${td};text-align:center">${P(g.eco)}</td><td style="${td};text-align:center">${pill(g.glo)}</td><td style="${td};text-align:center;font-weight:800;color:${g.ok221?'#22c55e':'#ef4444'}">${g.dis.G}·${g.dis.R}·${g.dis.C}</td></tr>`).join('')+'</tbody></table>'
+    :'<div style="font-size:12px;color:var(--text3)">Ese día no hubo reportes.</div>';
+  const tDet=`<table style="width:100%;border-collapse:collapse;font-size:11.5px"><thead><tr><th style="${th}">Fecha</th><th style="${th}">Turno</th><th style="${th}">Jefe</th><th style="${th};text-align:right">Producido</th><th style="${th};text-align:center">Física</th><th style="${th};text-align:center">Económica</th><th style="${th};text-align:center">Global</th><th style="${th};text-align:center">G·R·C</th></tr></thead><tbody>`
+    +G.map(g=>`<tr style="cursor:pointer" onclick="efopVerDia('${g.f}')"><td style="${td}">${dm(g.f)}</td><td style="${td}">${g.t}</td><td style="${td}"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colJ(g.jefe)};margin-right:6px"></span>${escAttr(corto(g.jefe))}</td><td style="${td};text-align:right;color:${colV(g.val)};font-weight:700">${S0(g.val)}</td><td style="${td};text-align:center">${P(g.fis)}</td><td style="${td};text-align:center">${P(g.eco)}</td><td style="${td};text-align:center;color:${colG(g.glo)};font-weight:800">${P(g.glo)}</td><td style="${td};text-align:center;font-weight:800;color:${g.ok221?'#22c55e':'#ef4444'}">${g.dis.G}·${g.dis.R}·${g.dis.C}</td></tr>`).join('')+'</tbody></table>';
+  // ── notas: lo que todavía es provisional, dicho en la pantalla
+  const prov=Object.keys(D.prov).map(k=>EFOP.tipos[k].n+' '+D.ref[k]+' kg/m').join(', ');
+  const sinT=Object.entries(D.sinTarifa).map(([n,m])=>n+' ('+(Math.round(m*10)/10)+' m)').join(', ');
+  const fijado=(typeof opsVistaFijada==='function')&&opsVistaFijada();
+  const rangoTxt=dm(w.ini)+'/'+w.ini.slice(0,4)+' → '+dm(w.fin)+'/'+w.fin.slice(0,4);
+  const caja='background:var(--coal4);border:1px solid var(--border);border-radius:14px;padding:12px 14px';
+  const tit=t=>`<div style="font-size:12px;font-weight:800;color:var(--text2);letter-spacing:.4px;text-transform:uppercase;margin-bottom:8px">${t}</div>`;
+  cont.innerHTML=
+  '<div style="background:var(--coal3);border:1px solid var(--border);border-radius:18px;padding:18px;margin-bottom:18px">'
+   +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px">'
+     +'<div style="font-size:15px;font-weight:900;color:var(--gold-light);letter-spacing:.4px">📈 EFICIENCIA OPERATIVA — LO QUE PRODUCE CADA JEFE DE GUARDIA</div>'
+     +'<div style="font-size:11px;color:var(--text3)">Ciclo '+rangoTxt+(fijado?' · <b style="color:#f59e0b">ciclo anterior, en revisión</b>':'')+'</div></div>'
+   +'<div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6"><b style="color:var(--text2)">Global = física × económica.</b> '
+     +'Física: óptimo de la sección ÷ factor de carga real, tope 100 %. Económica: soles producidos ÷ meta '+S0(M)+'. '
+     +'Barras: <span style="color:#22c55e">verde</span> sobre '+S0(M+H)+', <span style="color:#f59e0b">naranja</span> entre '+S0(M-H)+' y '+S0(M+H)+', <span style="color:#ef4444">rojo</span> bajo '+S0(M-H)+'. '
+     +'La rayita bajo cada barra es el color del jefe. <b style="color:var(--text2)">Toca una barra</b> para ver ese día.</div>'
+   +'<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;margin-bottom:6px">'+J.map(x=>`<span style="display:inline-flex;align-items:center;gap:6px;color:var(--text2)"><span style="width:10px;height:10px;border-radius:50%;background:${x.col}"></span>${escAttr(x.j)}</span>`).join('')+'</div>'
+   +(G.length?'<div class="table-wrap" style="overflow-x:auto">'+g1+'</div>':'<div style="font-size:12px;color:var(--text3);padding:14px 0">Todavía no hay reportes de guardia en este ciclo.</div>')
+   +(G.length?'<div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:14px">'
+     +'<div style="'+caja+';flex:3 1 520px;min-width:0">'+tit('Acumulado del ciclo por jefe')+'<div class="table-wrap" style="overflow-x:auto">'+g2+'</div></div>'
+     +'<div style="'+caja+';flex:1 1 250px;min-width:0">'+tit('Día '+(_efopDia?dm(_efopDia):'—')+' — quién produjo más')+dona+'</div></div>'
+   +'<div style="'+caja+';margin-top:14px">'+tit('Acumulado y puesto de cada jefe — ordenado por eficiencia global')+'<div class="table-wrap" style="overflow-x:auto">'+tAcum+'</div></div>'
+   +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:14px;margin-top:14px">'
+     +'<div style="'+caja+'">'+tit('Eficiencia del mes por jefe')+'<div class="table-wrap" style="overflow-x:auto">'+tComp+'</div><div style="font-size:10.5px;color:var(--text3);margin-top:6px">Global del mes = promedio de las globales de sus guardias. 🔴 / 🟠 / 🟢 = cuántas guardias quedaron en cada color.</div></div>'
+     +'<div style="'+caja+'">'+tit('Panel del día '+(_efopDia?dm(_efopDia):''))+'<div class="table-wrap" style="overflow-x:auto">'+tDia+'</div><div style="font-size:10.5px;color:var(--text3);margin-top:6px">Solo salen los jefes que reportaron ese día. G·R·C = disparos en galería · rampa (con ESCM) · chimenea; en rojo si no llega a 2·2·1.</div></div></div>'
+   +'<details style="margin-top:14px"><summary style="cursor:pointer;font-size:12px;font-weight:800;color:var(--text2)">Detalle de las '+G.length+' guardias del ciclo</summary><div class="table-wrap" style="overflow-x:auto;margin-top:8px">'+tDet+'</div></details>'
+   +'<div style="font-size:10.5px;color:#d97706;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:10px;padding:8px 12px;margin-top:14px;line-height:1.55">'
+     +'<b>Por definir:</b> '+(prov?'sin óptimo de factor de carga todavía — se mide contra la mediana real del ciclo, <b>provisional</b>: '+prov+'. ':'')
+     +'ESCM usa el óptimo de rampa (27.5), por confirmar. Chimenea sin puntales (el parte aún no los registra). Perno de 6\' de la CRNE y sostenimiento del subnivel sin precio. TJ 5100 se registra pero no se valoriza.'
+     +(sinT?' Labores sin tarifa, no valorizadas: '+escAttr(sinT)+'.':'')+'</div>'
+   :'')
   +'</div>';
 }
 /* INGRESADO VS CONSUMIDO.
@@ -27361,6 +27563,7 @@ function renderTableroOp(){
   // El bloque de factor de carga vive aquí, en Operaciones: es dato de la operación diaria, no
   // del tablero ejecutivo.
   try{ renderDashVoladura(); }catch(e){ console.warn('voladura',e); }
+  try{ renderEficienciaOperativa(); }catch(e){ console.warn('eficiencia operativa',e); }
   if(typeof metasLoad==='function')metasLoad();
   if(typeof distribLoad==='function')distribLoad();
   const r1m=n=>Math.round((Number(n)||0)*10)/10;
@@ -27368,7 +27571,7 @@ function renderTableroOp(){
      Los días ya se contaban sobre esa ventana —de ahí el «día 11 de 30»— pero los reportes se
      filtraban por mes calendario, así que el avance del 26 al 30 del mes anterior se quedaba
      fuera y el acumulado arrancaba en falso contra una meta que sí lo incluía. */
-  const ts=hoy(), mesAct=(typeof finMesActual==='function')?finMesActual(AREA_OP):ts.slice(0,7);
+  const ts=hoy(), mesAct=(typeof opsPeriodoVista==='function')?opsPeriodoVista():((typeof finMesActual==='function')?finMesActual(AREA_OP):ts.slice(0,7));
   const rg=(state.reportesGuardia||[]);
   const rgMes=rg.filter(r=>(typeof enVentana==='function')?enVentana(r.fecha,mesAct,AREA_OP):((r.fecha||'').slice(0,7)===mesAct));
   const rgHoy=rg.filter(r=>r.fecha===ts);
