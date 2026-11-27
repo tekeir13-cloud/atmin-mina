@@ -108,6 +108,18 @@ Residente** (quien dirigió el trabajo, quien paga, quien responde).
 
 ---
 
+## LOS CICLOS — CADA ÁREA CON EL SUYO
+
+- **Operaciones** (avance, factor de carga, eficiencia operativa, producido acumulado, tablero y la
+  parte de avance del dashboard) va por **ciclo 26 → 25**. El 25 todavía se ve el ciclo que cierra;
+  el 26 ya se ve solo el ciclo nuevo. Eso lo da `periodoActual(AREA_OP)`.
+- **Logística, Recursos Humanos, Mantenimiento** y los tanques van por **mes calendario, del 1 al
+  último día**, también en sus cuadros del dashboard.
+- **Vista en revisión (27/11/2026):** `OPS_CICLO_VISTA='2026-11'` en `index.html` fija las vistas de
+  Operaciones en el ciclo 26/10 → 25/11 para revisarlo. **Cuando el usuario pida "volver a lo real",
+  se pone `OPS_CICLO_VISTA=null`** y todo vuelve a la regla de arriba. Solo cambia lo que se mira;
+  guardar y cerrar siempre usan el ciclo real.
+
 ## PROPUESTAS GUARDADAS (no implementar sin pedido)
 
 - **Parte valorizado de guardia** — `docs/propuestas/parte_valorizado/` (LEEME.md, PDF, maqueta,
