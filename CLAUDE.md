@@ -105,3 +105,11 @@ Residente** (quien dirigió el trabajo, quien paga, quien responde).
 - **Una sola fuente por cifra.** Si un informe calcula por su cuenta, el mismo mes dirá dos
   cifras distintas en dos pantallas y nadie volverá a creerle a ninguna.
 - **Sin librerías por CDN en la app.** Trabaja en interior mina, donde el CDN no responde.
+
+---
+
+## PROPUESTAS GUARDADAS (no implementar sin pedido)
+
+- **Parte valorizado de guardia** — `docs/propuestas/parte_valorizado/` (LEEME.md, PDF, maqueta,
+  modelo Excel). El usuario dirá cuándo implementarlo. `docs/propuestas` está en `.vercelignore`:
+  no se publica en la web porque lleva tarifas y nombres.
