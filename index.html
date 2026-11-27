@@ -2570,7 +2570,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.27-395</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.27-396</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2615,7 +2615,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.27-395</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.27-396</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2783,7 +2783,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.27-395</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.27-396</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -7478,16 +7478,23 @@ function _dmFecha(iso){ const p=String(iso||'').split('-'); return p.length===3?
 function _dmDatos(){
   /* El mes EN CURSO, no el que tenga elegido el panel ejecutivo: ese salta a la última valorización
      (podía mostrar junio en noviembre). La portada dice cómo va la mina hoy. */
-  const mes=(typeof finMesActual==='function')?finMesActual():hoy().slice(0,7);
-  const w=ventanaMes(mes, AREA_OP);
+  /* DOS RELOJES EN UNA MISMA PORTADA. El avance es de Operaciones y va por SU ciclo, del 26 al 25:
+     el 27 de noviembre ya corre el ciclo de diciembre (26/11 → 25/12). Antes se le pasaba el mes
+     de calendario y la portada seguía mostrando el ciclo que cerró el 25. Logística, Mantenimiento,
+     Recursos Humanos y los tanques cierran por mes de calendario, del 1 al último día: esos usan
+     `mes`. Son dos ciclos distintos y cada cuadro dice el suyo. */
+  const mes=hoy().slice(0,7);                                                    // calendario
+  const mesOp=(typeof finMesActual==='function')?finMesActual(AREA_OP):mes;      // ciclo 26→25
+  const w=ventanaMes(mesOp, AREA_OP);
   const ini=new Date(w.ini+'T00:00:00'), fin=new Date(w.fin+'T00:00:00');
   const nDias=Math.round((fin-ini)/86400000)+1;
-  const hoyIso=hoy(), dTransc=Math.max(1,Math.min(nDias,(typeof diasTranscurridosPeriodo==='function')?diasTranscurridosPeriodo(mes):nDias));
+  const hoyIso=hoy(), dTransc=Math.max(1,Math.min(nDias,(typeof diasTranscurridosPeriodo==='function')?diasTranscurridosPeriodo(mesOp):nDias));
+  const dCal=Number(hoyIso.slice(8,10))||1;                                      // día del mes calendario
   const esp=dTransc/nDias;
   const dias=[]; for(let i=0;i<nDias;i++){ const d=new Date(ini); d.setDate(d.getDate()+i); dias.push(_dmISO(d)); }
   const M=state.metas||{}, diasMeta=M.dias||M.diasMes||26;
   // ── OPERACIONES: avance por labor (la misma fuente que el resto del Dashboard)
-  const perf=(state.perforacion||[]).filter(p=>enVentana(p.fecha,mes,AREA_OP));
+  const perf=(state.perforacion||[]).filter(p=>enVentana(p.fecha,mesOp,AREA_OP));
   const visibles=frentesVisibles(f=>perf.some(p=>String(p.frente)===String(f.id))).filter(f=>!f.tajo);
   const frentes=visibles.map(f=>{
     const serie=dias.map(dd=>perf.filter(p=>String(p.frente)===String(f.id)&&String(p.fecha).slice(0,10)===dd).reduce((s,p)=>s+(Number(p.metros)||0),0));
@@ -7495,7 +7502,7 @@ function _dmDatos(){
   }).filter(f=>f.meta>0||f.av>0);
   const total=dias.map((dd,i)=>frentes.reduce((s,f)=>s+f.serie[i],0));
   // Reportes del jefe de guardia del ciclo (para el detalle y para saber qué días faltan)
-  const rg=(state.reportesGuardia||[]).filter(r=>enVentana(r.fecha,mes,AREA_OP));
+  const rg=(state.reportesGuardia||[]).filter(r=>enVentana(r.fecha,mesOp,AREA_OP));
   const conReporte=new Set(rg.map(r=>String(r.fecha).slice(0,10)));
   // ── LOGÍSTICA y MANTENIMIENTO: el cálculo del Informe de Cierre
   let C=null; try{ C=cieDatos(mes); }catch(e){ console.warn('[dash] cieDatos',e); }
@@ -7507,9 +7514,9 @@ function _dmDatos(){
   // La guardia sale de la distribución del Ingeniero Residente, igual que en la hoja de tareo.
   const gmap=(state.distribucion&&state.distribucion._guardias)||{};
   const guardia=p=>String(gmap[p.id]||p.guardia||'').toLowerCase();
-  const hojas=(state.tareosPend||[]).filter(h=>enVentana(h.fecha,mes,AREA_OP));
+  const hojas=(state.tareosPend||[]).filter(h=>(typeof enMesTareo==='function')?enMesTareo(h.fecha,mes):String(h.fecha||'').slice(0,7)===mes);   // tareo: mes calendario
   const cargos={}; act.forEach(p=>{ const c=String(p.rol||'—'); cargos[c]=(cargos[c]||0)+1; });
-  return {mes,w,nDias,dTransc,esp,dias,hoyIso,frentes,total,rg,conReporte,C,P,G,
+  return {mes,mesOp,dCal,w,nDias,dTransc,esp,dias,hoyIso,frentes,total,rg,conReporte,C,P,G,
     rrhh:{activos:act.length,nv:act.filter(p=>(p.unidad||'NV2820')!=='MB').length,mb:act.filter(p=>p.unidad==='MB').length,
       dia:act.filter(p=>guardia(p)==='dia').length,noche:act.filter(p=>guardia(p)==='noche').length,
       hojas:hojas.length,hojasPend:hojas.filter(h=>h.estado!=='aprobado').length,
@@ -7566,7 +7573,7 @@ function renderDashMina(){
   const atras=D.frentes.filter(f=>f.meta>0&&f.av/f.meta<D.esp*.75);
   const faltan=D.dias.filter(dd=>dd<D.hoyIso&&!D.conReporte.has(dd)).slice(-3);
   const C=D.C||{}, kitsPend=(C.kits||[]).filter(k=>!((k.aprobLog||{}).ok&&(k.aprobOps||{}).ok)).length;
-  const dPet=D.P&&D.P.consCiclo>0?Math.floor(D.P.saldo/(D.P.consCiclo/Math.max(1,D.dTransc))):null;
+  const dPet=D.P&&D.P.consCiclo>0?Math.floor(D.P.saldo/(D.P.consCiclo/Math.max(1,D.dCal||D.dTransc))):null;
   const tks=[
     ...atras.map(f=>[f.av===0?'#ff5a5a':'#f5a524',f.av===0?'PARADA':'ATRASO',f.n,f.av===0?'0 m en el ciclo · revisar si se reporta en otra labor':_dmF1(f.av)+' de '+f.meta+' m · debería ir en '+_dmF1(f.meta*D.esp),`dmAbrirFrente('${f.k}')`]),
     ...(faltan.length?[['#f5a524','FALTA','Reporte de guardia','sin reporte del '+faltan.map(_dmFecha).join(', '),`dmAbrirDia('${faltan[faltan.length-1]}')`]]:[]),
@@ -7609,7 +7616,7 @@ function renderDashMina(){
       <div class="lgl">${rub.map(([n,c,g],k)=>`<div class="lgr" onclick="event.stopPropagation();dmShowLog(${[0,3,4,0][k]})"><span class="ln">${n}</span>
         <span class="lb"><i style="width:${c/mxR*100}%;background:linear-gradient(90deg,#2a6fe0,#5aa2ff)"></i><i style="width:${g/mxR*100}%;background:linear-gradient(90deg,#f5a524,#f7c35c)"></i></span>
         <span class="lv num"><span style="color:var(--dmCo)">${_dmS(c)}</span><span style="color:var(--dmWa)">${_dmS(g)}</span></span></div>`).join('')}</div>
-      <div class="tqs">${_dmTqMini(D.P,'Petróleo','#2dd4bf','#7ff0de',D.dTransc)}${_dmTqMini(D.G,'Gasolina','#f59e0b','#fcd34d',D.dTransc)}</div></div>
+      <div class="tqs">${_dmTqMini(D.P,'Petróleo','#2dd4bf','#7ff0de',D.dCal||D.dTransc)}${_dmTqMini(D.G,'Gasolina','#f59e0b','#fcd34d',D.dCal||D.dTransc)}</div></div>
     <div class="clk" onclick="dmShowMant()"><div class="mod" style="color:var(--dmMa)"><i style="background:#a78bfa"></i>Mantenimiento <span class="play">▶ presentación</span></div><div class="cap">${nomMes} · trabajos a máquinas</div>
       <div class="mv num">${kits.length}<small> trabajos</small></div>
       <div class="stk">${Object.entries(tipos).map(([t,v])=>`<i style="width:${v/Math.max(1,kits.length)*100}%;background:${tc[t]||'#64748b'}"></i>`).join('')}</div>
@@ -7622,7 +7629,7 @@ function renderDashMina(){
       <div class="mn">${R.nv} en NV 2820 · ${R.mb} en Monte Bravo</div>
       <div class="dots">${'<i style="background:#3b8bff"></i>'.repeat(R.dia)}${'<i style="background:#8b5cf6"></i>'.repeat(R.noche)}${'<i style="background:#1e293b"></i>'.repeat(Math.max(0,R.activos-R.dia-R.noche))}</div>
       <div style="display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11.5px;color:var(--dmT2);margin-top:6px"><span><b style="color:#3b8bff">■</b> guardia Día ${R.dia}</span><span><b style="color:#8b5cf6">■</b> guardia Noche ${R.noche}</span></div>
-      <div class="mn" style="margin-top:8px">Hojas de tareo del ciclo: <b>${R.hojas-R.hojasPend} aprobadas</b>${R.hojasPend?` · <b style="color:var(--dmWa)">${R.hojasPend} por aprobar</b>`:''}</div>
+      <div class="mn" style="margin-top:8px">Hojas de tareo del mes: <b>${R.hojas-R.hojasPend} aprobadas</b>${R.hojasPend?` · <b style="color:var(--dmWa)">${R.hojasPend} por aprobar</b>`:''}</div>
       <div class="cap" style="margin-top:12px">Cargos principales</div>
       <div class="lst">${R.cargos.slice(0,5).map(([c,n])=>`<span>${c.charAt(0)+c.slice(1).toLowerCase()}</span><span>${n}</span>`).join('')}</div></div>
   </div></div>
@@ -7696,7 +7703,7 @@ function dmAbrirRRHH(){
   _dmPanel(`<div class="cap">Recursos Humanos</div><div class="t">${R.activos} trabajadores</div>
     <div class="k"><div><span class="cap">NV 2820</span><b>${R.nv}</b></div><div><span class="cap">Monte Bravo</span><b>${R.mb}</b></div>
       <div><span class="cap">Guardia Día</span><b>${R.dia}</b></div><div><span class="cap">Guardia Noche</span><b>${R.noche}</b></div></div>
-    <div class="d">Hojas de tareo del ciclo: <b>${R.hojas-R.hojasPend} aprobadas</b>, ${R.hojasPend} por aprobar. La guardia de cada uno sale de la distribución del Ingeniero Residente.</div>
+    <div class="d">Hojas de tareo del mes: <b>${R.hojas-R.hojasPend} aprobadas</b>, ${R.hojasPend} por aprobar. La guardia de cada uno sale de la distribución del Ingeniero Residente.</div>
     <div class="cap" style="margin:18px 0 4px">Por cargo</div>
     ${R.cargos.map(([c,n])=>`<div class="tp"><span>${c.charAt(0)+c.slice(1).toLowerCase()}</span><span class="m">${n}</span><div class="b"><i style="width:${n/Math.max(1,R.cargos[0][1])*100}%;background:#3ddc84"></i></div></div>`).join('')}
     <button class="ir" onclick="dmCerrar();navigate('rrhh')">Ir a Recursos Humanos →</button>`);
@@ -8125,8 +8132,8 @@ function dmShowLog(desde){
   const pex=(typeof compGetPreciosExp==='function')?compGetPreciosExp():(typeof COMP_PRECIOS_EXP_DEFAULT!=='undefined'?COMP_PRECIOS_EXP_DEFAULT:{});
   const eo={}; (((state.almacen||{}).explosivos||{}).ingresos||[]).filter(r=>String(r.fecha||'').slice(0,7)===String(D.mes)).forEach(r=>{ const k=String(r.origen||'Sin origen').trim(); eo[k]=(eo[k]||0)+(Number(r.totalUnidades)||0)*(Number(pex[r.producto])||0); });
   const topEx=(C.expPorProd||[]).filter(x=>x.salS>0).sort((a,b)=>b.salS-a.salS).slice(0,7);
-  const P=D.P||{}, dP=P.consCiclo>0?Math.floor(P.saldo/(P.consCiclo/Math.max(1,D.dTransc))):null;
-  const Gs=D.G||null, dG=Gs&&Gs.consCiclo>0&&Gs.saldo>0?Math.floor(Gs.saldo/(Gs.consCiclo/Math.max(1,D.dTransc))):null;
+  const P=D.P||{}, dP=P.consCiclo>0?Math.floor(P.saldo/(P.consCiclo/Math.max(1,D.dCal||D.dTransc))):null;
+  const Gs=D.G||null, dG=Gs&&Gs.consCiclo>0&&Gs.saldo>0?Math.floor(Gs.saldo/(Gs.consCiclo/Math.max(1,D.dCal||D.dTransc))):null;
   // gasolina por equipo: los mismos partes y la misma ventana que usa el tanque de gasolina
   const gasEq=(()=>{ try{ const w=_combVentana(), m={}; (state.compresorista||[]).filter(r=>r&&_combEnCiclo(r.fecha,w)&&String(r.fecha||'').slice(0,10)>=COMB_CORTE).forEach(r=>(r.gasolina||[]).forEach(x=>{ const g=Number(x&&x.gln)||0; if(g) m[x.equipo]=(m[x.equipo]||0)+g; })); return Object.entries(m).sort((a,b)=>b[1]-a[1]); }catch(e){ return []; } })();
   const cols=['#3b8bff','#2dd4bf','#a78bfa','#f5a524','#f472b6','#60a5fa','#94a3b8'];
@@ -8143,7 +8150,7 @@ function dmShowLog(desde){
     _L.t('Explosivos', `Ingresos al polvorín por <b>${_dmS(C.expIngS||0)}</b> y despachos a mina por <b>${_dmS(C.expSalS||0)}</b>. Existencias valorizadas en <b>${_dmS(C.expStockS||0)}</b>.`)+
       `<div class="dos">${_L.kp(Object.entries(eo).map(([k,v])=>['Proveedor: '+k,_L.n(v,'S'),'ingresos del mes','var(--dmCo)']).concat([['Despachos a mina',_L.n(C.expSalS||0,'S'),_dmF0(C.expSalU||0)+' unidades','var(--dmWa)'],['Existencias en polvorín',_L.n(C.expStockS||0,'S'),_dmF0(C.expStockU||0)+' unidades']])).replace('class="kp"','class="kp compacta"')}
        ${_G.envoltura('Principales productos despachados',_G.barras(topEx.map(x=>[x.nombre.replace(/DETONADOR NO ELECTRICO /i,'').replace(/EMULNOR/i,'Emulnor'),x.salS]),'#f472b6',_dmS))}</div>`,
-    _L.t('Petróleo', `Saldo en tanque: <b>${_dmF0(P.saldo||0)} galones</b>${dP!=null?`, con una autonomía estimada de <b>${Math.max(0,dP)} días</b> al consumo del ciclo`:''}. Consumo promedio: <b>${_dmF0((P.consCiclo||0)/Math.max(1,D.dTransc))} gln por día</b>.`)+
+    _L.t('Petróleo', `Saldo en tanque: <b>${_dmF0(P.saldo||0)} galones</b>${dP!=null?`, con una autonomía estimada de <b>${Math.max(0,dP)} días</b> al consumo del mes`:''}. Consumo promedio: <b>${_dmF0((P.consCiclo||0)/Math.max(1,D.dCal||D.dTransc))} gln por día</b>.`)+
       `<div class="dos"><div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap"><div style="text-align:center">${_G.tanque(Math.max(0.04,Math.min(1,(P.saldo||0)/Math.max(1,(P.saldo||0)+(P.consCiclo||0)))),_dmF0(P.saldo||0)+' gln')}<div style="font-size:11px;color:var(--dmT3);max-width:160px;margin-top:4px">saldo frente al total disponible en el ciclo</div></div>
          ${_L.kp([['Ingresos del mes',_L.n(C.petIn||0,'0','',' gln'),_dmS(C.petIngS||0),'var(--dmCo)'],['Consumo del mes',_L.n(C.petSalido||0,'0','',' gln'),_dmS(petG),'var(--dmWa)']]).replace('class="kp"','class="kp compacta" style="flex:1;min-width:180px;grid-template-columns:1fr"')}</div>
        ${_G.envoltura('Consumo de petróleo por día',_G.columnas(dias.map(d=>(C.dPetCon&&C.dPetCon[d])||0),_dmEtqDias(dias),{col:'#2dd4bf',fmt:v=>Math.round(v)}))}</div>`,
