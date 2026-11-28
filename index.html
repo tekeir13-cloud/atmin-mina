@@ -2570,7 +2570,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <div class="login-brand-name"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.27-401</span></div>
+        <div class="login-brand-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.28-402</span></div>
       </div>
       <div class="login-brand-bottom">
         <div class="login-brand-desc">
@@ -2615,7 +2615,7 @@ select option{background:var(--coal3);}
 </g></svg>
         </div>
         <span class="login-form-logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></span>
-        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.27-401</span></div>
+        <div class="login-form-logo-tagline">Operaciones Mineras Inteligentes · <span class="app-version-login" style="font-weight:800;color:var(--accent)">v2026.11.28-402</span></div>
       </div>
 
       <div class="login-form-body">
@@ -2783,7 +2783,7 @@ select option{background:var(--coal3);}
     </div>
     <div class="logo-meta">
       <div class="logo-text"><span class="mk-w1">MUKI</span><span class="mk-w2">CLOUD</span></div>
-      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.27-401</span></div>
+      <div class="logo-sub">Operaciones Mineras <span id="app-version" title="Versión de la app" style="opacity:0.65;font-size:9px">v2026.11.28-402</span></div>
     </div>
   </div>
   <nav class="nav">
@@ -23220,7 +23220,7 @@ function _tareoCell(tid,fecha){
   if(t.tipo==='libre') return 'DL';
   if(t.tipo==='falta') return 'F';
   if(t.tipo==='ausencia') return t.codigo||'F';
-  const m=Number(t.mult||1); const s=String(m); return TAREO_CICLO.includes(s)?s:'1';
+  const m=Number(t.mult||1); return m>0?String(Math.round(m*1000)/1000):'1';   // 1.375 se ve 1.375, no 1
 }
 function _tareoColVal(v){
   // La F no tenía color: se pintaba en blanco sobre fondo transparente, así que en modo oscuro
@@ -23228,6 +23228,7 @@ function _tareoColVal(v){
   // de TAREO_MARCAS para que no vuelva a faltar ninguno.
   const colorMap={'1':'#16a34a','1.25':'#84cc16','1.5':'#d97706','1.75':'#f59e0b','2':'#dc2626','2.25':'#e11d48','2.5':'#ec4899','2.75':'#c026d3','3':'#8b5cf6'};
   TAREO_MARCAS.forEach(m=>{ colorMap[m.v]=m.c; });
+  if(!colorMap[v] && /^\d+(\.\d+)?$/.test(String(v))){ const n=+v; return n<1.25?'#16a34a':n<1.5?'#84cc16':n<1.75?'#d97706':n<2?'#f59e0b':n<2.5?'#dc2626':n<3?'#ec4899':'#8b5cf6'; }
   return colorMap[v]||'transparent';
 }
 function _tareoPintaCelda(td,v){ if(!td)return; td.textContent=v; td.style.background=_tareoColVal(v); td.style.color=(v===''?'#39415a':'#fff'); }
@@ -23409,6 +23410,171 @@ function tareoPago(tid,mes){
   const r=tareoResumen(tid,mes);
   return (r.tareas + r.dlTomados + r.comprados) * j;
 }
+/* ═══ SUBIR EL TAREO DESDE EXCEL ══════════════════════════════════════════════════════════════
+   Pedido del 28/11/2026: Recursos Humanos lleva el tareo del mes en un Excel (BD_TAREO_<MES>_<AÑO>)
+   y lo quiere subir de un golpe para que cada trabajador lo vea en su consulta por QR.
+   CÓMO LEE: por los ENCABEZADOS, no por la posición. Busca la fila que tiene "DNI" y "D1"; los días
+   son las columnas D1…D31; el nombre es la columna de nombres (o la que va justo después del DNI).
+   Así sirve para meses de 28, 30 o 31 días aunque se agreguen o muevan columnas.
+   QUÉ HACE (decidido por el usuario):
+     · Cada fila se busca en el padrón por DNI; si no aparece, por nombre. Si se encontró por nombre
+       y el DNI del Excel es otro, MANDA EL EXCEL: se corrige el DNI de la ficha.
+     · Quien no está en el sistema recibe ficha nueva: ACTIVO entra activo; NO ACTIVO entra de baja,
+       con sus tareas guardadas para la planilla. El Excel no trae jornal: queda en 0 hasta ponerlo.
+     · A los que ya están no se les toca nada más de la ficha.
+     · Cada celda escrita reemplaza lo que el sistema tenga ese día —también en hojas aprobadas—;
+       una celda VACÍA no borra nada.
+     · Números = tareas ganadas ese día (1, 1.25, 1.5…). Marcas: DL, F, DM, P (permiso pagado,
+       1 tarea), PSG (permiso sin goce, 0), T, S, V. VAC se lee como V y PCG como P. Lo que no se
+       entiende ("REVISAR…", letras sueltas) NO se carga: se lista para corregirlo en el Excel. */
+const _TX_MESES={ENE:1,ENERO:1,FEB:2,FEBRERO:2,MAR:3,MARZO:3,ABR:4,ABRIL:4,MAY:5,MAYO:5,JUN:6,JUNIO:6,JUL:7,JULIO:7,AGO:8,AGOSTO:8,SET:9,SEP:9,SETIEMBRE:9,SEPTIEMBRE:9,OCT:10,OCTUBRE:10,NOV:11,NOVIEMBRE:11,DIC:12,DICIEMBRE:12};
+const _TX_ALIAS={VAC:'V',PCG:'P'};
+function _txNorm(s){ return String(s==null?'':s).toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim(); }
+function _txFecha(v){
+  if(v==null||v==='') return '';
+  if(typeof v==='number' && v>20000 && v<80000){ const d=new Date(Date.UTC(1899,11,30)+Math.round(v)*864e5); return d.toISOString().slice(0,10); }
+  const s=String(v).trim(); let m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  if(m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); return m?m[0]:'';
+}
+function _txMesDeNombre(nombre){
+  const t=_txNorm(nombre).replace(/[^A-Z0-9]+/g,' ').split(' ');
+  let mes=0, anio=0; t.forEach(w=>{ if(_TX_MESES[w]) mes=_TX_MESES[w]; if(/^20\d\d$/.test(w)) anio=+w; });
+  return (mes&&anio)? anio+'-'+String(mes).padStart(2,'0') : '';
+}
+// Lee el libro y devuelve las filas tal como vienen, sin decidir nada todavía.
+function tareoExcelLeer(buf){
+  const wb=XLSX.read(buf,{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]];
+  const A=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:''});
+  const hi=A.findIndex(r=>r.some(c=>_txNorm(c)==='DNI') && r.some(c=>_txNorm(c)==='D1'));
+  if(hi<0) throw new Error('No encuentro la fila de encabezados: tiene que haber una columna "DNI" y los días "D1", "D2"…');
+  const H=A[hi].map(_txNorm), col=(...n)=>H.findIndex(h=>n.some(x=>h===x||h.startsWith(x)));
+  const cDni=col('DNI'), dias={};
+  H.forEach((h,i)=>{ const m=h.match(/^D(\d{1,2})$/); if(m&&+m[1]>=1&&+m[1]<=31) dias[+m[1]]=i; });
+  let cNom=col('NOMBRE','APELLIDOS Y NOMBRES','TRABAJADOR','OPERACIONES');
+  if(cNom<0) cNom=cDni+1;
+  const c={cargo:col('CARGO'),cond:col('CONDICION'),ing:col('F.INGRESO','FECHA INGRESO','F. INGRESO'),cel:col('CELULAR'),fnac:col('F.NAC','FECHA NAC'),zona:col('ZONA')};
+  const filas=[];
+  for(let r=hi+1;r<A.length;r++){ const R=A[r]; const nom=String(R[cNom]||'').trim(); const dni=String(R[cDni]||'').replace(/\D/g,'');
+    if(!nom && !dni) continue;
+    const d={}; Object.entries(dias).forEach(([k,i])=>{ const v=R[i]; if(v!==''&&v!=null) d[+k]=v; });
+    filas.push({fila:r+1,nombre:nom.replace(/\s+/g,' '),dni,cargo:c.cargo>=0?String(R[c.cargo]||'').trim():'',
+      cond:c.cond>=0?_txNorm(R[c.cond]):'',ingreso:c.ing>=0?_txFecha(R[c.ing]):'',celular:c.cel>=0?String(R[c.cel]||'').replace(/\D/g,''):'',
+      fnac:c.fnac>=0?_txFecha(R[c.fnac]):'',zona:c.zona>=0?_txNorm(R[c.zona]):'',dias:d}); }
+  return {filas, nDias:Object.keys(dias).length};
+}
+// Interpreta una celda: {tipo:'num',v:'1.5'} · {tipo:'marca',v:'DL'} · null (no se entiende)
+function _txCelda(v){
+  if(typeof v==='number') return v>0?{tipo:'num',v:String(Math.round(v*1000)/1000)}:null;   // 1.375 se queda en 1.375
+  const s=_txNorm(v).replace(',','.'); if(!s) return null;
+  if(/^\d+(\.\d+)?$/.test(s)){ const n=+s; return n>0?{tipo:'num',v:String(n)}:null; }
+  const k=_TX_ALIAS[s]||s; return tareoMarca(k)?{tipo:'marca',v:k}:null;
+}
+// Arma el plan: qué fichas se crean o corrigen y qué días cambian. No toca nada.
+function tareoExcelPlan(L, mes){
+  const P=state.personal||[], plan={mes,filas:L.filas.length,coinc:0,dniCorr:[],nuevos:[],dias:[],iguales:0,raros:[],fuera:0,futuros:0}, hoyIso=hoy();
+  const ult=new Date(+mes.slice(0,4), +mes.slice(5,7), 0).getDate();
+  L.filas.forEach(x=>{
+    let p=x.dni?P.find(q=>String(q.dni||'').replace(/\D/g,'')===x.dni):null;
+    if(!p) p=P.find(q=>_txNorm(q.nombre)===_txNorm(x.nombre));
+    let ref;
+    if(p){ plan.coinc++; ref={pid:p.id}; if(x.dni && String(p.dni||'').replace(/\D/g,'')!==x.dni) plan.dniCorr.push({pid:p.id,nombre:p.nombre,antes:p.dni||'',ahora:x.dni}); }
+    else { ref={nuevo:x}; plan.nuevos.push(x); }
+    Object.entries(x.dias).forEach(([d,v])=>{
+      if(+d>ult){ plan.fuera++; return; }
+      const fecha=mes+'-'+String(d).padStart(2,'0'), c=_txCelda(v);
+      if(fecha>hoyIso){ plan.futuros++; return; }   // el futuro no se tarea: entra al volver a subir el Excel ese día
+      if(!c){ plan.raros.push({nombre:x.nombre,dia:+d,v:String(v)}); return; }
+      if(p && _tareoCell(p.id,fecha)===c.v){ plan.iguales++; return; }
+      plan.dias.push({...ref,fecha,c,antes:p?_tareoCell(p.id,fecha):''});
+    });
+  });
+  return plan;
+}
+// Aplica el plan: fichas nuevas, DNI corregidos y tareas. Una sola subida de cada módulo al final.
+function tareoExcelAplicar(plan){
+  if(typeof puedePublicarRRHH==='function' && !puedePublicarRRHH()){ showNotif('Solo el Administrador y el Jefe de Finanzas suben el tareo.','error'); return null; }
+  const ahora=Date.now(); let k=0; const idDe=new Map();
+  plan.nuevos.forEach(x=>{
+    const activo=!/NO ACTIVO|CESAD|BAJA|INACTIV/.test(x.cond);
+    const id=_nuevoIdPersonal(k++);
+    const may=t=>String(t||'').toUpperCase().replace(/\s+/g,' ').trim();   // conserva la Ñ y las tildes
+    const nv={id,nombre:may(x.nombre),dni:x.dni,rol:may(x.cargo)||'AYUDANTE MINA',frente:null,estado:activo?'activo':'baja',jornal:0,
+      ingreso:x.ingreso||hoy(),unidad:x.zona==='MB'||/MONTE/.test(x.zona)?'MB':'NV2820',_ts:ahora,
+      ficha:{dni:x.dni,fechaNac:x.fnac||'',celular:x.celular||'',fechaIngreso:x.ingreso||'',cargoActual:may(x.cargo)}};
+    if(!activo){ nv.motivoBaja='Llegó como NO ACTIVO en el tareo Excel de '+plan.mes; nv.fechaBaja=hoy(); }
+    state.personal.push(nv); try{ if(typeof tombQuitar==='function') tombQuitar(id); }catch(e){}
+    idDe.set(x,id);
+  });
+  plan.dniCorr.forEach(c=>{ const p=state.personal.find(q=>String(q.id)===String(c.pid)); if(p){ p.dni=c.ahora; if(p.ficha&&typeof p.ficha==='object') p.ficha.dni=c.ahora; p._ts=ahora; } });
+  let n=0;
+  plan.dias.forEach(D=>{
+    const tid=D.pid!=null?D.pid:idDe.get(D.nuevo); if(tid==null) return;
+    const p=state.personal.find(q=>String(q.id)===String(tid));
+    const previa=(state.tareas||[]).find(t=>String(t.trabajadorId)===String(tid)&&t.fecha===D.fecha);
+    state.tareas=(state.tareas||[]).filter(t=>!(String(t.trabajadorId)===String(tid)&&t.fecha===D.fecha));
+    const base={fecha:D.fecha,trabajadorId:tid,id:'T'+ahora+'x'+(n++)+Math.random().toString(36).slice(2,6),_ts:ahora,jornal:p?p.jornal:0,origen:'excel'};
+    if(previa&&previa.turno) base.turno=previa.turno;
+    if(D.c.tipo==='marca'){ const m=tareoMarca(D.c.v);
+      state.tareas.push({...base,tipo:m.tipo,codigo:m.v,mult:m.paga,tarea:m.l.split(' · ')[1]||m.v,paga:m.paga>0}); }
+    else state.tareas.push({...base,tipo:'trabajo',mult:parseFloat(D.c.v),tarea:'Tareo diario',frente:(p&&p.frente)||1});
+  });
+  try{ if(typeof personalOrdenar==='function') personalOrdenar(); }catch(e){}
+  if(plan.nuevos.length||plan.dniCorr.length){ try{ (state.personal||[]).forEach(q=>{ if(q) q._guard=ahora; }); }catch(e){} personalSave(); }
+  tareasSave();
+  return {dias:n,nuevos:plan.nuevos.length,dni:plan.dniCorr.length};
+}
+let _txLeido=null;
+function tareoExcelElegir(){ const i=document.getElementById('tareo-xls-input'); if(i){ i.value=''; i.click(); } }
+function tareoExcelArchivo(input){
+  const f=input&&input.files&&input.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=e=>{ try{ _txLeido={L:tareoExcelLeer(new Uint8Array(e.target.result)),nombre:f.name};
+      const mes=_txMesDeNombre(f.name)||tareoMesSel(); tareoExcelVista(mes); }
+    catch(err){ console.warn('[tareo excel]',err); showNotif('⚠ No se pudo leer el Excel: '+(err&&err.message||err),'error'); } };
+  rd.readAsArrayBuffer(f);
+}
+function tareoExcelVista(mes){
+  if(!_txLeido) return; const plan=tareoExcelPlan(_txLeido.L, mes); _txLeido.plan=plan;
+  document.getElementById('tareo-xls-modal')?.remove();
+  const nNuevosAct=plan.nuevos.filter(x=>!/NO ACTIVO|CESAD|BAJA|INACTIV/.test(x.cond)).length;
+  const cambian=plan.dias.filter(d=>d.antes).length, nuevosDias=plan.dias.length-cambian;
+  const li=a=>a.map(s=>'<li>'+escAttr(s)+'</li>').join('');
+  const ov=document.createElement('div'); ov.id='tareo-xls-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9997;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.innerHTML=`<div style="background:var(--coal2);border:1px solid var(--border);border-radius:14px;padding:20px;width:min(560px,96vw);max-height:90vh;overflow:auto;box-shadow:0 8px 32px rgba(0,0,0,.6)">
+    <div style="font-size:15px;font-weight:800;margin-bottom:2px">⬆ Subir tareo desde Excel</div>
+    <div style="font-size:11.5px;color:var(--text3);margin-bottom:12px">${escAttr(_txLeido.nombre)} · ${plan.filas} trabajadores · ${_txLeido.L.nDias} columnas de días</div>
+    <label style="font-size:11px;color:var(--text3)">Mes del tareo</label>
+    <input type="month" value="${mes}" onchange="tareoExcelVista(this.value)" style="display:block;margin:4px 0 12px;background:var(--coal3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text)">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;margin-bottom:12px">
+      <div style="background:var(--coal4);border-radius:10px;padding:10px"><b style="font-size:20px">${nuevosDias}</b><br>días nuevos</div>
+      <div style="background:var(--coal4);border-radius:10px;padding:10px"><b style="font-size:20px;color:${cambian?'#f59e0b':'inherit'}">${cambian}</b><br>días que cambian</div>
+      <div style="background:var(--coal4);border-radius:10px;padding:10px"><b style="font-size:20px">${plan.iguales}</b><br>ya estaban igual</div>
+      <div style="background:var(--coal4);border-radius:10px;padding:10px"><b style="font-size:20px">${plan.coinc}</b><br>trabajadores con ficha</div>
+    </div>
+    ${plan.nuevos.length?`<div style="font-size:12px;margin-bottom:8px"><b>Fichas nuevas (${plan.nuevos.length}):</b> ${nNuevosAct} activo${nNuevosAct!==1?'s':''}, ${plan.nuevos.length-nNuevosAct} de baja. Jornal en 0 hasta ponerlo.<ul style="margin:4px 0 0 18px;color:var(--text2)">${li(plan.nuevos.map(x=>x.nombre+(/NO ACTIVO/.test(x.cond)?' · de baja':'')))}</ul></div>`:''}
+    ${plan.dniCorr.length?`<div style="font-size:12px;margin-bottom:8px"><b>DNI que se corrigen con el Excel (${plan.dniCorr.length}):</b><ul style="margin:4px 0 0 18px;color:var(--text2)">${li(plan.dniCorr.map(c=>c.nombre+': '+(c.antes||'—')+' → '+c.ahora))}</ul></div>`:''}
+    ${cambian?`<div style="font-size:12px;margin-bottom:8px"><b>Días que cambian (manda el Excel):</b><ul style="margin:4px 0 0 18px;color:var(--text2)">${li(plan.dias.filter(d=>d.antes).slice(0,12).map(d=>{const p=(state.personal||[]).find(q=>String(q.id)===String(d.pid));return (p?p.nombre:'')+' · '+d.fecha.slice(8)+'/'+d.fecha.slice(5,7)+': '+d.antes+' → '+d.c.v;}))}</ul></div>`:''}
+    ${plan.raros.length?`<div style="font-size:12px;margin-bottom:8px;color:#f59e0b"><b>No se cargan — corregir en el Excel (${plan.raros.length}):</b><ul style="margin:4px 0 0 18px">${li(plan.raros.map(r=>r.nombre+' · día '+r.dia+': "'+r.v+'"'))}</ul></div>`:''}
+    ${plan.fuera?`<div style="font-size:12px;margin-bottom:8px;color:#f59e0b">${plan.fuera} celda(s) en días que no existen en ese mes: se ignoran.</div>`:''}
+    ${plan.futuros?`<div style="font-size:12px;margin-bottom:8px;color:var(--text2)">${plan.futuros} celda(s) son de días que todavía no llegan: no se cargan. Entran cuando vuelvas a subir el Excel ese día.</div>`:''}
+    <div style="font-size:11px;color:var(--text3);margin:8px 0 12px">Una celda vacía en el Excel no borra nada del sistema. Lo cargado aparece en el Tareo Mensual y en la consulta por QR de cada trabajador.</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-outline" onclick="document.getElementById('tareo-xls-modal').remove()">Cancelar</button>
+      <button class="btn btn-gold" onclick="tareoExcelConfirmar()" ${plan.dias.length||plan.nuevos.length||plan.dniCorr.length?'':'disabled'}>Cargar al sistema</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+}
+function tareoExcelConfirmar(){
+  if(!_txLeido||!_txLeido.plan) return;
+  const r=tareoExcelAplicar(_txLeido.plan); if(!r) return;
+  document.getElementById('tareo-xls-modal')?.remove();
+  try{ const s=document.getElementById('tareomes-sel'); if(s && [...s.options].some(o=>o.value===_txLeido.plan.mes)) s.value=_txLeido.plan.mes; }catch(e){}
+  _txLeido=null;
+  try{ renderTareoMensual(); }catch(e){} try{ if(typeof renderPersonal==='function') renderPersonal(); }catch(e){}
+  showNotif('✓ Tareo cargado: '+r.dias+' días'+(r.nuevos?' · '+r.nuevos+' ficha(s) nueva(s)':'')+(r.dni?' · '+r.dni+' DNI corregido(s)':'')+'. Ya se ve en la consulta por QR.');
+}
 function renderTareoMensual(){
   const cont=_tareoCont(); if(!cont) return;
   const isEditing=cont.dataset.editing==='true';
@@ -23463,6 +23629,7 @@ function renderTareoMensual(){
           <button class="btn btn-outline" onclick="_tareoCont().dataset.editing='false';renderTareoMensual()">Cancelar</button>
           <button class="btn btn-gold" onclick="tareoMensualGuardar('${mes}')">💾 Guardar</button>
         `:(_puede?`
+          ${(typeof puedePublicarRRHH==='function'&&puedePublicarRRHH())?`<input type="file" id="tareo-xls-input" accept=".xlsx,.xls" style="display:none" onchange="tareoExcelArchivo(this)"><button class="btn btn-outline" onclick="tareoExcelElegir()" title="Sube el Excel del tareo del mes (columnas DNI y D1…D31): carga las tareas al sistema y a la consulta por QR">⬆ Subir Excel</button>`:''}
           <button class="btn btn-gold" onclick="_tareoCont().dataset.editing='true';renderTareoMensual()">✏️ Editar${_arch?' (mes archivado)':''}</button>
         `:`
           <span style="font-size:11px;color:#f59e0b;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.35);border-radius:8px;padding:7px 12px">🔒 Solo lectura — mes archivado</span>
