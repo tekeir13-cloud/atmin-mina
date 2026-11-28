@@ -115,9 +115,9 @@ Residente** (quien dirigió el trabajo, quien paga, quien responde).
   el 26 ya se ve solo el ciclo nuevo. Eso lo da `periodoActual(AREA_OP)`.
 - **Logística, Recursos Humanos, Mantenimiento** y los tanques van por **mes calendario, del 1 al
   último día**, también en sus cuadros del dashboard.
-- **Vista en revisión (27/11/2026):** `OPS_CICLO_VISTA='2026-11'` en `index.html` fija las vistas de
-  Operaciones en el ciclo 26/10 → 25/11 para revisarlo. **Cuando el usuario pida "volver a lo real",
-  se pone `OPS_CICLO_VISTA=null`** y todo vuelve a la regla de arriba. Solo cambia lo que se mira;
+- **Vista en revisión:** `OPS_CICLO_VISTA` en `index.html` puede fijar las vistas de Operaciones en
+  un ciclo ya cerrado para revisarlo (`'AAAA-MM'`). Del 27 al 28/11/2026 estuvo en `'2026-11'`; el
+  28/11 el usuario pidió volver al ciclo real y quedó en **`null`**. Solo cambia lo que se mira;
   guardar y cerrar siempre usan el ciclo real.
 
 ## PROPUESTAS GUARDADAS (no implementar sin pedido)
